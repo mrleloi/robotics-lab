@@ -449,7 +449,7 @@ Chạy với `protobuf` 7.36 (Python):
 
 | Câu | Kết quả | Vì sao |
 |---|---|---|
-| 1 | **190 byte** | stamp 13 · frame_id 10 · sequence 4 · hai Vec3 29 mỗi cái · covariance packed 75 · hai chuỗi ID 21 + 10 |
+| 1 | **190 byte** | stamp 13 · frame_id 10 · sequence 4 · hai Vec3 29 mỗi cái · covariance packed 74 (số 0 trong mảng packed vẫn được ghi) · hai chuỗi ID 21 + 10 |
 | 2 | **172 byte** (−18) | mỗi `double` bằng 0.0 không được ghi: mất 1 byte tag + 8 byte |
 | 3 | 188 / 189 / 192 byte | varint: 1 → 1 byte, 300 → 2, 2³²−1 → 5 (so với 123456 → 3) |
 | 4 | **`CLOCK_SOURCE_ESP32_TIMER`** | trường vắng → giá trị số 0 của enum. Mọi file trước v2 bị gán "đóng dấu bằng ESP32" |

@@ -584,3 +584,266 @@ Checklist khi đọc một khẳng định về độ ổn định (đồng hồ
   </details>
 
 ---
+
+## F4.3 — Đồng hồ trong máy tính: wall/monotonic/raw, TSC, clocksource, timestamp ở kernel/driver/app (4h)
+
+> **Dùng cho:** K2 Bài 2, Bài 11 · K3 Bài 14, Bài 17 · K5 Bài 1, Bài 9, Bài 13 · K6 Bài 3 · K7 C7.2 · **Cần trước:** F4.1 · **Sau viên nang này bạn đánh giá được:** một timestamp trong log/MCAP đến từ đồng hồ nào, có thể nhảy hay bị chỉnh tốc độ không, có so được với timestamp của máy khác/lần boot khác không, và mang theo trễ của tầng nào.
+
+### 1. Câu chuyện
+
+Nửa đêm UTC ngày 1/1/2017 có một giây nhuận. Một phần DNS của Cloudflare bắt đầu lỗi: code Go của họ lấy hai lần `time.Now()`, trừ nhau để có thời lượng, và vì đồng hồ treo tường bị kéo lùi một giây, kết quả là **âm**; con số âm đi vào một hàm sinh số ngẫu nhiên vốn chỉ nhận số dương và làm tiến trình panic [chuẩn: Cloudflare blog, *How and why the leap second affected Cloudflare DNS*, 1/2017]. Sau sự cố đó (và nhiều báo cáo tương tự), Go 1.9 (8/2017) thay đổi `time.Time` để mang thêm một số đọc **monotonic** ẩn, và phép trừ hai thời điểm dùng số đó [chuẩn: Go 1.9 release notes; thiết kế của Russ Cox]. Năm năm trước đó, giây nhuận 30/6/2012 đã làm nhiều server Linux treo CPU 100% vì một lỗi trong cách kernel xử lý timer quanh giây nhuận (Reddit, Mozilla và nhiều hệ Java/MySQL bị ảnh hưởng) [chuẩn].
+
+Bài học không phải "giây nhuận nguy hiểm" (năm 2022 CGPM đã quyết định bỏ giây nhuận chậm nhất vào 2035 [chuẩn]). Bài học là: **trong một máy có nhiều đồng hồ, mỗi cái hứa một điều khác nhau**, và code chọn nhầm cái thì đúng 364 ngày một năm.
+
+### 2. Mô hình tư duy
+
+**Từ thạch anh tới `time.time()`** (Linux x86, đơn giản hóa):
+
+```mermaid
+flowchart TB
+  X["Thạch anh trên mainboard"] --> TSC["Bộ đếm phần cứng<br/>(TSC trên x86; HPET, ACPI PM dự phòng)"]
+  TSC --> CS["clocksource của kernel<br/>/sys/devices/system/clocksource/clocksource0/current_clocksource"]
+  CS --> RAW["CLOCK_MONOTONIC_RAW<br/>bộ đếm × hệ số cố định<br/>không ai chỉnh"]
+  CS --> MONO["CLOCK_MONOTONIC<br/>không nhảy, nhưng NTP/PTP<br/>chỉnh TỐC ĐỘ (slew)"]
+  MONO --> BOOT["CLOCK_BOOTTIME<br/>= MONOTONIC + thời gian suspend"]
+  MONO --> RT["CLOCK_REALTIME (wall)<br/>= MONOTONIC + offset<br/>offset có thể NHẢY (step)"]
+  RT --> TAI["CLOCK_TAI = REALTIME + 37 s (nếu đã đặt)"]
+  NIC["Thạch anh của NIC i225/i226"] --> PHC["PHC /dev/ptpN<br/>đồng hồ riêng, không phải clocksource"]
+  PHC -. "phc2sys (F4.5)" .-> RT
+  NTP["chrony / ntpd / phc2sys"] -. "adjtimex: chỉnh tốc độ hoặc nhảy" .-> MONO
+```
+
+Lời hứa của từng đồng hồ [spec: `man 2 clock_gettime`]:
+
+| Đồng hồ | Có nhảy? | Bị chỉnh tốc độ? | Qua suspend | Qua reboot / sang máy khác | Dùng cho |
+|---|---|---|---|---|---|
+| `CLOCK_REALTIME` | Có (đặt giờ tay, NTP step, giây nhuận) | Có | Tiếp tục | **So được** (nếu đã đồng bộ) | Timestamp dữ liệu nhiều máy, giờ con người đọc |
+| `CLOCK_MONOTONIC` | Không | **Có** (slew) | Dừng | Không — gốc là lúc boot | Thời lượng, timeout trong một tiến trình |
+| `CLOCK_MONOTONIC_RAW` | Không | Không | Dừng | Không | Đo tần số thô của phần cứng, so sánh đồng hồ |
+| `CLOCK_BOOTTIME` | Không | Có | **Tính cả** | Không | Thời lượng khi máy có thể ngủ |
+| PHC `/dev/ptpN` | Có thể (ptp4l step) | Có (servo) | — | So được nếu PTP | Hardware timestamp gói mạng (F4.5) |
+
+**Tầng đóng dấu.** Cùng một gói tin hay một dòng serial, timestamp khác nhau tùy *ai* đọc đồng hồ và *lúc nào*:
+
+```
+sự kiện ──► [phần cứng] ──► [driver/kernel] ──► [hàng đợi socket/tty] ──► [scheduler] ──► [app: time.time()]
+             HW timestamp     SW timestamp          chờ                       chờ          app timestamp
+             (NIC: PHC)       (SO_TIMESTAMPNS)                                              (+ USB polling ~1 ms,
+             ±ns              ±µs                                                            + jitter scheduler)
+```
+
+Với USB-serial (ESP32-S3 qua USB Full Speed), kernel không đóng dấu từng byte; host poll thiết bị theo khung 1 ms [spec: USB 2.0, full speed frame 1 ms], nên timestamp phía app mang thêm 0–1 ms lượng tử cộng jitter scheduler. Đó là lý do K5 Bài 8 đóng dấu **trên ESP32** (esp_timer trong ISR) và chỉ dùng thời gian host để ghép cặp. Với Ethernet, `SO_TIMESTAMPING` cho lấy timestamp phần cứng của NIC [spec: kernel `Documentation/networking/timestamping.rst`]; `ethtool -T <iface>` cho biết NIC hỗ trợ gì và PHC nào.
+
+**Ba con số về biểu diễn** (đo trên máy của bạn ở mục 5): đọc đồng hồ qua vDSO tốn cỡ chục ns khi clocksource là `tsc` [ước lượng; nếu rơi về `hpet` thì thành syscall, chậm hơn nhiều]; `float64` giây Unix hiện nay chỉ phân giải được bước cỡ một phần tư µs; `int64` nano-giây tràn vào năm 2262. ROS 2 và MCAP dùng số nguyên ns [spec: `builtin_interfaces/Time`, MCAP spec].
+
+**TSC và vì sao nó đáng tin bây giờ.** Bộ đếm chu kỳ CPU từng đổi tốc độ theo tần số CPU và dừng khi CPU ngủ sâu; CPU hiện đại có *invariant TSC* (cờ `constant_tsc`, `nonstop_tsc` trong `/proc/cpuinfo`): đếm đều bất kể P-state/C-state [chuẩn]. Kernel tự kiểm tra và có thể loại TSC nếu thấy không ổn (dmesg: "clocksource tsc unstable"), rơi về HPET [chuẩn]. Trong VM, clocksource thường là `kvm-clock`.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| `time.time()` cho log, `time.monotonic()` cho duration | Như vậy, cộng `boot_id` và biết monotonic bị slew | Backend hiếm khi so monotonic giữa hai lần boot hay hai máy; robot thì rút điện liên tục (K3 Bài 17) | Trừ `mono_ns` của hai boot khác nhau → thời lượng âm hoặc khổng lồ |
+| `created_at` do DB server gán | Mỗi message mang timestamp của nơi sinh ra nó | Ở backend một đồng hồ (DB) gán mọi thứ nên thứ tự nhất quán; ở robot mỗi node một đồng hồ, không có "DB" trung tâm | Sắp dữ liệu nhiều node theo timestamp, tưởng đó là thứ tự thật (→ F4.8) |
+| Request timestamp ở load balancer vs ở app | Tầng đóng dấu: HW / kernel / app | Backend coi hiệu vài ms là "latency của tầng"; ở đây hiệu đó **là** sai số của timestamp nếu bạn cần biết lúc sự kiện vật lý xảy ra | Dùng timestamp app làm thời điểm cảm biến lấy mẫu; sai bằng toàn bộ trễ pipeline + jitter |
+| Epoch milliseconds trong JSON | Số nguyên ns, `int64` | JSON number là float64 trong nhiều parser (JavaScript) | Timestamp ns đi qua một tool JS bị làm tròn tới ~256 ns, không báo lỗi |
+
+**Chấm mô hình:**
+
+- *"`CLOCK_MONOTONIC` không bao giờ bị NTP đụng tới."* — **SAI.** Nó không *nhảy*, nhưng tốc độ của nó bị NTP/PTP chỉnh (slew) [spec: `man 2 clock_gettime`, mục CLOCK_MONOTONIC]. Python còn làm rối thêm: `time.get_clock_info("monotonic").adjustable` trả `False` — ý là "không thể bị đặt lại", không phải "không bị chỉnh tốc độ". Phản ví dụ: khi chrony đang kéo một offset lớn về, đo cùng một khoảng 10 s bằng `MONOTONIC` và `MONOTONIC_RAW` cho hai số khác nhau một lượng bằng tốc độ slew.
+- *"Timestamp càng nhiều chữ số (ns) càng chính xác."* — **SAI.** Đơn vị ns là quyết định biểu diễn; độ chính xác do tầng đóng dấu quyết định (F1.1: resolution ≠ accuracy). Một timestamp ns đóng ở app sau USB có độ bất định cỡ ms.
+
+**Tên chuẩn của thứ bạn đã làm:** khi bạn ghi cả `wall` và `mono_ns` cho mỗi sự kiện (K3 Bài 14 đã yêu cầu), đó là mẫu *dual timestamp* — một đồng hồ để so giữa các máy và với người, một đồng hồ để đo khoảng. Go làm đúng điều đó bên trong `time.Time` từ bản 1.9. Thứ còn thiếu: `boot_id` để biết hai `mono_ns` có cùng gốc không, và ghi **nguồn** đồng hồ (`clock_source` trong metadata MCAP theo `CONVENTIONS.md`).
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Wall clock (`CLOCK_REALTIME`) | Giờ UTC của máy, có thể nhảy | "Giờ đúng" |
+| 🟢 | Monotonic | Không lùi trong một lần boot; vẫn bị slew | "Không bị chỉnh" |
+| 🟢 | Step vs slew | Nhảy giá trị vs đổi tốc độ để bắt kịp dần | Một thứ |
+| 🟢 | Tầng đóng dấu (HW / kernel / app) | Ai đọc đồng hồ, lúc nào | Không quan trọng nếu cùng một máy |
+| 🟢 | `boot_id` | UUID của lần boot hiện tại | Không cần nếu đã có wall clock |
+| 🟡 | `CLOCK_MONOTONIC_RAW`, `CLOCK_BOOTTIME`, `CLOCK_TAI` | Raw không slew / tính cả suspend / không giây nhuận | Đồ trang trí |
+| 🟡 | clocksource, TSC, invariant TSC, HPET | Bộ đếm phần cứng kernel dùng | Thứ chỉ người viết kernel cần |
+| 🟡 | vDSO | Đọc đồng hồ không cần syscall | Tối ưu vi mô vô nghĩa |
+| 🟡 | `SO_TIMESTAMPING`, `ethtool -T` | Lấy timestamp NIC/kernel cho gói tin | Chỉ dùng cho PTP |
+| 🔴 | timekeeping core, `adjtimex` chi tiết, NTP kernel PLL | Cơ chế kernel chỉnh đồng hồ | Cần cho lộ trình này |
+
+### 5. Bài tập dự đoán
+
+**Đề.** Chạy script dưới trên laptop (Linux; macOS chạy được phần lớn, Windows thì không có các hằng `CLOCK_*`). Trước khi chạy, dự đoán:
+
+1. clocksource hiện tại của máy bạn.
+2. `clock_getres` của các đồng hồ.
+3. Bước dương nhỏ nhất giữa hai lần đọc liên tiếp và trung vị bước — con số đó đo *cái gì*: độ phân giải của đồng hồ, hay thứ khác?
+4. p99,99 của bước — vì sao lớn hơn trung vị nhiều bậc?
+5. Bước biểu diễn của `float64` giây ở thời điểm hiện tại; năm `int64` ns tràn.
+
+**Tham số cần tra:** `cat /sys/devices/system/clocksource/clocksource0/{current,available}_clocksource`; `grep -o -w 'constant_tsc\|nonstop_tsc' /proc/cpuinfo | sort -u`. **Phương pháp:** câu 5: `float64` có 52 bit phần định trị; giá trị ~1,8×10⁹ nằm giữa 2³⁰ và 2³¹, nên bước = 2^(30−52) giây.
+
+```python
+# [đã chạy] F4.3 — đồng hồ trong máy của bạn: độ phân giải khai báo vs bước nhỏ nhất thật, giá một lần đọc,
+# và float64 giây mất bao nhiêu độ chính xác ở thời điểm hiện tại
+import time, numpy as np, platform
+
+CLOCKS = {"realtime": time.CLOCK_REALTIME, "monotonic": time.CLOCK_MONOTONIC}
+if hasattr(time, "CLOCK_MONOTONIC_RAW"):
+    CLOCKS["monotonic_raw"] = time.CLOCK_MONOTONIC_RAW
+if hasattr(time, "CLOCK_BOOTTIME"):
+    CLOCKS["boottime"] = time.CLOCK_BOOTTIME
+
+print(platform.system(), platform.release())
+try:
+    print("clocksource:", open("/sys/devices/system/clocksource/clocksource0/current_clocksource").read().strip())
+except OSError:
+    print("clocksource: (không đọc được — không phải Linux?)")
+
+for name, cid in CLOCKS.items():
+    N = 200_000
+    t = np.empty(N, dtype=np.int64)
+    for i in range(N):                       # đọc liên tiếp, không làm gì khác
+        t[i] = time.clock_gettime_ns(cid)
+    d = np.diff(t)
+    nz = d[d > 0]
+    print(f"{name:14s} getres={time.clock_getres(cid)*1e9:5.0f} ns | bước>0 nhỏ nhất={nz.min():5d} ns"
+          f" | trung vị Δ={np.median(d):5.0f} ns | p99.99 Δ={np.percentile(d, 99.99):8.0f} ns | Δ<0: {(d < 0).sum()}")
+
+now = time.time()
+print(f"float64 giây ở {now:.0f}: bước biểu diễn = {np.spacing(now)*1e9:.0f} ns")
+print(f"int64 ns tràn năm ≈ {1970 + (2**63 - 1) / 1e9 / 86400 / 365.2425:.0f}")
+```
+
+```markdown
+# prediction.md — F4.3
+1. clocksource: ___
+2. getres: ___ ns
+3. bước nhỏ nhất ___ ns, trung vị ___ ns; con số này đo: ___
+4. p99.99 ≈ ___ ; vì: ___
+5. float64 bước ≈ ___ ns ; int64 ns tràn năm ___
+Độ tự tin (1–5): ___   Tôi sẽ ngạc nhiên nếu: ___
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Kết quả trên máy soạn bài (một VM Linux 6.x, clocksource `tsc`, có `constant_tsc`/`nonstop_tsc`) — máy bạn sẽ khác về số, không khác về hình dạng:
+
+| Đồng hồ | getres | bước > 0 nhỏ nhất | trung vị Δ | p99,99 Δ | Δ < 0 |
+|---|---|---|---|---|---|
+| realtime | 1 ns | 158 ns | 196 ns | ~37 µs | 0 |
+| monotonic | 1 ns | 165 ns | 181 ns | ~24 µs | 0 |
+| monotonic_raw | 1 ns | 167 ns | 183 ns | ~24 µs | 0 |
+| boottime | 1 ns | 164 ns | 180 ns | ~23 µs | 0 |
+
+- `getres` = 1 ns là độ phân giải *khai báo*. Bước ~160–200 ns là **chi phí một vòng lặp Python** (gọi hàm, tạo số nguyên, ghi mảng), không phải độ phân giải đồng hồ: dụng cụ đo (vòng lặp) thô hơn thứ được đo. Viết bằng C bạn sẽ thấy bước cỡ chục ns. Đây là F1.1 ở dạng thuần phần mềm.
+- p99,99 cỡ chục µs: tiến trình bị scheduler ngắt, ngắt cứng, hoặc (trong VM) hypervisor lấy CPU. Đó chính là jitter mà mọi timestamp đóng ở tầng app mang theo — và nó không nằm ở trung vị.
+- `float64` ở ~1,79×10⁹ s: bước 2⁻²² s ≈ **238 ns**. Lưu thời gian Unix dạng `float` giây trong pandas/JSON/CSV là tự cắt độ chính xác xuống dưới mức µs; với PTP (chục ns) thì mất hết. `int64` ns tràn năm **2262**.
+- Δ < 0 bằng 0 cho cả `realtime` trong lần chạy này vì không có NTP step xảy ra trong 1 giây đo; điều đó không chứng minh realtime không lùi.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi đọc một timestamp, một trường thời gian trong schema, hoặc một khẳng định về đồng hồ:
+
+1. **Đồng hồ nào** (REALTIME/MONOTONIC/RAW/BOOTTIME/PHC/đồng hồ MCU)? Có ghi trong metadata không?
+2. **Tầng nào** đóng dấu (phần cứng cảm biến / MCU ISR / kernel / app sau hàng đợi)?
+3. Có thể **nhảy** không? Có bị **slew** không? Lúc ghi có chrony/phc2sys đang chạy không?
+4. Có so được **qua reboot / qua máy** không (`boot_id`, đồng bộ)?
+5. **Biểu diễn**: số nguyên ns hay float giây? Đi qua tool nào có thể làm tròn?
+6. Khẳng định có phân biệt "không lùi" với "không bị chỉnh" không?
+
+**Khẳng định mẫu — tự chấm trước khi mở:**
+
+(a) Bản Gemini K3 (Bài 14): *"`CLOCK_MONOTONIC`: Không bao giờ chạy lùi, dùng để đo chính xác thời lượng xử lý... `CLOCK_REALTIME` (Wall clock): Có thể nhảy lùi do NTP đồng bộ, nhưng bắt buộc phải có để đối chiếu với giờ thực tế."*
+
+(b) Bản Gemini K7 (bảng "Nếu ra khác"): *"Audit tool Khóa 2 báo lỗi timestamp không đơn điệu → đang dùng `CLOCK_REALTIME` bị dịch lùi do NTP đồng bộ lại trong lúc xe đang chạy → Chuyển sang đóng dấu thời gian bằng `CLOCK_MONOTONIC` hoặc sử dụng trực tiếp timer phần cứng của vi điều khiển."*
+
+(c) `robotics-data-infra-roadmap.md` mục 3.1: *"Robotics mặc định nanosecond từ UNIX epoch. int64 ns hết tràn năm 2262. float64 giây mất độ chính xác — chỉ còn ~µs ở thời điểm hiện tại."*
+
+<details><summary>🔒 Đáp án</summary>
+
+(a) **ĐÚNG MỘT PHẦN.** Hai vế đều đúng về hướng. Thiếu: "đo chính xác thời lượng" bằng MONOTONIC vẫn chịu slew của NTP (sai cỡ ppm tới hàng trăm ppm khi đang kéo offset); cần thời lượng phần cứng thật thì dùng `MONOTONIC_RAW`. Và "nhảy lùi do NTP" chỉ xảy ra khi daemon *step* (chrony mặc định chỉ step ở vài lần cập nhật đầu nếu cấu hình `makestep`; offset nhỏ thì slew) [tự đo: `man chrony.conf`, `makestep`]; nguyên nhân nhảy thường gặp hơn trên thiết bị mới boot là lúc đồng hồ được đặt lần đầu (RTC sai, máy không có pin RTC).
+
+(b) **ĐÚNG MỘT PHẦN.** Sửa được triệu chứng "không đơn điệu", nhưng phá chỗ khác: MONOTONIC của mini PC và timer của MCU là hai trục thời gian **không so được** với nhau, với máy khác, hay qua reboot. Dữ liệu nhiều nguồn cần một trục chung: đóng dấu ở nguồn bằng đồng hồ cục bộ ổn định *và* ghi ánh xạ sang trục chung (REALTIME đã đồng bộ, hoặc trục của recorder) kèm `boot_id`; chặn NTP step khi đang ghi (chỉ slew). Ngoài ra, nguyên nhân "NTP kéo lùi" phải được kiểm (log chrony), không giả định: hàng đợi, ghép sai channel hay `header.stamp` mặc định 0 cũng gây không đơn điệu (K2 Bài 11).
+
+(c) **ĐÚNG**, với một chỉnh độ chính xác: bước `float64` hiện nay ≈ 0,24 µs, tức "dưới µs", và sẽ thành 0,48 µs sau năm 2038 (khi vượt 2³¹ s). Cụm "mất độ chính xác" đúng tinh thần: không dùng float giây cho dữ liệu cần đồng bộ cỡ µs trở xuống.
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Vì sao không]** Vì sao không đóng dấu mọi thứ bằng `CLOCK_MONOTONIC_RAW` cho "sạch", rồi tính trục chung sau?
+   <details><summary>Hướng nghĩ</summary>
+
+   Làm được, và có người làm vậy. Cái giá: phải ghi kèm ánh xạ RAW → trục chung theo thời gian (offset và skew thay đổi), và mọi người đọc dữ liệu phải áp ánh xạ đó. Nghĩ về provenance (F3.8): ánh xạ là một artifact phải có phiên bản.
+
+   </details>
+2. **[Failure mode]** Robot không có pin RTC. Boot lên, mini PC nghĩ hôm nay là năm 1970 (hoặc ngày build image) cho tới khi có mạng. Dữ liệu ghi trong 40 giây đầu sẽ trông thế nào trong MCAP, và detector nào của K2 bắt được?
+   <details><summary>Hướng nghĩ</summary>
+
+   Một bước nhảy khổng lồ về phía trước khi chrony step; mọi message trước đó có timestamp năm 1970. Detector đơn điệu có thể không thấy (nhảy tới, không lùi); detector "timestamp hợp lý so với ngày ghi" thì thấy. Phòng: chờ đồng bộ trước khi ghi, hoặc ghi MONOTONIC + boot_id và hậu xử lý.
+
+   </details>
+3. **[Quy mô]** 100 robot, 1000 giờ dữ liệu. Bao nhiêu phần trăm episode có ít nhất một bước step đồng hồ, nếu mỗi robot reboot 3 lần/ngày và mỗi lần chrony step một lần trong 2 phút đầu?
+   <details><summary>Hướng nghĩ</summary>
+
+   Phụ thuộc episode có bắt đầu trong 2 phút đầu sau boot không. Tính tỉ lệ thời gian "nguy hiểm" trên tổng thời gian chạy. Quyết định thiết kế: cấm ghi trong cửa sổ đó, hay chấp nhận và gắn cờ.
+
+   </details>
+4. **[Liên ngành]** Hệ thống giao dịch tài chính dùng PTP và đóng dấu ở NIC. Vì sao họ không chấp nhận timestamp ở tầng app, dù app chỉ trễ vài µs?
+   <details><summary>Hướng nghĩ</summary>
+
+   Quy định (MiFID II, F4.7) yêu cầu truy vết về UTC với dung sai và độ phân giải cụ thể; jitter tầng app có đuôi không chặn được (p99,99 ở mục 5). Thứ không chặn được thì không cam kết được.
+
+   </details>
+5. **[Nếu…thì]** Nếu `current_clocksource` của mini PC là `hpet` thay vì `tsc`, điều gì xảy ra với một node ROS 2 đọc đồng hồ 10 000 lần/giây?
+   <details><summary>Hướng nghĩ</summary>
+
+   Mỗi lần đọc thành syscall và truy cập thiết bị chậm, tốn µs thay vì chục ns; CPU tăng, jitter tăng. Kiểm dmesg xem kernel có loại TSC không và vì sao.
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Cơ sở dữ liệu.** `NOW()` trong PostgreSQL trả thời điểm bắt đầu transaction, không phải lúc gọi; `clock_timestamp()` mới là lúc gọi [spec: PostgreSQL docs, Date/Time Functions]. Giống: "timestamp nào" là câu hỏi ngữ nghĩa, không chỉ kỹ thuật. Khác: ở DB đồng hồ là của một máy; ở robot thì nhiều.
+- **Hàng không.** Bộ ghi dữ liệu chuyến bay đóng dấu theo đồng hồ của bộ ghi, và điều tra viên phải căn chỉnh nó với ghi âm buồng lái và radar mặt đất bằng các sự kiện chung (một cú bấm nút phát, một câu nói). Giống: dữ liệu nhiều đồng hồ, căn bằng sự kiện (F4.6). Khác: họ căn sau sự cố, một lần, bằng tay.
+
+### 9. Áp vào khóa chính
+
+- **K2 Bài 2, Bài 11:** khi gặp `log_time − stamp` âm hoặc không đơn điệu, liệt kê đồng hồ và tầng của *từng* trường trước khi đặt giả thuyết.
+- **K3 Bài 14, 17:** `wall` + `mono_ns` + `boot_id` cho mọi sự kiện; chỉ trừ `mono_ns` trong cùng `boot_id`.
+- **K5 Bài 1:** `ethtool -T` để biết PHC nào gắn với cổng nào; `current_clocksource` vào lab notebook. **K5 Bài 9:** trọng tài dùng `PTP_SYS_OFFSET_EXTENDED` với CLOCK_REALTIME làm đồng hồ trung chuyển — hiểu vì sao giá trị của nó triệt tiêu. **K5 Bài 13:** `log_time` từ REALTIME đã đồng bộ, ghi thêm MONOTONIC nếu muốn đo trễ không bị nhảy.
+- **K6 Bài 3:** `time.time()` trong nhánh logic phá determinism; trong sim, đồng hồ phải là đồng hồ sim (`use_sim_time`) [tự đo: theo bản ROS 2 Jazzy].
+- **K7 C7.2:** quyết định timestamp IMU được đóng ở ESP32 (nguồn) hay ở host (nhận), và ghi quyết định đó vào metadata.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Ngữ nghĩa các `CLOCK_*` (MONOTONIC bị slew, RAW không) | [spec] | `man 2 clock_gettime` |
+| Cloudflare 1/1/2017: thời lượng âm từ đồng hồ treo tường gây panic | [chuẩn] | Blog Cloudflare 1/2017 |
+| Go 1.9 thêm monotonic reading vào `time.Time` | [spec] | Go 1.9 release notes, package `time` doc mục "Monotonic Clocks" |
+| Sự cố giây nhuận 2012 trên Linux | [chuẩn] | Nhiều báo cáo công khai; chi tiết lỗi kernel không trình bày ở đây |
+| CGPM 2022 quyết định bỏ giây nhuận chậm nhất 2035 | [chuẩn] | Nghị quyết 4, CGPM lần thứ 27 |
+| USB Full Speed khung 1 ms | [spec] | USB 2.0 spec |
+| Chi phí đọc đồng hồ qua vDSO cỡ chục ns | [ước lượng] / [tự đo] | Viết vòng lặp C để đo |
+| chrony `makestep` và tốc độ slew mặc định | [tự đo] | `man chrony.conf` theo bản cài |
+| Bước float64 ~238 ns, int64 ns tràn 2262 | [đã chạy] | Mục 5 |
+
+Đã sửa so với Gemini: (K3 Bài 14) "MONOTONIC dùng để đo chính xác thời lượng" → bị slew, dùng RAW khi cần tốc độ phần cứng thật; (K7) "chuyển sang CLOCK_MONOTONIC để sửa timestamp không đơn điệu" → monotonic không so được giữa máy/boot, phải ghi ánh xạ sang trục chung và kiểm nguyên nhân trước.
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** `man 2 clock_gettime`; tài liệu kernel `Documentation/networking/timestamping.rst` (phần SO_TIMESTAMPING).
+- **Giải thích:** tài liệu package `time` của Go, mục "Monotonic Clocks" — một trang, giải thích rõ nhất vì sao một kiểu thời gian cần hai đồng hồ.
+- **Đào sâu (tùy chọn):** bài blog Cloudflare về giây nhuận 2017 (tìm theo tiêu đề *How and why the leap second affected Cloudflare DNS*).
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao "đã dùng monotonic" chưa đủ cho dữ liệu nhiều máy; (2) vẽ lại sơ đồ đồng hồ ở mục 2; (3) câu hỏi:
+
+  Log có `mono_ns` và `boot_id`. Hai sự kiện: A (`boot_id` = X, `mono_ns` = 9,0×10¹²), B (`boot_id` = Y, `mono_ns` = 2,0×10¹¹). B xảy ra trước hay sau A?
+  <details><summary>Đáp án</summary>
+
+  Không biết từ hai trường đó. Khác `boot_id` thì `mono_ns` không cùng gốc; phải dùng `wall` (và tin nó tới mức đồng hồ đã đồng bộ) hoặc thứ tự boot ghi ở nơi khác.
+
+  </details>
+
+---

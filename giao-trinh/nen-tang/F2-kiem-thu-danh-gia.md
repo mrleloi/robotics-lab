@@ -1398,3 +1398,202 @@ Chấm:
 </details>
 
 ---
+
+## F2.7 — Các tầng X-in-the-loop: MIL/SIL/HIL, kim tự tháp test cho robot (4h)
+
+> **Dùng cho:** K7 C4 (test firmware trên bàn), C10.2, **C11.2** (HIL và CI cho hành vi robot), C11.3 · K2 Bài 5 (SIL với dữ liệu tổng hợp) · **Cần trước:** F2.1, F2.5, F2.6 · **Sau viên nang này bạn đánh giá được:** một tầng test (sim, HIL, bàn, thực địa) bắt được **lớp lỗi nào mà tầng khác không bắt**, thứ gì trong vòng là thật và thứ gì là giả, và một khẳng định "HIL bắt được X" có đúng với cách cổng HIL được dựng không.
+
+### 1. Câu chuyện
+
+**Ariane 5, chuyến bay 501 (4/6/1996).** 37 giây sau khi phóng, cả hai hệ quán tính (SRI, chính và dự phòng chạy cùng phần mềm) ngừng hoạt động: một phép chuyển số thực 64 bit sang số nguyên có dấu 16 bit của một đại lượng liên quan vận tốc ngang bị tràn. Phần mềm được dùng lại từ Ariane 4, nơi giá trị đó không bao giờ lớn tới vậy; quỹ đạo của Ariane 5 thì có. Báo cáo của Ban điều tra (Inquiry Board, 7/1996) ghi rằng dữ liệu quỹ đạo Ariane 5 không nằm trong đặc tả của SRI, và các thử nghiệm hệ thống không kiểm SRI một cách đầy đủ trong vòng kín với điều kiện bay thực tế; trong đó có khuyến nghị dựng cơ sở thử với càng nhiều thiết bị thật càng tốt, đưa vào dữ liệu đầu vào thực tế, và chạy thử nghiệm hệ thống vòng kín trọn vẹn [chuẩn: theo báo cáo Inquiry Board 1996; diễn đạt lại, không trích nguyên văn].
+
+Bài học không phải "phải dùng HIL". Bài học là: **mỗi tầng test có một danh sách thứ là thật và thứ là giả**, và lỗi sống ở đúng chỗ bạn đã thay thứ thật bằng thứ giả. Ở Ariane 5, thứ bị thay là quỹ đạo và chính SRI. Kiểu lỗi ấy (tràn số nguyên 16 bit) là thứ bạn sẽ gặp ở bộ đếm encoder của ESP32.
+
+### 2. Mô hình tư duy
+
+Ngành ô tô và hàng không gọi các tầng theo thứ được đặt "trong vòng" (in the loop) cùng với mô hình của thế giới (plant):
+
+| Tầng | Bộ điều khiển là | Thế giới là | Thời gian | Bắt được | Mù với |
+|---|---|---|---|---|---|
+| **MIL** (model) | Mô hình thuật toán (Python/Simulink) | Mô hình | Tùy, thường nhanh hơn thật | Lỗi thiết kế thuật toán | Mọi lỗi cài đặt |
+| **SIL** (software) | **Code thật** biên dịch cho máy host | Mô hình | Tùy | Lỗi logic của code thật, lỗi tích hợp phần mềm | Kiểu số của MCU (nếu host khác), timing, ngoại vi |
+| **PIL** (processor) | Code thật chạy **trên MCU đích** | Mô hình, trao đổi qua cổng debug/serial | Thường không thời gian thực | Trình biên dịch đích, kiểu số, tràn, tốc độ tính | Ngoại vi, điện, timing thật |
+| **HIL** (hardware) | MCU/ECU thật với **I/O điện thật** | Mô hình chạy **thời gian thực**, nối vào chân I/O | Thời gian thực bắt buộc | Ngoại vi, ngắt, timing, watchdog, giao thức | Cơ khí, điện công suất, thế giới thật |
+| **Bàn / thực địa** | Thật | Thật | Thật | Mọi thứ còn lại | Không lặp lại được, đắt, nguy hiểm |
+
+```
+  số lượng test        tầng                         giá mỗi lần chạy / độ thật
+  ████████████████     unit + property (Python, C trên host)       rẻ, giây
+  ██████████           SIL: firmware C trên host + mô hình; ROS 2 + MuJoCo
+  ████                 PIL/HIL: ESP32 thật, thế giới mô phỏng       phút, cần bàn
+  ██                   bàn: motor thật trên giá (K7 C3)
+  █                    thực địa: robot trong văn phòng              giờ, rủi ro
+```
+
+Ba câu bản chất:
+1. Một tầng có giá trị bằng **những lớp lỗi chỉ nó bắt được**. Nếu HIL chỉ bắt lại những gì SIL đã bắt, nó là chi phí, không phải bảo hiểm.
+2. "HIL" là một **danh sách thứ thật**, không phải một nhãn. Cổng HIL của K7 gốc Bài 19 cho ESP32 "nhận số đếm giả lập qua UART thay vì đọc encoder thật": khi đó bộ đếm phần cứng PCNT **không** nằm trong vòng. Theo bảng trên, đó gần với PIL có timing thật hơn là HIL đầy đủ. Không sai, nhưng phải biết nó mù với gì.
+3. Tầng trên **ít lần chạy** nên không làm được thống kê như tầng dưới: 20 lần HIL hay 20 lần thực địa là phép thử **lớp lỗi** (có hay không), không phải phép đo tỉ lệ thành công chính xác (F2.3).
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Kim tự tháp test (unit → integration → e2e) | Kim tự tháp X-in-the-loop | Ở backend, e2e chạy cùng loại máy với prod. Ở robot, tầng dưới chạy trên **máy khác loại** (x86 vs Xtensa/RISC-V), khác kiểu số, khác timing | Unit test Python xanh cho thuật toán sẽ chạy bằng `int16_t` trên MCU |
+| Staging giống prod | HIL | Staging có hết thành phần thật trừ người dùng. HIL thay **thế giới vật lý** bằng mô hình phải chạy kịp thời gian thực | Mô hình sim chạy chậm hơn chu kỳ điều khiển; firmware thấy dữ liệu đến trễ và "lỗi timing" là của bàn test |
+| Contract test với mock dependency | SIL với plant mô phỏng | Mock trả đúng hợp đồng bạn viết. Plant mô phỏng có động lực học, và sai của nó **tích lũy** qua vòng kín | Controller được "tune" cho sai số của mô hình, không cho robot |
+| e2e test chạy hằng đêm | Thực địa | e2e lặp lại được. Thực địa không: sàn, pin, người qua lại đổi mỗi lần | So hai lần thực địa như hai lần e2e, kết luận từ một lần chạy |
+
+**Chấm mô hình:**
+
+- *"Unit test và SIL đủ dày thì không cần HIL."* — **SAI** cho firmware. Kiểu số, ngắt, DMA, watchdog, ngoại vi chỉ có trên MCU thật. **Phản ví dụ:** bài tập mục 5: cùng thuật toán odometry, SIL bằng Python không bao giờ tràn; trên thanh ghi 16 bit nó tràn sau vài mét.
+- *"Có HIL thì bắt được mọi lỗi firmware."* — **SAI.** HIL chỉ bắt lỗi ở phần **thật** trong vòng. Cổng HIL bơm số đếm qua UART vào một biến 32 bit bỏ qua thanh ghi PCNT 16 bit; lỗi tràn của bài tập vẫn lọt HIL, chỉ lộ ở bàn (motor thật quay đủ lâu).
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | SIL | Code thật chạy trên host với thế giới mô phỏng | Mô phỏng thuật toán |
+| 🟢 | HIL | Phần cứng điều khiển thật, I/O điện thật, thế giới mô phỏng thời gian thực | Mọi test có MCU cắm USB |
+| 🟢 | Plant model | Mô hình của thứ được điều khiển (động cơ, robot, môi trường) | Mô hình ML |
+| 🟢 | Kim tự tháp test | Nhiều test rẻ ở dưới, ít test đắt ở trên, mỗi tầng một lớp lỗi | Tầng trên "tốt hơn" |
+| 🟡 | MIL, PIL | Mô hình trong vòng; code chạy trên CPU đích qua cổng debug | Bước thừa |
+| 🟡 | V-model | Mỗi mức đặc tả có một mức kiểm tra tương ứng | Waterfall |
+| 🟡 | Thời gian thực của plant | Sim phải hoàn thành mỗi bước trong chu kỳ thật | Chạy càng nhanh càng tốt |
+| 🔴 | ISO 26262 / DO-178C | Chuẩn an toàn ô tô / hàng không quy định mức test | Cần cho robot văn phòng |
+
+### 5. Bài tập dự đoán
+
+**Đề (≤1h):** bánh xe đường kính 65 mm, encoder 11 xung/vòng × 4 (quadrature) × hộp số 30 (đây là **giả định**; ở K7 C3.3 bạn thay bằng số của motor thật). Robot chạy thẳng 0,4 m/s, vòng điều khiển 100 Hz, 30 s. Bộ đếm phần cứng 16 bit có dấu [spec: PCNT của ESP32-S3 là bộ đếm 16 bit có dấu; tra *ESP32-S3 Technical Reference Manual*, chương Pulse Count Controller, và kiểm theo phiên bản ESP-IDF].
+1. Sau bao nhiêu mét, bao nhiêu giây thì bộ đếm tràn?
+2. Ba cách tính quãng đường: SIL Python (số nguyên không tràn), "MCU cách A" (đổi số đếm tuyệt đối 16 bit ra mét), "MCU cách B" (cộng dồn **hiệu** giữa hai lần đọc, phép trừ cũng 16 bit). Mỗi cách ra bao nhiêu mét sau 30 s?
+3. Lỗi của cách A bị bắt ở tầng nào trong: (i) unit test Python, (ii) SIL biên dịch C với `int16_t`, (iii) HIL bơm số đếm qua UART vào biến `int32_t`, (iv) HIL có bộ phát xung thật vào chân PCNT, (v) bàn với motor thật?
+
+```markdown
+# prediction.md — F2.7
+1. Tràn sau __ m, __ s
+2. SIL: __ m ; MCU cách A: __ m ; MCU cách B: __ m
+3. Bắt ở tầng: __ ; lọt ở tầng: __
+```
+
+```python
+# [đã chạy] — Python 3.13, numpy 2.5
+# Cùng một thuật toán odometry, chạy ở hai tầng: SIL (Python, số nguyên không tràn)
+# và "giống MCU" (bộ đếm 16 bit có dấu, như thanh ghi PCNT). Tầng nào thấy lỗi?
+import numpy as np
+
+TICKS_PER_REV = 1320          # GIẢ ĐỊNH: 11 xung x4 (quadrature) x hộp số 30 -> tra motor của bạn
+WHEEL_D = 0.065               # m, GIẢ ĐỊNH
+M_PER_TICK = np.pi * WHEEL_D / TICKS_PER_REV
+v, dt, T = 0.4, 0.01, 30.0    # chạy thẳng 0.4 m/s, vòng 100 Hz, 30 s
+
+true_ticks = np.round(np.arange(0, T, dt) * v / M_PER_TICK).astype(np.int64)
+hw16 = true_ticks.astype(np.int16)                    # thanh ghi 16 bit tự quấn vòng
+
+# Cách A: firmware đổi SỐ ĐẾM TUYỆT ĐỐI ra mét
+dist_sil_A = true_ticks[-1] * M_PER_TICK
+dist_mcu_A = int(hw16[-1]) * M_PER_TICK
+# Cách B: firmware lấy HIỆU giữa hai lần đọc, phép trừ cũng trong 16 bit
+d16 = np.diff(hw16).astype(np.int16)                  # quấn vòng triệt tiêu trong phép trừ
+dist_mcu_B = (int(hw16[0]) + d16.astype(np.int64).sum()) * M_PER_TICK
+
+print(f"tràn sau {32767 * M_PER_TICK:.2f} m (= {32767 * M_PER_TICK / v:.1f} s ở {v} m/s)")
+print(f"SIL cách A: {dist_sil_A:.2f} m | MCU cách A: {dist_mcu_A:.2f} m | MCU cách B: {dist_mcu_B:.2f} m")
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Kết quả chạy:
+
+```
+tràn sau 5.07 m (= 12.7 s ở 0.4 m/s)
+SIL cách A: 12.00 m | MCU cách A: 1.86 m | MCU cách B: 12.00 m
+```
+
+- Câu 1: ~5 m, ~13 s. Một hành lang văn phòng. Lỗi này không cần điều kiện hiếm; nó cần một lần chạy dài hơn mọi lần test trên bàn (thường vài giây).
+- Câu 2: cách A ra một con số **trông hợp lý** (1,86 m, dương, cỡ đúng) nhưng sai hoàn toàn: không có NaN, không crash. Cách B đúng dù thanh ghi tràn nhiều lần, vì hiệu hai số 16 bit tính trong 16 bit triệt tiêu phần quấn vòng (miễn là giữa hai lần đọc bánh quay ít hơn 32 767 xung, ở đây ~25 xung/chu kỳ). Đây là kỹ thuật chuẩn cho bộ đếm tràn, và là lý do ESP-IDF có tùy chọn tích lũy số đếm khi chạm giới hạn [tự đo: tên tùy chọn theo phiên bản ESP-IDF].
+- Câu 3: (i) lọt (Python int không tràn); (ii) **bắt** nếu SIL dùng đúng kiểu `int16_t` của thanh ghi và chạy đủ lâu; (iii) **lọt**: cổng HIL bỏ qua thanh ghi; (iv) bắt, nếu test chạy quá ~13 s mô phỏng; (v) bắt, nếu motor chạy đủ lâu và có người so với quãng đường thật. Tầng "cao hơn" không tự động bắt nhiều hơn; tầng nào có **thứ thật chứa lỗi** trong vòng mới bắt.
+- Nếu motor của bạn có encoder nhiều xung hơn (ví dụ 7 PPR × 4 × 100 = 2800 xung/vòng [ước lượng: tùy motor]), tràn đến sớm hơn nữa.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi đọc một khẳng định về tầng test:
+1. Trong vòng, thứ gì **thật**, thứ gì **mô phỏng**? Viết ra cho từng tín hiệu (encoder, PWM, nguồn, đồng hồ).
+2. Lớp lỗi được hứa (tràn số, ngắt, timing) có nằm ở thành phần thật không?
+3. Plant model có chạy kịp thời gian thực không? Đo, đừng giả định.
+4. Tầng này chạy bao nhiêu lần? Kết luận là "có/không có lớp lỗi" hay là một tỉ lệ?
+5. Có ví dụ lỗi **thật** mà chỉ tầng này bắt được không (tiêu chí của K7 gốc Bài 19)?
+6. Kết quả tầng dưới có được dùng để quyết định chạy tầng trên không, và ngưỡng chuyển tầng là gì?
+
+Chấm:
+
+**(a)** *"HIL bắt được lớp lỗi mà mô phỏng thuần túy (chạy trên Python/C++ x86) hoàn toàn bỏ sót: lỗi tràn số nguyên 16-bit trên MCU, hiện tượng ngắt interrupt bị nghẽn, trôi timer thời gian thực, hoặc watchdog kích hoạt do task serial bị khóa."* (Gemini K7 Bài 19)
+
+**(b)** *"CI: mỗi thay đổi → 1000 episode sim → verdict ba trạng thái → nếu PASS thì 20 lần chạy HIL → nếu PASS thì đề xuất chạy thật."* (K7 gốc Bài 19, bước 5)
+
+**(c)** *"Ba mức test, mỗi mức nhanh và rẻ hơn mức dưới: sim thuần (1000 episode/giờ), HIL (thời gian thực), thật (vài lần/giờ)."* (K7 gốc Bài 19)
+
+**(d)** *"Hàng không/ô tô (SIL): phần mềm điều khiển được kiểm bằng tín hiệu cảm biến tổng hợp trước khi lên phần cứng."* (K2 Bài 5)
+
+<details><summary>🔒 Đáp án gập</summary>
+
+- **(a) ĐÚNG MỘT PHẦN.** Ngắt nghẽn, timer, watchdog do task bị khóa: đúng là lớp lỗi cần MCU thật. Tràn 16 bit: **không** "hoàn toàn bỏ sót" ở SIL, nếu SIL biên dịch đúng code C với đúng kiểu dữ liệu; và **có thể lọt** HIL nếu cổng HIL bỏ qua thanh ghi tràn (bài tập mục 5). Viết đúng: "lớp lỗi phụ thuộc phần cứng có trong vòng HIL".
+- **(b) ĐÚNG MỘT PHẦN.** Thứ tự tầng hợp lý. Nhưng 20 lần HIL là phép thử lớp lỗi, không phải phép so tỉ lệ: 0/20 lỗi chỉ cho cận trên ~14% (F2.3). Phán quyết HIL nên là "không thấy lỗi thuộc các lớp X, Y, Z trong 20 lần, mỗi lần dài T giây", kèm danh sách lớp lỗi và độ dài; và các lần HIL nên chọn kịch bản **chạy lâu** (bắt tràn, rò bộ nhớ) chứ không lấy ngẫu nhiên. Không đổi số 20 của bài gốc.
+- **(c) ĐÚNG.** Đọc theo chiều từ dưới lên: sim nhanh hơn HIL (HIL bị khóa vào thời gian thực), HIL rẻ và an toàn hơn thật. Con số "1000 episode/giờ" là mục tiêu của bài, phụ thuộc máy [tự đo].
+- **(d) ĐÚNG.** Đó đúng là SIL. Cần nói thêm: ở hai ngành đó, tín hiệu tổng hợp đến từ mô hình đã được validate với dữ liệu thật; dữ liệu tổng hợp của K2 Bài 5 chỉ đủ để kiểm đường ống, không đủ để kiểm thuật toán ước lượng.
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot, mỗi lần đổi firmware phải qua HIL. Một bàn HIL chạy 20 kịch bản × 60 s. Bao nhiêu bàn HIL cho 10 PR firmware mỗi ngày? Cái gì gãy trước: số bàn, hay độ lệch giữa các bàn?
+   <details><summary>Hướng nghĩ</summary>Tính giờ-bàn. Nhiều bàn thì bàn cũng cần "hiệu chuẩn" lẫn nhau (cùng firmware, cùng kết quả?), giống golden theo lớp máy ở F2.2. Bàn HIL hỏng là một nguồn flake mới.</details>
+2. **[Failure mode]** Plant model trong HIL chạy chậm hơn chu kỳ 10 ms ở 5% số bước. Firmware thấy gì, và lỗi bạn quan sát thuộc về ai?
+   <details><summary>Hướng nghĩ</summary>Dữ liệu encoder đến trễ/không đều: giống jitter thật nhưng do bàn test. Phải log thời gian bước của plant và loại các lần chạy vượt ngân sách, hoặc báo INCONCLUSIVE cho chúng.</details>
+3. **[Vì sao không]** Vì sao không bỏ hẳn sim và chỉ test thật, vì robot văn phòng rẻ?
+   <details><summary>Hướng nghĩ</summary>Số lần chạy: để có power cho sụt 5 điểm cần cỡ nghìn episode (F2.3); thực địa làm vài lần/giờ. Và lỗi an toàn không thể "thử nhiều lần" trên người thật.</details>
+4. **[Liên ngành]** Ngành ô tô chạy HIL cho ECU phanh hàng nghìn giờ. Họ có gì mà bạn không có?
+   <details><summary>Hướng nghĩ</summary>Plant model đã validate kỹ, phần cứng HIL thương mại có I/O điện thật ở mức tín hiệu, và chuẩn quy định độ phủ. Bạn có: một ESP32, một UART, và quyền chọn đúng 3–5 lớp lỗi đáng đưa vào vòng.</details>
+5. **[Phản biện]** "Kim tự tháp test là lỗi thời; nên dùng 'chiếc cúp' (nhiều integration test)." Áp vào robot thì sao?
+   <details><summary>Hướng nghĩ</summary>Tranh luận ở web là về giá viết/sửa test. Ở robot, giá chạy tầng trên tăng theo thời gian thực và rủi ro vật lý, nên hình dạng bị chi phối bởi vật lý, không bởi sở thích. Nhưng SIL (tầng giữa) đáng dày hơn unit test thuần thuật toán.</details>
+
+### 8. Liên kết ra ngoài
+
+- **Hàng không: iron bird.** Một khung máy bay mặt đất có hệ thủy lực, bộ chấp hành, máy tính bay thật, khí động học mô phỏng. Giống: HIL đầy đủ. Khác: quy mô và chuẩn chứng nhận (DO-178C) quy định độ phủ test cho từng mức phần mềm.
+- **Y sinh: thử nghiệm in silico → in vitro → in vivo → lâm sàng.** Giống: kim tự tháp, mỗi tầng một lớp lỗi (độc tính tế bào, chuyển hóa toàn cơ thể), số lượng giảm dần lên trên. Khác: chuyển tầng được quy định bởi cơ quan quản lý, và tầng trên có rủi ro đạo đức.
+- **Bán dẫn: simulation → emulation (FPGA) → silicon.** Giống: thay dần thứ giả bằng thứ thật; emulation chạy nhanh hơn simulation nhưng ít quan sát được hơn. Khác: tape-out là điểm không quay lại, nên đầu tư vào tầng dưới lớn hơn nhiều so với robot.
+
+### 9. Áp vào khóa chính
+
+- **K7 C4:** viết test firmware chạy được ở hai nơi: SIL (code C biên dịch trên host với đúng kiểu dữ liệu) và trên ESP32; liệt kê lớp lỗi cho mỗi nơi.
+- **K7 C10.2:** mỗi dòng FMEA ghi tầng nào kiểm nó (SIL, HIL, bàn, thực địa).
+- **K7 C11.2:** khi dựng cổng HIL, viết bảng "thật / mô phỏng" cho từng tín hiệu; ít nhất một kịch bản HIL chạy đủ lâu để vượt mọi giới hạn bộ đếm; ghi ví dụ lỗi thật mà chỉ HIL bắt được (tiêu chí gốc).
+- **K7 C11.3:** tầng sim có giá trị chỉ khi xếp hạng cấu hình khớp thực địa; đó là validation của cả kim tự tháp.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Ariane 501: tràn khi chuyển float 64 bit sang int 16 bit trong SRI, phần mềm dùng lại từ Ariane 4 | [chuẩn] | Báo cáo Inquiry Board 1996 |
+| Báo cáo khuyến nghị thử nghiệm vòng kín với thiết bị thật và dữ liệu thực tế | [chuẩn] | Diễn đạt lại; trích nguyên văn thì đọc mục khuyến nghị của báo cáo |
+| PCNT ESP32-S3 là bộ đếm 16 bit có dấu | [spec] | ESP32-S3 TRM, chương PCNT; kiểm lại |
+| Thông số motor/encoder trong bài tập | [ước lượng] | Giả định; thay bằng số của motor thật (K7 C3) |
+| Kết quả bài tập | [đã chạy] | |
+| Đã sửa: Gemini K7 Bài 19 nói HIL bắt tràn 16 bit mà sim "hoàn toàn bỏ sót" | sửa | Phụ thuộc kiểu dữ liệu trong SIL và cách dựng cổng HIL |
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** *ARIANE 5 Flight 501 Failure, Report by the Inquiry Board* (J.-L. Lions, chủ tịch), Paris, 19/7/1996.
+- **Giải thích:** *Software Engineering at Google*, chương 14 *Larger Testing* (độ trung thực của test, khi nào cần môi trường thật).
+- **Đào sâu (tùy chọn):** Mike Cohn, *Succeeding with Agile* (2009), phần kim tự tháp test; đọc cùng phản biện "testing trophy" để thấy tranh luận bên web.
+- **Tự kiểm tra:** (1) giải thích MIL/SIL/PIL/HIL cho đồng nghiệp backend trong 5 câu; (2) vẽ lại bảng tầng và kim tự tháp; (3) câu hỏi:
+
+<details><summary>Câu hỏi: cổng HIL của bạn gửi PWM về sim qua UART. Lỗi nào của driver motor thật (H-bridge) không bao giờ hiện trong HIL này?</summary>
+
+Mọi thứ sau chân PWM: dead-time, tần số PWM sai làm motor kêu/nóng, dòng hãm khi đổi chiều, sụt nguồn khi motor khởi động làm ESP32 brownout (F5.7, K7 C3.2). Muốn kéo một phần vào vòng: đo PWM thật bằng logic analyzer hoặc capture của chính ESP32 thay vì gửi giá trị duty qua UART.
+
+</details>
+
+---
