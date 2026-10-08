@@ -340,13 +340,11 @@ flowchart LR
   SH --> RUN["mọi kết quả Module 3–4<br/>tham chiếu set_hash"]
 ```
 
-Mô phỏng 1: **ngân sách 25 kịch bản, 4 tham số, lỗi thật nằm ở một góc tương tác.** Bộ sinh nào chạm được góc?
+Mô phỏng 1: **25 kịch bản, 4 tham số, lỗi nằm ở một góc tương tác.** Bộ sinh nào chạm được góc?
 
 ```python
 # [đã chạy] — Python 3.13, numpy 2.x, scipy 1.18
-# Ngân sách 25 kịch bản, 4 tham số chuẩn hóa về [0,1): friction, mass, x, y.
-# Lỗi thật chỉ xảy ra ở GÓC TƯƠNG TÁC: friction < 0.2 VÀ mass >= 0.8.
-# Bộ sinh nào chạm được góc đó? Bộ nào để trống ô nào?
+# 25 kịch bản, 4 tham số trong [0,1): friction, mass, x, y. Lỗi chỉ ở góc friction < 0.2 VÀ mass >= 0.8.
 import numpy as np
 from scipy.stats import qmc
 
@@ -387,8 +385,7 @@ Mô phỏng 2: **tham số rời rạc** (5 vật, 3 mức ma sát, 3 mức kh�
 
 ```python
 # [đã chạy] — Python 3.13, numpy 2.x
-# Pairwise (all-pairs) cho tham số RỜI RẠC: phủ mọi cặp giá trị với ít kịch bản.
-# Sinh tham lam đơn giản (không tối ưu như PICT), so với full factorial và ngẫu nhiên.
+# Pairwise cho tham số RỜI RẠC, sinh tham lam (không tối ưu như PICT), so với full factorial và ngẫu nhiên.
 import itertools, numpy as np
 
 levels = {"vật": 5, "ma_sát": 3, "khối_lượng": 3, "ánh_sáng": 3, "vùng_đặt": 4}
@@ -429,8 +426,7 @@ Mô phỏng 3: **seed theo vị trí hay theo danh tính**, và giá trị sweep
 
 ```python
 # [đã chạy] — Python 3.13, numpy 2.x
-# Seed của kịch bản con dẫn xuất từ VỊ TRÍ hay từ DANH TÍNH (hash nội dung)?
-# Thêm một điểm ma sát vào giữa sweep rồi xem bao nhiêu kịch bản cũ bị đổi seed.
+# Seed kịch bản con theo VỊ TRÍ hay DANH TÍNH (hash nội dung)? Chèn một điểm vào giữa sweep.
 import hashlib, json, numpy as np
 
 ROOT = 20261008
@@ -487,7 +483,6 @@ print("cộng dồn 0.1:", drift[2], "| từ chỉ số:", old[2], "| linspace:"
 | 🟡 | Covering array, pairwise, t-way | Bộ test trong đó mọi tổ hợp t giá trị của t tham số bất kỳ xuất hiện ít nhất một lần | Full factorial rút gọn ngẫu nhiên |
 | 🟡 | Latin hypercube (LHS), strength 2 | Mỗi chiều chia N khoảng, mỗi khoảng một điểm; strength 2 thêm: mỗi ô của mọi mặt chiếu 2-D một điểm (dựa trên orthogonal array) | Lưới đều |
 | 🟡 | Discrepancy | Độ lệch của phân bố điểm so với phân bố đều; nhỏ hơn = phủ đều hơn | Phương sai |
-| 🟡 | Seed theo danh tính vs theo vị trí | Khóa dẫn xuất seed là hash/khóa ổn định vs chỉ số trong danh sách | Hai cách viết cùng một thứ |
 
 ### 5. Dự đoán
 

@@ -163,3 +163,139 @@ Bản gốc có lịch 19 tuần cộng đúng 120h, nhưng hai tuần cuối l�
 **Ba điểm không được bỏ (bản gốc):** Bài 3, Bài 12, Bài 15–16. Tuần crunch rơi vào đâu thì hy sinh **tuần 10–12** (Module 3 là sân nhà của bạn, làm nhanh được), không hy sinh ba điểm này. Mục 6 của gate có thời gian chờ không do bạn kiểm soát: đăng bài sớm nhất có thể ở tuần 21 và bắt đầu đếm 4 tuần.
 
 **Lượt chạy dài:** 1.000 episode (gate mục 2), R ≥ 20 lần canary (mục 4) và các sweep chạy nền trên N100. Giờ máy không tính vào giờ học, nhưng **giờ đồng hồ** thì có: tính trước bằng số giây/episode của Bài 2 và throughput của Bài 8, để một lượt 20 giờ máy không chặn cả một tuần.
+
+---
+
+## Bẫy đã biết
+
+Mỗi bẫy có một câu hỏi ngược. Trả lời trước khi mở hướng nghĩ.
+
+**1. So sánh simulator thay vì chạy thí nghiệm** (bản gốc). MuJoCo + robosuite đã chọn; Isaac, Newton, Genesis chỉ để theo dõi.
+- **[Phản biện]** "MJX nhanh hơn, nên chuyển sang MJX luôn cho gate mục 2." Phản biện.
+<details><summary>Hướng nghĩ</summary>
+
+N100 không có GPU CUDA; và MJX là một backend khác, cần baseline và A/A riêng, không trộn số với MuJoCo C (Bài 8).
+
+</details>
+
+**2. "Docker là tái lập" và tổ hợp phiên bản không tự khớp.** `pip freeze` không thấy gói hệ thống (Mesa, glibc); LIBERO ghim một robosuite và Python cũ hơn nhiều so với MuJoCo mới nhất. Cấu hình render mẫu trên mạng thường là cho GPU NVIDIA, không phải iGPU Intel.
+- **[Failure mode]** Build lại đúng Dockerfile sau ba tháng, hash episode đổi. Bạn kiểm gì trước?
+<details><summary>Hướng nghĩ</summary>
+
+Base image gọi bằng tag, `apt-get` không ghim, so `dpkg -l` giữa hai image. Đó là lý do giữ image theo digest thay vì tin Dockerfile (Bài 2, Bài 7).
+
+</details>
+
+**3. Seed dẫn xuất bằng phép cộng hoặc theo vị trí.** Đúng trong một run, sai giữa các run, và đổi khi chèn thêm kịch bản.
+- **[Nếu…thì]** Hai run "độc lập" dùng `seed_root + i` với root 42 và 43. Phép so sánh của bạn thực chất là gì?
+<details><summary>Hướng nghĩ</summary>
+
+Gần như cùng bộ seed, tức gần như ghép cặp mà bạn không biết; CI tính như độc lập là sai. Dùng `SeedSequence` theo danh tính (Bài 3, Bài 6).
+
+</details>
+
+**4. N100 là 4 nhân, 4 luồng, không hyperthreading.** Lời khuyên "đừng dùng hyper-thread core" của Gemini không áp dụng; worker thứ 5 trở đi là oversubscription, cộng throttling và một kênh RAM (Bài 8, lỗi đã biết ở mục 7 quy chuẩn).
+- **[Quy mô]** Thuê một máy 16 vCPU. Đường cong throughput của N100 dự đoán được gì cho máy đó, và không dự đoán được gì?
+<details><summary>Hướng nghĩ</summary>
+
+Phần nối tiếp (Amdahl) và phần tranh chấp (USL) đo trên N100 vẫn là giả thuyết; vCPU có thể là SMT, băng thông bộ nhớ khác. Đo lại vài điểm trước khi trả tiền cho 10.000 episode.
+
+</details>
+
+**5. Ma sát trong MuJoCo không phải một số toàn cục.** Nó thuộc từng geom và được trộn theo cặp. Sweep "ma sát" của vật thể có thể ra đường phẳng mà không vì policy bền (Bài 5–6, Bài 17).
+- **[Failure mode]** Sweep ma sát vật 0.1 → 1.0, success rate không đổi. Bạn kết luận gì, và kiểm gì trước khi kết luận?
+<details><summary>Hướng nghĩ</summary>
+
+Đọc ma sát của **tiếp xúc** thật sự trong `d.contact` ở vài điểm sweep. Đường phẳng có thể là bằng chứng rằng tham số không tới được tiếp xúc.
+
+</details>
+
+**6. Một lần chạy không phải một verdict.** "Không thay đổi → PASS", "canary bị bắt", "INCONCLUSIVE khi n nhỏ" đều là tỉ lệ trên nhiều lần với seed root khác. Nhìn trộm rồi cộng dồn episode đến khi "có ý nghĩa" làm vỡ tỉ lệ sai đã thiết kế (Bài 12–13, 18).
+- **[Phản biện]** "CI của hai run chồng nhau nên không khác nhau." Đúng tới đâu?
+<details><summary>Hướng nghĩ</summary>
+
+Chồng lấn là một phép kiểm quá bảo thủ, và "không thấy khác" không phải "bằng nhau". Dùng CI của **hiệu** (Newcombe) và biên δ khai báo trước (Bài 10, Bài 13).
+
+</details>
+
+**7. Giữ mọi thất bại, lấy mẫu thành công** mà không ghi xác suất được giữ thì mọi thống kê tính trên tầng trajectory bị lệch (Bài 9).
+- **[Liên ngành]** Khảo sát xã hội học có cùng vấn đề. Họ sửa bằng gì?
+<details><summary>Hướng nghĩ</summary>
+
+Trọng số nghịch đảo xác suất chọn (Horvitz–Thompson). Muốn dùng được thì RNG rút thăm cũng phải có seed và vào provenance.
+
+</details>
+
+**8. Đo thật bằng đúng kênh, đúng đơn vị.** Cảm biến gắn trên quả nặng không cho mọi kênh cùng tần số; hệ số damping của MuJoCo không cùng đơn vị với γ bạn fit (Bài 16).
+- **[Failure mode]** Sim và thật lệch chu kỳ cỡ 1%, bạn tăng damping để khớp. Sai ở đâu?
+<details><summary>Hướng nghĩ</summary>
+
+Damping gần như không đổi chu kỳ; bạn đang dùng sai tham số để vá một lệch thuộc tham số khác. Tách system ID thành từng bước, mỗi tham số một hiện tượng (Bài 16 phần 7, sau khi commit dự đoán).
+
+</details>
+
+**9. Vòng kín trở thành mục tiêu tối ưu** của bạn, của bộ tìm siêu tham số, và của pipeline agent tự sửa code. Một agent thấy được bộ seed của gate sẽ học bộ seed đó (Bài 18).
+- **[Vì sao không]** Vì sao không công khai toàn bộ bộ eval cho agent "để nó sửa nhanh hơn"?
+<details><summary>Hướng nghĩ</summary>
+
+Goodhart: số đo bị tối ưu trực tiếp thôi đo thứ nó từng đo. Bộ giữ kín, trần số lần gọi, chạy xác nhận trước khi nâng baseline (Bài 18, → F2.8).
+
+</details>
+
+---
+
+## Sửa lỗi so với bản gốc và bản Gemini (gom từ phần 11 các bài)
+
+Bảng này chứa kết luận của nhiều bài. Đọc theo module, sau khi xong module đó.
+
+<details><summary>🔒 MỞ SAU KHI XONG MODULE TƯƠNG ỨNG</summary>
+
+| Chỗ | Sai | Đúng | Ở đâu |
+|---|---|---|---|
+| Gốc + Gemini | CI 95% của **một** tỉ lệ khi câu hỏi là so hai run | Sai số của hiệu; thiết kế theo cặp đổi câu trả lời | Bài 1 |
+| Gốc | Bảng 7 nguồn phi tất định | Thêm mức tập lệnh CPU (SIMD dispatch) và warmstart solver; `dict` có thứ tự, `set` và `os.listdir` thì không | Bài 1, 3 |
+| Gốc | `pip freeze` giống hệt = cùng môi trường | Không thấy gói hệ thống; giữ image theo digest | Bài 2 |
+| Gốc + Gemini | Không tăng throughput → do GIL | MuJoCo nhả GIL; phần giữ GIL là Python của robosuite | Bài 2 |
+| Gốc + Gemini | Tên task LIBERO rút gọn; `MUJOCO_GL=egl` + `--gpus all` | Tên đầy đủ; iGPU Intel mặc định an toàn là `osmesa` `[tự đo]` | Bài 2, 5 |
+| Gốc | `seed_root + env_index` | `default_rng([root, index])` / `SeedSequence.spawn` | Bài 3 |
+| Gốc + Gemini | Làm tròn rồi hash = tương đương thống kê | Hash cho bit-exact + checkpoint có dung sai | Bài 3 |
+| Gốc | Khác máy cùng kiến trúc → bit-exact | Cùng **mức tập lệnh** | Bài 3 |
+| Gemini | Monkey-patch `random`, `randn` là đủ | Thiếu `uniform`; phải patch trước khi import | Bài 3 |
+| Gemini | Canary assert "hash khác golden" | Chèn → chạy bộ test → kỳ vọng FAIL, đo tỉ lệ bắt | Bài 4 |
+| Gốc | "Canary bị bắt 100%" | Kèm n và cận trên tỉ lệ bỏ sót | Bài 4, gate 1 |
+| Gốc | `physics.friction` toàn cục | Theo geom, trộn theo cặp | Bài 5 |
+| Gốc | Đổi một trường → kết quả đổi | Kiểm ở `model_fingerprint`; độ nhạy là bảng đo | Bài 5 |
+| Gốc + Gemini | `initial_state.object_pose` cho LIBERO | Tham chiếu file init state + hash + chỉ số | Bài 5 |
+| Gemini | `json.dumps(sort_keys=True)` đủ; code thiếu import; loader "raise khi bị ghi đè" | Ép kiểu, NaN, hash cấu hình hiệu lực; đọc ngược sau `reset()` | Bài 5 |
+| Gốc | LHS là một kiểu sweep | Thiết kế space-filling; tách strength 1/2 | Bài 6 |
+| Gốc | Seed theo `episode_index` | Theo danh tính, chung dọc trục sweep (CRN) | Bài 6 |
+| Gemini | Không trộn sweep và randomization vì "bất lực xác định nguyên nhân" | Có lineage thì tách được; thứ không trộn là estimand | Bài 6 |
+| Gốc | Đủ 6 trường là tái lập | Thêm định nghĩa thành công, asset, env var, backend, harness config, `set_hash`; chính sách giữ | Bài 7 |
+| Gốc | `reproduce.py` "tự dựng lại môi trường" | Thêm phán quyết KHÔNG TÁI LẬP ĐƯỢC | Bài 7 |
+| Gemini | `collect_provenance` | `platform.processor()` không cho model CPU; mặc định `'local-dev'` là fail mở; nhiều biến không định nghĩa | Bài 7 |
+| Gốc + Gemini | Hyperthread trên N100; quét tới "logical core" | 4C/4T; quét 1..4, thêm 6, 8 để thấy oversubscription | Bài 8 |
+| Gốc | Không phân biệt MJX và MuJoCo C | Khác backend = baseline khác | Bài 8 |
+| Gốc + Gemini | Tool K2 trên dữ liệu sim "phải báo sạch" | Có thể báo động giả (kênh đơ, NaN của episode nổ) | Bài 9 |
+| Gốc | Lấy mẫu thành công | Ghi `inclusion_prob`, trọng số 1/π | Bài 9 |
+| Gemini | CI chồng lấn → INCONCLUSIVE; p99 số bước cho từng task | CI của hiệu; phân vị cao chỉ khi n đủ | Bài 10 |
+| Gốc | Gộp `sim_unstable` vào thất bại là sai | Loại ra cũng sai khi policy gây bất ổn; báo theo arm + độ nhạy | Bài 11 |
+| Gemini | Nới ngưỡng thành công trên run đang so | Đổi định nghĩa bằng version mới, chạy lại baseline | Bài 11 |
+| Gốc | Chênh A/A ở n = 50 "10–15 điểm"; "~700 episode cho 7 điểm" | Tính lại bằng mô phỏng (số trong 🔒 Bài 12) | Bài 12 |
+| Gemini | Power tính từ Δ quan sát; p ≥ 0.05 = không khác | MDE khai báo trước; in CI của hiệu | Bài 12 |
+| Gốc + Gemini | PASS = "không tệ hơn có ý nghĩa" | Quy tắc ba nhánh với δ khai báo trước, chung với Bài 18 | Bài 13 |
+| Gốc + Gemini | Bonferroni hoặc FDR ngang nhau cho gating | Holm phía FAIL cho cổng merge; FDR cho báo cáo khám phá | Bài 13 |
+| Gốc + Gemini | DR "thu hẹp gap"; hai đường cắt nhau → điểm tối ưu | DR giảm độ nhạy trong dải đã phủ, gap vẫn phải đo; chọn λ theo tập mục tiêu | Bài 14 |
+| Gemini | W1 của hai tập giống nhau = 0; KS chứng minh cùng phân bố; Pearson là "rank correlation" | Sàn A/A, bootstrap CI; Spearman cho mức 4 | Bài 15 |
+| Gốc | Gap định nghĩa không kèm độ bất định | u_val (ASME V&V 20) + sàn A/A | Bài 15 |
+| Gốc + Gemini | Chu kỳ đọc từ gia tốc hướng tâm; rolling shutter đo con lắc | Gyro + cổng quang ESP32; rolling shutter chỉ kiểm chéo | Bài 16 |
+| Gemini | `damping` = γ; dt 0.001 đặt sẵn | Đổi đơn vị qua mô-men quán tính; chọn dt bằng kiểm hội tụ | Bài 16 |
+| Gốc | Khớp chu kỳ "sau khi fit damping" | Chu kỳ khớp nhờ chiều dài hiệu dụng; system ID hai bước | Bài 16 |
+| Gốc + Gemini | Số kỳ vọng trong phần Làm; "Verified Domain"; đếm hàng rolling shutter để đo rơi | Chuyển vào 🔒; gọi là validation; fit t₀ nhiều độ cao | Bài 17 |
+| Gốc | Ba PR giả, một lần chạy | Tỉ lệ verdict trên R lần, so với α và power | Bài 18 |
+| Gemini | "PR chỉ sửa comment" là A/A; `with Writer(...)` cứu MCAP | A/A với seed root khác; ghi file tạm rồi đổi tên | Bài 18 |
+| Gốc + Gemini | Không nhắc Goodhart | Bộ giữ kín, seed HMAC, trần số lần gọi, chạy xác nhận | Bài 18 |
+| Gốc ("Ba điều mang đi") + Gemini | "Phần lớn kết quả công khai không đủ power", "n = 20–50" | Thành bước khảo sát có bảng, hoặc hạ giọng | Bài 19 |
+| Gốc (Sau Khóa 6) | "K7 là dự án 340 giờ, 13 tháng" | K7 mới lõi 561h, chạy song song từ K1; tới đây bạn có thể đã đi được nửa đường ray | Tổng quan |
+| Gốc (lịch) | 19 tuần, tuần 18 là 14h | 21 tuần, ≤ 8h/tuần, cùng 120h | Tổng quan |
+
+</details>
