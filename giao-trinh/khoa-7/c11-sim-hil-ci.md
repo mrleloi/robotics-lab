@@ -301,9 +301,9 @@ Mô hình đồ chơi: lực mỗi bánh `g·(u − ke·v_bánh)` khi driver d�
 
 **Chấm mô hình:**
 
-- *"Sim khớp cả bốn hiện tượng của bản gốc trong ngưỡng, vậy sim đúng."* → **SAI.** Hai trong bốn hiện tượng chạy vòng kín và gần như mù với động lực học (phần 7 có số). Phản ví dụ: trong mô phỏng ở phần 2, tăng ma sát, khối lượng hay trễ 10 % không đổi thời gian đi 5 m và thời gian quay 360° tới 0,1 %. Hai phép thử đó vẫn đáng làm, nhưng để kiểm **hình học và controller**, và phải ghi đúng như vậy trong `VALIDITY.yaml`.
+- *"Sim khớp cả bốn hiện tượng của bản gốc trong ngưỡng, vậy sim đúng."* → **SAI.** Hai trong bốn hiện tượng chạy vòng kín và gần như mù với động lực học (phần 7 có số). Phản ví dụ: chạy mô phỏng ở phần 2 và đọc hai hàng đầu của bảng độ nhạy (đáp án ở phần 7). Hai phép thử đó vẫn đáng làm, nhưng để kiểm **hình học và controller**, và phải ghi đúng như vậy trong `VALIDITY.yaml`.
 - *Bản Gemini K7 Bài 18: fit ma sát, I_z, trễ "cho tới khi đường cong khớp" từ bốn phép thử.* Đã chấm ở → F6.4 mục 6 (khẳng định (a), **ĐÚNG MỘT PHẦN**). Không chấm lại; bài này biến ba chỗ gãy F6.4 chỉ ra thành ba phép thử riêng ở phần 6 bước 2.
-- *Mô hình của bạn ở K3 lượt 12:* "có đủ dữ liệu trong thời gian dài thì mọi công thức vật lý gần như là hằng số, tầng AI biểu diễn và dự đoán được." → **ĐÚNG MỘT PHẦN.** Đúng: đủ dữ liệu thì ước lượng được tham số, đó là nhận dạng hệ thống. Gãy ở chỗ "đủ dữ liệu" phải là dữ liệu **có độ nhạy** với tham số. Phản ví dụ: hàng nghìn giờ log robot đi theo Nav2 (vòng kín, quay đều) không chứa thông tin nào về I_z, vì cột I_z trong bảng độ nhạy của các phép thử vòng kín bằng 0. Thêm dữ liệu cùng loại không đổi số 0 đó.
+- *Mô hình của bạn ở K3 lượt 12:* "có đủ dữ liệu trong thời gian dài thì mọi công thức vật lý gần như là hằng số, tầng AI biểu diễn và dự đoán được." → **ĐÚNG MỘT PHẦN.** Đúng: đủ dữ liệu thì ước lượng được tham số, đó là nhận dạng hệ thống. Gãy ở chỗ "đủ dữ liệu" phải là dữ liệu **có độ nhạy** với tham số. Phản ví dụ: hàng nghìn giờ log robot đi theo Nav2 (vòng kín, quay đều) chứa rất ít thông tin về I_z: đọc cột I_z ở các hàng vòng kín của bảng độ nhạy. Thêm dữ liệu cùng loại không đổi được độ nhạy đó.
 
 ### 4. Thuật ngữ
 
@@ -612,7 +612,7 @@ host            |step sim 10 ms|──USB──► #2 nhận v[k+1]  |
 
 Có thể làm ngược lại (MCU chờ host rồi mới chạy tick: "lockstep ảo"), nhưng khi đó timer không còn là timer thật, và lỗi timing, thứ đáng giá nhất của tầng này, biến mất. Bài này giữ timer thật, chấp nhận deadline miss, và **đếm** nó.
 
-**Một lần lỡ hạn làm run vô hiệu: run đó là ERROR**, không phải INCONCLUSIVE. Theo cổng của K6 Bài 13, ERROR là "phép so sánh không hợp lệ, dụng cụ hỏng", INCONCLUSIVE là "thiếu bằng chứng". Lỡ hạn là dụng cụ hỏng. Cái bẫy nằm ở thống kê đuôi: p99 trễ thấp không có nghĩa run sạch. Một run 2 phút có 12.000 tick; lỡ 1/5.000 tick là gần như run nào cũng hỏng. Mô phỏng (phân bố giả định, bạn thay bằng số đo):
+**Một lần lỡ hạn làm run vô hiệu: run đó là ERROR**, không phải INCONCLUSIVE. Theo cổng của K6 Bài 13, ERROR là "phép so sánh không hợp lệ, dụng cụ hỏng", INCONCLUSIVE là "thiếu bằng chứng". Lỡ hạn là dụng cụ hỏng. Cái bẫy nằm ở thống kê đuôi: p99 trễ thấp không có nghĩa run sạch. Một run 2 phút có 12.000 tick: tự tính xem tỉ lệ lỡ mỗi tick phải nhỏ cỡ nào để phần lớn run còn sạch. Mô phỏng (phân bố giả định, bạn thay bằng số đo):
 
 ```python
 # [đã chạy] C11.2 — cổng HIL khóa nhịp vào timer ESP32 (10 ms): một run có ≥1 lần lỡ hạn là ERROR.
@@ -646,12 +646,12 @@ for name, (lt, sp) in cfgs.items():
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
 | Kim tự tháp unit / integration / e2e | SIL / HIL / chạy thật | E2E backend vẫn gần tất định và tăng tốc được. HIL bị khóa vào thời gian thực, chạy thật thì ngẫu nhiên, đắt, có rủi ro vật lý | Dồn kiểm lên tầng trên: CI chậm tới mức không ai đợi. Bỏ tầng giữa: lỗi timing chỉ lộ trên sàn văn phòng |
-| SLO "p99 latency < X" | Ngân sách trễ mỗi tick của cổng HIL | SLO cho phép 1 % vượt; một run HIL **không cho phép lần nào**. Đơn vị cần tính là run, không phải request | Báo "p99 3,5 ms, cổng ổn", trong khi 40 % run dài là ERROR (phần 7) |
+| SLO "p99 latency < X" | Ngân sách trễ mỗi tick của cổng HIL | SLO cho phép 1 % vượt; một run HIL **không cho phép lần nào**. Đơn vị cần tính là run, không phải request | Báo "p99 vài ms, cổng ổn", trong khi phần lớn run dài là ERROR |
 | Load test ngắn, nhiều lần | Run HIL ngắn, nhiều lần | Lỗi tích lũy (tràn, rò, buffer đầy dần) cần **một** run dài, không cần nhiều run ngắn | 1000 run × 10 s xanh, robot thật hỏng ở mét thứ 4 |
 
 **Chấm mô hình:**
 
-- *Câu của bạn ở đầu lộ trình:* "phải có nơi để environment show ra lỗi, metric, đúng và sai." → **ĐÚNG MỘT PHẦN.** Đúng: cần môi trường tái lập được để quan sát hành vi. Gãy ở ba chỗ. (1) Môi trường chỉ "show" lỗi ở phần **thật** trong vòng: bàn HIL không có motor thì không bao giờ show dòng phanh làm ESP32 brownout. (2) "Đúng và sai" thiếu hai trạng thái: INCONCLUSIVE (thiếu bằng chứng) và ERROR (môi trường hỏng); K6 Bài 13 đã thêm. (3) Môi trường cũng có tỉ lệ hỏng của chính nó. Phản ví dụ: cấu hình B ở phần 2, p99 trễ 3,5 ms nhưng phần lớn run 2 phút là ERROR; một hệ chỉ có đúng/sai sẽ gán các lần lỡ hạn đó cho firmware.
+- *Câu của bạn ở đầu lộ trình:* "phải có nơi để environment show ra lỗi, metric, đúng và sai." → **ĐÚNG MỘT PHẦN.** Đúng: cần môi trường tái lập được để quan sát hành vi. Gãy ở ba chỗ. (1) Môi trường chỉ "show" lỗi ở phần **thật** trong vòng: bàn HIL không có motor thì không bao giờ show dòng phanh làm ESP32 brownout. (2) "Đúng và sai" thiếu hai trạng thái: INCONCLUSIVE (thiếu bằng chứng) và ERROR (môi trường hỏng); K6 Bài 13 đã thêm. (3) Môi trường cũng có tỉ lệ hỏng của chính nó. Phản ví dụ: so cấu hình B và C trong mô phỏng ở phần 2 (đáp án phần 7): p99 trễ như nhau, tỉ lệ run hỏng khác hẳn; một hệ chỉ có đúng/sai sẽ gán các lần lỡ hạn đó cho firmware.
 - *"Thêm thật nhiều run HIL ngắn là đủ."* → **SAI** cho lớp lỗi tích lũy. Phản ví dụ: PCNT 16 bit với 0,108 mm/count tràn sau một quãng cố định; run ngắn hơn thời gian đi hết quãng đó không bao giờ thấy lỗi xử lý tràn, dù chạy bao nhiêu lần (bạn tính quãng ở phần 5).
 
 ### 4. Thuật ngữ
@@ -917,9 +917,9 @@ print(f"null (thật như nhau, n=20): P(ρ≥0.829) = {np.nanmean(np.array(null
 
 **Chấm mô hình:**
 
-- *Gemini K7 Bài 20: "Tương quan mạnh (ρ ≥ 0,80): thứ tự được bảo toàn."* → **SAI** như một tiêu chí. Với n = 6, ρ = 0,8 không đạt được; giá trị gần nhất dưới 0,829 là 0,771, mà phân bố null cho P(ρ ≥ 0,771) ≈ 5,1 %. Ngưỡng không gắn power cũng vô nghĩa: phản ví dụ ở phần 7, sim xếp hạng đúng hoàn toàn, thiết kế "hẹp" với n = 20 chỉ đạt ρ ≥ 0,829 khoảng một phần ba số lần.
+- *Gemini K7 Bài 20: "Tương quan mạnh (ρ ≥ 0,80): thứ tự được bảo toàn."* → **SAI** như một tiêu chí. Với n = 6, ρ = 0,8 không đạt được; giá trị gần nhất dưới 0,829 là 0,771, mà phân bố null cho P(ρ ≥ 0,771) ≈ 5,1 %. Ngưỡng không gắn power cũng vô nghĩa: phản ví dụ là hàng "hẹp, n = 20" của mô phỏng phần 2, nơi sim xếp hạng đúng hoàn toàn (đáp án phần 7).
 - *Gemini: "Nếu thanh sai số của hai cấu hình chồng lấn, không được kết luận chúng khác nhau."* → **ĐÚNG MỘT PHẦN.** Không chồng lấn là điều kiện đủ cho khác biệt; chồng lấn **không** chứng minh giống nhau, và hai CI 95 % chồng lấn một phần vẫn có thể có hiệu khác 0 có ý nghĩa. Phản ví dụ: kiểm hiệu bằng CI của hiệu (Newcombe, K6 Bài 13), không bằng mắt nhìn hai thanh.
-- *Gemini: "ρ ≤ 0 → mô hình trễ hoặc động học bánh sai dạng."* → đã chấm ở → F6.5 mục 6 (c), **ĐÚNG MỘT PHẦN**: kiểm power và CI của ρ trước. Phần 7 cho số: với sim đúng hoàn toàn, thiết kế hẹp, n = 20, P(ρ ≤ 0) ≈ 2 %.
+- *Gemini: "ρ ≤ 0 → mô hình trễ hoặc động học bánh sai dạng."* → đã chấm ở → F6.5 mục 6 (c), **ĐÚNG MỘT PHẦN**: kiểm power và CI của ρ trước. Cột P(ρ ≤ 0) của mô phỏng phần 2 cho biết một sim đúng hoàn toàn vẫn ra ρ ≤ 0 thường tới mức nào.
 - *Gemini: "Sim gần như luôn lạc quan hơn thực tế."* → **ĐÚNG MỘT PHẦN.** Thường đúng cho tỉ lệ thành công khi sim thiếu nhiễu. Sai khi sim **khắt khe** hơn: va chạm trong sim tính theo footprint hình học, ngoài đời robot cạ nhẹ không ai ghi; người trong sim đi theo quỹ đạo không né robot, người thật né. Phản ví dụ: kịch bản có người cắt ngang dày, sim có thể bi quan hơn.
 
 ### 4. Thuật ngữ
@@ -1580,7 +1580,7 @@ for k, r in res.items():
 | Dự báo traffic bằng trung bình trượt | CV với vận tốc lọc | Traffic không phản ứng với dự báo; người phản ứng với robot | Đánh giá dự đoán trên dữ liệu robot **đứng yên** rồi dùng khi robot **di chuyển** |
 | Baseline "naive forecast" trong time series | Đứng yên / CV | Baseline time series ít nhạy nhiễu đo; ở đây vận tốc từ vị trí nhiễu | So mô hình học được với một CV ước vận tốc tệ, tưởng mình thắng |
 
-**Chấm mô hình:** *"Mô hình học sâu dự đoán người tốt hơn vận tốc không đổi."* → **ĐÚNG MỘT PHẦN**: có thể ở tầm dài và cảnh đông; ở 1–2 s trong văn phòng nhỏ, CVM là baseline khó thắng (Schöller 2020). Phản ví dụ: phần 7, chỉ đổi **cách ước vận tốc** đã làm FDE@1 s giảm gần 4 lần.
+**Chấm mô hình:** *"Mô hình học sâu dự đoán người tốt hơn vận tốc không đổi."* → **ĐÚNG MỘT PHẦN**: có thể ở tầm dài và cảnh đông; ở 1–2 s trong văn phòng nhỏ, CVM là baseline khó thắng (Schöller 2020). Phản ví dụ: trong mô phỏng phần 2, chỉ đổi **cách ước vận tốc** của CV đã đổi FDE nhiều hơn mọi mô hình học được thường hứa (đáp án phần 7).
 
 ### 4. Thuật ngữ
 
