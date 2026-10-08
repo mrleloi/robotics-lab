@@ -243,7 +243,6 @@ Chấm ĐÚNG / ĐÚNG MỘT PHẦN / SAI / CHƯA RÕ:
 
 - **Y học sàng lọc.** Xét nghiệm có độ nhạy và đặc hiệu cao vẫn cho phần lớn kết quả dương tính là giả khi bệnh hiếm; vì thế y học tách *sàng lọc* (nhạy, rẻ) khỏi *xác nhận* (đặc hiệu, đắt). Giống: đúng cấu trúc CI nhanh/CI chậm. Khác: bác sĩ biết tỉ lệ nền từ dịch tễ học; bạn phải tự đo tỉ lệ nền của bug.
 - **Radar và lý thuyết phát hiện tín hiệu.** Đường ROC sinh ra để chọn ngưỡng phát hiện máy bay trong nhiễu radar. Giống: một ngưỡng, hai loại sai, đánh đổi liên tục. Khác: nhiễu radar có mô hình vật lý; "nhiễu" của một bộ test (flaky, hạ tầng) thường không có mô hình nào.
-- **Kiểm toán tài chính.** Kiểm toán viên lấy mẫu chứng từ và nói "không phát hiện sai sót trọng yếu", không nói "không có sai sót". Giống: câu chữ trung thực về FN. Khác: kiểm toán chọn mẫu theo rủi ro có chủ đích, điều mà bộ seed CI ngẫu nhiên không làm (F2.4).
 
 ### 9. Áp vào khóa chính
 
@@ -531,7 +530,7 @@ Ba câu bản chất:
 **Chấm mô hình:**
 
 - *"Test đỏ rồi chạy lại xanh thì là flake hạ tầng, bỏ qua được."* — **SAI.** Một lần đỏ rồi xanh chỉ nói p nằm giữa 0 và 1; nó không nói nguyên nhân nằm ở hạ tầng hay ở code. **Phản ví dụ:** watchdog firmware reset khi tác vụ serial bị chặn quá 100 ms, chỉ xảy ra khi host bận; test HIL đỏ 1/5 lần. Chạy lại xanh; lỗi lên robot.
-- *"Ba trạng thái: PASS = không tệ hơn baseline có ý nghĩa; FAIL = tệ hơn có ý nghĩa; INCONCLUSIVE = không đủ episode."* (K6 gốc Bài 13) — **ĐÚNG MỘT PHẦN.** Tinh thần đúng, định nghĩa thiếu biên. "Không tệ hơn có ý nghĩa" **chính là** trạng thái của mọi so sánh thiếu episode, nên hai dòng PASS và INCONCLUSIVE chồng lên nhau; viết code theo đúng câu chữ thì INCONCLUSIVE không bao giờ được trả về. **Phản ví dụ:** n = 50, sụt thật 5 điểm: CI của Δ rộng khoảng ±16 điểm, chứa 0, nên "không tệ hơn có ý nghĩa" → PASS theo câu chữ. Sửa: PASS khi cận dưới CI > −δ (bài tập mục 5). Đây là sửa **cách đọc** tiêu chí, không đổi ngưỡng của bài gốc.
+- *"Ba trạng thái: PASS = không tệ hơn baseline có ý nghĩa; FAIL = tệ hơn có ý nghĩa; INCONCLUSIVE = không đủ episode."* (K6 gốc Bài 13) — **ĐÚNG MỘT PHẦN.** Tinh thần đúng, định nghĩa thiếu biên. "Không tệ hơn có ý nghĩa" **chính là** trạng thái của mọi so sánh thiếu episode, nên hai dòng PASS và INCONCLUSIVE chồng lên nhau; viết code theo đúng câu chữ thì INCONCLUSIVE không bao giờ được trả về. **Phản ví dụ:** n = 50, sụt thật 5 điểm: CI của Δ rộng hơn 5 điểm nhiều lần và chứa 0, nên "không tệ hơn có ý nghĩa" → PASS theo câu chữ. Sửa: PASS khi cận dưới CI > −δ (bài tập mục 5). Đây là sửa **cách đọc** tiêu chí, không đổi ngưỡng của bài gốc.
 
 ### 4. Thuật ngữ
 
@@ -703,7 +702,6 @@ Chấm:
 
 - **Thử nghiệm lâm sàng: non-inferiority và tương đương sinh học.** Giống hệt cấu trúc: biên chọn trước, CI của chênh lệch, ba kết luận. Khác: biên được cơ quan quản lý duyệt, và nhìn trộm bị cấm bằng quy trình (ủy ban giám sát dữ liệu độc lập).
 - **Sản xuất: acceptance sampling.** Nhà máy lấy mẫu một lô, chấp nhận/từ chối theo kế hoạch lấy mẫu có rủi ro nhà sản xuất (α) và rủi ro người mua (β) ghi rõ. Giống: phán quyết là thiết kế có hai loại rủi ro. Khác: lô hàng tĩnh; bộ test của bạn chạy trên hệ đổi mỗi commit.
-- **Mạng: phát hiện mất gói.** "Không mất gói nào trong 100 ping" không nói mất gói 0%; nói dưới khoảng 3%. Giống: quy tắc ba. Khác: mất gói thường theo cụm (không độc lập), nên CI thật còn rộng hơn.
 
 ### 9. Áp vào khóa chính
 
@@ -789,7 +787,7 @@ flowchart TD
 
 **Chấm mô hình:**
 
-- *"Property-based test là test ngẫu nhiên; chạy 100 ví dụ xanh nghĩa là tính chất đúng."* — **ĐÚNG MỘT PHẦN.** Có ngẫu nhiên, nhưng bộ sinh của Hypothesis cố ý dồn về biên (0, rỗng, rất lớn, lặp lại), lưu phản ví dụ cũ để chạy lại, và thu nhỏ khi gãy. "100 ví dụ xanh" vẫn chỉ là một mẫu: nó nói về những vùng bộ sinh đã chạm. **Phản ví dụ:** bộ sinh tín hiệu không có offset DC; bản quên trừ trung bình xanh 100/100 lần. Thêm `dc` vào bộ sinh, nó gãy ngay (bài tập mục 5).
+- *"Property-based test là test ngẫu nhiên; chạy 100 ví dụ xanh nghĩa là tính chất đúng."* — **ĐÚNG MỘT PHẦN.** Có ngẫu nhiên, nhưng bộ sinh của Hypothesis cố ý dồn về biên (0, rỗng, rất lớn, lặp lại), lưu phản ví dụ cũ để chạy lại, và thu nhỏ khi gãy. "100 ví dụ xanh" vẫn chỉ là một mẫu: nó nói về những vùng bộ sinh đã chạm. **Phản ví dụ:** bộ sinh tín hiệu không có offset DC thì một bộ ước lượng quên trừ trung bình có thể xanh 100/100 lần, vì lỗi chỉ hiện khi có offset. Bài tập mục 5 cho bạn kiểm điều này.
 - *"Differential test với bản tham chiếu là đủ để tin adapter."* — **ĐÚNG MỘT PHẦN.** Bắt được mọi chỗ adapter **lệch** tham chiếu. Không bắt được chỗ hai bên **cùng sai**: nếu script gốc của model dùng thống kê chuẩn hóa của dataset khác dataset của bạn, adapter khớp tham chiếu tuyệt đối và vẫn sai. **Phản ví dụ:** cả hai dùng `stats.json` của LIBERO cho robot của bạn.
 
 ### 4. Thuật ngữ
@@ -1013,7 +1011,7 @@ Ba câu bản chất:
 
 **Chấm mô hình:**
 
-- *"Coverage cao thì bộ test tốt."* — **SAI** như một phát biểu đủ. Coverage là điều kiện cần yếu (code không chạy thì chắc chắn không được kiểm). **Phản ví dụ:** bài tập mục 5: bộ test hai ví dụ chạy qua cả hai phép so sánh của hàm phán quyết, vậy mà hai đột biến nằm **trên chính những dòng đã chạy** (đổi `<` thành `<=`, `>` thành `>=` ở biên) vẫn sống. Coverage nói dòng đó đã chạy; nó không nói biên đã được kiểm.
+- *"Coverage cao thì bộ test tốt."* — **SAI** như một phát biểu đủ. Coverage là điều kiện cần yếu (code không chạy thì chắc chắn không được kiểm). **Phản ví dụ:** một test gọi `verdict()` với 20 bộ tham số ngẫu nhiên và chỉ assert `result in {"PASS", "FAIL", "INCONCLUSIVE"}`: chạy qua mọi dòng, coverage 100%, và gần như không đột biến nào bị giết (đổi nhãn PASS ↔ INCONCLUSIVE vẫn là một nhãn hợp lệ). Bài tập mục 5 đo khoảng cách này trên một bộ test trông hợp lý hơn nhiều.
 - *"Canary chỉ cần làm output thay đổi."* — **SAI.** Canary phải làm **bộ phát hiện** đổi phán quyết. Đổi output mà bộ phát hiện không đọc chỗ đó thì canary "thành công" còn test vẫn mù (xem khẳng định (a) mục 6, và K6 Bài 4 chấm canary của Gemini).
 
 ### 4. Thuật ngữ
@@ -1138,7 +1136,7 @@ Chấm:
 
 <details><summary>🔒 Đáp án gập</summary>
 
-- **(a) ĐÚNG MỘT PHẦN, và canary `+1e-9` đúng là thứ sẽ lộ ra lỗ hổng.** Script round-trip của K2 Bài 5 assert số message, `sequence`, và so một trường giữa hai đường giải mã; còn so giá trị với `acc` thì chỉ **in ra** (`print(... np.array_equal(got, acc))`), không assert. Với canary `acc[i] + 1e-9` lúc ghi, script in "bằng nhau từng bit: False" nhưng **không đỏ**. Canary "bỏ `finish()`" thì đỏ (file thiếu summary). Sửa: thêm `assert np.array_equal(got, acc)` (MCAP lưu byte, nên đòi bit-exact là đúng). Đây là minh họa hoàn hảo cho mindset 4: chỉ khi chạy canary bạn mới biết test có nhìn thấy không. (Đã ghi vào ghi chú cho người điều phối để sửa ở K2 Bài 5.)
+- **(a) ĐÚNG MỘT PHẦN, và canary `+1e-9` đúng là thứ sẽ lộ ra lỗ hổng.** Script round-trip của K2 Bài 5 assert số message, `sequence`, và so một trường giữa hai đường giải mã; còn so giá trị với `acc` thì chỉ **in ra** (`print(... np.array_equal(got, acc))`), không assert. Với canary `acc[i] + 1e-9` lúc ghi, script in "bằng nhau từng bit: False" nhưng **không đỏ**. Canary "bỏ `finish()`" thì đỏ (file thiếu summary). Sửa: thêm `assert np.array_equal(got, acc)` (MCAP lưu byte, nên đòi bit-exact là đúng). Đây là minh họa hoàn hảo cho mindset 4: chỉ khi chạy canary bạn mới biết test có nhìn thấy không. (Lỗ hổng này có thật trong bản nháp K2 Bài 5 và đã được sửa bằng đúng dòng assert trên; khẳng định mẫu giữ nguyên để bạn tự chấm.)
 - **(b) ĐÚNG MỘT PHẦN.** Với quy tắc có biên δ = 5 điểm, PASS ở Δ = −5 vẫn xảy ra với xác suất cỡ α (mô phỏng F2.3: ~3%). Chạy canary **một lần** và thấy PASS chưa chắc là bug của CI. "Tuyệt đối" phải thay bằng "tần suất PASS không vượt α đã thiết kế, kiểm bằng m lần canary".
 - **(c) ĐÚNG**, và là fault injection đúng nghĩa. Hai bổ sung: một lần gây lỗi là n = 1 cho tỉ lệ phát hiện; lỗi phụ thuộc thời điểm (rút dây lúc đang tăng tốc vs lúc đứng yên) cần lặp ở nhiều trạng thái. Và chỉ làm sau khi E-stop phần cứng đã được kiểm (K7 C10.1).
 - **(d) ĐÚNG.** Known-answer test cho chính công cụ chấm, và nó đã bắt một lỗi thật khi soạn bài. Mở rộng: giữ ba file giả đó trong CI như test cố định.
@@ -1179,7 +1177,7 @@ Chấm:
 | goto fail: dòng `goto fail;` lặp làm bỏ qua kiểm chữ ký | [chuẩn] | CVE-2014-1266, mã nguồn Apple đã công bố |
 | DeMillo, Lipton, Sayward 1978; coupling effect | [chuẩn] | |
 | Google hiện đột biến trong code review | [chuẩn] | Petrović & Ivanković, ICSE-SEIP 2018 |
-| Script round-trip K2 Bài 5 không assert giá trị | [đã kiểm] | Đọc trực tiếp `khoa-2/m1-mcap-cong-cu.md` (đoạn script đọc lại) |
+| Script round-trip K2 Bài 5 (bản nháp) không assert giá trị — đã sửa | [đã kiểm] | Đọc trực tiếp `khoa-2/m1-mcap-cong-cu.md` (đoạn script đọc lại) |
 | Kết quả bài tập | [đã chạy] | |
 
 ### 11. Đọc thêm và tự kiểm tra
@@ -1446,8 +1444,8 @@ Ba câu bản chất:
 
 **Chấm mô hình:**
 
-- *"Unit test và SIL đủ dày thì không cần HIL."* — **SAI** cho firmware. Kiểu số, ngắt, DMA, watchdog, ngoại vi chỉ có trên MCU thật. **Phản ví dụ:** bài tập mục 5: cùng thuật toán odometry, SIL bằng Python không bao giờ tràn; trên thanh ghi 16 bit nó tràn sau vài mét.
-- *"Có HIL thì bắt được mọi lỗi firmware."* — **SAI.** HIL chỉ bắt lỗi ở phần **thật** trong vòng. Cổng HIL bơm số đếm qua UART vào một biến 32 bit bỏ qua thanh ghi PCNT 16 bit; lỗi tràn của bài tập vẫn lọt HIL, chỉ lộ ở bàn (motor thật quay đủ lâu).
+- *"Unit test và SIL đủ dày thì không cần HIL."* — **SAI** cho firmware. Kiểu số, ngắt, DMA, watchdog, ngoại vi chỉ có trên MCU thật. **Phản ví dụ:** ESP32 reset do watchdog khi một ISR encoder chạy quá lâu ở tốc độ bánh cao; SIL không có ISR, không có watchdog phần cứng. Bài tập mục 5 cho bạn một phản ví dụ thứ hai, về kiểu số.
+- *"Có HIL thì bắt được mọi lỗi firmware."* — **SAI.** HIL chỉ bắt lỗi ở phần **thật** trong vòng. Cổng HIL bơm số đếm qua UART thì cấu hình sai bộ lọc glitch của PCNT (lọc mất xung thật khi bánh quay nhanh) không bao giờ hiện, vì PCNT không nằm trong vòng.
 
 ### 4. Thuật ngữ
 
@@ -1597,3 +1595,268 @@ Mọi thứ sau chân PWM: dead-time, tần số PWM sai làm motor kêu/nóng, 
 </details>
 
 ---
+
+## F2.8 — Eval cho hệ ML/AI: tập giữ kín, Goodhart, LLM-as-judge và hiệu chuẩn (kappa), nhiễm benchmark (6h)
+
+> **Dùng cho:** K1 (dùng AI như dụng cụ đo) · K2 Bài 10, 12 · K3 Bài 15 · K4 Bài 7, 9 · K6 Bài 11, 14 · K7 C9.2, C11.3, C11.5 · **Cần trước:** F2.1, F2.3, F2.5, F1.4 · **Sau viên nang này bạn đánh giá được:** một con số eval có còn đo được thứ nó tuyên bố không (sau khi đã bị tối ưu, bị nhìn nhiều lần, hoặc bị rò vào dữ liệu huấn luyện), và một judge tự động đáng tin đến đâu so với người.
+
+### 1. Câu chuyện
+
+**Volkswagen, 2015.** Cơ quan môi trường Mỹ (EPA) thông báo rằng phần mềm điều khiển động cơ diesel của Volkswagen nhận ra khi xe đang chạy theo chu trình thử khí thải và chỉ khi đó mới bật đầy đủ hệ xử lý khí thải; trên đường thật, lượng NOx cao hơn mức cho phép nhiều lần [chuẩn]. Đây là Goodhart ở dạng thuần nhất: khi phép đo trở thành mục tiêu, hệ được tối ưu để **nhận ra phép đo**, không để đạt thứ phép đo đại diện. Charles Goodhart nêu quy luật này năm 1975 cho chính sách tiền tệ; câu quen thuộc "khi một thước đo trở thành mục tiêu, nó thôi là thước đo tốt" là cách Marilyn Strathern diễn đạt lại (1997) [chuẩn].
+
+Ở ML, Goodhart có ba đường vào. **Tối ưu thích nghi:** chọn cấu hình tốt nhất trên cùng tập eval nhiều lần, con số của cấu hình thắng bị thổi phồng. **Nhiễm:** dữ liệu test lọt vào dữ liệu huấn luyện. Zhang và cộng sự (NeurIPS 2024) dựng GSM1k, một bộ đề toán mới cùng độ khó với GSM8k; vài họ model giảm điểm rõ trên bộ mới (tới 8 điểm trong bản hội nghị, 13 điểm trong bản preprint đầu), dấu hiệu đã "học" bộ cũ [chuẩn: theo paper]. **Judge bị tối ưu:** khi thước đo là một LLM chấm điểm, hệ có thể học cách làm vừa lòng judge. Zheng và cộng sự (NeurIPS 2023, MT-Bench) báo GPT-4 làm judge đạt trên 80% đồng ý với người, ngang mức người với người, và cũng chỉ ra các thiên lệch: thứ tự trình bày, độ dài câu trả lời, ưu ái câu trả lời của chính mình [chuẩn: theo paper].
+
+Một kết quả làm dịu bớt: Recht và cộng sự (ICML 2019) dựng lại tập test ImageNet theo đúng quy trình cũ; độ chính xác của mọi model tụt khoảng 11–14 điểm, nhưng **thứ hạng** giữa các model gần như giữ nguyên [chuẩn]. Nghĩa là tập test bị dùng lại nhiều năm làm lệch con số tuyệt đối, nhưng chưa chắc làm sai phép so sánh. Biết khi nào mình cần con số tuyệt đối, khi nào chỉ cần thứ hạng, là một nửa của eval.
+
+### 2. Mô hình tư duy
+
+```mermaid
+flowchart LR
+  TR[train] --> M[model / policy / ngưỡng]
+  DEV[dev: chỉnh, chọn, so nhiều lần] --> M
+  M --> TEST[test: báo cáo, ít lần]
+  M -.hiếm, có nhật ký.-> HO[holdout kín:<br/>người tối ưu không thấy]
+  J[judge tự động] --> TEST
+  H[nhãn người trên mẫu] --> CAL[hiệu chuẩn judge:<br/>kappa, FP/FN theo lớp]
+  CAL --> J
+  LEAK[rò: cùng người/session/cảnh,<br/>dữ liệu test trong pretrain] -.làm hỏng.-> TEST
+```
+
+Bốn ý bản chất:
+1. **Mỗi lần nhìn tập eval để ra quyết định là tiêu một ít tính độc lập của nó.** Chọn max trên K cấu hình là một lần nhìn K lần. Tập dev để tiêu; tập test để báo cáo; holdout kín để kiểm tra rằng dev chưa bị tiêu cạn.
+2. **Chia tập theo đơn vị độc lập**, không theo mẫu. Ảnh của cùng một người, frame của cùng một episode, episode của cùng một kịch bản: chia ngẫu nhiên theo ảnh/frame là rò.
+3. **Judge là oracle (F2.1), đo nó như oracle.** Trên một mẫu có nhãn người: ma trận nhầm lẫn, độ nhạy theo lớp, và **Cohen's kappa** = (đồng ý quan sát − đồng ý do ngẫu nhiên) / (1 − đồng ý do ngẫu nhiên). Kappa trừ đi phần đồng ý mà một judge "luôn nói PASS" cũng có được khi lớp lệch.
+4. **Eval của agent tự sửa là một vòng Goodhart khép kín.** Agent thấy test, sửa tới khi xanh. Không có tập test agent không đọc/sửa được, "xanh" chỉ còn đo khả năng làm test xanh.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Model AI review kết quả (bạn đã làm) | LLM/VLM-as-judge | Bạn dùng judge; chưa đo judge. Với lớp lệch (90% episode thành công), "đồng ý 90%" có thể là judge không nhìn gì | Báo tỉ lệ thành công do judge chấm, sai lệch theo hướng judge thiên |
+| Agent tự test → sửa → deploy (bạn đã làm) | Closed-loop CI với policy/detector | Agent tối ưu để qua test. Ở ML, "sửa" có thể là chỉnh ngưỡng, đổi seed, lọc dữ liệu khó | Mutation score, độ khó dữ liệu test giảm dần qua các vòng mà con số trên dashboard tăng |
+| Bộ eval cố định chạy mỗi release | Benchmark (LIBERO), tập kịch bản K6 | Bộ cố định bị tối ưu theo thời gian (bởi bạn, bởi cộng đồng); gần trần thì mất khả năng phân biệt | Báo "SOTA trên LIBERO" như năng lực tổng quát |
+| A/B test có holdout user | Holdout kịch bản/người/session | A/B holdout là để đo hiệu ứng dài hạn; ở đây holdout là để **phát hiện overfit vào chính tập eval** | Dùng holdout để chọn cấu hình, rồi nó thành dev |
+| Train/test split theo `random_split` | Split theo nhóm (người, session, kịch bản) | Dữ liệu robot có cấu trúc nhóm mạnh; mẫu trong nhóm gần như trùng | FRR "tốt" vì người trong test đã có trong train |
+
+**Tên chuẩn của thứ bạn đã làm:** model AI review = *LLM-as-judge*; agent tự test-sửa-deploy = *closed-loop CI*. **Thiếu:** hiệu chuẩn judge bằng kappa trên tập gán nhãn (có CI, có độ nhạy theo lớp, đo lại khi đổi model/prompt); và **tập giữ kín** agent không chạm được.
+
+**Chấm mô hình:**
+
+- *"Judge đồng ý với người 90% là judge tốt."* — **SAI** khi lớp lệch. **Phản ví dụ:** khi phần lớn episode thành công, một judge "luôn nói PASS" không nhìn video nào vẫn đạt % đồng ý cao. Bài tập mục 5 cho bạn tính nó cao bao nhiêu, và kappa của nó.
+- *"Agent sửa code tới khi toàn bộ test xanh thì code đúng."* — **SAI.** Test xanh sau khi agent được phép sửa cả code lẫn test là một phép đo đã bị tối ưu (Goodhart). **Phản ví dụ (kịch bản):** agent nới dung sai của test golden từ 1e-6 lên 1e-2 để "sửa" một test đỏ; mọi thứ xanh, hồi quy thật lọt. Phòng: test giữ kín ngoài quyền ghi của agent, và mutation/canary chạy định kỳ (F2.5).
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Tập giữ kín (holdout) | Dữ liệu không dùng cho bất kỳ quyết định nào cho tới lần báo cáo | Tập test được nhìn mỗi ngày |
+| 🟢 | Goodhart | Thước đo bị tối ưu thì ngừng đo thứ nó đại diện | "Metric xấu" |
+| 🟢 | Rò dữ liệu (leakage) | Thông tin của test lọt vào train/chọn lựa | Chỉ là trùng file |
+| 🟢 | Split theo nhóm | Chia theo người/session/kịch bản, không theo mẫu | `random_split` |
+| 🟢 | Cohen's kappa | Đồng ý giữa hai người chấm, đã trừ phần do ngẫu nhiên | % đồng ý |
+| 🟡 | Nhiễm benchmark (contamination) | Dữ liệu test có trong dữ liệu huấn luyện (pretrain) | Gian lận cố ý |
+| 🟡 | Overfit thích nghi (adaptive overfitting) | Lệch lạc do chọn nhiều lần trên cùng tập | Overfit của model khi train |
+| 🟡 | Thiên lệch judge (vị trí, độ dài, tự ưu ái) | Lỗi hệ thống của LLM-judge | Nhiễu ngẫu nhiên |
+| 🟡 | Reward hacking | Policy khai thác lỗ hổng của reward/predicate | Policy "thông minh" |
+| 🔴 | Reusable holdout (Thresholdout), differential privacy cho eval | Kỹ thuật cho phép dùng lại holdout có kiểm soát | Cần ở dự án cá nhân |
+
+### 5. Bài tập dự đoán
+
+**Đề (≤2h):**
+- **(A) Hiệu chuẩn judge.** 300 episode, 10% thất bại thật. Người chấm lệch 5% so với sự thật. Hai judge: "luôn nói PASS", và "judge thật" bắt 45% ca hỏng, báo nhầm 3% ca tốt. So với nhãn người: % đồng ý thô và kappa (bootstrap CI 95%) của mỗi judge?
+- **(B) Goodhart đồ chơi.** 50 cấu hình, tỉ lệ thành công **thật** của tất cả đều 60%. Mỗi cấu hình chạy 200 episode trên tập eval; chọn cấu hình cao nhất. Tỉ lệ thành công trung bình của "người thắng" trên tập eval? Chạy lại người thắng trên 200 episode holdout: bao nhiêu?
+
+**Phương pháp:** (A): kappa theo định nghĩa, bootstrap theo episode. (B): trước khi chạy, ước lượng bằng tay: độ lệch chuẩn của một tỉ lệ ở n = 200, p = 0.6, và kỳ vọng của max của 50 biến chuẩn (khoảng +2,2 độ lệch chuẩn) [chuẩn: thống kê thứ tự].
+
+```markdown
+# prediction.md — F2.8
+A. "luôn PASS": đồng ý __ , kappa __ ; "judge thật": đồng ý __ , kappa __ [__, __]
+B. Người thắng trên eval: __ % ; trên holdout: __ %
+   Ước lượng tay độ thổi phồng: __ điểm
+```
+
+```python
+# [đã chạy] — Python 3.13, numpy 2.5
+# (A) Hiệu chuẩn LLM-judge: % đồng ý thô vs Cohen's kappa, có bootstrap CI.
+# (B) Goodhart đồ chơi: chọn cấu hình tốt nhất trên tập eval, đo lại trên tập giữ kín.
+import numpy as np
+rng = np.random.default_rng(3)
+
+def kappa(a, b):
+    po = np.mean(a == b)
+    pe = np.mean(a) * np.mean(b) + np.mean(1 - a) * np.mean(1 - b)
+    return (po - pe) / (1 - pe) if pe < 1 else 0.0
+
+n, base_fail = 300, 0.10
+truth = (rng.random(n) < base_fail).astype(int)            # 1 = episode thất bại thật
+human = np.where(rng.random(n) < 0.05, 1 - truth, truth)    # người chấm: lệch 5%
+judges = {
+    "luôn nói PASS": np.zeros(n, int),
+    "judge thật":   np.where(truth == 1, rng.random(n) < 0.45,      # bắt 45% ca hỏng
+                             rng.random(n) < 0.03).astype(int),    # báo nhầm 3% ca tốt
+}
+for name, j in judges.items():
+    boot = []
+    for _ in range(2000):
+        i = rng.integers(0, n, n); boot.append(kappa(human[i], j[i]))
+    lo, hi = np.percentile(boot, [2.5, 97.5])
+    print(f"{name:14s} đồng ý thô={np.mean(human == j):.2f}  kappa={kappa(human, j):.2f} "
+          f"[{lo:.2f}, {hi:.2f}]")
+
+# (B) K cấu hình, tỉ lệ thành công THẬT đều bằng 0.60. Chọn max trên tập eval n_eval episode.
+K, n_eval, p_true, reps = 50, 200, 0.60, 2000
+best_eval, best_hold = [], []
+for _ in range(reps):
+    obs = rng.binomial(n_eval, p_true, K) / n_eval
+    best_eval.append(obs.max())
+    best_hold.append(rng.binomial(n_eval, p_true) / n_eval)  # chạy lại "người thắng" trên holdout
+print(f"cấu hình thắng: trên eval {np.mean(best_eval):.3f}, trên holdout {np.mean(best_hold):.3f}, "
+      f"thật {p_true}")
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Kết quả chạy:
+
+```
+luôn nói PASS  đồng ý thô=0.89  kappa=0.00 [0.00, 0.00]
+judge thật     đồng ý thô=0.90  kappa=0.34 [0.16, 0.51]
+cấu hình thắng: trên eval 0.677, trên holdout 0.601, thật 0.6
+```
+
+(A) Hai judge có % đồng ý gần như bằng nhau (0.89 vs 0.90). Kappa tách chúng ra: 0 cho judge không nhìn gì, 0.34 cho judge thật, với CI rộng (0.16–0.51) dù có 300 episode, vì chỉ khoảng 30 ca thất bại mang thông tin. Bài học thực hành:
+- Lấy mẫu **phân tầng** khi gán nhãn hiệu chuẩn (nhiều ca thất bại hơn tỉ lệ tự nhiên), như K6 Bài 11 bước 5 làm (25 thành công, 25 thất bại theo predicate), rồi báo độ nhạy và đặc hiệu theo lớp.
+- Thang Landis & Koch (1977) gọi 0.21–0.40 là "fair"; thang đó là quy ước, không phải chuẩn. Câu hỏi đúng là: với độ nhạy 45% cho ca hỏng, judge này dùng để làm gì? Làm bộ lọc ưu tiên thì có thể; làm oracle báo tỉ lệ thành công thì không.
+
+(B) Người thắng trên eval trông như 67.7%; trên holdout về 60.1%, đúng giá trị thật. Thổi phồng ~7.7 điểm. Ước lượng tay: SD = √(0.6·0.4/200) ≈ 3.5 điểm; max của 50 ≈ +2.2 SD ≈ +7.6 điểm. Mọi cấu hình đều như nhau, nhưng quy trình "chọn max rồi báo cáo con số đó" luôn cho ra một "cải tiến". Đây là lý do K4 Bài 9 thêm bước xác nhận holdout cho điểm Pareto được chọn, và câu hỏi ngược của K6 Bài 11 chỉ ra cần tập kịch bản giữ kín khi chọn ngưỡng.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi đọc một con số eval:
+1. Con số này đo trên tập nào, và tập đó đã được dùng cho bao nhiêu quyết định trước đó?
+2. Có tập giữ kín không? Ai có quyền nhìn nó, bao nhiêu lần, có nhật ký không?
+3. Split theo đơn vị nào? Có cùng người/session/kịch bản/cảnh ở cả hai phía không?
+4. Dữ liệu test có thể có trong dữ liệu huấn luyện của model nền (pretrain) không?
+5. Nếu dùng judge: đã hiệu chuẩn trên bao nhiêu mẫu có nhãn, kappa và độ nhạy theo lớp bao nhiêu, có CI không, lúc nào đo lại (đổi model/prompt)?
+6. Có dấu hiệu thiên lệch judge (thứ tự, độ dài, tự ưu ái) được kiểm chưa?
+7. Kết luận cần con số tuyệt đối hay chỉ cần thứ hạng?
+
+Chấm:
+
+**(a)** *"Trong một nghiên cứu công khai, mô hình GR00T-N1.6 khi nén INT8 (PTQ + QAT) trên Jetson AGX Orin cho tỷ lệ thành công trung bình giống hệt bản FP16 (đều đạt 61.07%)."* (Gemini K4 Bài 8)
+
+**(b)** *"Strong LLM judges like GPT-4 … achieving over 80% agreement, the same level of agreement between humans."* (Zheng và cộng sự 2023, MT-Bench) — dùng làm căn cứ để thay người chấm bằng GPT-4 cho episode robot của bạn.
+
+**(c)** *"Fine-tune model nhận diện người trên dữ liệu văn phòng thật (ánh sáng, góc, nhòe chuyển động) → đo lại FRR theo bảng Bài 12."* (K7 gốc Bài 21, nay K7 C11.5)
+
+**(d)** *"Reward > ngưỡng [là định nghĩa thành công sai vì] reward là đại lượng dùng để train, không phải để đánh giá. Reward hacking. Dùng cờ `success` có sẵn của môi trường: bạn không biết nó định nghĩa thế nào. Đọc source, đừng tin."* (K6 gốc Bài 11)
+
+<details><summary>🔒 Đáp án gập</summary>
+
+- **(a) CHƯA RÕ.** Không tìm được nguồn để kiểm, và bản Gemini không dẫn nguồn có thể truy. Nếu có thật, "giống hệt đến hai chữ số thập phân" cần giải thích: cùng episode, cùng seed, và INT8 không đổi một phán quyết nào? Hay chỉ trùng trung bình trong khi từng episode khác? Câu hỏi để chấm: n bao nhiêu, CI bao nhiêu, ghép cặp không, bao nhiêu episode lật kết quả. Không dùng câu này làm căn cứ.
+- **(b) ĐÚNG MỘT PHẦN.** Đúng cho bối cảnh của paper: so sánh **cặp** câu trả lời chat, judge là GPT-4, % đồng ý (không phải kappa), trên phân bố câu hỏi của MT-Bench. Không chuyển được sang "episode robot có thành công không" từ video: khác nhiệm vụ, khác phương thức, khác phân bố lớp. Phải đo lại trên tập của bạn.
+- **(c) ĐÚNG MỘT PHẦN.** Hướng đúng (dữ liệu đúng miền). Thiếu: chia train/test **theo người và theo phiên**, không theo ảnh; nếu người trong tập đo FRR đã có trong tập fine-tune, FRR giảm vì model nhớ người, không vì model tốt lên. Và ngưỡng chọn trên tập nào thì không báo FAR/FRR trên chính tập đó.
+- **(d) ĐÚNG.** Đó chính là Goodhart (reward là mục tiêu tối ưu) và bài toán oracle (cờ `success` là định nghĩa người khác viết). Bổ sung: predicate của bạn cũng là một oracle cần đo FP/FN (K6 Bài 11 bước 5).
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Quy mô]** 1000 giờ dữ liệu robot từ 100 robot ở 20 văn phòng. Split theo đơn vị nào để con số eval dự đoán được hiệu năng ở văn phòng thứ 21?
+   <details><summary>Hướng nghĩ</summary>Theo văn phòng (đơn vị triển khai). Split theo episode sẽ cho con số đẹp và vô dụng cho câu hỏi đó. Cái giá: ít đơn vị độc lập (20), nên CI rộng.</details>
+2. **[Failure mode]** Bạn dùng VLM chấm "thành công" cho 10 000 episode sim. Một tháng sau đổi sang phiên bản VLM mới. Tỉ lệ thành công nhảy 4 điểm. Policy tốt lên hay judge đổi?
+   <details><summary>Hướng nghĩ</summary>Không phân biệt được nếu không có tập hiệu chuẩn cố định chấm bằng cả hai judge. Judge là một phần của dụng cụ đo; đổi judge là đổi dụng cụ, phải hiệu chuẩn lại như đổi multimeter.</details>
+3. **[Vì sao không]** Vì sao không dùng luôn holdout để chọn cấu hình, cho "dữ liệu được dùng hết"?
+   <details><summary>Hướng nghĩ</summary>Holdout dùng để chọn thì thành dev, và bạn mất thứ duy nhất phát hiện được Goodhart. Có kỹ thuật cho phép dùng lại holdout có kiểm soát (Dwork và cộng sự 2015), nhưng cái giá là chỉ nhận câu trả lời đã thêm nhiễu.</details>
+4. **[Liên ngành]** Kaggle có public leaderboard và private leaderboard. Hiện tượng "shake-up" khi công bố private nói gì?
+   <details><summary>Hướng nghĩ</summary>Người tối ưu theo public leaderboard (nhìn hàng trăm lần) bị tụt hạng ở private. Đó là thí nghiệm Goodhart lặp lại công khai; bài tập (B) là phiên bản đồ chơi.</details>
+5. **[Phản biện]** Recht và cộng sự thấy thứ hạng ImageNet giữ nguyên trên tập test mới. Vậy lo Goodhart có thừa không?
+   <details><summary>Hướng nghĩ</summary>Với thứ hạng giữa các model khác nhau nhiều, có thể. Với việc chọn giữa các cấu hình gần nhau (đúng việc bạn làm ở K4 Bài 9, K6), độ thổi phồng cùng cỡ với khác biệt bạn đang đo, nên không thừa.</details>
+
+### 8. Liên kết ra ngoài
+
+- **Y học: điểm cuối thay thế (surrogate endpoint).** Thuốc làm giảm một chỉ số xét nghiệm (đích tối ưu) mà không giảm tử vong, đôi khi còn tăng. Giống: tối ưu thước đo thay vì mục tiêu. Khác: hậu quả đo bằng mạng người, nên ngành có quy trình phê duyệt riêng cho surrogate.
+- **Kiểm định khí thải và an toàn ô tô.** Dieselgate là Goodhart cố ý; nhưng cũng có dạng vô ý: xe được tối ưu cho đúng các bài crash test chuẩn. Ngành đáp lại bằng cách thêm bài test mới không báo trước (ví dụ va chạm lệch nhỏ). Đó là "holdout" của ngành ô tô.
+
+### 9. Áp vào khóa chính
+
+- **K2 Bài 10, 12:** VLM chỉ làm bộ lọc ứng viên sau khi đo kappa và độ nhạy theo lớp trên mẫu tự chấm; giữ một tập dataset không dùng để chỉnh ngưỡng detector.
+- **K3 Bài 15:** LLM moderation hiệu chuẩn trên tập có nhãn; nội dung đối kháng nghĩa là FN đo hôm nay là cận dưới.
+- **K4 Bài 7, 9:** LIBERO là benchmark công khai gần trần, nhiễm và tối ưu thích nghi đều có thể; điểm Pareto được chọn phải xác nhận trên holdout.
+- **K6 Bài 11, 14:** tập kịch bản giữ kín cho ngưỡng và cho domain randomization; predicate là oracle cần đo.
+- **K7 C9.2, C11.5:** split theo người và phiên; ngưỡng FAR chọn trên tập khác tập báo cáo.
+- **K7 C11.3:** "sim dự đoán thứ hạng thực tế" chính là câu hỏi Recht hỏi cho ImageNet, ở quy mô 6 cấu hình.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Volkswagen dùng phần mềm nhận ra chu trình thử khí thải (2015) | [chuẩn] | Thông báo vi phạm của EPA, 9/2015 |
+| Goodhart 1975; diễn đạt của Strathern 1997 | [chuẩn] | |
+| GSM1k: tụt tới 8 điểm (bản NeurIPS 2024), 13 điểm (preprint v1) | [chuẩn] | Zhang và cộng sự, đã kiểm hai phiên bản abstract |
+| MT-Bench: >80% đồng ý, ngang người–người; thiên lệch vị trí/độ dài/tự ưu ái | [chuẩn] | Zheng và cộng sự 2023, abstract |
+| ImageNetV2: tụt 11–14 điểm, thứ hạng gần như giữ | [chuẩn] | Recht và cộng sự, ICML 2019 |
+| Khẳng định GR00T-N1.6 INT8 = FP16 = 61.07% | không kiểm được | Đánh dấu CHƯA RÕ, không dùng |
+| Kết quả bài tập | [đã chạy] | |
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Zheng và cộng sự, *Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena*, NeurIPS 2023 (Datasets and Benchmarks).
+- **Giải thích:** Recht, Roelofs, Schmidt, Shankar, *Do ImageNet Classifiers Generalize to ImageNet?*, ICML 2019.
+- **Đào sâu (tùy chọn):** Dwork, Feldman, Hardt, Pitassi, Reingold, Roth, *The reusable holdout: Preserving validity in adaptive data analysis*, Science, 2015.
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao % đồng ý không đủ để tin một judge; (2) vẽ lại sơ đồ dev/test/holdout/hiệu chuẩn; (3) câu hỏi:
+
+<details><summary>Câu hỏi: viết quy trình hiệu chuẩn VLM-judge cho predicate thành công ở K6, đủ để người khác chạy lại.</summary>
+
+(1) Lấy mẫu có seed, phân tầng theo phán quyết judge (ví dụ 50 PASS, 50 FAIL theo judge). (2) Người chấm mù (không thấy phán quyết judge), theo định nghĩa viết sẵn; nếu được, hai người chấm để có kappa người–người làm trần. (3) Báo ma trận nhầm lẫn, độ nhạy/đặc hiệu theo lớp có CI, kappa có bootstrap CI. (4) Cố định phiên bản judge + prompt + hash; đổi bất kỳ thứ gì thì chạy lại bước 1–3. (5) Hiệu chỉnh tỉ lệ thành công báo cáo theo FP/FN đo được, hoặc nói rõ hướng thiên lệch.
+
+</details>
+
+---
+
+## Tranh luận đang mở trong nghề
+
+**1. Determinism bit-exact có đáng giá không?** Một phía (FoundationDB, TigerBeetle, cộng đồng DST): bit-exact ở ít nhất một tầng là điều kiện để debug lỗi hiếm; không có nó thì mỗi lỗi hiếm là một bóng ma. Phía kia (nhiều nhóm ML/robot học): chi phí giữ bit-exact trên GPU và đa luồng quá cao, cái cần là tương đương thống kê và đủ episode; lỗi hiếm của policy là chuyện phân bố, không phải chuyện một episode. Hai phía thường nói về hai loại lỗi khác nhau (lỗi phần mềm vs hiệu năng policy), và K6 Bài 1 bắt bạn chọn theo tầng thay vì theo phe.
+
+**2. LLM-as-judge thay được người chấm không?** Một phía: đồng ý với người ngang mức người–người, rẻ hơn nhiều bậc, nhất quán hơn người mệt. Phía kia: thiên lệch có hệ thống (độ dài, vị trí, tự ưu ái), có thể bị tối ưu ngược, và khi judge và model được đánh giá cùng họ thì lỗi chung không bao giờ lộ. Điểm đồng thuận đang hình thành: judge dùng được **sau khi** hiệu chuẩn trên dữ liệu của chính nhiệm vụ, và phải hiệu chuẩn lại mỗi lần đổi judge.
+
+**3. Benchmark tĩnh có còn ý nghĩa?** Một phía: thứ hạng trên benchmark cũ vẫn dự đoán thứ hạng trên dữ liệu mới (Recht 2019), nên benchmark tĩnh vẫn hữu ích để so sánh. Phía kia: với model nền huấn luyện trên dữ liệu internet, nhiễm là mặc định, và benchmark gần trần (LIBERO, GSM8k) không còn phân biệt được; cần eval động, tập riêng không công bố, hoặc eval trên robot thật. Với người làm robot, câu hỏi thực tế là: benchmark nào dự đoán được **thứ hạng thực địa** của bạn (K7 C11.3).
+
+**4. Mock hay đồ thật trong test?** Một phía (nhiều nhóm backend, và chính *Software Engineering at Google* chương 13): ưu tiên đồ thật hoặc fake chất lượng cao, vì mock chỉ kiểm điều bạn tin về dependency. Phía kia: đồ thật chậm, flaky, không hermetic. Ở robot, phiên bản của tranh luận này là sim vs HIL vs thực địa (F2.7), và câu trả lời là bảng "thật/giả" theo lớp lỗi chứ không phải một lựa chọn.
+
+---
+
+## Bài kiểm tra cuối khóa nền
+
+**Bối cảnh:** dùng chính hạ tầng của bạn ở K6 (harness sim + CI ba trạng thái). Nếu chưa tới K6, dùng bộ audit dữ liệu K2 Bài 12 và thay "episode" bằng "dataset/episode có lỗi tiêm". Thời gian gợi ý 8–10h, chia 3–4 tuần.
+
+**Sản phẩm:** một file `EVAL-CARD.md` trong repo, mỗi mục một bảng số, kèm script tái tạo, và `prediction.md` commit **trước** khi chạy từng phần.
+
+| # | Mục | Viên nang | Tiêu chí đạt |
+|---|---|---|---|
+| 1 | **Oracle:** FP/FN của predicate thành công (hoặc detector) trên ≥ 50 mẫu tự chấm mù, phân tầng | F2.1 | Ma trận nhầm lẫn + độ nhạy/đặc hiệu có CI Wilson; PPV ở tỉ lệ nền thật |
+| 2 | **Tái lập:** bảng tầng (cùng tiến trình → khác máy) với cam kết, cách kiểm, cái gì ghim, cái gì ghi lại | F2.2 | Ít nhất 3 tầng đã **chạy thử**, có kết quả; seed dẫn xuất không bằng phép cộng |
+| 3 | **Flake:** tỉ lệ flake của bộ CI nhanh, ước lượng từ lịch sử hoặc ≥ 100 lần chạy lặp | F2.3 | Tỉ lệ có CI; chính sách retry viết ra, kèm xác suất lọt của lỗi chập chờn q = 0.3 |
+| 4 | **Phán quyết:** `verdict()` có δ, in MDE; mô phỏng tần suất ba phán quyết ở Δ = 0, −δ, −2δ với n thực tế của bạn | F2.3 | Tần suất khớp thiết kế (α, power) trong sai số mô phỏng |
+| 5 | **Không đáp án:** ≥ 2 quan hệ metamorphic hoặc property cho generator/bộ ước lượng của bạn, có điều kiện tiên quyết | F2.4 | Ít nhất một phản ví dụ thật được tìm và lưu thành test cố định (hoặc giải thích vì sao không có sau ≥ 1000 ví dụ) |
+| 6 | **Test của test:** mutation trên `verdict()` + bộ canary cho CI (−δ, 0, lỗi determinism) | F2.5 | Mutation score có danh sách đột biến sống và lý do; tỉ lệ bắt của canary có CI |
+| 7 | **DST-lite:** một bất biến cho đường ingest/upload (K3 Bài 14 hoặc K5 Bài 14), mô phỏng có seed với mất gói + crash | F2.6 | Tìm và tái hiện được bằng seed ít nhất một vi phạm ở bản chưa sửa; bản sửa qua ≥ 1000 seed |
+| 8 | **Tầng:** bảng "thật/giả" cho từng tín hiệu ở mỗi tầng bạn có (SIL, HIL nếu có, thực địa) và lớp lỗi mỗi tầng bắt | F2.7 | Mỗi lớp lỗi quan trọng có ít nhất một tầng có thứ thật chứa nó |
+| 9 | **Eval:** tập giữ kín (theo đơn vị độc lập), nhật ký truy cập; nếu dùng judge: kappa có CI | F2.8 | Một lần chọn cấu hình được xác nhận trên holdout; độ chênh eval–holdout được báo |
+
+**Tự chấm cuối:** viết 10 câu "Tôi KHÔNG chắc về: …" cho chính `EVAL-CARD.md`. Một eval card không có dòng nào như vậy là eval card chưa được đọc bằng lăng kính của khóa này.
+
+<details><summary>🔒 Gợi ý chấm (mở sau khi nộp)</summary>
+
+Các lỗi hay gặp nhất khi tự làm bài này, theo thứ tự:
+1. Mục 1 chấm không mù (thấy phán quyết của predicate trước khi chấm), làm kappa/độ nhạy bị thổi phồng.
+2. Mục 4 kiểm `verdict()` bằng **một** lần chạy mỗi canary rồi kết luận; phải là tần suất trên nhiều lần mô phỏng.
+3. Mục 6 canary đi qua đường code CI không chạy (ví dụ chỉ có trong job hằng đêm), nên bộ nhanh "bắt 0%" và người làm nghĩ canary hỏng.
+4. Mục 9 holdout chia theo episode trong khi kịch bản lặp lại giữa các episode.
+5. Mục 2 ghi "khác máy: bit-exact" mà chưa từng chạy trên máy thứ hai.
+
+Nếu mục 7 không tìm được vi phạm nào ở bản chưa sửa: hoặc mô phỏng thiếu sự kiện (crash, trùng lặp), hoặc bất biến viết quá lỏng. Đó là kết quả đáng ghi, không phải thất bại.
+
+</details>

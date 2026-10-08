@@ -782,3 +782,446 @@ Checklist khi gặp một timestamp, một cửa sổ, hay một con số "dữ 
   </details>
 
 ---
+
+## F3.4 — Ghép luồng khác tần số: as-of join, nội suy, resampling, sai số căn chỉnh (5h)
+
+> **Dùng cho:** K2 Bài 1 (lướt), Bài 11 · K5 Bài 13 · K7 C7, C8.3 · **Cần trước:** F3.3; F4.6 (thời điểm của một phép đo); F5.5 (Nyquist, aliasing) nên đọc mục 2 · **Sau viên nang này bạn đánh giá được:** một bảng "đã đồng bộ" ghép camera với IMU bằng phương pháp nào, sai số căn chỉnh tới đâu (ms và đơn vị vật lý), có bịa dữ liệu trong lỗ hổng không, và có tạo ra tần số không tồn tại không.
+
+### 1. Câu chuyện
+
+Năm 1991, Charles Lee và Mark Ready công bố cách đoán một giao dịch chứng khoán là lệnh mua hay bán: so giá khớp với giá chào mua/bán **đang hiệu lực tại thời điểm khớp**. Đó là một as-of join: với mỗi giao dịch, lấy báo giá gần nhất *trước* nó. Vấn đề họ gặp: báo giá và giao dịch đi qua hai đường báo cáo khác nhau với độ trễ khác nhau, nên "báo giá gần nhất trước giao dịch" theo timestamp thường là báo giá *sai*. Họ đề nghị lùi báo giá 5 giây — quy tắc "5-second rule" — một hiệu chỉnh cho độ lệch đồng hồ giữa hai luồng `[chuẩn: Lee & Ready, Journal of Finance, 1991]`. Ba mươi năm sau, khi dữ liệu có timestamp mili giây rồi micro giây, giới nghiên cứu vẫn tranh luận độ lùi đúng là bao nhiêu. Phép join thì dễ; **sai số căn chỉnh** mới là nội dung.
+
+Ghép IMU 200 Hz với camera 30 Hz là đúng bài toán đó với thêm hai cái bẫy mà tài chính ít gặp: tín hiệu **liên tục** (nên nội suy là hợp lệ, và cũng vì thế mà dễ bịa), và tín hiệu **có tần số** (nên lấy mẫu lại có thể sinh ra dao động không tồn tại).
+
+### 2. Mô hình tư duy
+
+```
+ IMU 200 Hz   |    |    |    |    |    |    |    |    |    |    |    |    |    |   (5 ms)
+ camera 30 Hz ├──── phơi sáng ────┤ stamp = giữa phơi sáng (→ F4.6)
+                       ▲ t_cam
+   as-of (backward):  lấy mẫu IMU cuối cùng ≤ t_cam      → nhân quả, trễ 0..5 ms, TB 2,5 ms
+   nearest:           mẫu gần nhất                        → không nhân quả, lệch 0..2,5 ms
+   linear interp:     nội suy giữa hai mẫu kề             → không nhân quả, sai số ≈ h²/8·|x''|
+   interval join:     mọi mẫu IMU trong [t_cam−Δ, t_cam+Δ] → giữ phân bố, để downstream quyết
+```
+
+**Ngân sách sai số căn chỉnh** cho một đại lượng x(t) (ví dụ vận tốc góc):
+
+| Nguồn | Độ lớn trên x | Giảm bằng |
+|---|---|---|
+| Lệch đồng hồ còn lại δ giữa hai luồng | ≈ \|dx/dt\| · δ | đồng bộ tốt hơn (F4.5, F4.6) |
+| Phương pháp ghép | as-of: ≈ \|dx/dt\| · h/2 trung bình; nội suy: ≤ h²/8 · \|d²x/dt²\| | đổi phương pháp |
+| Định nghĩa thời điểm camera sai (đầu phơi sáng thay vì giữa, rolling shutter) | ≈ \|dx/dt\| · t_exp/2, khác nhau theo hàng ảnh | đóng dấu đúng (F4.6) |
+| Lỗ hổng trong luồng nhanh | không giới hạn nếu nội suy xuyên lỗ | tolerance, mask |
+
+K5 Bài 13 đã có mô phỏng cho thấy khi δ vượt cỡ một chu kỳ IMU thì phương pháp ghép hết quan trọng. Viên nang này lo ba cái bẫy **không nằm trong công thức nội suy**:
+
+1. **Resampling là lọc.** "Đưa IMU về 30 Hz cho gọn" là lấy mẫu lại ở 30 Hz; mọi thành phần trên 15 Hz (rung motor, rung khung) **gập** xuống dưới 15 Hz (aliasing, → F5.5). Hạ tần số đúng = lọc thông thấp trước, rồi mới lấy mẫu; hoặc đừng hạ, giữ cửa sổ mẫu IMU quanh mỗi frame.
+2. **Nội suy xuyên lỗ là bịa dữ liệu.** `np.interp` vui vẻ nối thẳng qua một khoảng USB rớt 250 ms. Kết quả mượt, không NaN, sai.
+3. **As-of không có tolerance trả về mẫu cũ bất kỳ.** `merge_asof` mặc định không giới hạn tuổi mẫu: frame trong lỗ hổng được gắn mẫu IMU từ trước lỗ.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Stream–stream join theo khóa (Flink interval join, Kafka Streams `JoinWindows`) | Ghép theo **thời gian**, không có khóa | Join backend ghép sự kiện rời rạc; không ai nội suy giữa hai đơn hàng. Tín hiệu vật lý liên tục nên nội suy được — chỉ cho đại lượng liên tục (không cho cờ trạng thái, ảnh; quaternion phải slerp) | Nội suy cờ `range_status` ra 0,5; trung bình hai ảnh |
+| SQL `ASOF JOIN` (DuckDB, kdb+ `aj`, `pd.merge_asof`) | Đúng công cụ | Mặc định không có giới hạn tuổi mẫu; chiều mặc định là *backward* (nhân quả). Phải đặt tolerance theo chu kỳ luồng nhanh | Lỗ hổng biến thành mẫu cũ hợp lệ |
+| Downsample metrics (avg mỗi phút) cho dashboard | Downsample tín hiệu cảm biến | Metric backend hiếm khi có tần số tuần hoàn cao; rung cơ khí có. Lấy mẫu thưa không lọc = aliasing, trung bình theo khối là một bộ lọc thô có búp phụ | Thấy "dao động 10 Hz" trong dataset, đi tìm nguồn không tồn tại |
+| Clock skew giữa hai service: chấp nhận vài ms | Lệch vài ms giữa camera và IMU | Ở 2 rad/s, 5 ms lệch = 0,01 rad ≈ 0,6° mỗi lần ghép `[ước lượng]`; với hiệu chuẩn camera–IMU hay fusion, đó là sai số hệ thống | Mô hình học được độ trễ cố định như một đặc trưng của robot |
+
+**Chấm mô hình:**
+
+- *"Cứ resample mọi luồng về một lưới chung 30 Hz rồi join theo chỉ số, đơn giản nhất."* — **SAI** cho luồng có thành phần trên 15 Hz. Phản ví dụ: bài tập mục 5 — rung 40 Hz biên độ 0,4 rad/s hiện thành đỉnh phổ ở 10 Hz trong chuỗi 30 Hz. Đúng khi: đã lọc thông thấp trước (và chấp nhận mất thông tin rung), hoặc tín hiệu vốn chậm (nhiệt độ, pin).
+- *"`merge_asof` là as-of join, dùng là xong."* — **ĐÚNG MỘT PHẦN.** Đúng thuật toán. Thiếu ba tham số quyết định nghĩa: `direction` (backward = nhân quả, cho dữ liệu huấn luyện policy chạy online; nearest/forward = nhìn trước tương lai), `tolerance` (tuổi mẫu tối đa), và cả hai bảng phải **sort theo cùng một thời gian event đã quy đổi**. Phản ví dụ: mục 5 Bẫy 3.
+
+**Tên chuẩn của thứ bạn đã làm:** khi bạn ghép log request với metric hạ tầng "theo phút gần nhất" để debug, bạn đang làm **as-of join với zero-order hold**. Còn thiếu ở robot: ghi **tuổi mẫu** (khoảng cách thời gian giữa hai bên ghép) thành một cột của bảng kết quả, để mọi người dùng sau biết sai số căn chỉnh của từng dòng — giống cách K5 Bài 15 biến sai số sync thành một trường dữ liệu.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | As-of join | Ghép mỗi dòng với dòng gần nhất trước nó theo thời gian | Join bằng nhau theo timestamp |
+| 🟢 | Tolerance / tuổi mẫu | Khoảng cách tối đa cho phép giữa hai bên ghép | Tùy chọn |
+| 🟢 | Nội suy tuyến tính, slerp | Nối thẳng giữa hai mẫu; nội suy quaternion | Dùng được cho mọi kênh |
+| 🟢 | Aliasing, lọc chống aliasing | Tần số cao gập xuống khi lấy mẫu thưa; lọc trước khi hạ tần số | Chỉ chuyện âm thanh |
+| 🟢 | Sai số căn chỉnh (alignment error) | Sai lệch giá trị do ghép lệch thời điểm | Bằng nửa chu kỳ |
+| 🟡 | Interval join | Ghép với *mọi* mẫu trong một khoảng | — |
+| 🟡 | Zero-order hold | Giữ giá trị cũ tới mẫu sau | — |
+| 🔴 | Resampling đa pha (polyphase) | `scipy.signal.resample_poly` làm hộ | — |
+
+### 5. Bài tập dự đoán
+
+IMU 200 Hz đo vận tốc góc = quay chậm 0,5 Hz biên độ 1 rad/s + rung motor **40 Hz** biên độ 0,4 rad/s. USB rớt 250 ms IMU tại t = 8 s. Camera 30 Hz, stamp giữa phơi sáng, **đã cùng đồng hồ** (để tách riêng ba bẫy khỏi lỗi đồng hồ).
+
+**Dự đoán:**
+
+1. Bẫy 1: nội suy IMU tại các mốc camera (30 Hz), không lọc trước. Trong phổ của chuỗi 30 Hz, đỉnh lớn nhất trên 2 Hz nằm ở tần số nào? (công thức: tần số gập = |f − k·f_s| nhỏ nhất)
+2. Bẫy 2: bao nhiêu frame camera rơi vào lỗ? Sai số lớn nhất khi nội suy xuyên lỗ cỡ bao nhiêu (so với biên độ các thành phần)?
+3. Bẫy 3: `merge_asof` backward không tolerance trả bao nhiêu NaN? Mẫu IMU được gắn cũ nhất là bao nhiêu ms? Với tolerance 7,5 ms (1,5 chu kỳ IMU) thì bao nhiêu NaN?
+
+```python
+# [đã chạy] Ghép IMU 200 Hz vào camera 30 Hz: ba cái bẫy không nằm ở công thức nội suy
+import numpy as np, pandas as pd
+rng = np.random.default_rng(5)
+T = 20.0
+def gyro(t):   # quay chậm 0.5 Hz + rung motor 40 Hz (rad/s)
+    return 1.0 * np.sin(2*np.pi*0.5*t) + 0.4 * np.sin(2*np.pi*40*t)
+t_imu = np.arange(0, T, 1/200)
+x_imu = gyro(t_imu) + rng.normal(0, 0.01, t_imu.size)
+gap = (t_imu > 8.0) & (t_imu < 8.25)                      # USB rớt 250 ms IMU
+t_imu_g, x_imu_g = t_imu[~gap], x_imu[~gap]
+t_cam = np.arange(0.01, T, 1/30)                         # mốc giữa phơi sáng, đã cùng clock
+
+# Bẫy 1: "resample IMU về 30 Hz cho gọn" = nội suy tại mốc camera, không lọc trước
+x30 = np.interp(t_cam, t_imu_g, x_imu_g)
+spec = np.abs(np.fft.rfft((x30 - x30.mean()) * np.hanning(x30.size)))
+f = np.fft.rfftfreq(x30.size, 1/30)
+band = f > 2                                              # bỏ vùng quay chậm
+print("B1 đỉnh phổ lớn nhất trên 2 Hz của chuỗi 30 Hz: %.1f Hz" % f[band][spec[band].argmax()])
+
+# Bẫy 2: nội suy xuyên qua lỗ hổng — trông mượt, là dữ liệu bịa
+in_gap = (t_cam > 8.0) & (t_cam < 8.25)
+err = np.abs(np.interp(t_cam[in_gap], t_imu_g, x_imu_g) - gyro(t_cam[in_gap]))
+print("B2 số frame camera rơi vào lỗ: %d, sai số max khi nội suy xuyên lỗ: %.2f rad/s" % (in_gap.sum(), err.max()))
+
+# Bẫy 3: merge_asof không tolerance lặng lẽ gắn mẫu cũ
+cam = pd.DataFrame({"t": t_cam}); imu = pd.DataFrame({"t": t_imu_g, "gyro": x_imu_g})
+j0 = pd.merge_asof(cam, imu, on="t", direction="backward")
+j1 = pd.merge_asof(cam, imu, on="t", direction="backward", tolerance=0.0075)
+age = t_cam - imu["t"].to_numpy()[np.searchsorted(t_imu_g, t_cam, side="right") - 1]
+print("B3 không tolerance: NaN =", j0.gyro.isna().sum(), "| tuổi mẫu max = %.0f ms" % (age.max()*1e3))
+print("B3 tolerance 7.5 ms: NaN =", j1.gyro.isna().sum())
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+| Câu | Kết quả | Đọc |
+|---|---|---|
+| 1 | Đỉnh ở **10,0 Hz** | 40 − 30 = 10 Hz. Rung 40 Hz biến thành "dao động 10 Hz" với cùng biên độ; không bộ lọc nào phía sau tách ra được nữa |
+| 2 | **8 frame**, sai số max ≈ **0,42 rad/s** | ≈ biên độ rung: nội suy xuyên lỗ xóa rung và trả về đường thẳng trông hợp lý |
+| 3 | Không tolerance: **0 NaN**, mẫu cũ nhất **243 ms**. Tolerance 7,5 ms: **8 NaN** | Đúng 8 frame trong lỗ hiện ra như thiếu dữ liệu, thay vì dữ liệu cũ |
+
+Hệ quả thiết kế: bảng ghép nên có cột `imu_age_ms` (tuổi mẫu) và cột cờ "nội suy/giữ/thiếu"; hạ tần số chỉ sau lọc thông thấp (`scipy.signal.decimate` hoặc `resample_poly` có lọc sẵn); với ứng dụng cần rung (phát hiện va chạm, chẩn đoán motor), giữ cửa sổ mẫu IMU gốc quanh mỗi frame thay vì một giá trị.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi gặp một bảng/dataset "đã đồng bộ" hay một con số sai số căn chỉnh:
+
+1. Hai luồng có được đưa về **cùng một trục event time** trước khi ghép không (F3.3)? Ghép theo `log_time` là CHƯA RÕ cho tới khi chứng minh trễ nhỏ hơn ngân sách.
+2. Phương pháp: as-of, nearest, nội suy, interval? **Nhân quả** hay không, và ứng dụng có cần nhân quả không (train policy chạy online)?
+3. Có **tolerance** không? Có cột tuổi mẫu không? Lỗ hổng hiện ra thế nào?
+4. Có **hạ tần số** không? Nếu có, lọc trước chưa, và tín hiệu có năng lượng trên Nyquist mới không?
+5. Thời điểm của camera là đầu, giữa hay cuối phơi sáng, hay lúc nhận frame?
+6. Sai số căn chỉnh được báo bằng **ms và bằng đơn vị vật lý** (rad, m/s²) ở tốc độ thay đổi điển hình, hay chỉ "đã sync"?
+7. Kênh nào được nội suy: chỉ đại lượng liên tục? quaternion có slerp?
+
+**Khẳng định mẫu để tự chấm:**
+
+- (a) `robotics-data-infra-roadmap.md`: *"Nội suy (interpolation) — Hai stream khác tần số → phải nội suy về cùng mốc thời gian. Đây là code bạn sẽ viết."*
+- (b) Gemini, K5 Bài 17, bảng ưu tiên drop: luồng camera — *"Mất một khung nhìn, nhưng thuật toán thị giác có thể nội suy."*
+- (c) *"Ghép bằng as-of với IMU 200 Hz thì sai số căn chỉnh là 2,5 ms."*
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+- (a) **ĐÚNG MỘT PHẦN.** Đúng là bạn sẽ viết code ghép. Sai ở chữ "phải nội suy": as-of (nhân quả) là lựa chọn đúng cho dữ liệu huấn luyện một policy chạy online, vì nội suy dùng mẫu tương lai; interval join giữ thông tin rung; và nội suy chỉ hợp lệ cho kênh liên tục, có tolerance. Thiếu hẳn: aliasing khi đưa về "cùng mốc" thưa hơn.
+- (b) **ĐÚNG MỘT PHẦN.** Một bộ ước lượng trạng thái online có thể *dự đoán qua* frame thiếu. Nhưng trong **dataset**, frame thiếu phải được ghi là thiếu (mask, bản ghi drop, → F3.9), không được nội suy ảnh để lấp. Nội suy ảnh tạo dữ liệu không ai quan sát.
+- (c) **ĐÚNG MỘT PHẦN.** 2,5 ms là sai số *trung bình của riêng phương pháp* (nửa chu kỳ, phân bố đều 0–5 ms). Sai số căn chỉnh tổng còn cộng lệch đồng hồ δ, định nghĩa thời điểm camera (giữa phơi sáng, rolling shutter), và phải đổi sang đơn vị vật lý. Ngoài ra, với tỉ số 200/30 = 20/3, mốc camera chỉ rơi vào ba pha cố định của chu kỳ IMU, nên sai số có cấu trúc lặp chứ không đều (K5 Bài 13).
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Nếu…thì]** Nếu camera có rolling shutter 30 ms từ hàng đầu tới hàng cuối, "thời điểm của frame" là gì khi ghép với IMU? Interval join giúp gì?
+   <details><summary>Hướng nghĩ</summary>
+
+   Mỗi hàng ảnh có thời điểm riêng (→ F4.6, K5 Bài 11). Một giá trị IMU cho cả frame là xấp xỉ; giữ cả cửa sổ IMU trong [đầu phơi sáng hàng đầu, cuối phơi sáng hàng cuối] cho phép downstream bù theo hàng.
+
+   </details>
+2. **[Quy mô]** 1 000 giờ dữ liệu, bạn đổi phương pháp ghép (as-of → nội suy). Phải tính lại cái gì, và nếu bảng ghép là "nguồn sự thật" thì sao?
+   <details><summary>Hướng nghĩ</summary>
+
+   Nếu bảng ghép là view dẫn xuất từ MCAP (F3.1, F3.8), chỉ chạy lại job. Nếu bảng ghép đã thay raw (raw bị xóa cho tiết kiệm), phương pháp ghép bị đông cứng vĩnh viễn. Đây là lý do không xóa raw.
+
+   </details>
+3. **[Failure mode]** Hai luồng ghép rất khớp trong lab, lệch rõ trên robot thật chạy 30 phút. Ba giả thuyết theo thứ tự nên kiểm?
+   <details><summary>Hướng nghĩ</summary>
+
+   Drift chưa bù (lệch tăng theo thời gian, F3.3); trễ thay đổi theo tải CPU (camera đóng dấu lúc nhận); nhiệt độ làm đổi tần số thạch anh. Vẽ độ lệch ước lượng (cross-correlation theo cửa sổ, F4.6) theo thời gian phiên.
+
+   </details>
+4. **[Liên ngành]** Y sinh ghép ECG 500 Hz với huyết áp 125 Hz và SpO₂ 1 Hz trên monitor ICU. Họ giải bài toán ghép thế nào, và cái gì giống robot?
+   <details><summary>Hướng nghĩ</summary>
+
+   Thiết bị cùng một máy dùng chung đồng hồ; ghép theo sự kiện (đỉnh R của ECG) thay vì theo lưới. Giống: neo vào một sự kiện vật lý chung (như TN-1 GPIO chung ở K5 Bài 8). Khác: thiết bị y tế được chứng nhận cùng đồng hồ; robot ghép từ linh kiện rời.
+
+   </details>
+5. **[Vì sao không]** Vì sao không nâng IMU lên 1 kHz để sai số as-of còn 0,5 ms?
+   <details><summary>Hướng nghĩ</summary>
+
+   Khi δ đồng hồ là vài ms thì sai số phương pháp đã không phải phần trội. Còn băng thông, CPU, và bộ lọc nội của chip (ODR cao thì nhiễu khác). Tối ưu thành phần nhỏ nhất của ngân sách là lãng phí.
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Tài chính (kdb+/q `aj`, TAQ):** as-of join là phép toán hạng nhất của cơ sở dữ liệu tick; câu chuyện Lee–Ready ở mục 1. Giống: bài toán lệch đồng hồ giữa hai luồng báo cáo. Khác: giá là bậc thang (zero-order hold là đúng nghĩa), không nội suy.
+- **Âm thanh số:** chuyển 48 kHz → 44,1 kHz bắt buộc qua bộ lọc chống aliasing; đó là lý do "sample rate converter" là một khối có tên trong mọi DAW. Giống hệt bẫy 1. Khác: âm thanh có đồng hồ chung chính xác, robot thì không.
+
+### 9. Áp vào khóa chính
+
+- **K2 Bài 11:** lớp lỗi về đồng bộ cần oracle là sai số căn chỉnh *đo được*; dùng checklist mục 6 để viết định nghĩa lớp lỗi.
+- **K5 Bài 13:** quyết định as-of hay nội suy theo ứng dụng (nhân quả hay không), đặt tolerance theo chu kỳ, ghi cột tuổi mẫu; không hạ tần số khi chưa lọc.
+- **K7 C7, C8.3:** hợp nhất odometry 50 Hz với pose marker 30 Hz có trễ xử lý ảnh: thời điểm của pose là lúc chụp, không phải lúc tính xong; ghép bằng as-of trên lịch sử odometry (đây là cách bộ ước lượng trạng thái xử lý đo muộn).
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Lee & Ready 1991, quy tắc 5 giây | `[chuẩn]` | Journal of Finance 46(2), 1991 |
+| Sai số nội suy tuyến tính ≤ h²/8·max\|x''\| | `[chuẩn]` | Giải tích số |
+| Alias 40 → 10 Hz, 8 frame, 243 ms, 8 NaN | `[đã chạy]` | Mục 5; pandas 3.0, numpy |
+| `merge_asof` mặc định `direction="backward"`, không tolerance | `[spec]` | Tài liệu pandas `merge_asof`; kiểm bản bạn cài |
+| 0,6° sai lệch ở 2 rad/s, 5 ms | `[ước lượng]` | 2 × 0,005 = 0,01 rad |
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Lee & Ready, *Inferring Trade Direction from Intraday Data*, Journal of Finance (1991) — đọc phần về độ lệch thời gian báo giá.
+- **Giải thích:** tài liệu `pandas.merge_asof` và DuckDB `ASOF JOIN` — đọc kỹ tham số `direction`, `tolerance`, `by`.
+- **Đào sâu:** Furgale, Rehder, Siegwart, *Unified Temporal and Spatial Calibration for Multi-Sensor Systems* (IROS 2013; công cụ Kalibr) — cách ước lượng độ lệch thời gian camera–IMU như một tham số.
+- **Tự kiểm tra:** (1) giải thích cho backend engineer trong 5 câu vì sao "resample về 30 Hz" có thể tạo ra dao động không có thật; (2) vẽ lại hình mốc IMU/camera và bốn phương pháp; (3) câu hỏi:
+
+  Một bảng ghép có cột `imu_age_ms`. Phân bố của nó cho as-of trên IMU 200 Hz đều đặn trông thế nào, và một đỉnh phụ ở ~100 ms nói gì?
+  <details><summary>Đáp án</summary>
+
+  Đều đặn: dồn trong 0–5 ms (với 200/30 thì chỉ ba giá trị lặp lại). Đỉnh ở ~100 ms: có lỗ hổng IMU (USB kẹt/rớt) và tolerance quá rộng hoặc không có — các frame đó đang mang mẫu cũ.
+
+  </details>
+
+---
+
+## F3.5 — Idempotency, exactly-once, upload resumable, ngữ nghĩa object store (4h)
+
+> **Dùng cho:** K3 Bài 14 · K5 Bài 14 · K6 Bài 9 · K7 C7.3 · **Cần trước:** F3.1; F2.5 (fault injection) nên có · **Sau viên nang này bạn đánh giá được:** một thiết kế upload có thật sự "không mất, không trùng" không, dưới những lỗi nào; điều kiện xóa file local có đủ chặt không; và một khẳng định về checksum/ETag có kiểm cái mình tưởng nó kiểm không.
+
+### 1. Câu chuyện
+
+Phần này đúng nghề bạn nhất; câu chuyện ngắn. Tới tháng 12/2020, Amazon S3 chỉ bảo đảm *eventual consistency* cho một số thao tác: một object vừa ghi có thể chưa hiện trong `LIST`. Các pipeline Hadoop/Spark ghi output lên S3 rồi liệt kê để đọc tiếp thỉnh thoảng thiếu file mà không báo lỗi. Netflix viết hẳn một công cụ (s3mper, 2014) chỉ để *phát hiện* listing không nhất quán `[chuẩn]`. Từ 12/2020, S3 bảo đảm strong read-after-write consistency cho mọi PUT/LIST `[spec: thông báo AWS 12/2020]`, và từ 8/2024 hỗ trợ ghi có điều kiện `If-None-Match: *` cho PutObject và CompleteMultipartUpload `[spec: AWS S3 User Guide, "conditional writes"]`. Ngữ nghĩa của object store **đổi theo thời gian và theo nhà cung cấp** (MinIO, GCS, R2 không giống hệt S3). Thiết kế upload của bạn dựa trên ngữ nghĩa nào phải được ghi ra và test, không được nhớ.
+
+Phần robot thêm: đơn vị dữ liệu là **file nhiều GB vừa được ghi xong trên một ổ duy nhất**, đường mạng đứt là trạng thái bình thường, và bản local là bản sao duy nhất cho tới khi bản trên store được *chứng minh* đúng.
+
+### 2. Mô hình tư duy
+
+```mermaid
+stateDiagram-v2
+  [*] --> WRITING: writer mở file
+  WRITING --> SEALED: finish() + fsync + sha256 + manifest
+  WRITING --> RECOVER: crash (không có summary, F3.1)
+  RECOVER --> SEALED: mcap recover → file mới, hash mới
+  SEALED --> UPLOADING: tạo multipart, LƯU upload_id bền
+  UPLOADING --> UPLOADING: part n xong → lưu (n, checksum) bền
+  UPLOADING --> UPLOADED: Complete (If-None-Match: *)
+  UPLOADED --> VERIFIED: checksum DO SERVER TÍNH == sha256 lúc SEALED
+  VERIFIED --> [*]: được xóa local (khi cần chỗ)
+  UPLOADED --> QUARANTINE: lệch checksum → giữ local, alert
+```
+
+Ba ý tưởng, mỗi cái đã có tên trong nghề bạn:
+
+1. **Exactly-once không tồn tại trên đường truyền; effectively-once thì có**: at-least-once (retry tới khi chắc) + **thao tác idempotent** ở đích. Idempotent ở object store = cùng key, cùng nội dung, ghi lần hai không đổi gì.
+2. **Key quyết định idempotency.** Key theo **nội dung** (sha256) thì retry vô hại và hai bản khác nội dung không bao giờ đè nhau. Key theo **tên** thì phụ thuộc chính sách ghi đè. Key **mới mỗi lần thử** (UUID) thì mọi response bị mất thành một bản trùng.
+3. **Điểm commit phải đo được.** "Xóa local" là thao tác không đảo ngược, nên điều kiện của nó phải là một bằng chứng *do bên kia tạo ra* (checksum server tính trên bytes nó nhận), không phải một trạng thái *bên mình nghĩ* (đã gửi xong, HTTP 200).
+
+Ngữ nghĩa object store cần nhớ (S3; kiểm lại với store bạn dùng `[tự đo]` cho MinIO):
+
+| Thuộc tính | S3 | Hệ quả |
+|---|---|---|
+| PUT là nguyên tử cả object; không append, không ghi dở hiện ra | `[spec]` | Không có "object bị cắt" do mạng đứt giữa PUT — nhưng có object đúng bytes của một **file đã bị cắt từ trước** |
+| Multipart: part 5 MiB–5 GiB (trừ part cuối), tối đa 10 000 part; object chỉ hiện khi Complete | `[spec]` | Resume = `ListParts` theo `upload_id`; part bỏ dở vẫn tính tiền tới khi Abort (đặt lifecycle rule) |
+| ETag của object multipart **không phải MD5 của cả file** (dạng `md5-của-các-md5-N`) | `[chuẩn]` | So ETag với `md5sum` local luôn lệch; dùng checksum bổ sung (SHA-256/CRC) mà S3 tính và trả về, hoặc tải về băm lại |
+| Cùng key: ghi sau thắng; `If-None-Match: *` → 412 nếu key đã có | `[spec]` | Key theo tên + không điều kiện = có thể đè; có điều kiện = bản đầu (có thể là bản hỏng) thắng mãi |
+| Strong read-after-write từ 12/2020 | `[spec]` | `HEAD` ngay sau Complete là kiểm hợp lệ |
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Idempotency key trên API thanh toán (Stripe-style), server nhớ key 24h | Key object = sha256 nội dung | Server thanh toán *nhớ* key và trả lại response cũ; object store không nhớ request, nó chỉ có trạng thái hiện tại của key. Idempotency phải nằm **trong cách đặt key**, không trong header | Gửi header `Idempotency-Key` lên S3 và tưởng được bảo vệ |
+| Kafka EOS (KIP-98): producer idempotent + transaction, đọc–xử lý–ghi trong Kafka | Robot → object store qua mạng đứt | EOS chỉ bao phạm vi *bên trong Kafka*; hiệu ứng ra ngoài (gửi email, phát âm thanh, xóa file local) không quay lui được (đã chấm ở K3 Bài 14) | Coi "dùng hạ tầng có exactly-once" là xong cho cả bước xóa local |
+| Outbox pattern: ghi DB + ghi outbox trong một transaction | Hàng đợi upload bền trên robot | Ở đây "transaction" cần cả **fsync file dữ liệu** và **fsync trạng thái hàng đợi**; thứ tự sai (ghi trạng thái SEALED trước khi file xuống đĩa) → mất điện để lại trạng thái nói dối | Sau mất điện, hàng đợi trỏ tới file 0 byte |
+| Retry với backoff khi 5xx | Retry upload trên robot | Ổn; nhưng retry **sau khi mất response** của một PUT đã thành công là tình huống *phổ biến* trên Wi-Fi yếu, không phải hiếm | Key UUID → bản trùng tỉ lệ thuận với tỉ lệ mất response |
+
+**Chấm mô hình:**
+
+- *"Upload lại cùng file thì vô hại vì S3 ghi đè."* — **ĐÚNG MỘT PHẦN.** Vô hại nếu key xác định và nội dung giống. Gãy: (a) key sinh mới mỗi lần thử → trùng; (b) cùng key, nội dung khác (file được upload khi chưa SEALED, rồi upload lại bản đủ) → bản nào thắng phụ thuộc thứ tự và điều kiện ghi. Phản ví dụ: mục 5.
+- Đã chấm ở nơi khác, không lặp: *"`upload_file()` trả về thành công thì xóa local được"* — **SAI** (K5 Bài 14); *"Exactly-once là bài toán đã có lời giải"* — **ĐÚNG MỘT PHẦN** (K3 Bài 14).
+
+**Tên chuẩn của thứ bạn đã làm:** dedupe theo hash nội dung khi import dữ liệu là **content-addressable storage** (git, Docker registry, Bazel cache đều dựa trên nó). Còn thiếu ở robot: định nghĩa *nội dung* là file **đã niêm phong**, và hash được tính **một lần lúc SEALED** rồi đi kèm file như danh tính của nó suốt vòng đời (→ F3.8).
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | At-least-once / at-most-once / effectively-once | Có thể trùng / có thể mất / trùng nhưng vô hại nhờ idempotent | "Exactly-once" end-to-end |
+| 🟢 | Idempotent | Làm hai lần = làm một lần | Retry an toàn trong mọi trường hợp |
+| 🟢 | Multipart upload, `upload_id`, `ListParts` | Upload theo phần, resume được | Tự resume |
+| 🟢 | Conditional write (`If-None-Match`, `If-Match`) | Ghi chỉ khi key chưa có / đang đúng phiên bản | Khóa phân tán |
+| 🟢 | Content addressing | Key = hash nội dung | Chỉ để dedupe |
+| 🟢 | Seal / niêm phong | File đóng, fsync, hash xong, không đổi nữa | "Writer đã thoát" |
+| 🟡 | ETag multipart, checksum bổ sung (SHA-256, CRC) | Định danh phiên bản / bằng chứng toàn vẹn | ETag = MD5 file |
+| 🟡 | Lifecycle rule, abort incomplete multipart | Dọn part bỏ dở | — |
+| 🔴 | Giao thức tus | Upload resumable qua HTTP chung | — |
+
+### 5. Bài tập dự đoán
+
+Một object store đồ chơi (dict) có ghi có điều kiện (`setdefault` ≈ `If-None-Match: *`). Mỗi lần PUT: 10% mất trước khi tới store, 5% **store đã ghi nhưng response mất**. Client retry tới khi thấy 200. 2 000 file; 5 file bị đẩy lên lần đầu khi writer **chưa đóng** (bản bị cắt một nửa), sau đó lượt chính đẩy toàn bộ bản đúng. Ba cách đặt key: UUID mỗi lần thử, tên file, sha256 nội dung.
+
+**Dự đoán:**
+
+1. Kỳ vọng số bản trùng với key UUID? (Gợi ý: mỗi lần thử có ba kết cục; số lần "đã ghi nhưng mất response" trước lần thành công đầu tiên có kỳ vọng p_after / p_success.)
+2. Key theo tên + ghi có điều kiện: bao nhiêu file mất bản đúng? Nếu bỏ điều kiện (ghi sau thắng) thì sao?
+3. Key sha256: số object? Có bản trùng không? Thứ gì còn thừa trên store và phát hiện bằng gì?
+
+```python
+# [đã chạy] Retry + cách đặt key quyết định trùng lặp và hỏng âm thầm
+import hashlib, random, uuid
+random.seed(11)
+P_LOST_BEFORE, P_LOST_AFTER = 0.10, 0.05   # request mất trước khi tới store / store đã ghi, response mất
+
+def put(store, key, body):
+    r = random.random()
+    if r < P_LOST_BEFORE: raise TimeoutError
+    store.setdefault(key, body)             # ghi có điều kiện kiểu If-None-Match: * (key có rồi thì giữ bản cũ)
+    if r < P_LOST_BEFORE + P_LOST_AFTER: raise TimeoutError
+    return 200
+
+def upload(store, name, body, key_of):
+    n = 0
+    while True:                              # retry tới khi thấy 200, cùng hàm sinh key
+        n += 1
+        try: put(store, key_of(name, body), body); return n
+        except TimeoutError: pass
+
+full = {f"robot01/2026-11-02/{i:05d}.mcap": f"mcap-{i}|".encode() * 50 for i in range(2000)}
+early = [n for i, n in enumerate(full) if i % 400 == 399]   # 5 file bị đẩy lên khi writer CHƯA đóng
+
+keys = {"uuid mỗi lần thử": lambda n, b: str(uuid.uuid4()),
+        "tên file":         lambda n, b: n,
+        "sha256 nội dung":  lambda n, b: hashlib.sha256(b).hexdigest()}
+for label, key_of in keys.items():
+    store, tries = {}, 0
+    for n in early: tries += upload(store, n, full[n][: len(full[n]) // 2], key_of)   # bản bị cắt
+    for n, b in full.items(): tries += upload(store, n, b, key_of)                    # lượt chính
+    by_content = {}
+    for v in store.values(): by_content[v] = by_content.get(v, 0) + 1
+    dup = sum(c - 1 for c in by_content.values())
+    lost = sum(1 for n, b in full.items() if b not in by_content)       # bản đúng không có trên store
+    print(f"{label:17s}| lần thử {tries} | object {len(store)} | bản trùng {dup} | file mất bản đúng {lost}")
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+| Key | Lần thử | Object | Bản trùng | File mất bản đúng |
+|---|---|---|---|---|
+| UUID mỗi lần thử | 2 344 | 2 115 | **110** | 0 |
+| Tên file | 2 386 | 2 000 | 0 | **5** |
+| sha256 nội dung | 2 342 | 2 005 | 0 | 0 |
+
+1. Kỳ vọng 2 005 × 0,05/0,85 ≈ **118**; ra 110 (dao động thống kê). Tỉ lệ trùng = tỉ lệ mất response / tỉ lệ thành công — nó không giảm khi bạn retry "cẩn thận hơn".
+2. **5 file**: bản bị cắt tới trước, giành key, bản đúng bị 412 (ở đây: `setdefault` giữ bản cũ) mãi mãi, mọi request đều "thành công". Bỏ điều kiện thì lần này bản đúng đè lên — nhưng chỉ vì nó tới sau; đảo thứ tự (retry của bản cũ tới muộn) thì bản hỏng đè bản đúng. Key theo tên chỉ an toàn khi **chỉ file đã SEALED mới được vào hàng đợi** và có kiểm checksum sau Complete.
+3. **2 005 object**, không trùng; 5 object thừa là bản bị cắt, **mồ côi** (không manifest nào trỏ tới). Phát hiện bằng đối soát store ↔ manifest (job gom rác), và chúng không bao giờ che bản đúng. Cách sửa gốc vẫn là cấm upload trước SEALED.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist cho một thiết kế upload/ingest:
+
+1. Đơn vị upload là gì, và **trạng thái nào** của nó được phép vào hàng đợi (SEALED hay "file tồn tại")?
+2. Key đặt thế nào? Retry sau khi **mất response** tạo ra gì?
+3. Ngữ nghĩa store giả định (ghi đè, điều kiện, consistency) có được **ghi ra và test** trên đúng store (S3/MinIO/khác) không?
+4. Điều kiện xóa local là bằng chứng **do server tạo** (checksum server tính) hay trạng thái **phía mình** (200 OK, đã gửi đủ byte)?
+5. Trạng thái hàng đợi và file được fsync theo **thứ tự** nào? Mất điện ở giữa hai bước để lại gì?
+6. Phần bỏ dở (multipart chưa Complete, object mồ côi) được dọn bằng gì?
+7. Lỗi nào đã được **tiêm thật** (mất mạng, mất response, mất điện, đĩa đầy) và mỗi lỗi bao nhiêu lần (→ F1.4: 10 lần thành công không chứng minh tỉ lệ hỏng nhỏ)?
+
+**Khẳng định mẫu để tự chấm:**
+
+- (a) Gemini, K5 Bài 14, "Nếu kết quả ra khác": *"[ETag multipart không khớp] → Tính toán và so sánh SHA-256 metadata bằng cách gắn custom header `x-amz-meta-sha256` lúc khởi tạo upload."*
+- (b) Gemini, K5 Bài 14, "Số phải ra": *"Ngắt mạng giữa lúc upload: không bao giờ upload lại từ đầu; tiếp tục chính xác từ part chưa hoàn thành."*
+- (c) *"Đặt key là `robot01/2026-11-02/00042.mcap` là idempotent rồi, retry bao nhiêu cũng được."*
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+- (a) **SAI như một phép kiểm toàn vẹn.** `x-amz-meta-*` là user metadata: server lưu nguyên chuỗi client gửi, **không tính hay đối chiếu** gì. So "metadata sha256" với sha256 local là so client với chính nó. Phép kiểm thật: dùng checksum bổ sung mà S3 *tự tính* trên bytes nhận được (SHA-256/CRC32/CRC64NVME tùy loại; với multipart có dạng tổng hợp theo part hoặc full-object tùy thuật toán `[spec: S3 User Guide, "Checking object integrity" — kiểm theo SDK bạn dùng]`), hoặc tải về và băm lại. Ghi sha256 vào metadata vẫn hữu ích — làm *danh tính* để đối chiếu sau, không làm bằng chứng.
+- (b) **ĐÚNG MỘT PHẦN.** Đúng là mục tiêu và làm được bằng `upload_id` lưu bền + `ListParts`. Gãy: part đã lên nhưng crash trước khi lưu trạng thái → upload lại part đó (vô hại, cùng số part ghi đè); `upload_id` có thể đã bị lifecycle rule abort nếu robot offline lâu → phải bắt đầu lại từ đầu, và thiết kế phải coi đó là hợp lệ, không phải lỗi. "Không bao giờ" là tiêu chí test cho kịch bản ngắt mạng ngắn, không phải bất biến.
+- (c) **ĐÚNG MỘT PHẦN.** Idempotent khi nội dung dưới key đó không bao giờ đổi — tức chỉ file đã SEALED được upload, và tên không bị tái dùng (ví dụ bộ đếm file reset sau khi cài lại OS, hai robot cùng ID). Phản ví dụ: mục 5, 5 file mất bản đúng mà mọi request đều thành công. Thêm sha256 vào key hoặc kiểm checksum sau Complete để đóng lỗ này.
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Quy mô]** Robot ghi 24 GB/ngày, mất mạng 3 ngày, ổ còn trống 100 GB. Tính bằng định luật Little (→ F7.1) lượng dữ liệu trong hàng đợi và thời gian xả khi có mạng lại ở 20 MB/s. Cái gì gãy trước?
+   <details><summary>Hướng nghĩ</summary>
+
+   72 GB tồn sau 3 ngày; xả 72 GB ở 20 MB/s ≈ 1 giờ, *trong lúc* vẫn ghi thêm ~1 GB/giờ. Ổ chịu được ~4 ngày. Ngày thứ 5 cần chính sách drop/retention theo ưu tiên (F3.9), quyết định trước, không lúc 3h sáng.
+
+   </details>
+2. **[Failure mode]** Mất điện đúng lúc giữa "đổi trạng thái thành VERIFIED" và "xóa file". Khởi động lại thấy gì, làm gì? Ngược lại: xóa file rồi mới ghi trạng thái?
+   <details><summary>Hướng nghĩ</summary>
+
+   Thứ tự đúng: ghi VERIFIED bền → xóa → ghi DELETED. Crash ở giữa: thấy VERIFIED + file còn → xóa lại (idempotent). Thứ tự ngược: thấy file mất + trạng thái UPLOADED → không biết đã verify chưa. Đây là write-ahead logging cho một thao tác hệ thống file.
+
+   </details>
+3. **[Vì sao không]** Vì sao không dùng `rsync` hay `rclone` thay cho tự viết uploader?
+   <details><summary>Hướng nghĩ</summary>
+
+   Có thể, và thường nên. Câu hỏi đúng: công cụ đó có (a) chỉ lấy file đã SEALED, (b) kiểm checksum phía server, (c) báo trạng thái để bước xóa dựa vào không? `rclone` có `--checksum` và hỗ trợ hash theo backend `[tự đo]`. Tự viết chỉ khi không ghép được ba điều đó.
+
+   </details>
+4. **[Liên ngành]** Ngân hàng chuyển tiền liên ngân hàng dùng số tham chiếu duy nhất và đối soát cuối ngày. Giống quy trình robot→store ở đâu?
+   <details><summary>Hướng nghĩ</summary>
+
+   Key duy nhất (idempotency) + đối soát độc lập (reconciliation) giữa hai sổ = sha256 + job đối soát manifest ↔ store. Khác: ngân hàng có thể đảo giao dịch; robot không tạo lại được dữ liệu đã xóa.
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Docker registry / OCI:** layer định danh bằng digest sha256; push lại layer đã có là no-op. Giống content addressing ở đây. Khác: registry kiểm digest phía server khi nhận — đúng thứ bạn cần đòi hỏi ở bước VERIFIED.
+- **Thư viện số (LOCKSS, "Lots Of Copies Keep Stuff Safe"):** nhiều bản ở nhiều nơi, định kỳ so hash để phát hiện mục nát bit. Giống: niềm tin vào dữ liệu đến từ đối chiếu độc lập. Khác: họ bảo quản hàng thập kỷ; robot chỉ cần tới khi bản trên store được xác minh.
+
+### 9. Áp vào khóa chính
+
+- **K3 Bài 14:** khóa dedupe là danh tính ổn định của *ý định* (confession ID), không phải hash nội dung có thể sửa; F3.5 cho bạn từ vựng để phân biệt hai trường hợp.
+- **K5 Bài 14:** dùng sơ đồ trạng thái mục 2 làm thiết kế; test đủ bốn lỗi (mất mạng, **mất response**, mất điện, đĩa đầy); điều kiện xóa = checksum server tính khớp sha256 lúc SEALED.
+- **K6 Bài 9:** output 10 000 episode đặt key theo hash nội dung, manifest trỏ tới; chạy lại job không nhân đôi artifact.
+- **K7 C7.3:** sidecar trên robot thật; đo tỉ lệ mất response trên Wi-Fi văn phòng để biết UUID-key sẽ đẻ bao nhiêu bản trùng.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| S3 strong consistency từ 12/2020 | `[spec]` | Thông báo AWS "Amazon S3 now delivers strong read-after-write consistency" |
+| `If-None-Match` cho PutObject/CompleteMultipartUpload, 412 khi key có | `[spec]` | AWS S3 User Guide, conditional writes (8/2024) |
+| Giới hạn multipart 5 MiB/10 000 part | `[spec]` | AWS S3 User Guide, multipart upload limits |
+| Checksum bổ sung, full-object CRC cho multipart | `[spec — kiểm theo SDK]` | AWS S3 User Guide, "Checking object integrity" |
+| MinIO hỗ trợ đủ các ngữ nghĩa trên | `[tự đo]` | Test trực tiếp ở K5 Bài 14 |
+| Số trong bảng mục 5 | `[đã chạy]` | Mô phỏng |
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** AWS S3 User Guide — các mục *Uploading and copying objects using multipart upload*, *Checking object integrity*, *conditional writes*.
+- **Giải thích:** Kleppmann, *DDIA* chương 11, mục "Fault Tolerance" (exactly-once, idempotence) và chương 12, mục "The end-to-end argument for databases".
+- **Đào sâu:** Saltzer, Reed, Clark, *End-to-End Arguments in System Design* (1984) — vì sao kiểm toàn vẹn phải làm ở hai đầu cuối, đúng lý do bước VERIFIED tồn tại.
+- **Tự kiểm tra:** (1) giải thích cho backend engineer trong 5 câu vì sao 200 OK không phải điều kiện xóa; (2) vẽ lại sơ đồ trạng thái từ trí nhớ; (3) câu hỏi:
+
+  Mỗi lần thử PUT có 3% mất response sau khi store đã ghi, 87% thành công. Dùng key UUID cho 10 000 file, kỳ vọng bao nhiêu bản trùng?
+  <details><summary>Đáp án</summary>
+
+  10 000 × 0,03 / 0,87 ≈ **345**. Không phụ thuộc số lần retry tối đa, chỉ phụ thuộc tỉ lệ hai kết cục.
+
+  </details>
+
+---

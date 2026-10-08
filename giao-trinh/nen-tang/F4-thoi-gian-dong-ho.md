@@ -1087,3 +1087,259 @@ Checklist khi đọc một khẳng định về NTP hoặc về độ trễ mộ
   </details>
 
 ---
+
+## F4.5 — PTP: hardware timestamping, PHC, ptp4l/phc2sys, servo, BMCA, transparent/boundary clock (6h)
+
+> **Dùng cho:** K5 Bài 1 (phần PHC và hardware timestamping), K5 Bài 9 · **Cần trước:** F4.3, F4.4 · **Sau viên nang này bạn đánh giá được:** một hướng dẫn cấu hình linuxptp có đúng không (cờ, tùy chọn, số instance), một con số "PTP đạt X ns" đo ở đâu và bằng gì, PTP có giúp gì cho cảm biến của bạn không, và mạng giữa hai node cần gì (switch thường, transparent clock, boundary clock) để con số đó còn đứng được.
+
+### 1. Câu chuyện
+
+Cuối thập niên 1990, John Eidson ở Agilent làm hệ đo lường phân tán: nhiều thiết bị trên Ethernet phải lấy mẫu cùng lúc tới cỡ micro-giây. NTP có đúng thuật toán cần thiết (bốn timestamp, F4.4) nhưng timestamp của nó đóng ở phần mềm, sau driver và scheduler, mang theo chục tới trăm µs jitter. Đề xuất của nhóm ông thành IEEE 1588-2002: giữ thuật toán, **dời chỗ đóng dấu xuống phần cứng mạng**, lúc khung tin thật sự đi qua dây [chuẩn]. Bản 2008 (PTPv2) thêm *transparent clock* để switch không phá độ chính xác; bản 2019 bổ sung tiếp [chuẩn]. Viễn thông, lưới điện, tài chính và ô tô (gPTP, IEEE 802.1AS) lần lượt dùng nó.
+
+Năm 2022, Meta công bố đã chuyển đồng bộ thời gian trong datacenter từ NTP (độ chính xác cỡ mili-giây) sang PTP nhắm tới nano-giây, sau nhiều năm phải làm lại cả phần cứng lẫn phần mềm thời gian trong server; thí nghiệm của họ cho thấy chênh lệch cỡ 100 lần giữa NTP và bản PTP đầu tiên [chuẩn: Meta Engineering blog, *Precision Time Protocol at Meta*, 11/2022]. Chi tiết đáng học nhất trong bài đó không phải con số mà là API: thư viện `fbclock` của họ không trả về "bây giờ", mà trả về một cặp `{earliest_ns, latest_ns}` — *Window of Uncertainty* — vì đồng hồ đã đồng bộ vẫn trôi giữa hai lần chỉnh và theo nhiệt độ [chuẩn: cùng bài]. PTP tốt đến đâu thì người dùng vẫn phải được biết nó sai bao nhiêu (F4.8 nối tiếp ý này).
+
+### 2. Mô hình tư duy
+
+**Cái PTP thay đổi so với NTP** — không phải công thức, mà là *ai* đóng dấu và *mạng* làm gì với gói:
+
+```mermaid
+flowchart LR
+  subgraph M["Master"]
+    PHCm["PHC (đồng hồ trên NIC)"] --> TSm["Đóng dấu khi khung<br/>qua MAC/PHY: t1, t4"]
+  end
+  subgraph N["Mạng"]
+    SW["Switch thường:<br/>hàng đợi = trễ ngẫu nhiên,<br/>bất đối xứng"]
+    TC["Transparent clock:<br/>đo thời gian gói nằm trong switch,<br/>cộng vào correctionField"]
+    BC["Boundary clock:<br/>làm slave phía trên,<br/>master phía dưới"]
+  end
+  subgraph S["Slave"]
+    TSs["Đóng dấu: t2, t3"] --> SERVO["Servo PI<br/>chỉnh tần số PHC"]
+    SERVO --> PHCs["PHC slave"]
+    PHCs -- "phc2sys (PCIe, trong một máy)" --> SYS["CLOCK_REALTIME"]
+  end
+  TSm --> SW --> TSs
+  TSm --> TC --> TSs
+```
+
+Năm khối, mỗi khối một nguồn sai số riêng:
+
+1. **Hardware timestamping và PHC.** NIC có một bộ đếm thời gian riêng (PHC, lộ ra thành `/dev/ptpN`), chốt giá trị khi khung PTP đi qua giao diện MAC/PHY [spec: kernel `Documentation/driver-api/ptp.rst`]. `ethtool -T <iface>` cho biết NIC hỗ trợ không và PHC số mấy. Sai số còn lại: độ phân giải bộ đếm, trễ PHY khác nhau giữa phát và thu (bất đối xứng nhỏ, cố định), và jitter đọc PHC từ CPU.
+2. **ptp4l** chạy giao thức (Sync/Follow_Up/Delay_Req/Delay_Resp hoặc Pdelay), chọn master bằng **BMCA**, và chạy **servo** chỉnh tần số PHC của slave. Mặc định servo PI; khi offset ban đầu > `first_step_threshold` (mặc định 20 µs) thì nhảy một lần [spec: ptp4l(8)]. Log in `master offset`, `freq` (ppb chỉnh), `path delay`, và trạng thái servo `s0` (chưa khóa), `s1` (vừa nhảy), `s2` (đã khóa).
+3. **phc2sys** đồng bộ hai đồng hồ *trong một máy* (PHC ↔ `CLOCK_REALTIME`) bằng cách đọc PHC kẹp giữa hai lần đọc đồng hồ hệ thống. Không có nó, ptp4l chạy hoàn hảo mà `time.time()` vẫn sai.
+4. **BMCA** (Best Master Clock Algorithm): mỗi node quảng bá bộ thuộc tính (priority1, clockClass, clockAccuracy, offsetScaledLogVariance, priority2, cuối cùng clockIdentity để phá hòa); mọi node so cùng một thứ tự và tự suy ra ai là master [spec: IEEE 1588-2008 mục 9.3]. Không bỏ phiếu, không quorum; cấu hình bằng `priority1` hoặc ép vai bằng `serverOnly`/`clientOnly`.
+5. **Mạng.** Gói PTP xếp hàng trong switch như mọi gói khác. Switch thường: thời gian nằm hàng là trễ ngẫu nhiên và — khi tải hai chiều khác nhau — bất đối xứng, đúng thứ F4.4 nói là vô hình. **Transparent clock** (TC) đo thời gian gói nằm trong nó và cộng vào trường `correctionField`, slave trừ ra. **Boundary clock** (BC) kết thúc PTP ở một cổng (làm slave) và phát lại ở cổng khác (làm master) — mỗi tầng một servo, sai số cộng dồn theo số tầng.
+
+**Hai instance ptp4l trên một máy** (đúng cấu hình "hai PHC trong một hộp" của K5 Bài 9): mỗi instance mở một UNIX socket quản lý (`uds_address`) và một socket chỉ đọc (`uds_ro_address`). Mặc định trên bản linuxptp hiện tại là `/var/run/ptp/ptp4l` và `/var/run/ptp/ptp4lro`; bản cũ là `/var/run/ptp4l` và `/var/run/ptp4lro` [spec: ptp4l(8), bản 3/2024]. Hai instance cùng mặc định thì giẫm lên nhau, nên **mỗi instance cần một file cấu hình riêng** với `uds_address`, `uds_ro_address`, interface, và vai trò (hoặc priority) riêng; `domainNumber` phải *giống nhau* để hai bên nói chuyện; `clockIdentity` tự sinh từ MAC nên tự khác nhau. Cờ `-p` **không** liên quan tới socket: nó chỉ định *thiết bị PHC* (ví dụ `/dev/ptp0`), đã deprecated, dành cho kernel trước v3.5 không tự tìm được PHC của interface [spec: ptp4l(8), mục OPTIONS]. Cấu hình mẫu đầy đủ nằm ở K5 Bài 9 bước 2; không chép lại ở đây để chỉ có một nơi phải sửa.
+
+Mô phỏng: offset ước lượng qua 3 switch, khi tải hai chiều bằng nhau và khi một chiều nặng hơn; switch thường vs transparent clock. Đơn vị: sai số của **một lần trao đổi**, trước khi servo lấy trung bình.
+
+```python
+# [đã chạy] F4.5 — vì sao PTP cần transparent clock khi đi qua switch:
+# 3 switch, tải nặng chiều master→slave; so offset ước lượng khi switch thường vs transparent clock (TC)
+import numpy as np
+rng = np.random.default_rng(3)
+N, HOPS = 5000, 3
+TS_NOISE = 8e-9                       # nhiễu hardware timestamp mỗi đầu (s), [ước lượng] cỡ vài ns–chục ns
+CABLE = 50e-9 * HOPS                  # trễ dây + PHY cố định mỗi chiều (đối xứng)
+
+def residence(mean, n):               # thời gian gói nằm trong một switch (hàng đợi), phân bố mũ
+    return rng.exponential(mean, (n, HOPS)).sum(axis=1)
+
+def run(load_ms, load_sm, tc_error):
+    r_ms, r_sm = residence(load_ms, N), residence(load_sm, N)
+    d_ms = CABLE + r_ms + rng.normal(0, TS_NOISE, N) * np.sqrt(2)
+    d_sm = CABLE + r_sm + rng.normal(0, TS_NOISE, N) * np.sqrt(2)
+    if tc_error is not None:          # TC đo residence và ghi vào correctionField; sai số đo tc_error mỗi hop
+        d_ms -= r_ms + rng.normal(0, tc_error * np.sqrt(HOPS), N)
+        d_sm -= r_sm + rng.normal(0, tc_error * np.sqrt(HOPS), N)
+    err = (d_ms - d_sm) / 2           # sai số offset = nửa bất đối xứng của lần trao đổi đó
+    return err
+
+for name, tc in (("switch thường", None), ("transparent clock", 5e-9)):
+    for load in ((2e-6, 2e-6), (20e-6, 2e-6)):
+        e = run(*load, tc) * 1e9      # servo lấy trung bình được phần ngẫu nhiên, KHÔNG khử được phần TB có dấu
+        print(f"{name:18s} tải M→S={load[0]*1e6:4.0f} µs/hop, S→M={load[1]*1e6:3.0f} µs/hop | "
+              f"|sai số| p50={np.median(abs(e)):7.0f} ns  p99={np.percentile(abs(e), 99):7.0f} ns"
+              f" | trung bình có dấu={e.mean():+7.0f} ns")
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Header `Via` / tracing span do proxy thêm vào | Transparent clock ghi thời gian nằm trong switch vào `correctionField` | Proxy ghi để quan sát; TC ghi để **sửa** phép đo, và chỉ đúng khi mọi switch trên đường đều là TC | Một switch thường xen giữa chuỗi TC → bất đối xứng của nó lọt vào, các switch khác vẫn "sạch" nên bạn tin cả đường |
+| Leader election (Raft, ZooKeeper) | BMCA chọn grandmaster | BMCA là so sánh tất định, không quorum; mạng bị chia thì mỗi phần tự có master riêng và không ai báo lỗi | Hai nửa robot (hai switch) chạy theo hai grandmaster khác nhau sau khi một cáp lỏng |
+| Hai service cùng máy cần khác cổng | Hai ptp4l cùng máy cần khác `uds_address` (và file cấu hình riêng) | Ở backend xung đột cổng báo lỗi ngay khi bind; ở linuxptp hiện tại instance thứ hai **xóa** socket cũ rồi bind lại (log "uds: removed existing …"), instance đầu vẫn chạy nhưng `pmc` chỉ còn nói với instance sau [tự đo: theo mã nguồn `uds.c` nhánh chính; kiểm bản bạn cài] | Tưởng đang hỏi trạng thái slave mà thật ra đọc của master |
+| Reverse proxy terminate TLS rồi mở kết nối mới | Boundary clock | Mỗi BC là một servo mới: lỗi không chỉ đi qua mà còn được *lọc và cộng* qua từng tầng | Chuỗi 10 BC: sai số và thời gian hội tụ tăng theo tầng |
+
+**Chấm mô hình:**
+
+- *"PTP chính xác hơn NTP vì thuật toán tốt hơn."* — **ĐÚNG MỘT PHẦN.** Công thức offset/delay là một. PTP hơn ở ba chỗ ngoài thuật toán: timestamp phần cứng, hỗ trợ của mạng (TC/BC), và tần số trao đổi cao (mặc định 1 Sync/s, cấu hình được nhanh hơn). Phản ví dụ: chrony với hardware timestamping trên cùng NIC đạt cỡ gần PTP trong LAN [tự đo]; ptp4l với software timestamping (`-S`) thì không hơn NTP bao nhiêu.
+- *"ptp4l khóa rồi (s2) là đồng hồ hệ thống đúng."* — **SAI.** s2 nghĩa là servo của PHC đã khóa theo master *theo phép đo của chính nó*. Đồng hồ hệ thống cần phc2sys; và "khóa" vẫn mù với bất đối xứng (F4.4). Phản ví dụ: K5 Bài 9 bước 5c — đổi tốc độ link làm offset trọng tài dịch một hằng số trong khi ptp4l vẫn s2 quanh 0.
+
+**Tên chuẩn của thứ bạn đã làm:** khi bạn đưa một service "ghi giờ" vào sát tầng mạng nhất có thể (đo latency ở load balancer thay vì trong app), bạn đang làm đúng việc IEEE 1588 làm: dời điểm đóng dấu xuống dưới các hàng đợi. Thứ còn thiếu: hàng đợi *giữa* hai điểm đóng dấu (switch) vẫn phá đo lường, và chỉ thiết bị mạng hợp tác (TC/BC) mới sửa được.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Hardware timestamping | NIC chốt PHC khi khung qua MAC/PHY | "PTP" (PTP chạy được cả với software timestamp) |
+| 🟢 | PHC (`/dev/ptpN`) | Đồng hồ phần cứng trên NIC | Đồng hồ hệ thống |
+| 🟢 | ptp4l / phc2sys / pmc | Giao thức + servo / đồng bộ PHC ↔ hệ thống / hỏi trạng thái qua UDS | Một chương trình |
+| 🟢 | Servo, trạng thái s0/s1/s2 | Vòng điều khiển chỉnh tần số; chưa khóa / vừa nhảy / đã khóa | s2 = đúng |
+| 🟢 | `-p` của ptp4l | Thiết bị PHC (deprecated) | Đường dẫn socket |
+| 🟡 | BMCA, priority1, clockClass | Thuật toán chọn master và thuộc tính đem so | Bầu chọn có quorum |
+| 🟡 | Transparent clock (E2E/P2P), boundary clock | Switch cộng thời gian nằm hàng / switch làm slave+master | Switch "hỗ trợ PTP" nói chung |
+| 🟡 | One-step vs two-step | t1 nhét ngay vào Sync / gửi sau trong Follow_Up | Khác độ chính xác |
+| 🟡 | Transport L2 (`-2`) vs UDP | Khung Ethernet thô vs UDP/IP | Cờ bật hardware timestamping |
+| 🟡 | gPTP (IEEE 802.1AS) | Profile PTP cho TSN/ô tô, L2, P2P | Giao thức khác hẳn |
+| 🔴 | Telecom profile, SyncE, PTP over WiFi (802.11 FTM) | Biến thể ngành | Cần cho lộ trình |
+
+### 5. Bài tập dự đoán
+
+**Đề.** Mô phỏng mục 2 (3 switch, sai số timestamp 8 ns mỗi đầu, TC đo residence sai 5 ns mỗi hop). Dự đoán cho bốn ô (switch thường / TC × tải đối xứng 2 µs/hop / tải lệch 20 vs 2 µs/hop):
+
+1. p50 và p99 của |sai số offset| một lần trao đổi.
+2. Trung bình có dấu của sai số trong trường hợp tải lệch, switch thường — tính tay.
+3. Servo PI lấy trung bình hàng trăm lần trao đổi: sau đó, ô nào còn sai đáng kể, và sai bao nhiêu?
+4. Áp vào K5 Bài 9 (cáp nối thẳng hai cổng, không switch): phần nào của mô phỏng còn, phần nào biến mất?
+
+**Tham số cần tra:** với phần cứng thật: `ethtool -T enp1s0` (capabilities, PTP Hardware Clock index); `man ptp4l` của bản bạn cài (mục `tx_timestamp_timeout`, `uds_address`, `first_step_threshold`). **Phương pháp:** sai số một lần trao đổi = (d_ms − d_sm)/2; trung bình phần mũ = tham số tải × số hop; TC trừ residence nên chỉ còn sai số đo của TC và nhiễu timestamp.
+
+```markdown
+# prediction.md — F4.5
+1. |sai số| p50/p99 (ns): thường-đối xứng ___/___ ; thường-lệch ___/___ ; TC-đối xứng ___/___ ; TC-lệch ___/___
+2. TB có dấu, thường-lệch (tính tay): ___ µs
+3. sau servo còn sai: ___ ; khoảng ___
+4. K5 Bài 9 cáp thẳng: còn ___ ; mất ___
+Độ tự tin (1–5): ___   Tôi sẽ ngạc nhiên nếu: ___
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Kết quả khi chạy (seed 3):
+
+| | p50 \|sai số\| | p99 \|sai số\| | TB có dấu |
+|---|---|---|---|
+| Switch thường, tải đối xứng 2 µs/hop | ~1,4 µs | ~6,9 µs | ~−0,1 µs |
+| Switch thường, tải lệch 20/2 µs/hop | ~24 µs | ~85 µs | **+27 µs** |
+| TC, tải đối xứng | ~7 ns | ~26 ns | ~0 |
+| TC, tải lệch | ~7 ns | ~26 ns | ~0 |
+
+- Câu 2: 3 hop × (20 − 2) µs / 2 = **27 µs**, khớp mô phỏng.
+- Câu 3: servo làm nhỏ phần ngẫu nhiên (cỡ σ/√n), nên ô "thường-đối xứng" về cỡ dưới trăm ns sau trung bình đủ lâu; ô "thường-lệch" còn **~27 µs** bất kể servo chạy bao lâu, và ptp4l tự báo offset quanh 0. Hai ô TC thì tải không còn quan trọng: hiệu quả của TC không phải giảm jitter mà là *xóa bất đối xứng do hàng đợi*.
+- Câu 4: cáp nối thẳng không có switch → không có residence, không có bất đối xứng do hàng đợi; còn lại: nhiễu timestamp, bất đối xứng PHY phát/thu (cố định, cỡ ns tới chục ns, và đổi theo tốc độ link [tự đo]), và sai số đọc PHC của trọng tài. Đó là lý do K5 Bài 9 đo "PTP trong một hộp" trước, rồi mới thêm switch ở bước 6.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi đọc một hướng dẫn hoặc một kết quả PTP:
+
+1. **Cờ và tùy chọn** có đúng theo `man ptp4l` của *phiên bản* được dùng không (tên deprecated: `slaveOnly`, `masterOnly`; `-p` là PHC)?
+2. Timestamping thật sự là hardware không (`time_stamping hardware` là mặc định; kiểm log "selected /dev/ptpN as PTP clock" và `ethtool -T`)?
+3. Nhiều instance trên một máy: có file cấu hình riêng, `uds_address`/`uds_ro_address` riêng, `pmc -s` trỏ đúng socket?
+4. Có **phc2sys** (hoặc tương đương) nếu ứng dụng đọc đồng hồ hệ thống?
+5. Con số offset là **tự báo** hay **trọng tài**? Trọng tài có độc lập về phương pháp không (F4.7)?
+6. Mạng giữa hai node: cáp thẳng, switch thường, TC, BC? Tải hai chiều có đối xứng không?
+7. Thời gian hội tụ và hành vi khi mất link có được đo không?
+
+**Khẳng định mẫu — tự chấm trước khi mở:**
+
+(a) Bản Gemini K5 Bài 9, bước 2: *"`sudo ptp4l -i enp2s0 -2 -m --slaveOnly 1 -p /var/run/ptp4l_slave` (Dùng cờ `-p` để tách UDS socket riêng nếu hai instance chạy trên cùng một máy)"*; và bảng "Nếu ra khác": *"Hai lệnh ptp4l báo lỗi 'Address already in use' → Cả hai tiến trình tranh chấp Unix Domain Socket mặc định (/var/run/ptp4l) → Thêm tham số `-p /var/run/ptp4l_slave` vào tiến trình thứ hai."*
+
+(b) Bản Gemini K5 Bài 9, "Nếu ra khác": *"Offset sau khi bật PTP vẫn ở mức vài mili-giây → ptp4l đang chạy ở chế độ Software Timestamping do cấu hình sai flag → bắt buộc phải có cờ `-2` (L2) hoặc driver card mạng phải hỗ trợ SOF_TIMESTAMPING_TX_HARDWARE."*
+
+(c) Bản Gemini K5 Bài 9, "Số phải ra": *"Khi có tải mạng nặng (iperf3): Offset dao động tăng nhẹ nhưng vẫn giữ ở cấp µs ... Đóng dấu gói tin ở phần cứng miễn nhiễm với nghẽn hàng đợi kernel."*
+
+(d) `robotics-data-infra-roadmap.md` mục 3.1: *"PTP (IEEE 1588) / gPTP — Sync có hỗ trợ phần cứng — Sub-microsecond. Đây là cái robot dùng. Cần NIC hỗ trợ hardware timestamping."*
+
+<details><summary>🔒 Đáp án</summary>
+
+(a) **SAI** (lỗi đã biết, quy chuẩn mục 7), ở ba tầng. (1) `-p` chỉ định **thiết bị PHC**, đã deprecated, cho kernel trước v3.5 [spec: ptp4l(8)]. Theo mã nguồn linuxptp nhánh chính, khi dùng hardware timestamping mà đưa `-p /var/run/ptp4l_slave`, ptp4l thử mở đường dẫn đó như một PHC và thoát với lỗi "Failed to open …" [tự đo: kiểm trên bản bạn cài]. (2) Cách đúng: hai **file cấu hình riêng**, mỗi file có `uds_address`, `uds_ro_address`, interface và vai trò riêng (K5 Bài 9 bước 2); `pmc -s <uds_address>` để hỏi đúng instance. (3) Triệu chứng "Address already in use" cũng không chắc xảy ra: mã nguồn hiện tại xóa socket cũ trước khi bind, nên instance thứ hai lặng lẽ chiếm socket [tự đo]. Thêm: `--slaveOnly` là tên cũ, nay là `clientOnly` (hoặc cờ `-s`).
+
+(b) **SAI.** `-2` chọn transport (Ethernet L2 thay vì UDP IPv4), không bật hardware timestamping; hardware timestamping là **mặc định** (`time_stamping hardware`, cờ `-H`) [spec: ptp4l(8)]. Lý do dùng `-2` trong K5 Bài 9 là khác: hai IP trên cùng một máy thì kernel giao gói nội bộ, không ra dây. Offset vài ms sau khi bật PTP nhiều khả năng do: đang đọc đồng hồ hệ thống mà quên phc2sys, servo chưa khóa (s0/s1), hoặc đang đo bằng `phc_ctl` hai lệnh nối tiếp (F4.7).
+
+(c) **ĐÚNG MỘT PHẦN.** Với cáp nối thẳng, timestamp chốt lúc khung thật sự rời/đến PHY nên thời gian chờ trong hàng đợi kernel và NIC không đi vào phép đo — đúng. Nhưng (1) qua switch thường thì hàng đợi *trong switch* đi vào đầy đủ, và tải lệch tạo bất đối xứng mà ptp4l không thấy (mục 5: hàng chục µs); (2) tải nặng có thể làm timestamp TX đến muộn quá `tx_timestamp_timeout` và ptp4l báo lỗi/reset [spec: ptp4l(8)]; (3) "vẫn ở cấp µs" là kỳ vọng, phải đo bằng trọng tài, không bằng log ptp4l.
+
+(d) **ĐÚNG MỘT PHẦN.** "Sub-µs, cần NIC hỗ trợ" đúng giữa các máy Linux có PHC trên mạng có dây. "Đây là cái robot dùng" quá rộng: PTP đồng bộ **máy tính và NIC**; cảm biến nối qua USB/I2C/SPI không có PHC, nên thời điểm lấy mẫu của chúng vẫn phải giải bằng hardware trigger, đóng dấu ở MCU, hoặc ước lượng offset (F4.6). Trên robot một máy tính, PTP có thể không có việc gì để làm; trên robot nhiều máy tính (hoặc LiDAR/camera công nghiệp có PTP), nó là lựa chọn đúng.
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Vì sao không]** Vì sao không bắt mọi switch làm boundary clock cho chắc, thay vì transparent clock?
+   <details><summary>Hướng nghĩ</summary>
+
+   BC lọc jitter nhưng thêm một servo, một trạng thái, một chỗ cấu hình sai mỗi tầng; sai số và thời gian hội tụ cộng dồn. TC đơn giản hơn nhưng phải *mọi* switch đều là TC. Quyết định theo số tầng và theo việc bạn có quản lý switch hay không.
+
+   </details>
+2. **[Quy mô]** Robot có 3 máy tính và 4 camera PTP qua một switch. Lên 100 robot trong một nhà xưởng, có nên đồng bộ tất cả về một grandmaster chung không?
+   <details><summary>Hướng nghĩ</summary>
+
+   Câu hỏi thật: dữ liệu giữa *các robot* có cần so ở mức µs không? Thường chỉ cần trong một robot (fusion); giữa robot, NTP/ms đủ cho log. Một grandmaster chung = một điểm hỏng chung và một miền BMCA lớn. Domain riêng mỗi robot là mặc định hợp lý.
+
+   </details>
+3. **[Failure mode]** Grandmaster mất tín hiệu GPS và chuyển sang holdover. Các slave thấy gì, và dữ liệu ghi trong lúc đó sai thế nào?
+   <details><summary>Hướng nghĩ</summary>
+
+   Slave vẫn khóa theo master (s2), offset tự báo vẫn đẹp, vì chúng chỉ so với master. Cả miền trôi cùng nhau so với UTC theo skew của dao động master (F4.1). Trong một robot thì vô hại; so với nguồn ngoài thì sai. clockClass trong Announce đổi — ai theo dõi trường đó?
+
+   </details>
+4. **[Liên ngành]** Lưới điện dùng PMU (phasor measurement unit) đồng bộ theo GPS/PTP để so pha điện áp ở các trạm cách nhau hàng trăm km. Vì sao 1 µs sai thời gian thành sai pha đáng kể?
+   <details><summary>Hướng nghĩ</summary>
+
+   Ở 50 Hz, chu kỳ 20 ms = 360°; 1 µs ≈ 0,018°. Nhỏ, nhưng chuẩn đo pha yêu cầu cỡ đó và ổn định góc pha giữa hai vùng là thứ họ ra quyết định dựa vào. Giống: thời gian thành đại lượng vật lý khác qua một hệ số. Khác: họ có GPS ở mọi trạm.
+
+   </details>
+5. **[Nếu…thì]** Nếu đổi cáp Cat6 1 m thành 50 m trong K5 Bài 9, offset trọng tài đổi bao nhiêu?
+   <details><summary>Hướng nghĩ</summary>
+
+   Trễ cáp tăng (cỡ 5 ns/m) nhưng *đối xứng* hai chiều, nên PTP đo và trừ được; offset gần như không đổi. Nếu đổi thì nguồn là PHY/bất đối xứng, không phải chiều dài.
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Viễn thông 4G/5G.** Trạm phát TDD cần đồng bộ pha cỡ ±1,5 µs với nhau; nhà mạng dùng PTP profile viễn thông qua mạng có BC/TC ở mọi node, hoặc GPS ở trạm [chuẩn: ITU-T G.8271]. Giống: ngân sách sai số chia cho từng tầng mạng. Khác: họ kiểm soát toàn bộ thiết bị mạng.
+- **Spanner TrueTime và Meta fbclock.** Cả hai đều đồng bộ tốt (GPS + nguyên tử; PTP) nhưng trả về **khoảng**, không phải điểm (F4.8). Giống: độ chính xác tốt đến đâu thì vẫn phải công bố cận. Khác: robot của bạn hiếm khi cần commit-wait; bạn cần cận để chấp nhận hoặc loại một cặp mẫu khi ghép.
+
+### 9. Áp vào khóa chính
+
+- **K5 Bài 1:** trước khi mua gì: `ethtool -T` trên cả hai cổng, ghi PHC index; xác nhận hai PHC độc lập. Quyết định: rig "PTP trong một hộp" khả thi không.
+- **K5 Bài 9:** hai file cấu hình (không `-p`), `-2`, phc2sys cho tầng 2, trọng tài `PTP_SYS_OFFSET_EXTENDED`; bước 5 (tải, rút cáp, đổi tốc độ) đo đúng các nguồn ở mục 2.
+- **K5 Bài 12:** dòng "PTP" trong ngân sách ghi: cấu hình mạng (cáp thẳng/switch), phương pháp trọng tài, độ rộng kẹp — không ghi số tự báo của ptp4l.
+- **K7 (robot nhiều máy, nếu có):** dùng domain riêng cho robot, không trộn với PTP của tòa nhà.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| `-p` = thiết bị PHC, deprecated, cho kernel < v3.5 | [spec] | ptp4l(8), linuxptp, bản 3/2024 (đã đọc mã nguồn man page) |
+| `uds_address` mặc định `/var/run/ptp/ptp4l` (bản mới), `/var/run/ptp4l` (bản cũ) | [spec] | ptp4l(8); kiểm `man ptp4l` bản cài |
+| `-p` với đường dẫn không phải PHC → ptp4l thoát lỗi | [tự đo] | Suy từ `clock.c` nhánh chính; chạy thử trên bản cài |
+| Instance thứ hai xóa socket cũ ("uds: removed existing") | [tự đo] | Suy từ `uds.c` nhánh chính |
+| `first_step_threshold` mặc định 20 µs; `clientOnly`; `delayAsymmetry` | [spec] | ptp4l(8) |
+| IEEE 1588-2002/2008/2019; Eidson ở Agilent | [chuẩn] | — |
+| Meta 2022: NTP ms → PTP ns, ~100× trong thí nghiệm, fbclock trả `{earliest_ns, latest_ns}` (WOU) | [chuẩn] | Meta Engineering blog 11/2022 (đã kiểm qua tìm kiếm; trang gốc không truy cập được từ môi trường soạn) |
+| BMCA so thuộc tính theo thứ tự cố định | [spec] | IEEE 1588-2008 mục 9.3 |
+| G.8271 ±1,5 µs cho TDD | [chuẩn] | ITU-T G.8271 |
+| Kết quả mô phỏng | [đã chạy] | seed 3 |
+
+Đã sửa so với Gemini: (K5 Bài 9) `-p` để tách socket → `-p` là PHC; hai file cấu hình với `uds_address` riêng (quy chuẩn mục 7); (K5 Bài 9) `-2` "bắt buộc" để có hardware timestamping → `-2` là transport, HW timestamping là mặc định; (K5 Bài 9) "miễn nhiễm nghẽn hàng đợi" → chỉ với cáp thẳng; switch thường đưa bất đối xứng vào; `--slaveOnly`/`--masterOnly` → `clientOnly`/`serverOnly`.
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** `man ptp4l`, `man phc2sys`, `man pmc` của bản linuxptp bạn cài (nguồn duy nhất đáng tin cho tên tùy chọn); kernel `Documentation/driver-api/ptp.rst`.
+- **Giải thích:** Meta Engineering, *Precision Time Protocol at Meta* (11/2022) — đọc phần kiến trúc và Window of Uncertainty.
+- **Đào sâu (tùy chọn):** IEEE 1588-2019 (trả phí; phần BMCA và transparent clock), hoặc tài liệu linuxptp về cấu hình boundary clock (`boundary_clock_jbod`).
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao "ptp4l báo offset 12 ns" không phải bằng chứng; (2) vẽ lại sơ đồ năm khối ở mục 2; (3) câu hỏi:
+
+  Bạn có một switch thường giữa master và slave. Khi chép file 10 GB từ slave sang master (tải chiều slave→master), offset trọng tài dịch +8 µs. Dấu của dịch chuyển có hợp lý không, và dịch thành bao nhiêu nếu chép theo chiều ngược lại?
+  <details><summary>Đáp án</summary>
+
+  Sai số = (d_ms − d_sm)/2. Tải chiều slave→master làm d_sm tăng → sai số âm theo quy ước của mô phỏng; nếu quy ước offset của trọng tài ngược dấu (A − B thay vì B − A) thì +8 µs là hợp lý — kiểm quy ước trước khi kết luận. Chép ngược chiều với tải tương đương → dịch cỡ −8 µs (đổi dấu). Cái quan trọng: độ lớn ~ nửa chênh lệch thời gian nằm hàng hai chiều, và ptp4l không thấy.
+
+  </details>
+
+---

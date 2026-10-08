@@ -1194,6 +1194,7 @@ got = np.array([[p.linear_acceleration.x, p.linear_acceleration.y, p.linear_acce
 assert [p.sequence for *_, p in rows] == list(range(len(acc)))
 assert all(m.sequence == i for i, (_, _, m, _) in enumerate(rows))
 print("max |sai lệch|", np.abs(got - acc).max(), "| bằng nhau từng bit:", np.array_equal(got, acc))
+assert np.array_equal(got, acc)  # MCAP lưu byte: đòi bit-exact; thiếu dòng này thì canary +1e-9 ở Bước 7 không làm test đỏ (→ F2.5)
 # giải mã thêm bằng lớp đã biên dịch (không qua schema nhúng) để chắc hai đường cho cùng kết quả
 p0 = imu_pb2.ImuSample.FromString(rows[0][2].data)
 assert p0.linear_acceleration.z == rows[0][3].linear_acceleration.z
