@@ -1196,3 +1196,205 @@ Tiêm đoạn đơ với **nhiều độ dài** (từ dưới tới trên ngư�
 </details>
 
 ---
+
+## F2.6 — Deterministic simulation testing và chaos (FoundationDB, TigerBeetle, Antithesis, Jepsen) (5h)
+
+> **Dùng cho:** K6 Bài 1, 3, 4 · K3 Bài 14 · K7 C11 · **Cần trước:** F2.2, F2.3, F2.4 (bất biến làm oracle) · **Sau viên nang này bạn đánh giá được:** một hệ thống tuyên bố "đã test bằng mô phỏng" đang tất định ở tầng nào, lỗi tìm được có tái hiện được không, và oracle của nó là gì; và phân biệt được sim vật lý tất định với **test tất định của cả stack phần mềm**.
+
+### 1. Câu chuyện
+
+**FoundationDB.** Will Wilson, *Testing Distributed Systems w/ Deterministic Simulation* (Strange Loop 2014), kể cách đội FoundationDB xây cơ sở dữ liệu phân tán có giao dịch: toàn bộ hệ chạy trên một runtime đơn luồng; mạng, đĩa, đồng hồ, lập lịch đều đi qua giao diện có **bản giả lập** điều khiển bằng một seed. Trong mô phỏng, cả cụm máy chạy trong một tiến trình, thời gian được "tua nhanh", và các macro kiểu `BUGGIFY` cố ý bật những hành vi hiếm (gói đến chậm, đĩa trả lỗi, tiến trình chết) với xác suất cao hơn đời thật nhiều lần. Lỗi tìm được, dù sau hàng triệu lần chạy, tái hiện bằng đúng seed đó [chuẩn: theo bài nói].
+
+Từ đó: **TigerBeetle** có VOPR, bộ mô phỏng chạy cụm replica trong một tiến trình với mạng và lưu trữ giả lập, kể cả lỗi hỏng đĩa [chuẩn]. **Antithesis** (do người từ FoundationDB lập) làm một hypervisor tất định để áp kỹ thuật này cho phần mềm bất kỳ, không cần viết lại theo runtime riêng [chuẩn].
+
+Ở phía ngược lại là **Jepsen** (Kyle Kingsbury, từ 2013): không mô phỏng gì cả. Chạy cơ sở dữ liệu thật trên cụm thật, cắt mạng thật, làm lệch đồng hồ thật, ghi lại **lịch sử thao tác** từ phía client, rồi dùng bộ kiểm (Knossos cho linearizability, Elle cho mức cô lập giao dịch) để tìm lịch sử vi phạm cam kết của hệ. Jepsen đã chỉ ra vi phạm ở nhiều hệ nổi tiếng [chuẩn]. Và **Chaos Monkey** của Netflix (khoảng 2011) giết máy ngẫu nhiên **trong production** để buộc hệ chịu lỗi thật.
+
+### 2. Mô hình tư duy
+
+| | DST (FoundationDB, VOPR, Antithesis) | Jepsen | Chaos (Chaos Monkey) |
+|---|---|---|---|
+| Chạy ở đâu | Mô phỏng, một tiến trình | Cụm thật, môi trường test | Production |
+| Tất định? | Có: seed → toàn bộ lần chạy | Không | Không |
+| Tái hiện lỗi | Chạy lại seed | Đọc lịch sử, cố tái tạo | Postmortem |
+| Oracle | Bất biến kiểm trong code (F2.4) | Bộ kiểm lịch sử theo mô hình nhất quán | Chỉ số SLO, cảnh báo |
+| Bắt được | Lỗi logic dưới mọi thứ tự sự kiện được mô phỏng | Lỗi của **hệ thật**, kể cả thứ mô phỏng không có | Lỗi vận hành, cấu hình, phụ thuộc |
+| Mù với | Thứ không được mô phỏng (bug kernel, phần cứng, thư viện bên ngoài) | Thứ tự sự kiện hiếm mà không tạo ra được | Phần lớn lỗi hiếm |
+
+Bốn nguyên lý của DST, mỗi cái có lý do lịch sử:
+1. **Mọi nguồn phi tất định đứng sau một giao diện**, và trong test giao diện đó trả lời theo seed (F2.2 mục 2, ô "đầu vào có tên").
+2. **Khuếch đại lỗi hiếm.** Đời thật mất gói 0.1%; trong mô phỏng cho 10%. Mục tiêu không phải tái tạo đời thật mà là **đi tới** những thứ tự sự kiện hiếm trong số lần chạy có hạn.
+3. **Nén thời gian.** Timeout 30 giây chạy trong micro giây, nên một lần chạy mô phỏng "nhiều giờ" tốn vài giây.
+4. **Oracle là bất biến**, kiểm liên tục: "mỗi lệnh áp dụng đúng một lần", "không hai leader cùng nhiệm kỳ". Không cần biết output đúng của từng bước.
+
+Điểm dễ nhầm cho robot: MuJoCo tất định **cho vật lý**. Một stack ROS 2 + Nav2 chạy trong sim với đồng hồ thời gian thực, executor đa luồng và DDS **không** tất định, dù sim bên dưới tất định. DST cho robot nghĩa là đưa cả thứ tự message và thời gian vào cửa có seed (đồng hồ sim, `use_sim_time`, executor đơn luồng hoặc có lập lịch xác định), không chỉ seed vật lý.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Integration test với Testcontainers (Kafka, Postgres thật) | Test stack robot trong sim | Container thật mang theo lập lịch thật: thứ tự sự kiện mỗi lần khác, lỗi hiếm không tái hiện | Gặp lỗi một lần trong 500 lần chạy CI, không bao giờ thấy lại, đóng ticket "không tái hiện được" |
+| Retry + idempotency key (bạn biết) | Bất biến "đúng một lần" trong DST | Ở backend bạn thiết kế idempotency rồi **tin** nó. DST **thử** nó dưới mọi thứ tự trễ/mất gói | Dedupe giữ trong RAM, mất khi tiến trình khởi động lại; chưa ai mô phỏng crash nên chưa ai thấy |
+| Chaos engineering trên Kubernetes | Fault injection lên robot (K3 Bài 14, K7 C10.2) | Kill pod an toàn vì có bản sao; kill tiến trình điều khiển robot đang chạy là một sự kiện vật lý | Làm chaos lên robot thật mà chưa có watchdog và E-stop độc lập |
+| Replay log production để debug | Replay MCAP vào stack | Replay đưa lại **dữ liệu**, không đưa lại **thứ tự lập lịch**; stack có thể xử lý khác lần đầu | Tin "replay ra kết quả khác" là bug mới, trong khi nó là phi tất định cũ |
+
+**Chấm mô hình:**
+
+- *"Sim vật lý tất định nên test robot trong sim là deterministic simulation testing."* — **ĐÚNG MỘT PHẦN.** Phần vật lý tất định; phần phần mềm (thứ tự callback, thời điểm message, thread) thì chưa chắc. **Phản ví dụ:** Nav2 trong sim, cùng seed vật lý, hai lần chạy cho hai quỹ đạo khác nhau vì costmap cập nhật trước hay sau planner tùy lập lịch.
+- *"Chaos test trong production là đủ, không cần mô phỏng."* — **ĐÚNG MỘT PHẦN.** Chaos bắt được lỗi của hệ thật mà mô phỏng không có. Nhưng nó đi qua rất ít thứ tự sự kiện, và lỗi nó tìm được không tái hiện. Hai thứ bổ sung nhau; Theo bài nói của Wilson, FoundationDB dùng cả hai: mô phỏng là chính, cộng một cụm máy thật bị bật tắt nguồn liên tục để bắt thứ mô phỏng không có [chuẩn: theo bài nói, chi tiết kiểm lại trong video].
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Deterministic simulation testing (DST) | Chạy cả hệ phần mềm trong mô phỏng mà mọi nguồn phi tất định đi qua một seed | Mô phỏng vật lý tất định |
+| 🟢 | Bất biến (invariant) | Điều phải luôn đúng, kiểm liên tục làm oracle | Assert cuối test |
+| 🟢 | Fault amplification ("buggify") | Cho lỗi hiếm xảy ra thường hơn trong mô phỏng | Mô phỏng sai thực tế |
+| 🟢 | Tái hiện bằng seed | seed + **cùng build** → cùng lần chạy | seed một mình là đủ |
+| 🟡 | Jepsen, lịch sử, linearizability | Kiểm hệ thật bằng lịch sử thao tác so với mô hình nhất quán | Benchmark hiệu năng |
+| 🟡 | Chaos engineering | Tiêm lỗi vào hệ thật, thường là production | Phá bừa |
+| 🟡 | Nén thời gian (simulated time) | Đồng hồ giả nhảy tới sự kiện kế tiếp | Chạy nhanh hơn thời gian thực |
+| 🔴 | Hypervisor tất định, record–replay (rr) | Tất định hóa phần mềm không sửa được | Cần cho dự án này |
+
+### 5. Bài tập dự đoán
+
+**Đề (≤1h30):** một client gửi 20 lệnh "cộng 1" tới server qua mạng có trễ ngẫu nhiên và mất gói; chưa nhận ack sau một timeout thì gửi lại. Server **không** khử trùng lặp. Bất biến: bộ đếm cuối cùng bằng đúng 20. Mọi ngẫu nhiên đi qua `random.Random(seed)`; thời gian là thời gian mô phỏng (hàng đợi sự kiện).
+1. Với xác suất mất gói 0.1% ("đời thật") và 10% ("buggify"): bao nhiêu trong 2000 seed vi phạm bất biến?
+2. Chạy lại seed vi phạm đầu tiên hai lần: hash của toàn bộ chuỗi sự kiện có giống nhau không?
+3. Thêm khử trùng lặp theo mã lệnh ở server: còn seed nào vi phạm? Bộ mô phỏng này **chưa** mô phỏng điều gì mà khử trùng lặp kiểu này sẽ gãy?
+
+```markdown
+# prediction.md — F2.6
+1. Số seed vi phạm / 2000: p_drop=0.001: __ ; p_drop=0.1: __
+2. Hai lần chạy cùng seed: cùng hash? __
+3. Có dedupe: __ seed vi phạm ; điều chưa mô phỏng: __
+```
+
+```python
+# [đã chạy] — Python 3.13 (chỉ thư viện chuẩn)
+# Deterministic simulation testing đồ chơi: mọi nguồn phi tất định (trễ mạng, mất gói,
+# thứ tự sự kiện) đi qua MỘT rng có seed. Lỗi tìm được thì tái hiện được bằng đúng seed đó.
+import heapq, random, hashlib
+
+def run(seed, p_drop, dedupe, n_ops=20):
+    rng = random.Random(seed)
+    q, t, trace = [], 0.0, []                 # hàng đợi sự kiện (thời điểm, thứ tự, sự kiện)
+    counter, seen, acked = 0, set(), set()
+    def send(at, ev):
+        if rng.random() < p_drop: return      # mạng "nuốt" gói
+        heapq.heappush(q, (at + rng.expovariate(1 / 5.0), len(trace) + len(q), ev))
+    for op in range(n_ops):                   # client gửi lệnh "cộng 1", có số thứ tự op
+        send(op * 10.0, ("req", op)); heapq.heappush(q, (op * 10.0 + 60, -1, ("timeout", op)))
+    while q:
+        t, _, (kind, op) = heapq.heappop(q); trace.append((round(t, 6), kind, op))
+        if kind == "req":                     # server
+            if not dedupe or op not in seen: counter += 1; seen.add(op)
+            send(t, ("ack", op))
+        elif kind == "ack": acked.add(op)
+        elif kind == "timeout" and op not in acked:   # client: chưa có ack -> gửi lại
+            send(t, ("req", op)); heapq.heappush(q, (t + 60, -1, ("timeout", op)))
+    digest = hashlib.sha256(repr(trace).encode()).hexdigest()[:10]
+    return counter == n_ops, digest           # bất biến: mỗi lệnh được áp dụng đúng một lần
+
+for p_drop in (0.001, 0.1):                   # thực tế hiếm vs. "buggify" trong sim
+    fails = [s for s in range(2000) if not run(s, p_drop, dedupe=False)[0]]
+    print(f"p_drop={p_drop}: {len(fails)}/2000 seed vi phạm, seed đầu tiên = {fails[:1]}")
+s = next(s for s in range(20000) if not run(s, 0.1, dedupe=False)[0])
+print("tái hiện seed", s, ":", run(s, 0.1, False), run(s, 0.1, False))
+bad = sum(not run(s, 0.1, dedupe=True)[0] for s in range(2000))
+print("có dedupe theo op-id, số seed vi phạm / 2000 =", bad)
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Kết quả chạy:
+
+```
+p_drop=0.001: 47/2000 seed vi phạm, seed đầu tiên = [11]
+p_drop=0.1: 1756/2000 seed vi phạm, seed đầu tiên = [0]
+tái hiện seed 0 : (False, '2b2971409a') (False, '2b2971409a')
+có dedupe theo op-id, số seed vi phạm / 2000 = 0
+```
+
+- Câu 1: ở mức "đời thật", khoảng 2% số lần chạy lộ bug (mất ack → client gửi lại → server cộng hai lần; thêm vài trường hợp trễ quá timeout). Ở mức buggify, gần như lần nào cũng lộ. Trong CI với 20 seed, mức đời thật cho xác suất **không thấy gì** khoảng (1 − 47/2000)²⁰ ≈ 0.62. Khuếch đại lỗi là thứ biến "hiếm" thành "chắc chắn thấy".
+- Câu 2: cùng seed, cùng hash chuỗi sự kiện. Đây là giá trị cốt lõi: lỗi không còn là "thỉnh thoảng", nó có địa chỉ. Điều kiện: **cùng code**. Đổi một dòng làm thay đổi số lần gọi `rng`, seed 0 sẽ đi một đường khác.
+- Câu 3: 0/2000 với mô phỏng này. Nhưng `seen` nằm trong RAM của server, và mô phỏng **không có crash server**. Thêm sự kiện "server khởi động lại, mất `seen`" là bất biến gãy lại. Thứ không được mô phỏng thì không được test, và đó là giới hạn số một của DST.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi đọc "đã test bằng mô phỏng / bằng chaos":
+1. Nguồn phi tất định nào đã đi qua seed? Thời gian, mạng, đĩa, lập lịch thread, thứ tự message, RNG?
+2. Tái hiện lỗi cần những gì: seed + commit + build + image? Có lưu đủ không?
+3. Oracle là gì: bất biến nào, kiểm lúc nào (liên tục hay cuối)?
+4. Lỗi hiếm có được khuếch đại không, hay mô phỏng theo xác suất đời thật?
+5. Mô phỏng **không** có gì (crash, mất điện, đĩa đầy, lệch đồng hồ, phần cứng)?
+6. Với chaos/Jepsen: có lịch sử đủ để kiểm sau không, hay chỉ có "không thấy lỗi"?
+
+Chấm:
+
+**(a)** *"Một bug tìm thấy sau hàng triệu giờ mô phỏng được tái hiện bằng đúng seed đó, mỗi lần, trên máy laptop."* (K6 Bài 1, kể về FoundationDB)
+
+**(b)** *"Cùng seed, chạy tuần tự vs song song 8 env: bit-exact nếu áp dụng đúng công thức dẫn xuất seed `seed_root + env_index`."* (Gemini K6 Bài 3)
+
+**(c)** *"Thêm một nhiễu cực nhỏ (1e-12) vào trạng thái đầu, vẽ khoảng cách giữa hai quỹ đạo theo thời gian trên trục log: độ dốc đường thẳng phản ánh sự phân kỳ theo hàm mũ của hệ tiếp xúc hỗn loạn."* (Gemini K6 Bài 3, Bước 5)
+
+<details><summary>🔒 Đáp án gập</summary>
+
+- **(a) ĐÚNG MỘT PHẦN.** Đúng với điều kiện ngầm: cùng **build** (cùng code, cùng trình biên dịch, cùng phiên bản thư viện giả lập). Seed không phải tọa độ tuyệt đối; nó là tọa độ trong một phiên bản code. Hệ DST nghiêm túc lưu seed **cùng** commit/build id cho mỗi lỗi.
+- **(b) ĐÚNG MỘT PHẦN.** Dẫn xuất seed theo index (không theo thứ tự xong việc) là điều kiện cần, và đúng hướng. Chưa đủ: mỗi worker có thể dùng số luồng BLAS/OpenMP khác khi chạy song song (thứ tự cộng khác, F2.2). Và **phép cộng** `seed_root + env_index` có va chạm: `seed_root = 0, env 1` và `seed_root = 1, env 0` cho cùng seed, nên hai lần chạy "khác seed gốc" dùng chung luồng ngẫu nhiên. Dùng `np.random.default_rng([seed_root, env_index])` hoặc `SeedSequence(seed_root).spawn(n)`.
+- **(c) ĐÚNG MỘT PHẦN.** Cách đo đúng. Nhưng đường thẳng trên trục log chỉ có trong **pha** tăng theo hàm mũ; khoảng cách bão hòa khi đạt cỡ không gian trạng thái (vật đã rơi hay chưa). Với tiếp xúc, phân kỳ thường **nhảy bậc** (một bên có tiếp xúc, bên kia không) thay vì tăng trơn; độ dốc khi đó không phải số mũ Lyapunov. Đọc đồ thị theo pha, đừng fit một đường thẳng qua tất cả (→ F6.3).
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Quy mô]** 1000 kịch bản K6 × 10 seed mỗi đêm. Bạn muốn phát hiện một lỗi chỉ xảy ra khi message `/odom` tới muộn hơn 50 ms, đời thật 1/10 000 lần. Không khuếch đại, xác suất thấy trong một đêm? Khuếch đại tới 1/100?
+   <details><summary>Hướng nghĩ</summary>Tính số lần có cơ hội (message mỗi episode × episode). Khuếch đại đổi "vài tháng mới thấy một lần" thành "đêm nào cũng thấy". Giá: phải lọc lỗi chỉ xuất hiện dưới khuếch đại phi thực tế (vẫn là bug, nhưng ưu tiên khác).</details>
+2. **[Failure mode]** DST của bạn xanh 10 000 seed. Robot thật vẫn kẹt khi WiFi chập chờn. Liệt kê ba thứ mô phỏng của bạn có thể đã không có.
+   <details><summary>Hướng nghĩ</summary>Trễ có tương quan theo thời gian (burst), không độc lập; tái kết nối DDS mất vài giây; đồng hồ hai máy lệch nhau (F4). Mỗi cái là một mô hình lỗi phải thêm vào bộ giả lập.</details>
+3. **[Vì sao không]** Vì sao không chạy cả ROS 2 trong một hypervisor tất định kiểu Antithesis ngay từ đầu?
+   <details><summary>Hướng nghĩ</summary>Có thể, nhưng giá và độ phức tạp cao; và lỗi bạn quan tâm nhiều nhất ở K6 là nhiễu thống kê của policy, không phải race của middleware. Bắt đầu bằng executor đơn luồng + đồng hồ sim cho phần quan trọng.</details>
+4. **[Liên ngành]** Ngành chip (EDA) mô phỏng mạch bằng simulator tất định theo chu kỳ trước khi tape-out. Giống và khác DST thế nào?
+   <details><summary>Hướng nghĩ</summary>Giống: mọi thứ tự sự kiện tái hiện được, oracle là assertion (SystemVerilog Assertions). Khác: mô hình phần cứng gần như đầy đủ; DST phần mềm luôn có phần "thế giới bên ngoài" không mô phỏng được.</details>
+5. **[Phản biện]** "DST chỉ tìm được lỗi trong mô hình của chính bạn về thế giới." Đó có phải lý do để không làm?
+   <details><summary>Hướng nghĩ</summary>Mọi test đều thế. Câu hỏi là mô hình lỗi có mở rộng được không, và có kênh nào (Jepsen-style, robot thật) đưa lỗi mới về bộ mô phỏng.</details>
+
+### 8. Liên kết ra ngoài
+
+- **Hàng không: mô phỏng chuyến bay với lỗi tiêm (iron bird).** Giống: chạy đi chạy lại tình huống hiếm (hỏng động cơ, cảm biến kẹt) với tần suất cao hơn đời thật. Khác: iron bird có phần cứng thật trong vòng (F2.7), không tất định tuyệt đối.
+- **Tài chính: backtest với dữ liệu lịch sử.** Giống: replay tất định một chuỗi sự kiện. Khác: backtest chỉ có **một** lịch sử thị trường; DST sinh vô số lịch sử, và backtest dễ bị overfit vào lịch sử đó (Goodhart, F2.8).
+- **Cơ sở dữ liệu: Jepsen.** Giống DST ở oracle (mô hình nhất quán). Khác ở triết lý: chạy hệ thật, chấp nhận không tái hiện được, đổi lấy việc thấy lỗi mà không ai nghĩ tới để mô phỏng.
+
+### 9. Áp vào khóa chính
+
+- **K6 Bài 1:** cam kết determinism ghi rõ tầng **phần mềm** (thứ tự callback, đồng hồ) tách khỏi tầng vật lý.
+- **K6 Bài 3–4:** dẫn xuất seed bằng tuple/`SeedSequence`, không bằng phép cộng; lưu seed cùng commit và image digest cho mỗi lỗi.
+- **K3 Bài 14:** fault injection điểm crash qua biến môi trường là bước đầu của DST: mỗi điểm crash là một "sự kiện có tên".
+- **K7 C11:** CI sim cho Nav2 dùng `use_sim_time` và ghi lại thứ tự message; khuếch đại trễ/mất gói trong sim để tìm lỗi phục hồi trước khi gặp ở văn phòng.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Kiến trúc mô phỏng của FoundationDB, BUGGIFY | [chuẩn] | Theo bài nói Strange Loop 2014 và tài liệu FoundationDB |
+| VOPR của TigerBeetle mô phỏng cụm, mạng, lỗi lưu trữ | [chuẩn] | Tài liệu và blog TigerBeetle |
+| Antithesis: hypervisor tất định | [chuẩn] | Trang chủ Antithesis |
+| Jepsen dùng Knossos, Elle | [chuẩn] | jepsen.io; Kingsbury & Alvaro, *Elle*, VLDB 2020 |
+| Va chạm của `seed_root + env_index` | [chuẩn] | Số học; khuyến nghị dùng `SeedSequence` theo tài liệu NumPy |
+| Kết quả bài tập | [đã chạy] | |
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Will Wilson, *Testing Distributed Systems w/ Deterministic Simulation*, Strange Loop 2014 (video công khai).
+- **Giải thích:** các báo cáo phân tích trên jepsen.io (đọc một bài bất kỳ để thấy cấu trúc: cam kết của hệ → lịch sử → vi phạm).
+- **Đào sâu (tùy chọn):** tài liệu kiến trúc TigerBeetle về VOPR (repo `tigerbeetle/tigerbeetle`, thư mục docs).
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao DST mua được khả năng tái hiện; (2) vẽ lại bảng DST/Jepsen/Chaos; (3) câu hỏi:
+
+<details><summary>Câu hỏi: thêm sự kiện "server khởi động lại" vào mô phỏng ở mục 5. Thiết kế dedupe nào giữ được bất biến?</summary>
+
+`seen` phải bền vững và được ghi **cùng lúc** với việc cộng (cùng một giao dịch, hoặc ghi log trước rồi áp dụng). Nếu ghi `seen` sau khi cộng mà crash giữa hai bước, bất biến vẫn gãy. Đây đúng là bài toán exactly-once của F3.5 và K3 Bài 14, và mô phỏng sẽ tìm ra khe giữa hai bước nếu bạn cho crash xảy ra ở mọi điểm.
+
+</details>
+
+---

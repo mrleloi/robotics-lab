@@ -1590,3 +1590,275 @@ Checklist cho mọi đường fit:
   </details>
 
 ---
+
+## F1.7 — Báo cáo trung thực (3h)
+
+> **Dùng cho:** trước `prediction.md` đầu tiên (K1 Bài 9) · K1 Bài 11 · K2 Bài 10 · K3 Bài 8, 17, Gate · K4 Bài 3, 13, 15, Gate · K5 Bài 2 · K6 Bài 7, 10, 11 · **Cần trước:** F1.5 (lướt) · **Sau viên nang này bạn đánh giá được:** một kết quả là xác nhận (đã cam kết trước) hay khám phá (tìm ra sau khi xem), một báo cáo có đủ để người khác kiểm không, và một `prediction.md` có thực sự cam kết điều gì không.
+
+### 1. Câu chuyện
+
+Năm 1974, Richard Feynman kể trong bài nói *Cargo Cult Science* (Caltech) về giá trị điện tích electron `[chuẩn]`. Millikan đo nó bằng giọt dầu năm 1909–1913, ra số hơi nhỏ (một phần do giá trị độ nhớt không khí sai). Những người đo sau ra số lớn hơn một chút, rồi lớn hơn một chút nữa, dần dần trong nhiều năm, mới tới giá trị đúng. Vì sao không nhảy một lần? Feynman giải thích: khi ai đó ra số cao hơn Millikan nhiều, họ nghĩ mình sai và tìm lỗi; khi ra số gần Millikan, họ không tìm. Họ loại bỏ có chọn lọc — không ai gian lận, chỉ là dừng kiểm tra đúng lúc số "trông đúng".
+
+Năm 2000, NHLBI bắt đầu yêu cầu các thử nghiệm lớn đăng ký trước kết cục chính trên ClinicalTrials.gov. Kaplan và Irvin (PLOS ONE, 2015) so 55 thử nghiệm tim mạch lớn: trước 2000, 17/30 (57%) báo lợi ích có ý nghĩa ở kết cục chính; sau 2000, 2/25 (8%) `[chuẩn]`. Họ cẩn thận nói đây là liên hệ, không phải chứng minh nhân quả — nhưng cách giải thích hợp lý nhất là: khi không còn chọn được kết cục nào "đẹp" sau khi xem dữ liệu, phần lớn "lợi ích" biến mất. Đó là thứ `prediction.md` của bạn làm, ở quy mô một người.
+
+### 2. Mô hình tư duy
+
+```mermaid
+flowchart LR
+  P["prediction.md<br/>commit + push<br/>(có timestamp)"] --> R["Chạy thí nghiệm<br/>đúng kế hoạch"]
+  R --> C["Phân tích XÁC NHẬN<br/>đúng như đã cam kết"]
+  R --> E["Phân tích KHÁM PHÁ<br/>mọi thứ khác"]
+  C --> Rep["Báo cáo"]
+  E --> Rep
+  Rep --> D["Mục 'Lệch kế hoạch'<br/>+ kết quả âm + dữ liệu thô"]
+```
+
+**Cam kết cái gì** (preregistration không chỉ là "đoán số"):
+
+| Mục | Ví dụ K4 | Vì sao phải cam kết |
+|---|---|---|
+| Câu hỏi và kết cục chính (primary endpoint) | p50 end-to-end và success rate LIBERO | Chặn việc chọn metric đẹp nhất sau khi xem |
+| Dự đoán + khoảng + độ tự tin | p50 GPU 80–150 ms, tự tin 2/5 | Đo trực giác của bạn (calibration) |
+| Phép phân tích | Wilson, CI hiệu Newcombe, δ = 5 điểm | Chặn đổi test cho tới khi p < 0,05 |
+| Quy tắc loại dữ liệu | bỏ 20 iteration warmup; loại episode crash sim, báo số lượng | Chặn loại outlier có chọn lọc (Millikan) |
+| Quy tắc dừng | n = 50 mỗi task, không nhìn trước | Chặn peeking (→ F1.5) |
+| Điều sẽ làm bạn ngạc nhiên | "INT8 nhanh hơn FP16 trên N100 dưới 1,2 lần" | Biến dự đoán thành thứ sai được |
+
+Phân tích khám phá **được phép và có giá trị** — chỉ phải dán nhãn "khám phá", và kết quả của nó là giả thuyết cho lần đo sau, không phải kết luận. **Lệch kế hoạch** cũng được phép (kế hoạch hiếm khi sống sót qua phần cứng thật) — chỉ phải ghi lệch gì, khi nào, vì sao, *trước hay sau* khi thấy kết quả.
+
+**Báo cáo đủ để kiểm:** mọi số có ± và n (→ F1.1, F1.4); dữ liệu thô có link; kết quả âm và cấu hình thất bại có mặt; mục giới hạn viết trước khi người khác viết hộ.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| SLO đặt trước khi launch | Preregistration | SLO thường được sửa sau sự cố mà không ai ghi đã sửa; ở đây lịch sử git của `prediction.md` là bằng chứng | Báo "đạt mục tiêu" với mục tiêu đã dời |
+| TDD: viết test trước code | Viết tiêu chí trước dữ liệu | Test TDD sửa được lặng lẽ cùng code; preregistration phải đông cứng (commit có timestamp, không amend) | "Dự đoán" sửa sau khi chạy — vô giá trị |
+| ADR (architecture decision record) | Ghi quyết định + lý do + thời điểm | ADR ghi quyết định thiết kế; ở đây ghi cả cách *đánh giá* quyết định | — |
+| Postmortem không đổ lỗi | Kết quả âm, mục "lệch kế hoạch" | Postmortem viết sau sự cố; kết quả âm phải viết dù không ai hỏi | Thiên lệch công bố: chỉ thứ chạy được mới được viết |
+| Dashboard chọn khung thời gian đẹp để demo | Forking paths | Mỗi lựa chọn nhỏ vô hại; tổng của chúng thì không | Bài tập mục 5 |
+
+**Chấm mô hình:**
+
+- *"`prediction.md` chỉ để luyện trực giác."* — **ĐÚNG MỘT PHẦN.** Đó là một nửa (so dự đoán với kết quả qua nhiều bài cho bạn biết trực giác mình lệch theo hướng nào — calibration). Nửa kia là chức năng **bảo vệ phân tích**: nó cố định metric, test, quy tắc loại dữ liệu trước khi bạn thấy số. Thiếu nửa này, mọi bài có "Số phải ra" đều mở cửa cho forking paths.
+- *"Sửa cách phân tích sau khi thấy dữ liệu là gian lận."* — **SAI.** Là chuyện bình thường; chỉ gian lận khi giấu. Phản ví dụ: bạn phát hiện timestamp lấy sai tầng sau khi chạy (→ F4.3) — phải sửa, và báo cả hai kết quả với ghi chú.
+- *"Kết quả âm không đáng viết."* — **SAI.** "N100 không chạy nổi model 3B vì hết RAM" tiết kiệm cho người đọc một tuần (K4 Bài 13 bài chính đã nói rõ). Thiếu kết quả âm, tài liệu chung của nghề đánh giá quá cao mọi kỹ thuật (file drawer problem).
+
+**Tên chuẩn của thứ bạn đã làm:** ghi kỳ vọng trước khi chạy load test = **preregistration**; pipeline agent tự báo cáo sau khi chạy = **automated reporting** — thứ còn thiếu là phân biệt trong báo cáo cái gì đã cam kết trước và cái gì agent tự tìm ra sau, vì một agent chạy nhiều phân tích sẽ tự đi vào khu vườn lối rẽ.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Preregistration | Cam kết câu hỏi, metric, phân tích trước khi có dữ liệu | Chỉ đoán số |
+| 🟢 | Confirmatory vs exploratory | Kiểm điều đã cam kết vs tìm điều mới | Exploratory là không nghiêm túc |
+| 🟢 | Primary endpoint | Một kết cục chính quyết định kết luận | Mọi metric ngang nhau |
+| 🟢 | Negative result | Kết quả không như kỳ vọng / không có hiệu ứng | Thất bại |
+| 🟡 | Garden of forking paths (Gelman & Loken) | Nhiều lựa chọn phân tích nhỏ phụ thuộc dữ liệu | Chỉ là p-hacking cố ý |
+| 🟡 | HARKing | Đặt giả thuyết sau khi biết kết quả rồi trình bày như có trước | — |
+| 🟡 | Publication bias / file drawer | Kết quả âm không được công bố | — |
+| 🔴 | Registered report | Tạp chí duyệt phương pháp trước khi có kết quả | Cần cho lộ trình này |
+
+### 5. Bài tập dự đoán
+
+**Đề A.** A/A: hai nhóm giống hệt, 30 lần chạy mỗi nhóm, mỗi lần ghi 3 metric tương quan với nhau. "Nhà phân tích" thử 3 metric × 3 quy tắc loại outlier (không loại, |z| > 2,5, |z| > 2) × 2 test (t-test, Mann–Whitney) = 18 đường, rồi báo đường có p nhỏ nhất. Dự đoán tỉ lệ báo "có khác biệt" khi (i) cam kết trước một đường, (ii) chọn đường đẹp nhất sau khi xem.
+
+**Đề B.** Dùng hàm `fmt` dưới: dự đoán cách in của `fmt(2.48831, 0.0382, "V")`, `fmt(163.94, 41.2, "ms")`, và `fmt(0.2, 0, "us")`.
+
+**Phương pháp:** A — 18 đường không độc lập (cùng dữ liệu), nên tỉ lệ thấp hơn 1 − 0,95¹⁸ ≈ 60%; nhưng cao hơn 5% bao nhiêu? Ước lượng rồi chạy.
+
+```markdown
+# prediction.md — F1.7
+A. (i) ___ (ii) ___   — 18 đường tương quan nên tôi đoán nằm giữa 5% và 60% ở ___ vì ___
+B. ___ / ___ / ___
+```
+
+```python
+# [đã chạy] F1.7 — "khu vườn lối rẽ": không có hiệu ứng thật, nhưng chọn cách phân tích SAU khi thấy số
+import numpy as np
+from scipy import stats
+rng = np.random.default_rng(8)
+def one_study(n=30):
+    # A và B giống hệt nhau (A/A). Mỗi lần chạy ghi 3 metric tương quan với nhau.
+    base = rng.normal(0, 1, (2, n, 1))
+    m = base + rng.normal(0, 1, (2, n, 3))           # m[:, :, j] = metric j
+    paths = []
+    for j in range(3):                                # chọn metric nào
+        for cut in (None, 2.5, 2.0):                  # bỏ outlier theo ngưỡng nào (|z| > cut)
+            for test in ("t", "mw"):                  # t-test hay Mann-Whitney
+                a, b = m[0, :, j], m[1, :, j]
+                if cut:
+                    a = a[np.abs(stats.zscore(a)) < cut]; b = b[np.abs(stats.zscore(b)) < cut]
+                p = (stats.ttest_ind(a, b).pvalue if test == "t"
+                     else stats.mannwhitneyu(a, b).pvalue)
+                paths.append(p)
+    return paths[0], min(paths)                       # đường đã cam kết trước vs đường "đẹp nhất"
+res = np.array([one_study() for _ in range(3000)])
+print(f"cam ket truoc (1 duong)     : FPR = {(res[:,0] < 0.05).mean():.3f}")
+print(f"chon sau khi xem (18 duong) : FPR = {(res[:,1] < 0.05).mean():.3f}")
+```
+
+```python
+# [đã chạy] F1.7 — in một con số kèm độ bất định, làm tròn theo độ bất định (2 chữ số có nghĩa)
+import math
+def fmt(value, U, unit="", k=2):
+    """value ± U (k=2): U giữ 2 chữ số có nghĩa, value làm tròn tới cùng vị trí thập phân."""
+    if U <= 0 or not math.isfinite(U):
+        return f"{value} {unit} (KHÔNG có độ bất định — đừng báo số này)"
+    dec = 1 - math.floor(math.log10(U))               # vị trí chữ số có nghĩa thứ 2 của U
+    return f"{round(value, dec):.{max(dec,0)}f} ± {round(U, dec):.{max(dec,0)}f} {unit} (k={k})"
+print(fmt(2.48831, 0.0382, "V"))        # số đọc multimeter
+print(fmt(0.7213, 0.124, ""))           # tỉ lệ thành công n=50 (dùng Wilson thì CI không đối xứng!)
+print(fmt(163.94, 41.2, "ms"))          # p99 từ 1000 mẫu
+print(fmt(0.2, 0, "us"))
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+A (seed 8): cam kết trước ≈ **0,05**; chọn sau khi xem ≈ **0,30**. Mười tám lựa chọn "hợp lý", không cái nào gian lận, đẩy tỉ lệ báo sai lên gấp sáu. Người phân tích không cần biết mình đã thử 18 đường — chỉ cần dừng khi thấy đường đẹp (Millikan).
+
+B: `2.488 ± 0.038 V (k=2)` · `164 ± 41 ms (k=2)` · `0.2 us (KHÔNG có độ bất định — đừng báo số này)`. Dòng tỉ lệ in `0.72 ± 0.12` — đúng làm tròn, nhưng với tỉ lệ nên báo khoảng Wilson bất đối xứng thay vì ± (→ F1.4); hàm này cho đại lượng có sai số gần đối xứng.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist cho một báo cáo/bài viết/README kết quả:
+
+1. Có tài liệu cam kết trước (prediction, methodology) với timestamp không? Báo cáo có tách xác nhận và khám phá không?
+2. Kết cục chính có khớp với cái đã cam kết không? Có metric nào "mới xuất hiện" ở phần kết luận không?
+3. Quy tắc loại dữ liệu có được nêu, kèm **số lượng** đã loại không?
+4. Có mục "lệch kế hoạch" không? (Không có lệch nào là đáng nghi hơn có vài lệch.)
+5. Kết quả âm / cấu hình thất bại có mặt không?
+6. Mọi số có ± và n? Chữ số khớp với U? Có link dữ liệu thô?
+7. Dự đoán có **sai được** không (khoảng hẹp đủ để sai), hay rộng tới mức đúng với mọi kết quả?
+
+**Khẳng định mẫu — tự chấm:**
+
+(a) Bản Gemini K4 Bài 13, tự kiểm tra: *"Methodology được viết dài hơn Results vì các con số trong Results sẽ lỗi thời rất nhanh khi có model hoặc phần cứng mới, còn methodology chặt chẽ chứng minh bạn nắm phương pháp luận."*
+
+(b) Bản Gemini K7 (Phụ lục C / HRI → K7 C10.4): *"Báo cáo kèm khoảng tin cậy và nêu rõ cỡ mẫu n = 10 mang tính chất tín hiệu định tính, không tuyên bố vượt quá dữ liệu."*
+
+(c) Mẫu tự dựng (kiểu `prediction.md` hay gặp): *"Dự đoán: latency p50 trên N100 sẽ khoảng 50–5000 ms. Độ tự tin: 5/5."*
+
+<details><summary>🔒 Đáp án</summary>
+
+(a) **ĐÚNG MỘT PHẦN.** Kết luận (methodology quan trọng hơn) đúng; lý do chính bị đặt lệch. Lý do chính không phải "số lỗi thời" mà là: không có methodology thì người đọc **không kiểm được** số có đúng không và **không chạy lại được** (K4 Bài 14–15). Một số mới tinh mà không có methodology cũng vô dụng như một số cũ.
+
+(b) **ĐÚNG**, với một bổ sung: n = 10 thì báo số đếm ("7/10 người thấy robot dễ đoán"), kèm Wilson ([40%, 89%]), không báo "70%". Và vì là định tính, ghi trước câu hỏi khảo sát và thang điểm (cam kết trước) — khảo sát nhỏ là chỗ forking paths dễ nhất (chọn câu hỏi nào để báo).
+
+(c) **SAI** như một dự đoán: khoảng hai bậc độ lớn không thể sai, nên không cam kết gì và không kiểm được trực giác. Độ tự tin 5/5 cho một khoảng rộng như vậy là đúng nhưng vô nghĩa. Dự đoán có ích: khoảng hẹp đủ để có thể sai (ví dụ trong một hệ số 2–3), kèm cách tính (FLOP/băng thông, → F7.2) và độ tự tin thật.
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Failure mode]** Agent của bạn chạy eval, phân tích, viết báo cáo tự động mỗi đêm. Thiết kế thế nào để báo cáo phân biệt được kết luận đã cam kết trước và "phát hiện" agent tìm ra trong 200 lát cắt dữ liệu?
+   <details><summary>Hướng nghĩ</summary>
+
+   File cam kết trong repo (metric chính, test, δ), agent chỉ được ghi kết luận cho các mục trong file đó; mọi thứ khác vào mục "khám phá" kèm số lát cắt đã xem (để người đọc tự hiệu chỉnh bội so sánh).
+
+   </details>
+2. **[Quy mô]** Sau 100 bài với `prediction.md`, bạn có 500 cặp (dự đoán khoảng 80%, kết quả). Làm gì với chúng?
+   <details><summary>Hướng nghĩ</summary>
+
+   Đo calibration: bao nhiêu % kết quả rơi vào khoảng "80%" của bạn? Theo chủ đề nào bạn quá tự tin? Đó là dữ liệu về dụng cụ đo quan trọng nhất của bạn — chính bạn (forecasting, Tetlock).
+
+   </details>
+3. **[Vì sao không]** Vì sao không chỉ công bố dữ liệu thô và để người đọc tự phân tích, khỏi cần preregistration?
+   <details><summary>Hướng nghĩ</summary>
+
+   Dữ liệu thô cần thiết nhưng không đủ: người đọc không biết bạn đã chọn đo cái gì, dừng khi nào, loại gì trước khi ghi. Lựa chọn thiết kế nằm trước dữ liệu.
+
+   </details>
+4. **[Liên ngành]** Hàng không bắt ghi checklist và quyết định trước khi cất cánh; ngân hàng bắt ghi lý do giao dịch trước khi đặt lệnh. Cái chung với `prediction.md` là gì?
+   <details><summary>Hướng nghĩ</summary>
+
+   Ghi trước để lý do không bị viết lại theo kết quả (hindsight bias). Khác: ở đó có kiểm toán bên ngoài; ở đây kiểm toán viên là bạn của sáu tháng sau.
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Y khoa — đăng ký thử nghiệm.** ICMJE (2005) yêu cầu đăng ký thử nghiệm lâm sàng trước khi tuyển bệnh nhân để được đăng trên các tạp chí thành viên `[chuẩn]`. Giống: cam kết kết cục chính. Khác: có cơ quan bên ngoài giữ bản đăng ký; bạn dùng git và push lên remote (timestamp không do bạn sửa được).
+- **Tâm lý học — khủng hoảng tái lập.** Open Science Collaboration (Science, 2015) lặp lại 100 nghiên cứu, khoảng 36% bản lặp cho kết quả có ý nghĩa thống kê so với ~97% bản gốc `[chuẩn]`. Giống: kết quả "đẹp" từ nhiều lựa chọn phân tích không tái lập. Khác: robot có thể chạy lại thí nghiệm rẻ hơn nhiều — tận dụng (K4 Bài 15: người reproduce).
+
+### 9. Áp vào khóa chính
+
+- **Mọi bài có `prediction.md`:** thêm ba dòng cố định — kết cục chính, phép phân tích (test + δ), quy tắc loại dữ liệu và dừng. Commit + push trước khi chạy; không amend.
+- **K4 Bài 13 (bài viết), K4 Gate:** mục "Deviations from plan" và "Negative results"; bảng số qua `fmt`/Wilson.
+- **K3 Bài 17, K6 Bài 7, 10:** báo cáo tự sinh tách "xác nhận" và "khám phá"; provenance cho mọi số (→ F3.8).
+- **K6 Bài 11:** "định nghĩa thành công bằng toán" chính là kết cục chính — viết và commit trước khi chạy policy đầu tiên.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Feynman, *Cargo Cult Science* (1974), câu chuyện giọt dầu Millikan | [chuẩn] | bài nói, in trong *Surely You're Joking, Mr. Feynman!* |
+| Kaplan & Irvin 2015: 17/30 (57%) vs 2/25 (8%) | [chuẩn] | PLOS ONE 10(8), đã kiểm |
+| Open Science Collaboration 2015: ~36% bản lặp có ý nghĩa | [chuẩn] | Science 349 |
+| ICMJE yêu cầu đăng ký thử nghiệm (2005) | [chuẩn] | |
+| Gelman & Loken, "garden of forking paths" | [chuẩn] | bài 2013/2014 |
+| Kết quả mục 5 | [đã chạy] | seed 8 |
+
+Đã sửa so với Gemini: (K4 Bài 13) lý do methodology quan trọng là kiểm được và chạy lại được, không phải "số lỗi thời"; (K7 HRI) báo số đếm + Wilson thay vì phần trăm.
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Kaplan & Irvin, "Likelihood of Null Effects of Large NHLBI Clinical Trials Has Increased over Time", *PLOS ONE*, 2015.
+- **Giải thích:** Richard Feynman, "Cargo Cult Science" (1974) — ngắn, đọc trong 20 phút.
+- **Đào sâu (tùy chọn):** Nosek và cộng sự, "The Preregistration Revolution", *PNAS*, 2018.
+- **Tự kiểm tra:** (1) giải thích cho đồng nghiệp vì sao 18 lựa chọn vô hại thành một lỗi lớn; (2) vẽ lại sơ đồ xác nhận/khám phá; (3) câu hỏi:
+
+  Sau khi chạy, bạn thấy 3/50 episode crash do lỗi sim không liên quan model. Loại chúng ra được không?
+  <details><summary>Đáp án</summary>
+
+  Được, nếu quy tắc đã cam kết trước ("loại episode crash sim, báo số lượng") — hoặc nếu chưa cam kết thì ghi vào "lệch kế hoạch", báo kết quả **cả hai cách** (có và không loại), và kiểm crash có phân bố đều giữa hai cấu hình không (crash nhiều hơn ở INT8 thì nó *là* kết quả).
+
+  </details>
+
+---
+
+## Tranh luận đang mở trong nghề
+
+**1. p-value và kiểm định, hay ước lượng và Bayes?** Một phía (nhiều nhà thống kê, tuyên bố của ASA về p-value năm 2016) cho rằng ngưỡng 0,05 gây ra nhị phân giả và nên thay bằng ước lượng hiệu + CI, hoặc phân tích Bayes với prior công khai. Phía kia cho rằng quyết định kỹ thuật (merge hay không, đổi model hay không) cuối cùng *là* nhị phân, và kiểm định với α, power cam kết trước là cách kiểm soát tỉ lệ sai dài hạn rõ nhất. Viên nang này đi giữa: báo hiệu + CI luôn, ra phán quyết bằng CI so với δ. Bayes (🟡) đáng học khi bạn có prior thật (ví dụ hàng trăm lần so sánh trước đó).
+
+**2. Báo min, median hay percentile cho benchmark?** Cộng đồng micro-benchmark (ví dụ BenchmarkTools.jl, Chen & Revels 2016) lập luận dùng min vì nhiễu chỉ cộng thêm thời gian; người làm hệ thống (Tene, Gregg) lập luận rằng đuôi chính là sản phẩm. Hai phía trả lời hai câu hỏi khác nhau — "code này tốn bao nhiêu" vs "hệ này trải nghiệm ra sao" — và tranh luận thường là vì không ai nói câu hỏi.
+
+**3. Eval robot với vài chục episode có đủ không?** Nhiều paper VLA/manipulation báo success rate trên vài chục episode mỗi task và so các phương pháp chênh vài điểm (K6 Bài 12 gốc đã nêu). Phía bảo vệ: chạy thật đắt, sim có gap, và chênh lớn vẫn thấy được. Phía phê phán: không có CI thì không biết chênh nào là thật. Hướng đang được thử: thiết kế cặp, đánh giá tuần tự, và báo CI bắt buộc.
+
+**4. Preregistration cho công việc kỹ thuật khám phá?** Phía nghi ngờ: kỹ thuật là lặp nhanh, cam kết trước làm chậm và không hợp với việc "chưa biết hỏi gì". Phía ủng hộ: chỉ cần cam kết cho các tuyên bố *xác nhận*; phần khám phá cứ tự do, miễn dán nhãn. Với người học này, `prediction.md` ngắn là mức đủ rẻ để luôn làm.
+
+## Bài kiểm tra cuối khóa nền (6–8h, tính vào giờ K4 Bài 13 hoặc làm riêng)
+
+**Đề.** Viết một "báo cáo so sánh" hoàn chỉnh cho câu hỏi thật của bạn ở K4: *cấu hình B (ví dụ INT8 trên N100) có thể thay cấu hình A (FP16 trên N100) không?* Nếu chưa có số đo K4, dùng dữ liệu tổng hợp (script dưới) — bài kiểm tra chấm **phương pháp**, không chấm số.
+
+1. **F1.7** — Commit `prediction.md` trước: kết cục chính (p50 end-to-end và success rate), δ cho success, ngưỡng "nhanh hơn có ý nghĩa" cho latency, quy tắc warmup, quy tắc loại dữ liệu, n và quy tắc dừng, dự đoán có khoảng.
+2. **F1.3** — Mỗi cấu hình chạy **≥ 5 phiên** xen kẽ ABABA…; mỗi phiên khởi động lại tiến trình. Thêm một **A/A** (A vs A) để đo sàn nhiễu giữa phiên. Lưu telemetry clock/nhiệt cùng kết quả.
+3. **F1.2** — Mỗi cấu hình: histogram gộp, mean/p50/p95/max + n; giải thích vì sao bạn báo (hoặc không báo) p99.
+4. **F1.4** — CI cho p50 theo phiên (bootstrap theo phiên); Wilson cho success rate.
+5. **F1.5** — Phán quyết năm trạng thái cho success (FAIL / INCONCLUSIVE / PASS không kém / tương đương / tốt hơn); nếu INCONCLUSIVE, power analysis: cần bao nhiêu episode nữa.
+6. **F1.1, F1.6** — Ngân sách bất định cho một con số latency (timer resolution, overhead harness đo bằng model rỗng); nếu có số đo ở vài kích thước input, fit latency theo kích thước và nhìn residual.
+7. Báo cáo một trang: bảng số với ± và n, phán quyết, mục "lệch kế hoạch", kết quả âm, link dữ liệu thô.
+
+**Dữ liệu tổng hợp khi chưa có số đo K4** (thay bằng số thật khi có):
+
+```python
+# [đã chạy] Sinh dữ liệu tổng hợp cho bài kiểm tra cuối F1 — thay bằng số đo K4 khi có
+import numpy as np, json
+rng = np.random.default_rng(2026)
+def phien(cfg, n_iter=300):
+    lech = rng.normal(0, 6)                                  # lệch giữa phiên (ms) — giả định
+    base, stall = {"A": (180, 0.01), "B": (120, 0.03)}[cfg]  # B nhanh hơn nhưng hay stall hơn — giả định
+    x = rng.lognormal(np.log(base + lech), 0.15, n_iter)
+    s = rng.random(n_iter) < stall; x[s] += rng.uniform(200, 600, s.sum())
+    return x.round(2).tolist()
+data = {"latency_ms": {f"{c}{i}": phien(c) for i in range(5) for c in "AB"},
+        "success": {"A": [int(v) for v in rng.random(50) < 0.72],
+                    "B": [int(v) for v in rng.random(50) < 0.66]}}
+json.dump(data, open("f1_final_synthetic.json", "w"))
+print({k: (np.median(v), len(v)) for k, v in list(data["latency_ms"].items())[:2]},
+      sum(data["success"]["A"]), sum(data["success"]["B"]))
+```
+
+**Tự chấm** bằng checklist mục 6 của cả bảy viên nang. Báo cáo PASS khi một người đọc chỉ có báo cáo + `prediction.md` + dữ liệu thô tái tạo được mọi con số và đồng ý với mọi phán quyết.

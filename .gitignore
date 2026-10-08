@@ -1,3 +1,4 @@
 data/
 .venv-giaotrinh/
 giao-trinh/_scratch/
+__pycache__/
