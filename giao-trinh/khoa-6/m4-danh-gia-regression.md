@@ -721,15 +721,15 @@ for n, z_fail in [(1000, 1.96), (1000, 3.023), (2500, 3.023)]:   # 3.023 = z_{1�
 
 ### 6. Làm
 
-**Bước 1 — baseline có version** (bản gốc). `baselines/<task>/<version>.json`: summary, kết quả **từng episode** theo (scenario_hash, episode_seed), provenance (image digest, scenario set hash, version định nghĩa thành công Bài 11, backend). Cập nhật bằng `promote_baseline --run <id> --reason "..."` + một dòng `decisions.md`. Thêm: **n baseline ≥ n candidate** (lý tưởng 2–4×), vì sai số của baseline là sai số **chung** của mọi PR dùng nó. Nếu determinism giữ ở tầng "khác tiến trình, cùng image" (Bài 1–3), kết quả từng episode của baseline dùng lại được để **ghép cặp** với candidate cùng seed (McNemar, ψ từ Bài 12); image digest đổi thì chạy lại baseline.
+**Bước 1 — baseline có version** (bản gốc). `baselines/<task>/<version>.json`: summary, kết quả **từng episode** theo (scenario_hash, episode_seed), provenance (image digest, scenario set hash, version định nghĩa thành công, backend). Cập nhật bằng `promote_baseline --run <id> --reason "..."` + một dòng `decisions.md`. Thêm: **n baseline ≥ n candidate** (lý tưởng 2–4×), vì sai số baseline là sai số **chung** của mọi PR. Nếu determinism giữ ở tầng "khác tiến trình, cùng image" (Bài 1–3), kết quả từng episode của baseline dùng lại được để **ghép cặp** với candidate cùng seed (McNemar, ψ từ Bài 12); đổi image digest thì chạy lại baseline.
 
-**Bước 2 — verdict bốn trạng thái** (bản gốc có ba; thêm ERROR). `sim_eval/regression.py`, mỗi task in: k/n, Δ̂, CI 95%, δ (= MDE theo Bài 18), verdict. ERROR khi provenance không khớp (Bài 10), tỉ lệ `sim_unstable` khác nhau có ý nghĩa giữa hai arm (Bài 11), hoặc harness exception. Nối thẳng vào script pass/fail/inconclusive cũ của bạn: điều kiện thành `hi < 0 → FAIL; lo ≥ −δ → PASS; còn lại INCONCLUSIVE` (đúng thứ tự Bài 18), thêm nhánh ERROR; AI review giữ vai oracle thành công có kappa đã đo (Bài 11 bước 5), không làm phán quyết thống kê.
+**Bước 2 — verdict bốn trạng thái** (bản gốc có ba; thêm ERROR). `sim_eval/regression.py`, mỗi task in k/n, Δ̂, CI 95% Newcombe, δ, verdict theo đúng hàm dùng chung với Bài 18: `hi < 0 → FAIL; lo ≥ −δ → PASS; còn lại INCONCLUSIVE`. ERROR khi provenance không khớp (Bài 10), tỉ lệ `sim_unstable` khác nhau có ý nghĩa giữa hai arm (Bài 11), hoặc harness exception. AI review trong script cũ của bạn giữ vai oracle thành công có kappa đã đo (Bài 11), không làm phán quyết thống kê.
 
-**Bước 3 — theo từng task** (bản gốc): bài học K4 Bài 8, trung bình đứng yên trong khi task dịch chuyển. Verdict tổng hợp: bộ PASS ⇔ mọi task PASS; bộ FAIL ⇔ ≥1 task FAIL; còn lại INCONCLUSIVE.
+**Bước 3 — theo từng task** (bản gốc; bài học K4 Bài 8: trung bình đứng yên trong khi task dịch chuyển). Bộ PASS ⇔ mọi task PASS; bộ FAIL ⇔ ≥1 task FAIL; còn lại INCONCLUSIVE.
 
-**Bước 4 — bội so sánh** (bản gốc, làm rõ). Phía FAIL: Holm (hoặc Bonferroni) trên m task → FWER báo động giả ≤ α. Phía PASS: mỗi task ở mức không hiệu chỉnh (intersection–union). Báo cáo nightly/khám phá (không chặn merge): có thể dùng FDR Benjamini–Hochberg (`statsmodels.stats.multitest.multipletests(method="fdr_bh")` `[tự đo theo phiên bản]`). Ghi rõ dùng cái nào ở đâu vào README (bản gốc yêu cầu).
+**Bước 4 — bội so sánh** (bản gốc, làm rõ). Phía FAIL: Holm (hoặc Bonferroni) trên m task → FWER ≤ α. Phía PASS: không hiệu chỉnh (intersection–union). Báo cáo khám phá không chặn merge: FDR Benjamini–Hochberg được (`multipletests(method="fdr_bh")` [tự đo theo phiên bản]); cổng merge thì không, vì một FAIL giả là một PR bị chặn. Ghi rõ dùng cái nào ở đâu vào README (bản gốc yêu cầu).
 
-**Bước 5 — canary phá hoại −5 điểm** (bản gốc). Wrapper policy làm thất bại có chủ đích ~5% episode của một task (ví dụ mở kẹp sớm khi `hash(seed) % 100 < k`, k chọn để đạt −5 điểm trên baseline của bạn). Chạy ở n đủ và n = 50. **Vì verdict là ngẫu nhiên**, kiểm cổng bằng tỉ lệ: lặp K lần (hoặc mô phỏng binomial với p đo được), yêu cầu tỉ lệ PASS ở canary n = 50 ≤ α/2 + sai số Monte Carlo. Thêm hai canary để đo đủ hai tỉ lệ sai của cổng: A/A (không đổi; FAIL ở đây là chặn nhầm) và canary đúng −δ (PASS ở đây là lọt lưới). Đây là mutation testing cho chính dụng cụ eval (→ F2.5).
+**Bước 5 — canary phá hoại −5 điểm** (bản gốc). Wrapper policy làm thất bại có chủ đích ~5% episode (ví dụ mở kẹp sớm khi `hash(seed) % 100 < k`). Chạy ở n đủ và n = 50. **Verdict là ngẫu nhiên**, nên kiểm bằng tỉ lệ qua K lần lặp (hoặc mô phỏng binomial với p đo được): tỉ lệ PASS ở n = 50 ≤ α/2 + sai số Monte Carlo. Thêm A/A (FAIL là chặn nhầm) và canary đúng −δ (PASS là lọt lưới). Đây là mutation testing cho chính dụng cụ eval (→ F2.5).
 
 **Bước 6 (thêm) — chính sách cho INCONCLUSIVE, không peeking.** Viết vào `EVAL.md`, trước khi dùng:
 
@@ -774,11 +774,11 @@ for label, z, peek in [("1 lần nhìn ở n=1000", z1, False),
           f" | PASS khi không đổi {np.mean(v0 == 'PASS'):.2f} | n TB {u0.mean():.0f}")
 ```
 
-Quy tắc mẫu: PR chạy giai đoạn 1 (n₁); INCONCLUSIVE thì tự xếp lịch giai đoạn 2 đến n₂ đã định trước, với ngưỡng mỗi lần nhìn đã chia α (Bonferroni qua số lần nhìn là bảo thủ nhưng đúng; Pocock/O'Brien–Fleming hiệu quả hơn). PR không bị chặn bởi INCONCLUSIVE nhưng mang nhãn; release thì bị chặn. **Cấm** "re-run job eval" thủ công khi FAIL — re-run chỉ hợp lệ cho ERROR.
+Quy tắc mẫu: PR chạy giai đoạn 1 (n₁); INCONCLUSIVE thì tự xếp giai đoạn 2 đến n₂ định trước, ngưỡng mỗi lần nhìn đã chia α (Bonferroni bảo thủ nhưng đúng; Pocock/O'Brien–Fleming hiệu quả hơn). INCONCLUSIVE không chặn PR nhưng mang nhãn; chặn release. **Cấm** re-run thủ công khi FAIL; re-run chỉ hợp lệ cho ERROR.
 
 **Bước 7 (thêm) — kiểm tương đương cho thay đổi hạ tầng.** Nâng MuJoCo, rebuild image, đổi loader: dùng TOST với ±δ. Nếu PASS non-inferiority nhưng **không** PASS tương đương vì Δ̂ dương lớn, verdict là ERROR cần điều tra — một refactor không được làm robot giỏi lên.
 
-**Bước 8 — ngưỡng phát hiện tối thiểu trong README** (bản gốc, tiêu chí PASS của khóa). Ghi bằng số, theo dạng: "Ở n = ___ episode/task, p ≈ ___, CI 95% (mỗi phía 2.5%): cổng chặn regression ≥ ___ điểm với xác suất ≥ 0.8; code không đổi PASS với xác suất ___ mỗi task, ___ cả bộ m = ___; tỉ lệ chặn nhầm cả bộ ≤ ___ (Holm)." Số lấy từ Bài 12 và từ bước 5, không phải từ lý thuyết suông.
+**Bước 8 — ngưỡng phát hiện tối thiểu trong README** (bản gốc, tiêu chí PASS của khóa). Dạng: "Ở n = ___ episode/task, p ≈ ___, CI 95%: cổng chặn regression ≥ ___ điểm với xác suất ≥ 0.8; code không đổi PASS với xác suất ___ mỗi task, ___ cả bộ m = ___; chặn nhầm cả bộ ≤ ___ (Holm)." Số lấy từ Bài 12 và bước 5.
 
 ### 7. Số phải ra
 
@@ -858,22 +858,19 @@ Peeking nhân **cả hai** tỉ lệ sai lên khoảng 4 lần. Bonferroni qua l
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| Quy tắc ba nhánh (FAIL nếu cận trên < 0; PASS nếu cận dưới ≥ −δ) — chung với K6 Bài 18; lọt lưới ≤ α/2 | [chuẩn] | Mô phỏng: PASS ≤ 0.025 ở Δ = −δ mọi n |
+| Quy tắc ba nhánh, CI Newcombe, chung với K6 Bài 18; lọt lưới ≤ α/2 | [chuẩn] + [đã chạy] | Mô phỏng: PASS ≤ 0.027 ở Δ = −δ mọi n |
 | TOST ⇔ CI 90% nằm trong (−δ, δ) | [chuẩn] | Schuirmann (1987), J. Pharmacokinetics and Biopharmaceutics |
 | Intersection–union không cần hiệu chỉnh bội | [chuẩn] | Berger (1982), Technometrics |
-| Peeking 10 lần nhân tỉ lệ sai ~4 lần (ở mức 2.5% mỗi phía) | [chuẩn] | Mô phỏng `b13_peek`; Armitage, McPherson, Rowe (1969) |
-| Optimizely Stats Engine 2015, Johari et al. KDD 2017 | [chuẩn] | *Peeking at A/B Tests: Why it matters, and what to do about it* |
-| Cá hồi chết fMRI (2009), Ig Nobel 2012 | [chuẩn] | Bennett, Baird, Miller, Wolford |
-| TTCN-3 verdict `none/pass/inconc/fail/error`, verdict chỉ được xấu đi trong một testcase | [spec] | ETSI ES 201 873-1, mục về verdict |
+| Peeking 10 lần nhân tỉ lệ sai ~4 lần (2.5% mỗi phía) | [đã chạy] | `b13_peek`; Armitage, McPherson, Rowe (1969) |
+| Optimizely Stats Engine 2015; cá hồi chết fMRI (Bennett và cộng sự, 2009) | [chuẩn] | Johari et al., KDD 2017 |
+| TTCN-3 verdict `none/pass/inconc/fail/error` | [spec] | ETSI ES 201 873-1 |
 
 **Đã sửa so với bản gốc/Gemini:**
-- **Bản gốc + Gemini:** PASS = "không tệ hơn một cách có ý nghĩa" chồng lên INCONCLUSIVE (n nhỏ thì luôn "không có ý nghĩa") → quy tắc ba nhánh chung với K6 Bài 18: FAIL nếu cận trên < 0, PASS nếu cận dưới ≥ −δ (δ = MDE khai báo trước).
-- **Bản gốc:** "Không thay đổi gì → PASS" → chỉ đúng khi n đủ; ở n nhỏ là INCONCLUSIVE.
-- **Bản gốc:** "Canary −5, n = 50 → INCONCLUSIVE" như kết quả tất định → kiểm bằng tỉ lệ PASS ≤ α qua nhiều lần lặp.
-- **Bản gốc + Gemini:** "Bonferroni hoặc FDR" như hai lựa chọn ngang nhau cho gating → FWER (Holm) phía FAIL cho cổng merge; không hiệu chỉnh phía PASS (intersection–union); FDR cho báo cáo khám phá.
-- **Gemini:** "nếu chênh âm nhưng p-value chưa đủ nhỏ thì INCONCLUSIVE" → luật vá: Δ̂ dương với CI rộng cũng phải INCONCLUSIVE; dùng quy tắc theo CI ở phần 2.
-- **Gemini, ví dụ README:** "phát hiện suy giảm ≥ 7.5% ở n = 400" không nêu p → MDE ở n = 400, power 0.8, một phía là ~8.8 điểm ở p = 0.5 và ~7.0 ở p = 0.8; luôn kèm p.
-- **Thêm:** ERROR riêng; chính sách INCONCLUSIVE không peeking; TOST cho thay đổi hạ tầng; baseline là phép đo có sai số chung.
+- Bản gốc + Gemini: PASS = "không tệ hơn một cách có ý nghĩa" chồng lên INCONCLUSIVE → quy tắc ba nhánh chung với Bài 18 (δ khai báo trước).
+- Bản gốc: "Không thay đổi → PASS" chỉ đúng khi n đủ; "Canary −5, n = 50 → INCONCLUSIVE" như tất định → kiểm bằng tỉ lệ.
+- Bản gốc + Gemini: "Bonferroni hoặc FDR" ngang nhau cho gating → Holm phía FAIL, không hiệu chỉnh phía PASS, FDR cho báo cáo khám phá.
+- Gemini: "chênh âm mà p chưa đủ nhỏ → INCONCLUSIVE" là luật vá (Δ̂ dương CI rộng cũng phải INCONCLUSIVE); README "phát hiện ≥ 7.5% ở n = 400" không nêu p → MDE một phía ở n = 400, power 0.8 là ~8.8 điểm ở p = 0.5, ~7.0 ở p = 0.8.
+- Reviewer sửa: bỏ ghi chú "Bài 18 minh họa bằng Wald"; Bài 18 nay dùng cùng hàm Newcombe.
 
 ### 12. Đọc thêm và tự kiểm tra
 
