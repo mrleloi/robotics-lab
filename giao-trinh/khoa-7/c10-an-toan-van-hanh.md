@@ -595,3 +595,541 @@ Thời gian tắt tỉ lệ với R2·C2 (τ = 0,1 s) và phụ thuộc Vg lúc 
   </details>
 
 ---
+
+## Bài C10.2 — State machine và FMEA: mỗi thành phần chết thì chuyện gì xảy ra (18h)
+
+> **Vị trí:** C10.1 → **C10.2** → C10.3 · **Cần trước:** → F7.6 (soak, chế độ hỏng, FMEA, vì sao RPN xếp sai — đọc trọn trước bài này), → F2.5 (fault injection), → F2.4 (property-based test), → F2.7 (tầng test); K3 Bài 14–15 (state machine confession, moderation queue, kill switch); K7 C4.4 (trạng thái an toàn của firmware), C10.1 (E-stop đã PASS) · **Sau bài này bạn quyết định được:** dòng FMEA nào sửa trước; sau mỗi loại lỗi robot phải ở trạng thái nào và ai được phép đưa nó ra khỏi đó; dòng nào test được trong CI, dòng nào chỉ test được trên robot thật.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Tối 2/10/2023 ở San Francisco, một xe người lái tông một người đi bộ và hất chị vào làn của một robotaxi Cruise. Robotaxi phanh nhưng vẫn va và chèn lên người. Rồi nó làm đúng điều đã được thiết kế cho "sau va chạm": **tấp vào lề**. Báo cáo kỹ thuật của Exponent do Cruise thuê kết luận hệ thống đã phát hiện và theo dõi đúng người đi bộ, nhưng **phân loại sai va chạm thành va chạm bên hông**, và chính phân loại đó kích hoạt thao tác tấp lề, kéo lê chị khoảng 20 feet (~6 m) `[chuẩn — tóm tắt báo cáo Exponent và Quinn Emanuel, công bố 1/2024; TechCrunch, Axios 25/1/2024]`. Cruise thu hồi phần mềm của cả đội xe; giấy phép ở California bị đình chỉ, phần lớn vì cách công ty báo cáo sự việc với cơ quan quản lý `[chuẩn — cùng nguồn]`.
+
+Điều đáng học cho bài này không phải nhận diện. Lỗi nằm ở **chuyển trạng thái sau một sự kiện bất thường**: một hành vi phục hồi hợp lý cho đa số tình huống ("đừng đứng giữa đường") gây hại nhiều hơn chính va chạm, vì điều kiện để chọn nó sai. Một bảng FMEA tốt hỏi không chỉ "cái gì hỏng" mà "**phản ứng của ta với hỏng** có thể hỏng thế nào". Robot văn phòng 5 kg của bạn không kéo lê ai, nhưng có cùng câu hỏi: sau bumper chạm, robot lùi lại? quay đầu? đứng yên? Lùi lại khi có người ngã phía sau là một lựa chọn tệ.
+
+### 2. Mô hình tư duy
+
+**Ba tầng trạng thái, một chiều sự thật.**
+
+```
+  PHẦN CỨNG (chuỗi cuộn K1, RELAY_FB)        ← sự thật cuối cùng về năng lượng motor
+        │ báo lên (ESTOP_SENSE, RELAY_FB)
+  ESP32 (C4.4): DISARMED · ARMED · ESTOP_LATCHED · FAULT     ← sự thật về lệnh tới driver
+        │ báo lên (STATE.state, fault_mask)
+  MINI PC: state machine nhiệm vụ (bên dưới)  ← chỉ quyết định "nên làm gì tiếp"
+```
+
+Trạng thái an toàn được **báo lên**, không bao giờ được **ra lệnh xuống** để thoát. Mini PC không thể đưa ESP32 ra khỏi `ESTOP_LATCHED`; chỉ RESET trên thân + ARM (C10.1) làm được. State machine trên mini PC là tầng 3: nó tránh được tình huống xấu, nó không bảo đảm an toàn.
+
+**State machine nhiệm vụ** (gốc, thêm `FAULT` tách khỏi `EMERGENCY_STOP`):
+
+```mermaid
+stateDiagram-v2
+  [*] --> IDLE
+  IDLE --> READY: arm
+  READY --> NAVIGATING: goal
+  NAVIGATING --> APPROACHING_PERSON: person_seen
+  APPROACHING_PERSON --> IDENTIFYING: near_person
+  IDENTIFYING --> SPEAKING: id_ok
+  IDENTIFYING --> RETURNING: id_fail
+  SPEAKING --> RETURNING: spoken
+  RETURNING --> CHARGING: docked
+  CHARGING --> IDLE: charged
+  NAVIGATING --> LOW_BATTERY: batt_low
+  LOW_BATTERY --> CHARGING: docked
+  state "mọi trạng thái" as ANY
+  ANY --> EMERGENCY_STOP: estop (phần cứng báo lên)
+  ANY --> FAULT: fault (phát hiện bằng phần mềm/firmware)
+  EMERGENCY_STOP --> IDLE: manual_reset [nút đã nhả]
+  FAULT --> IDLE: fault_cleared [người xác nhận]
+```
+
+Bốn tính chất bạn muốn chứng minh, không chỉ hy vọng:
+1. **Toàn phần:** mọi cặp (trạng thái, sự kiện) có kết quả định nghĩa — chuyển, hoặc **bị chặn và ghi log**. Không có cặp "không ai nghĩ tới".
+2. **Ưu tiên:** `estop`, `fault` dẫn tới trạng thái an toàn từ **mọi** trạng thái.
+3. **Không tự thoát:** `EMERGENCY_STOP` chỉ ra bằng `manual_reset` khi nút đã nhả; nhả nút (`estop_released`) không đổi trạng thái.
+4. **Mỗi chuyển có log:** thời gian monotonic + wall, trạng thái cũ, sự kiện, trạng thái mới, chấp nhận hay bị chặn, lý do.
+
+Viết state machine dạng **bảng** (dict), không dạng `if/else` rải rác, để kiểm được bằng máy. Mô phỏng: bảng 11 trạng thái × 15 sự kiện, một guard cho reset, và property test bằng chuỗi sự kiện ngẫu nhiên (→ F2.4):
+
+```python
+# [đã chạy] State machine dạng BẢNG + kiểm mọi cặp (trạng thái, sự kiện) + property test bằng chuỗi ngẫu nhiên.
+import itertools, random, sys
+S = ["IDLE", "READY", "NAVIGATING", "APPROACHING_PERSON", "IDENTIFYING", "SPEAKING",
+     "RETURNING", "CHARGING", "LOW_BATTERY", "FAULT", "EMERGENCY_STOP"]
+E = ["arm", "goal", "person_seen", "near_person", "id_ok", "id_fail", "spoken", "docked",
+     "batt_low", "fault", "fault_cleared", "estop", "estop_released", "manual_reset", "charged"]
+T = {("IDLE", "arm"): "READY", ("READY", "goal"): "NAVIGATING",
+     ("NAVIGATING", "person_seen"): "APPROACHING_PERSON", ("APPROACHING_PERSON", "near_person"): "IDENTIFYING",
+     ("IDENTIFYING", "id_ok"): "SPEAKING", ("IDENTIFYING", "id_fail"): "RETURNING",
+     ("SPEAKING", "spoken"): "RETURNING", ("RETURNING", "docked"): "CHARGING",
+     ("LOW_BATTERY", "docked"): "CHARGING", ("CHARGING", "charged"): "IDLE",
+     ("FAULT", "fault_cleared"): "IDLE", ("EMERGENCY_STOP", "manual_reset"): "IDLE"}
+for s in S:                                         # sự kiện ưu tiên: định nghĩa cho MỌI trạng thái
+    if s != "EMERGENCY_STOP": T[(s, "estop")] = "EMERGENCY_STOP"
+    if s not in ("EMERGENCY_STOP", "FAULT"): T[(s, "fault")] = "FAULT"
+    if s in {"READY", "NAVIGATING", "APPROACHING_PERSON", "IDENTIFYING", "SPEAKING", "RETURNING"}:
+        T[(s, "batt_low")] = "LOW_BATTERY"
+# cố ý: "estop_released" không có dòng nào -> nhả nút KHÔNG phải reset (ISO 13850)
+GUARD = {("EMERGENCY_STOP", "manual_reset"): lambda hw: not hw["estop"]}
+if len(sys.argv) > 1: GUARD = {}                    # chạy "python3 fsm.py noguard" để thấy lỗi
+
+def step(s, e, hw, log):
+    nxt = T.get((s, e))
+    if nxt is None or not GUARD.get((s, e), lambda hw: True)(hw):
+        log.append(("REJECT", s, e)); return s      # chặn + ghi log lý do, giữ nguyên trạng thái
+    log.append(("OK", s, e, nxt)); return nxt
+
+print(f"{len(S)}x{len(E)} = {len(S)*len(E)} cặp; có chuyển: {len(T)}; còn lại bị chặn và ghi log")
+random.seed(7); first = None; n_bad = 0
+for trial in range(20000):
+    s, hw, log = "IDLE", {"estop": False}, []
+    for e in random.choices(E, k=40):
+        if e == "estop": hw["estop"] = True          # chuỗi relay mở (phần cứng)
+        if e == "estop_released": hw["estop"] = False
+        s = step(s, e, hw, log)
+        broken = (hw["estop"] and s != "EMERGENCY_STOP" and log[-1][0] == "OK" and log[-1][1] == "EMERGENCY_STOP")
+        if broken:
+            n_bad += 1; first = first or log[-6:]
+print(f"vi phạm 'rời EMERGENCY_STOP khi nút vẫn đang nhấn': {n_bad}")
+if first: print("phản ví dụ (6 bước cuối):", *first, sep="\n  ")
+```
+
+Chạy hai lần: có guard và `noguard`. Dự đoán trước (phần 5) số vi phạm ở lần thứ hai và phản ví dụ trông thế nào.
+
+**FMEA theo chế độ hỏng, có S/O/D** (→ F7.6 cho định nghĩa, lịch sử, và vì sao RPN xếp sai; bài này không lặp lại). Thang cho robot văn phòng của bạn — viết vào `fmea/scales.md` **trước** khi chấm, để không chấm theo cảm giác:
+
+| Điểm | S — nghiêm trọng | O — khả năng xảy ra (trong 72h soak) | D — khó phát hiện trước khi gây hại |
+|---|---|---|---|
+| 9–10 | Có thể gây thương tích, cháy | Gần như chắc chắn, nhiều lần | Không có cơ chế phát hiện, hoặc cơ chế chưa từng được test |
+| 7–8 | Va chạm vật, hỏng phần cứng đắt | Vài lần | Phát hiện sau khi hậu quả bắt đầu |
+| 4–6 | Robot dừng giữa lối, cần người | Có thể một lần | Phát hiện trong vài giây, đã test |
+| 2–3 | Mất dữ liệu, nhiệm vụ trễ | Hiếm, đã thấy ở hệ tương tự | Phát hiện ngay, đã test nhiều trạng thái |
+| 1 | Không ai nhận ra | Chưa từng thấy, cơ chế vật lý khó xảy ra | Không thể không phát hiện (phần cứng chặn) |
+
+**Quy tắc ưu tiên của chặng:** xét **S trước**: mọi dòng S ≥ 9 phải có biện pháp **chặn hậu quả bằng phần cứng hoặc firmware độc lập** (C10.1), bất kể RPN. Sau đó mới xếp theo O, D. Vẫn ghi cột RPN, vì nó giúp so sánh *trong cùng mức S* và vì gate gốc không cấm nó; chỉ không dùng nó làm thứ tự duy nhất `[chuẩn — AIAG–VDA 2019 Action Priority, xem F7.6]`.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| State machine đơn hàng/workflow (K3 Bài 14) | State machine nhiệm vụ robot | Đơn hàng sai trạng thái thì sửa DB. Robot sai trạng thái thì nó đang **di chuyển** trong lúc sai | Cho phép `READY → NAVIGATING` khi `FAULT` chưa xóa vì "chỉ là log lỗi" |
+| Idempotent retry khi lỗi | Hành vi phục hồi (recovery) của Nav2 | Retry ở backend không đổi thế giới. Recovery của robot (lùi, xoay) **là chuyển động** gần chỗ vừa có sự cố | Lùi lại sau bumper khi người vừa ngã phía sau — bài học Cruise |
+| Chaos engineering (`kill -9` pod) | Fault injection lên robot | Kill pod có bản sao và scheduler dọn. Kill tiến trình điều khiển robot là một sự kiện vật lý: bánh còn quay | Gây lỗi trên sàn trước khi thử trên giá |
+| Risk register likelihood × impact | FMEA S/O/D | Tích ba thang thứ bậc trộn "hiếm nhưng gây thương tích" với "thường mà phiền" (→ F7.6) | Sửa "upload chậm" trước "relay không cắt" |
+| Feature flag tắt tính năng hỏng | Degraded mode (chạy giảm cấp) | Tắt một tính năng backend thường an toàn. Robot mất camera mà vẫn chạy bằng odometry là **chạy mù dần**, sai số tăng theo quãng đường (C6.3) | Cho robot "về trạm bằng odometry" 30 m sau khi mất camera |
+
+**Chấm mô hình:**
+- *Bản Gemini K7 (Bài 16 gốc): "FMEA là công cụ kỹ thuật an toàn bắt buộc để loại trừ các lỗi im lặng."* — **SAI.** FMEA liệt kê những chế độ hỏng người viết nghĩ ra; nó không loại trừ gì, và lỗi im lặng thật sự là lỗi không ai nghĩ tới hoặc cơ chế phát hiện tự hỏng. Phân tích đầy đủ và cách nói đúng: → F7.6 mục 6, khẳng định (a). Hệ quả cho bài này: bảng phải có **dòng cho chính các cơ chế phát hiện** (watchdog, mạch xung giữ, ESTOP_SENSE), vì đó là chỗ lỗi im lặng sống.
+- *"Sau lỗi, robot về trạng thái an toàn = dừng."* — **ĐÚNG MỘT PHẦN.** Dừng là an toàn cho đa số lỗi trên sàn phẳng. Gãy: (1) dừng giữa cửa thoát hiểm, đầu cầu thang, lối đi hẹp là một nguy cơ khác (chặn lối); (2) "dừng" phải nói rõ là loại nào (giữ năng lượng hay cắt). **Phản ví dụ:** pin yếu → robot dừng ngay giữa hành lang lúc 18h, nằm đó tới sáng. Hành vi thiết kế đúng là "về trạm ở ngưỡng còn đủ năng lượng để về", và FMEA ghi ngưỡng đó bằng số từ power budget (C1.2).
+- *"Gây lỗi một lần, hành vi khớp thiết kế → dòng FMEA PASS."* — **ĐÚNG MỘT PHẦN.** Một lần là n = 1 cho xác suất phát hiện (→ F2.5), và lỗi phụ thuộc thời điểm: rút encoder khi đứng yên khác hẳn khi đang tăng tốc (PID windup). **Phản ví dụ:** encoder đứt lúc đứng yên → không có gì xảy ra, test "PASS"; đứt lúc 0,5 m/s → PID thấy vận tốc 0, đẩy PWM lên max. Mỗi dòng thử ở ≥2 trạng thái.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | State machine toàn phần | Mọi cặp (trạng thái, sự kiện) có kết quả định nghĩa | Vẽ được sơ đồ |
+| 🟢 | Guard | Điều kiện phải đúng để một chuyển được phép | Một `if` trong callback |
+| 🟢 | Chế độ hỏng (failure mode) | Một cách cụ thể thành phần không làm đúng chức năng | Tên linh kiện |
+| 🟢 | S/O/D, RPN | Nghiêm trọng, xảy ra, khó phát hiện; RPN = tích | Một số khách quan |
+| 🟢 | Fault injection | Cố ý gây lỗi để kiểm phát hiện và phản ứng | Test thường |
+| 🟢 | Degraded mode | Chạy với chức năng giảm khi một phần hỏng | Chạy bình thường chậm hơn |
+| 🟡 | Common-cause failure | Một nguyên nhân (sụt áp, nhiệt, rung) hỏng nhiều thành phần | Hai lỗi độc lập trùng nhau |
+| 🟡 | FTA | Cây lỗi từ hậu quả xuống tổ hợp nguyên nhân | FMEA |
+| 🟡 | STPA | Phân tích tai nạn do tương tác điều khiển, không chỉ hỏng linh kiện | — |
+| 🔴 | FMEDA, chẩn đoán phủ (diagnostic coverage) | FMEA định lượng cho an toàn chức năng | — |
+
+### 5. Dự đoán
+
+**Tham số cần tra:** timeout lease, ngưỡng giám sát tốc độ (C4.4 `config.h`); ngưỡng pin "về trạm" từ power budget C1.2 (năng lượng cần để về từ điểm xa nhất của bản đồ C8 + biên); thời gian camera được phép mất trước khi dừng (từ sai số odometry theo quãng đường ở C6.3); dòng hãm motor (C3) cho ngưỡng "kẹt".
+
+**Đoán:**
+1. Mô phỏng state machine: bao nhiêu cặp bị chặn? Có guard: số vi phạm? Không guard: số vi phạm, và phản ví dụ ngắn nhất trông thế nào?
+2. Mỗi dòng FMEA ở bảng phần 6: điền S/O/D của bạn, RPN, thứ tự sửa theo "S trước"; dòng nào RPN xếp khác "S trước"?
+3. Mỗi kịch bản gây lỗi: phát hiện bằng gì, sau bao lâu (ms), robot dừng ở đâu (trạng thái ESP32 + trạng thái nhiệm vụ), cần ai để ra khỏi đó.
+4. Rút encoder trái khi đang chạy 0,5 m/s **trước** khi có giám sát tính hợp lý: robot làm gì trong 500 ms đầu?
+
+```markdown
+# prediction.md — C10.2
+1. cặp bị chặn __ ; có guard: __ vi phạm ; noguard: __ ; phản ví dụ: __
+2. | fmea_id | S | O | D | RPN | thứ tự RPN | thứ tự S-trước |
+4. encoder trái đứt ở 0,5 m/s: __ (vì PID __), phát hiện sau __ ms bằng __
+3. (mỗi kịch bản một dòng) | id | phát hiện bằng | t (ms) | trạng thái ESP32 | trạng thái nhiệm vụ | ai reset |
+```
+
+### 6. Làm
+
+1. **Implement state machine dạng bảng** trên mini PC (một node, một hàng đợi sự kiện đơn luồng — mọi callback chỉ **đẩy sự kiện vào hàng đợi**, một vòng duy nhất xử lý và đổi trạng thái; không có hai luồng cùng ghi trạng thái). Mọi chuyển có log theo schema mục 7 của chặng, kể cả chuyển bị chặn. Trạng thái `EMERGENCY_STOP` và `FAULT` lấy từ STATE của ESP32, không tự suy.
+2. **Test bảng trong CI**: `test_fsm_table` (toàn phần), property test như mô phỏng (≥10⁴ chuỗi), và một test cố ý bỏ guard phải FAIL (canary cho chính bài test, → F2.5).
+3. **Viết FMEA** `fmea/fmea.csv` theo chế độ hỏng, các cột: `id, chức năng, chế độ hỏng, nguyên nhân, hậu quả cục bộ, hậu quả hệ thống, S, phát hiện bằng, D, O, RPN, hành vi thiết kế, trạng thái sau lỗi, ai reset, tầng test (SIL/HIL/bàn/thực địa), cách gây lỗi thật`. Bắt đầu từ 9 dòng của gốc (đã viết lại thành chế độ hỏng) và thêm các dòng về cơ chế phát hiện và lỗi chung nguồn:
+
+| id | Chế độ hỏng | Nguyên nhân ví dụ | Phát hiện bằng | Hành vi thiết kế | Gây lỗi thật bằng |
+|---|---|---|---|---|---|
+| F01 | Mất WiFi | AP xa, nhiễu | Heartbeat mạng, `iw` | Chạy tiếp nhiệm vụ cục bộ, buffer MCAP local, về trạm khi xong; kill switch K3 qua MQTT **không còn** → chặn nội dung mới (dừng mềm phát âm) | Tắt AP / `nmcli radio wifi off` |
+| F02 | Mini PC treo (tiến trình điều khiển) | Kẹt swap, deadlock | Lease hết hạn ở ESP32 (C4.4) | ESP32 hãm, DISARMED; state machine coi là FAULT khi sống lại | `kill -STOP` node điều khiển; `kill -9` riêng |
+| F03 | Mini PC mất nguồn 12 V | DC-DC chết, sụt áp | Lease ở ESP32 | Như F02; ESP32 vẫn sống nhờ buck 5 V riêng | Rút jack 12 V mini PC khi chạy |
+| F04 | ESP32 treo | Bug firmware, ngắt kẹt | **Mạch xung giữ (C10.1)**; mini PC mất STATE | Relay nhả (T0b); mini PC → FAULT | `FAULT_HANG_TASK`, `FAULT_HANG_ALL` |
+| F05 | ESP32 reset lặp | Brownout, panic | `boot_count`, `esp_reset_reason` trong STATE | DISARMED sau mỗi boot; không tự ARM | Giữ/nhả EN; sụt áp 5 V bằng nguồn bàn (trên giá) |
+| F06 | Encoder một bên đứt dây | Giắc lỏng do rung | Tính hợp lý: PWM lớn mà count không đổi > X ms; lệch vận tốc hai bánh so với lệnh quay | ESP32 dừng, FAULT `enc_l_implausible` | Rút giắc encoder khi đứng yên **và** khi 0,5 m/s |
+| F07 | Camera chết/mất frame | USB rớt, quá nhiệt | Không có frame mới > T | Dừng khi độ bất định pose (C8.3) vượt ngưỡng, không dừng ngay | Rút USB camera; che ống kính |
+| F08 | Pin yếu | Chạy lâu, lạnh | INA226 (C1.5) | LOW_BATTERY ở ngưỡng đủ năng lượng để về (số từ C1.2) | Hạ ngưỡng trong config (giả lập) **và** một lần chạy pin thật xuống ngưỡng |
+| F09 | Motor kẹt | Vật kẹt bánh, thảm | Dòng (current sense C3) hoặc PWM cao + tốc độ ~0 | Cắt PWM bánh đó, FAULT `stall` | Chặn bánh bằng tay **qua khối gỗ**, ở giới hạn dòng nguồn bàn trước |
+| F10 | Mất định vị | Không thấy marker lâu | Covariance pose (C8.3) | Dừng, chờ thấy tag; không tự xoay tìm khi có người gần | Che marker; đưa robot vào vùng không tag |
+| F11 | **Mạch xung giữ hỏng: Q1 chập D–S** | MOSFET hỏng thường ở dạng chập | Không tự phát hiện được bằng xung. Kiểm định kỳ: ngừng đảo → RELAY_FB phải lên | Kiểm ở Lắp bước 7 mỗi ngày; E-stop vẫn hoạt động (nút nối tiếp) | Nối tắt D–S bằng dây (trên giá) → kiểm hàng ngày phải FAIL |
+| F12 | Relay K1 dính tiếp điểm | Hồ quang DC | RELAY_FB không lên khi COIL_SENSE xuống (C10.1) | ESP32 giữ driver tắt, chặn ARM, FAULT `relay_weld` | Không gây thật được an toàn → giả lập bằng rút dây RELAY_FB; ghi D cao hơn |
+| F13 | **Sụt áp chung** (common cause) | Dòng khởi động motor + pin yếu | INA226, `boot_count` cả hai máy | Không cả hai cùng reset rồi tự chạy; DISARMED, chờ người | Nguồn bàn thay pin, hạ áp từ từ (trên giá) |
+| F14 | Kill switch K3 / moderation không phản hồi | Daemon chết | Healthcheck daemon | Không phát nội dung chưa duyệt (K3 Bài 15) | `kill -9` daemon |
+
+   Dòng F11–F13 là các dòng bảng gốc không có: chính cơ chế phát hiện hỏng và lỗi chung nguồn.
+4. **Gây lỗi thật từng dòng** (gate: mỗi dòng đã test bằng lỗi thật). Quy trình mỗi lần: viết dự đoán ở `prediction.md` → robot trên giá, tay ở E-stop → gây lỗi → ghi `fmea/results.csv` (mục 7 của chặng) → nếu PASS trên giá, lặp trên sàn ở tốc độ thấp → rồi ở 0,5 m/s. Mỗi dòng ≥2 trạng thái (đứng yên / đang chạy; hoặc NAVIGATING / SPEAKING). Đo **thời gian phát hiện** và **thời gian về trạng thái an toàn** bằng log (và logic analyzer cho F04, F06).
+5. **Ghi hành vi thực tế, so cột thiết kế, sửa chỗ khác.** Mỗi chỗ khác là một issue; sửa xong gây lỗi lại. Một dòng **không test được bằng lỗi thật** (F12) ghi rõ cách giả lập và giới hạn; không đánh dấu PASS như các dòng khác.
+6. **Moderation queue và kill switch của K3: dùng lại nguyên vẹn** (gốc). Kiểm hai điều: kill switch dừng **nội dung** (âm thanh) chứ không phải E-stop; và khi WiFi mất (F01), robot không phát nội dung chưa duyệt (fail closed cho nội dung).
+7. **Chuyển trạng thái không hợp lệ bị chặn, có log**: gửi 20 sự kiện sai thứ tự từ một script (ví dụ `spoken` khi `NAVIGATING`, `manual_reset` khi nút còn nhấn), kiểm log có đủ 20 dòng `accepted=false`.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Mô phỏng state machine** (seed trong code): 165 cặp, 37 cặp có chuyển, 128 cặp bị chặn và ghi log. Có guard: **0** vi phạm. Không guard: **hàng chục nghìn** lần vi phạm trên 20.000 chuỗi (lần chạy mẫu: 15.399) — phản ví dụ ngắn nhất là `estop` → `manual_reset` trong khi nút chưa nhả. Một lỗi mà test tay theo "luồng chính" không bao giờ gặp, vì người test luôn nhả nút trước khi reset. Ở robot thật, phần cứng vẫn giữ relay nhả (nút đang nhấn), nhưng trạng thái phần mềm và phần cứng đã **lệch nhau**: khi nút được nhả, hệ ở `IDLE`/`READY` mà không ai chủ động reset.
+
+**Tiêu chí gốc (giữ nguyên):**
+
+| Kiểm tra | Ngưỡng |
+|---|---|
+| Mỗi dòng FMEA (≥8) | Test được bằng lỗi thật, hành vi khớp thiết kế (dòng chỉ giả lập được: ghi rõ, không tính là "lỗi thật") |
+| Chuyển trạng thái không hợp lệ | Bị chặn, có log |
+| Sau mọi lỗi | Robot ở trạng thái **an toàn**, xác định, không phải trạng thái không xác định |
+
+**Số tham khảo** `[tự đo]`: F02/F03 phát hiện ≈ timeout lease; F04 ≈ T0b đã đo ở C10.1; F06 phụ thuộc ngưỡng tính hợp lý (thường vài chục tới vài trăm ms). Câu 4: không có giám sát tính hợp lý, PID thấy vận tốc trái = 0 nên đẩy PWM trái lên trần (windup); robot **quay** về phía bánh còn lại cho tới khi lease, giám sát tốc độ bánh phải, hoặc bumper dừng nó. Đây là lý do F06 phải có kiểm tính hợp lý ở **firmware**, không chỉ ở mini PC.
+
+**Thứ tự sửa:** nhiều người chấm F01 (WiFi) O rất cao, D thấp, S thấp → RPN có thể **cao hơn** F04/F11 (S = 10, O thấp). Theo "S trước", F04, F11, F12, F13 đứng đầu; F01 chỉ sửa sau. Nếu bảng của bạn xếp F01 lên đầu theo RPN, đó chính là lỗi F7.6 mô tả.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Rút encoder khi chạy, robot quay vòng 1–3 s rồi mới dừng | PID windup; chỉ có giám sát ở mini PC | Log `u_l`, `w_l` 100 Hz | Kiểm tính hợp lý trong firmware: \|u\| lớn mà count không đổi > X ms → FAULT; kẹp tích phân |
+| State machine crash khi nhiều sự kiện dồn | Nhiều callback cùng ghi trạng thái | Log có hai chuyển cùng timestamp từ hai luồng | Hàng đợi sự kiện, một vòng xử lý |
+| `kill -9` PASS, `kill -STOP` FAIL | Tiến trình bị dừng vẫn giữ cổng serial mở; driver USB không báo lỗi; chỉ lease bắt được | So hai cách | Không tin "tiến trình chết thì cổng đóng"; lease là cơ chế chính |
+| Robot dừng oan khi WiFi chập chờn | F01 được nối nhầm với dừng | Log chuyển trạng thái quanh lúc mất WiFi | Tách: mất WiFi không phải sự kiện an toàn |
+| Sau mất camera robot "về trạm" và lạc | Degraded mode dùng odometry quá xa | Quãng đường từ lúc mất camera | Giới hạn quãng đường chạy mù theo sai số C6.3; quá thì dừng, chờ |
+| Sau sụt áp, ESP32 và mini PC cùng reset, robot tự chạy tiếp nhiệm vụ | Nhiệm vụ được khôi phục từ đĩa và tự ARM | Log boot hai máy | Sau boot luôn DISARMED; khôi phục nhiệm vụ cần người xác nhận |
+| Dòng FMEA "PASS" nhưng soak gặp đúng lỗi đó với hậu quả khác | Test ở một trạng thái | So `robot_state` trong results.csv | Thêm trạng thái; ghi vào FMEA |
+
+### 9. Câu hỏi ngược
+
+1. **[Failure mode]** Viết một dòng FMEA cho chính **state machine**: nó có thể hỏng theo những cách nào mà không dòng nào khác trong bảng bắt được?
+   <details><summary>Hướng nghĩ</summary>
+
+   Kẹt ở một trạng thái vì sự kiện ra không bao giờ tới (thiếu timeout trong trạng thái — `IDENTIFYING` chờ mãi); trạng thái lệch với ESP32 sau khi node khởi động lại; hàng đợi sự kiện đầy và drop `estop`. Mỗi trạng thái nên có thời gian tối đa và sự kiện `timeout` của nó.
+
+   </details>
+2. **[Vì sao không]** Vì sao không để state machine trên mini PC gửi lệnh "thoát E-stop" xuống ESP32 khi người dùng bấm "Resume" trên app?
+   <details><summary>Hướng nghĩ</summary>
+
+   Reset phải là hành động **tại máy**, sau khi người đã nhìn thấy nguy cơ đã hết (ISO 13850). App có thể ở phòng khác. Mini PC là tầng 3; cho tầng 3 quyền thoát tầng 0 là đảo ngược chiều sự thật.
+
+   </details>
+3. **[Quy mô]** 100 robot, mỗi tuần mỗi robot vài chục sự kiện FAULT. Bạn biến `fmea/results.csv` và log chuyển trạng thái thành gì để cập nhật cột O bằng số đo thay vì đoán?
+   <details><summary>Hướng nghĩ</summary>
+
+   O trở thành **tỉ lệ đo được** theo chế độ hỏng trên giờ chạy, có khoảng tin cậy (→ F1.4), theo phiên bản firmware/phần cứng. FMEA thành một bảng sống nối với dữ liệu đội xe; chế độ hỏng mới (không khớp dòng nào) là tín hiệu đáng nhất — lỗi bạn chưa nghĩ tới.
+
+   </details>
+4. **[Nếu…thì]** Nếu bumper chạm và state machine chọn "lùi 20 cm rồi đi vòng" làm hành vi phục hồi, cần điều kiện gì để lựa chọn đó không lặp lại bài học Cruise?
+   <details><summary>Hướng nghĩ</summary>
+
+   Biết phía sau trống (cảm biến phía sau, hoặc chỉ lùi trên đường vừa đi qua và trong cửa sổ thời gian ngắn); phân biệt "chạm vật tĩnh" với "chạm người" (không biết thì coi là người); giới hạn số lần thử rồi dừng chờ người. Khi không chắc, đứng yên là phục hồi an toàn nhất.
+
+   </details>
+5. **[Liên ngành]** Hàng không dùng danh sách thiết bị tối thiểu (MEL): máy bay được phép cất cánh khi một số thiết bị hỏng, với điều kiện vận hành cụ thể. Giống và khác degraded mode của robot?
+   <details><summary>Hướng nghĩ</summary>
+
+   Giống: quyết định trước, bằng văn bản, thiết bị nào được phép hỏng và khi đó phải làm gì — không quyết định tại chỗ. Khác: MEL được duyệt bởi nhà chức trách và áp **trước** chuyến bay; degraded mode của robot kích hoạt **trong** lúc chạy, nên cần phát hiện tự động.
+
+   </details>
+
+### 10. Liên kết ra ngoài
+
+- **Ô tô — ISO 26262 và "safe state".** Ngành ô tô định nghĩa cho mỗi lỗi một trạng thái an toàn và **thời gian chịu lỗi** (fault tolerant time interval): từ lúc lỗi xảy ra tới lúc hậu quả nguy hiểm có thể xảy ra; phát hiện + phản ứng phải nhanh hơn khoảng đó. Giống: cột "t phát hiện" và "trạng thái sau lỗi" của bạn. Khác: họ tính khoảng thời gian đó từ vật lý xe cho từng lỗi; bạn có thể làm tương tự bằng quãng dừng C10.1.
+- **Y tế — FMEA trong bệnh viện (HFMEA).** Bệnh viện dùng FMEA cho **quy trình** (cấp phát thuốc, truyền máu), không chỉ thiết bị. Giống: chế độ hỏng gồm cả hành động của người (y tá chọn nhầm), như "người lạ nhấn E-stop" hay "đồng nghiệp đặt đồ trước trạm sạc". Khác: lỗi người không có O ổn định; nó đổi theo thiết kế giao diện.
+- **Phân tích hệ thống — STPA (Leveson).** Thay vì hỏi "linh kiện nào hỏng", STPA hỏi "lệnh điều khiển nào, ở thời điểm nào, gây nguy hiểm" — đúng loại lỗi của Cruise (lệnh tấp lề đúng về kỹ thuật, sai về ngữ cảnh). Tranh luận FMEA vs STPA: → F7.6, phần "Tranh luận đang mở trong nghề".
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Cruise 2/10/2023: phân loại sai va chạm → tấp lề, kéo lê ~20 ft; thu hồi phần mềm; đình chỉ giấy phép California | [chuẩn] | Báo cáo Exponent/Quinn Emanuel (1/2024) qua TechCrunch, Axios; con số mét giữa các nguồn tin khác nhau — trích "khoảng 20 feet" |
+| AIAG–VDA 2019 thay RPN bằng Action Priority | [chuẩn] | → F7.6 |
+| ISO 26262: safe state, fault tolerant time interval | [chuẩn] | Tóm tắt công khai; không cần mua chuẩn |
+| Kết quả mô phỏng state machine | [đã chạy] | Seed 7; số vi phạm phụ thuộc phân bố sự kiện ngẫu nhiên |
+| MOSFET hỏng thường ở dạng chập | [chuẩn] | Kiến thức chung về hỏng bán dẫn công suất; vì vậy F11 cần kiểm định kỳ |
+| Thời gian phát hiện từng dòng | [tự đo] | `fmea/results.csv` |
+
+**Đã sửa so với bản gốc / Gemini (không đổi gate):**
+- Gốc: bảng "FMEA" theo **thành phần** và thiếu nguyên nhân, S/O/D → viết lại theo chế độ hỏng, thêm S/O/D, RPN, tầng test; thêm dòng cho cơ chế phát hiện (F11, F12) và lỗi chung nguồn (F13). Gate (≥8 dòng, mỗi dòng test bằng lỗi thật) giữ nguyên.
+- Gốc: ô "ESP32 treo → relay độc lập" giờ có thiết kế thật ở C10.1; gốc không có.
+- Gốc: `EMERGENCY_STOP` gộp mọi lỗi → tách `FAULT` (phát hiện bằng phần mềm, người xác nhận) khỏi `EMERGENCY_STOP` (phần cứng, reset tại máy).
+- Gemini: "FMEA loại trừ lỗi im lặng" → SAI (→ F7.6).
+- Gemini: "dừng bánh xe trong < 500 ms khi mất kết nối / mất sensor" như một tiêu chí chung → không có trong gate gốc; thời gian đúng phụ thuộc từng dòng (lease, T0b, ngưỡng tính hợp lý) và camera **không** nên dừng ngay (dừng theo độ bất định pose, như gốc).
+- Gemini: "kill switch phần mềm chuyển máy trạng thái về EMERGENCY_STOP trong < 1 s" → kill switch K3 là dừng mềm nội dung; không được đưa vào trạng thái mang tên E-stop.
+- Gemini: "tắt WiFi" đặt ngang hàng với các lỗi an toàn → F01 không phải sự kiện an toàn; nối nó với dừng là tạo dừng oan.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** AIAG & VDA, *FMEA Handbook* (2019), phần Design FMEA và Action Priority (sách trả phí; nhiều tóm tắt công khai).
+- **Giải thích:** báo cáo công khai của Cruise về sự cố 2/10/2023 (tóm tắt báo cáo Exponent và Quinn Emanuel, 1/2024).
+- **Đào sâu (tùy chọn):** Nancy Leveson & John Thomas, *STPA Handbook* (MIT, 2018, miễn phí).
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao state machine trên mini PC không được thoát E-stop; (2) vẽ lại ba tầng trạng thái và chiều báo lên; (3) câu hỏi:
+
+  Bảng FMEA có dòng "ESP32 treo → mạch xung giữ cắt relay", test 10/10 PASS bằng `FAULT_HANG_TASK`. Bảng còn thiếu dòng nào để dòng này thật sự đáng tin?
+  <details><summary>Đáp án</summary>
+
+  Dòng cho **chính mạch xung giữ**: Q1 chập (cắt không bao giờ xảy ra), tụ C2 rò hoặc đổi giá trị (timeout trôi), firmware mới vô tình đảo chân từ ISR hoặc LEDC. Và một kiểm định kỳ (Lắp bước 7) để biến lỗi im lặng của mạch thành lỗi lộ ra mỗi ngày. Thêm `FAULT_HANG_ALL` và giữ EN như các cách treo khác.
+
+  </details>
+
+---
+
+## Bài C10.3 — Soak 72 giờ trong văn phòng thật: hợp đồng SLO, error budget, dashboard vận hành (16h người, 72h treo máy)
+
+> **Vị trí:** C10.2 → **C10.3** → Gate chặng 10, C11 · **Cần trước:** **K3 Bài 17** (soak 72h đầu tiên: hợp đồng soak, `soak_monitor.py`, quy tắc ba, fit độ dốc — bài này dùng lại, không dạy lại), → F7.4 (SLI/SLO/error budget), → F7.5 (dashboard, counter vs gauge), → F7.6 (soak bắt được gì), → F7.7 (postmortem), → F1.4; K7 C7.3 (sidecar MCAP, audit), C10.1–C10.2 PASS · **Sau bài này bạn quyết định được:** robot đã đủ tin cậy để chạy không người trông chưa, và được phép viết câu nào về độ tin cậy đó; luồng nào, metric nào được lên dashboard.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Tháng 7/2017, một robot an ninh Knightscope K5 tuần tra khu Washington Harbour (Georgetown, Washington DC) lăn xuống mấy bậc và rơi vào đài phun nước. Theo quản lý tòa nhà, robot mới ở đó khoảng một tuần, trong lúc Knightscope lập trình và lập bản đồ khu vực; không ai bị thương, và công ty gọi đó là "sự việc riêng lẻ" đang điều tra `[chuẩn — Washington Post, NPR, CBS News, 7/2017; nguyên nhân chính xác chưa công bố, có nguồn nêu khả năng bị phá]`. Một năm trước, một robot K5 khác ở Stanford Shopping Center va vào một em bé 16 tháng tuổi (C10.4).
+
+Cả hai xảy ra ở **môi trường thật**, với người thật, sau khi sản phẩm đã qua thử nghiệm của nhà sản xuất. Soak 72h ở K3 (Bài 17) kiểm một hộp đứng yên trên bàn. Soak ở đây kiểm một vật **di chuyển** giữa người, nhiệt độ thay đổi theo ngày, WiFi theo giờ cao điểm, bậc cửa, dây sạc laptop trên sàn, ghế bị kéo ra giữa lối. F7.6 gọi đó là lỗi "kích hoạt theo môi trường": chỉ soak trong môi trường thật mới bắt được.
+
+### 2. Mô hình tư duy
+
+**Soak là một phép đo SLO viết trước** (K3 Bài 17 đã làm điều này; → F7.4). Khác ở robot: thêm SLI về an toàn và chuyển động, và mẫu số của completeness phải sống qua reboot.
+
+| SLI | Định nghĩa đếm (viết trước) | Ngưỡng (gốc, giữ nguyên) | Khi = 0, được phép nói gì |
+|---|---|---|---|
+| Sự cố an toàn | Va chạm người; va vật làm hỏng/đổ; rơi/lật; nhiệt/khói; E-stop không cắt. Near miss ghi riêng | **0** | Cận trên 95% ≈ 3/72 h⁻¹ (quy tắc ba, → F1.4), hoặc 3/km theo quãng đường |
+| Can thiệp tay | Mọi hành động ngoài vận hành bình thường: SSH sửa, restart, bế robot, gỡ kẹt, cắm lại dây. **Không** tính: cắm sạc (nếu chưa có trạm), RESET sau E-stop do **người khác** nhấn (ghi riêng) | **0** (ngoài sạc) | Như trên |
+| Completeness dữ liệu | **Theo từng luồng**; mẫu số từ `seq` trong mỗi `boot_id` **và** khoảng trống theo thời gian (freshness), mục dưới | **≥ 99%** | Budget còn lại mỗi luồng |
+| E-stop bị người khác nhấn | Đếm theo người nhấn + **hỏi vì sao** (nguyên văn) | Ghi lại và hỏi | Dữ liệu thiết kế tương tác (C10.4) |
+| Phản hồi định tính | Hỏi đồng nghiệp | Thu thập, đưa vào báo cáo | — |
+| Xu hướng (thêm, không gate) | RSS mỗi node, đĩa, nhiệt CPU và **bộ đếm throttle**, áp pin cuối mỗi chu kỳ sạc, t_relay của kiểm hàng ngày | Báo độ dốc + đơn vị | Thời điểm dự kiến chạm ngưỡng |
+
+**Đếm "đủ dữ liệu" khi có reboot.** Đếm theo `seq` (F7.4) bắt được message mất **trên đường** (USB, hàng đợi, ghi đĩa). Nó mù với hai thứ: nguồn **im** (driver treo không publish, `seq` không tăng) và khoảng **trước khi** nguồn khởi động lại. Mô phỏng ba cách đếm trên cùng 72h tổng hợp có 2 lần reboot và một cảm biến pin im 3h:
+
+```python
+# [đã chạy] Ba cách đếm "đủ dữ liệu" trong soak 72 h có reboot. Dữ liệu TỔNG HỢP, không phải số đo.
+import numpy as np
+rng = np.random.default_rng(10)
+H = 72 * 3600                                     # giây
+BOOT_GAP = 40                                     # s không có message sau mỗi lần boot [ước lượng]
+def stream(rate, drop, boots, silent=None):
+    """Trả về (boot_id, seq, t). seq về 0 sau mỗi boot. 'silent' = nguồn im (không sinh message, seq KHÔNG tăng)."""
+    out, edges = [], [0, *boots, H]
+    for b, (t0, t1) in enumerate(zip(edges[:-1], edges[1:])):
+        t = np.arange(t0 + BOOT_GAP, t1, 1 / rate)
+        if silent: t = t[~((t > silent[0]) & (t < silent[1]))]
+        seq = np.arange(t.size)                   # nguồn đánh số cái nó THẬT SỰ sinh ra
+        keep = rng.random(t.size) > drop          # mất trên đường (USB, hàng đợi, ghi đĩa)
+        out += list(zip([b] * keep.sum(), seq[keep], t[keep]))
+    return np.array(out)
+boots = [20 * 3600, 51 * 3600]                    # 2 lần reboot trong 72 h
+cfg = {"odom 50 Hz": (50, 0.002, None), "imu 200 Hz": (200, 0.001, None),
+       "battery 1 Hz": (1, 0.0, (30 * 3600, 33 * 3600)),   # INA226 treo 3 h, driver không publish
+       "state 10 Hz": (10, 0.0005, None)}
+print(f"{'luồng':<13}{'theo seq':>10}{'theo giờ tường':>16}{'giờ có dữ liệu mới (<5 s)':>28}")
+for name, (rate, drop, silent) in cfg.items():
+    r = stream(rate, drop, boots, silent)
+    by_seq = len(r) / sum(r[r[:, 0] == b, 1].max() + 1 for b in np.unique(r[:, 0]))
+    by_wall = len(r) / (rate * H)
+    gaps = np.diff(np.concatenate([[0], r[:, 2], [H]]))    # khoảng trống giữa hai message liên tiếp
+    fresh = 1 - np.clip(gaps - 5, 0, None).sum() / H        # tỉ lệ thời gian message mới nhất < 5 s tuổi
+    print(f"{name:<13}{by_seq:>10.3%}{by_wall:>16.3%}{fresh:>28.3%}")
+```
+
+**Error budget của soak** (→ F7.4): 1% của 72h là **43,2 phút mỗi luồng**. Mỗi lần reboot tiêu một phần (thời gian khởi động tới lúc luồng có lại); mỗi lần cảm biến im tiêu phần còn lại. Budget cho bạn một câu hỏi vận hành cụ thể: "còn bao nhiêu lần reboot nữa thì FAIL?" — không phải để chấp nhận reboot, mà để biết reboot tốn bao nhiêu.
+
+**Dashboard có chủ đích** (→ F7.5): mỗi ô trả lời một câu hỏi viết trước; không có ô nào chỉ vì "có dữ liệu".
+
+```
+┌─ CÓ AN TOÀN KHÔNG? ───────────────┬─ CÓ ĐANG LÀM VIỆC KHÔNG? ─────────┬─ DỮ LIỆU CÓ ĐỦ KHÔNG? ───────────┐
+│ sự cố an toàn (counter): 0        │ trạng thái hiện tại + thời gian   │ completeness/luồng + budget còn  │
+│ near miss (counter, có ghi chú)   │ quãng đường/giờ (tiến triển)      │ freshness/luồng (tuổi msg mới)   │
+│ E-stop theo người nhấn (counter)  │ nhiệm vụ xong / giao              │ upload: tồn đọng MB, tuổi file   │
+│ bumper, wd_trip, lease (counter)  │ recovery Nav2 / giờ               │ audit C7.3 PASS/FAIL theo session│
+├─ CÓ ĐANG HỎNG DẦN KHÔNG? ─────────┼─ NĂNG LƯỢNG ──────────────────────┼─ CAN THIỆP ──────────────────────┤
+│ RSS/node: độ dốc MB/h (fit/boot)  │ áp pin, % ước lượng, lần sạc      │ can thiệp tay (counter + lý do)  │
+│ đĩa trống %, dự báo ngày đầy      │ BMS cắt (counter), sụt áp min     │ reboot: boot_id, lý do           │
+│ nhiệt CPU + throttle (counter)    │ thời gian về trạm khi LOW_BATTERY │ thời gian tới ổn định sau reboot │
+└───────────────────────────────────┴───────────────────────────────────┴──────────────────────────────────┘
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Soak trên staging (K3 Bài 17) | Soak giữa người | Staging không có người qua lại, bậc cửa, ghế bị kéo | Lấy kết quả soak trên bàn để tuyên bố robot an toàn trong văn phòng |
+| SLO availability 99,9% | "0 sự cố an toàn" | An toàn **không có budget** (→ F7.4): một sự cố là FAIL, không "tiêu budget" | Viết "SLO an toàn 99,9%" |
+| `Restart=always` + alert khi crash loop | Robot tự phục hồi | Restart che lỗi: dashboard xanh, robot đứng yên vì node khởi động lại liên tục. Mỗi restart là một dòng log cần đếm | 0 can thiệp tay nhưng 300 lần restart, không ai thấy |
+| Watchdog phần cứng của server (IPMI) | `RuntimeWatchdogSec` của systemd trên mini PC | Reboot mini PC giữa lúc robot chạy là một sự kiện vật lý: lease ở ESP32 phải dừng robot trước | Bật watchdog mini PC mà chưa test F02/F03 |
+| Dashboard Grafana mọi metric | Dashboard soak theo câu hỏi | Gauge lấy mẫu 60 s bỏ lỡ sự kiện ngắn; sự kiện phải là counter (→ F7.5) | Không thấy 12 lần bumper vì xem gauge "bumper_pressed" |
+| On-call rotation | Bạn là người duy nhất | 72h có hai đêm. Định nghĩa trước: ban đêm robot ở đâu, làm gì | Robot sạc qua đêm không người trông — vi phạm C1.6 |
+
+**Chấm mô hình:**
+- *Bản Gemini K7 (Bài 17): soak 72h là "bộ lọc khắt khe nhằm phát hiện các lỗi tích lũy chậm: rò rỉ bộ nhớ… cho tới khi bị OOM killer giết."* — **ĐÚNG MỘT PHẦN.** Chỉ khi rò đủ nhanh để chạm OOM trong 72h, hoặc khi bạn **báo độ dốc**. Phân tích và phản ví dụ: → F7.6 mục 6, khẳng định (b). Ở robot: dùng `soak_monitor.py` của K3 Bài 17 và fit trong từng `boot_id`.
+- *"0 can thiệp tay trong 72h nghĩa là robot chạy được không người trông."* — **ĐÚNG MỘT PHẦN.** Bằng chứng, nhưng yếu: quy tắc ba cho cận trên tỉ lệ can thiệp ~0,04/h (khoảng một lần mỗi ngày). Và "không can thiệp" có thể chỉ vì robot đứng yên phần lớn thời gian. **Phản ví dụ:** robot kẹt ở trạng thái `IDENTIFYING` 40 giờ; không ai can thiệp, không có sự cố. Phải đi kèm SLI tiến triển (quãng đường, nhiệm vụ xong).
+- *"Completeness 99,9% theo seq nghĩa là đủ dữ liệu."* — **SAI** khi đứng một mình. **Phản ví dụ:** luồng pin trong mô phỏng ở trên.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Hợp đồng soak | Bảng SLI/ngưỡng/định nghĩa đếm commit trước khi chạy | Checklist sau khi chạy |
+| 🟢 | Completeness vs freshness | Đủ message so với số nguồn đã sinh; nguồn có đang sinh không | Một thứ |
+| 🟢 | Near miss | Suýt gây sự cố, không có hậu quả | Không đáng ghi |
+| 🟢 | SLI tiến triển | Robot có đang làm việc không (quãng đường, nhiệm vụ) | Uptime |
+| 🟡 | `RuntimeWatchdogSec` vs `WatchdogSec=` | Watchdog phần cứng cho cả máy (system.conf) vs watchdog phần mềm cho một service (`sd_notify`) | Cùng một thứ |
+| 🟡 | Burn rate | Tốc độ tiêu budget | Tỉ lệ lỗi |
+| 🔴 | Weibull, ALT | Mô hình tuổi thọ, thử nghiệm tăng tốc | Cần cho 72h |
+
+### 5. Dự đoán
+
+**Tham số cần tra:** runtime pin và thời gian sạc từ power budget C1.2 (bao nhiêu chu kỳ sạc trong 72h, có ai cắm sạc ban đêm không); công suất trung bình đo ở K3 Bài 17 bước 6 và C1.2; tỉ lệ drop từng luồng đo ở C7.3; thời gian từ boot tới khi mọi luồng có lại (đo một lần trước soak); số người qua khu vực mỗi giờ (đếm 15 phút ở giờ cao điểm).
+
+**Đoán:**
+1. Mô phỏng: luồng nào PASS 99% theo từng cách đếm? Cách đếm nào bắt cảm biến pin im?
+2. Budget mỗi luồng (phút) và số lần reboot tối đa trước khi luồng chậm nhất FAIL, với thời gian khởi động bạn đo được.
+3. Số lần E-stop do người khác nhấn, số lần bumper, số lần recovery Nav2 trong 72h.
+4. Độ dốc RSS của node lớn nhất (MB/h), nhiệt CPU tối đa, có throttle không.
+5. Câu được phép viết vào README nếu mọi thứ PASS.
+
+```markdown
+# prediction.md — C10.3   (commit: <hash>, giờ bắt đầu dự kiến: ____)
+1. odom/imu/battery/state: seq ___ ; tường ___ ; freshness ___ ; cái bắt được pin im: ___
+2. budget ___ phút/luồng ; boot→đủ luồng ___ s ; reboot tối đa ___
+3. E-stop người khác ___ ; bumper ___ ; recovery ___ ; near miss ___
+4. RSS ___ MB/h (node ___) ; CPU max ___ °C ; throttle ___
+5. README: "___"   Câu cấm: "___"
+Quyết định trước: sạc ban đêm ở đâu ___ ; robot làm gì 19h–7h ___ ; ai là người liên hệ ___
+```
+
+### 6. Làm
+
+0. **Hợp đồng soak** (bước 0 của K3 Bài 17, mở rộng): bảng SLI ở phần 2 với định nghĩa đếm; lịch nhiệm vụ (tuần tra A→B→C, hoặc nhiệm vụ của C9/C12); khu vực (bản đồ C8, keepout cho cầu thang/bậc); giờ chạy và giờ nghỉ; ai được nhấn RESET; cách hỏi người đã nhấn E-stop. Commit cùng `prediction.md` **trước** khi bắt đầu.
+1. **Chuẩn bị tự phục hồi**: mọi node trong systemd/Docker có restart policy (C5.4) **và** bộ đếm restart vào metric; BIOS Auto Power On (đã kiểm ở C5.4/K3); watchdog mini PC chỉ bật sau khi F02/F03 PASS: `RuntimeWatchdogSec=` trong `/etc/systemd/system.conf` dùng `/dev/watchdog` nếu chipset có (`iTCO_wdt` trên nhiều máy Intel) `[tự đo — `ls /dev/watchdog*`, `wdctl`]`; `WatchdogSec=` trong unit là watchdog **của service** qua `sd_notify`, không phải phần cứng. Task watchdog ESP32 đã có từ C4.
+2. **Chạy 72 giờ trong văn phòng, có người qua lại thật** (gốc). Biển báo trên thân; báo trước đồng nghiệp bằng một tin nhắn ngắn (robot làm gì, nút đỏ để dừng, gọi ai). Kiểm trước khi chạy (Lắp bước 7) **mỗi sáng**, ghi t_relay mỗi ngày.
+3. **Yêu cầu: 0 sự cố an toàn, 0 can thiệp tay** cho vận hành bình thường (được phép can thiệp cho sạc nếu chưa có trạm tự động) (gốc).
+4. **Theo dõi** (gốc): quãng đường, số lần phục hồi, số lần E-stop bị bấm và bởi ai, pin, nhiệt độ, completeness. Dùng `soak_monitor.py` của K3 Bài 17 (RSS, fd, đĩa, nhiệt, throttle, `boot_id`) cho mini PC; thêm exporter nhỏ cho counter an toàn từ STATE và log chuyển trạng thái. Sự kiện là **counter**.
+5. **Hỏi đồng nghiệp phản hồi** (gốc): ai thấy khó chịu, khi nào, vì sao. Mỗi lần E-stop do người khác nhấn: hỏi trong ngày, ghi nguyên văn. Đây là dữ liệu thật và thuộc về báo cáo. (Khảo sát có cấu trúc, A/B: C10.4.)
+6. **Ghi toàn bộ ra MCAP, chạy audit (C7.3), dựng dashboard** (gốc) theo bố cục phần 2. Completeness theo cả `seq` và freshness, theo từng luồng, nối qua `boot_id`.
+7. **Mỗi sự cố, near miss, can thiệp: postmortem một trang** (→ F7.7) → dòng FMEA mới/sửa (C10.2) → test mới (C11.2).
+8. **Báo cáo**: bảng "Số phải ra", đoạn "Được phép nói / Không được phép nói" bằng số (quy tắc ba), độ dốc mọi đại lượng tích lũy kèm đơn vị, phản hồi nguyên văn, ảnh dashboard.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Mô phỏng ba cách đếm** (seed 10):
+
+| Luồng | Theo seq | Theo giờ tường | Freshness (<5 s) |
+|---|---|---|---|
+| odom 50 Hz | 99,80% | 99,75% | 99,96% |
+| imu 200 Hz | 99,90% | 99,85% | 99,96% |
+| battery 1 Hz (im 3h) | **100,00%** | 95,79% | **95,79%** |
+| state 10 Hz | 99,95% | 99,90% | 99,96% |
+
+Đếm theo `seq` báo luồng pin hoàn hảo trong khi 3 giờ không có số đo pin nào — đúng loại lỗi làm robot không biết mình sắp hết pin. Hai lần reboot × 40 s tiêu ~0,05% (~1,3 phút) budget mỗi luồng; không lớn, nhưng `seq` không thấy nó. Cách viết SLO đúng cho soak: completeness theo `seq` (mất trên đường) **và** freshness (nguồn im), cả hai ≥ 99% theo từng luồng. Ngưỡng 99% của gốc giữ nguyên; chỉ làm rõ cách đếm.
+
+**Tiêu chí gốc:**
+
+| Đại lượng | Ngưỡng |
+|---|---|
+| Sự cố an toàn | **0** |
+| Can thiệp tay | **0** (ngoài sạc) |
+| Completeness dữ liệu | **≥ 99%** (mỗi luồng; theo seq và freshness) |
+| E-stop bị người khác bấm | Ghi lại **và hỏi vì sao** — dữ liệu về thiết kế tương tác |
+| Phản hồi định tính | Thu thập, đưa vào báo cáo |
+
+**Được phép viết** (nếu PASS): *"72h trong văn phòng, N km, 0 sự cố an toàn, 0 can thiệp ngoài sạc. Với cỡ mẫu này, cận trên 95% của tỉ lệ sự cố là khoảng 3/72 ≈ 0,04 lần/giờ."* **Cấm:** *"robot an toàn"*, *"không bao giờ va chạm"*, *"sẵn sàng triển khai"*.
+
+**Thường gặp** `[tự đo]`: vài lần E-stop do đồng nghiệp tò mò nhấn trong ngày đầu (ghi, hỏi, không phải sự cố); recovery Nav2 tập trung ở vài điểm hẹp cố định (bản đồ nhiệt vị trí recovery cho thấy ngay); nhiệt mini PC cao hơn khi robot đỗ sát tường hoặc trong nắng.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Node restart hàng trăm lần, dashboard vẫn xanh | Restart policy che crash | Counter restart theo node | Alert theo tốc độ restart; tìm nguyên nhân; mỗi restart tính vào hợp đồng nếu ảnh hưởng nhiệm vụ |
+| Completeness theo seq ~100% nhưng có lỗ trên đồ thị | Nguồn im (driver treo) | Freshness theo luồng | Healthcheck driver; SLI freshness |
+| Robot đứng yên hàng giờ, không lỗi | Kẹt trạng thái thiếu timeout (C10.2 câu 1) | Thời gian ở mỗi trạng thái | Timeout cho mọi trạng thái chờ |
+| Đồng nghiệp nhấn E-stop vì "đi sát quá" | Tốc độ/khoảng cách gần người | Log khoảng cách, tốc độ quanh sự kiện | C10.4 (A/B tốc độ, khoảng dừng); **không** chỉ tăng `inflation_radius` (phần 11) |
+| Mini PC reboot ban đêm | Watchdog phần cứng quá chặt, hoặc BMS cắt khi pin cạn | `journalctl -b -1`, log INA226 | Nới `RuntimeWatchdogSec`; quy trình đỗ/sạc ban đêm |
+| RSS một node tăng đều | Rò theo giờ hoặc theo sự kiện | Fit hai đơn vị (K3 Bài 17 bước 7) | Sửa; nếu chưa kịp, ghi thời gian tới ngưỡng |
+| Recovery Nav2 tăng theo ngày | Môi trường đổi (đồ đạc dời), bản đồ cũ | Vị trí recovery trên bản đồ | Cập nhật bản đồ; ghi như lỗi môi trường |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot ở 20 văn phòng, mỗi robot một soak 72h trước khi bàn giao. Cái gì trong quy trình của bạn gãy trước: dashboard, hỏi người nhấn E-stop, hay postmortem?
+   <details><summary>Hướng nghĩ</summary>
+
+   Hỏi người bằng tay không lên quy mô: thành form ngắn gắn QR trên thân. Postmortem cho mỗi sự kiện thành phân loại tự động + postmortem cho nhóm. Dashboard theo robot thành dashboard theo đội, với bội so sánh (→ F7.4 câu 1): vài robot sẽ "vi phạm" chỉ do may rủi.
+
+   </details>
+2. **[Failure mode]** Soak PASS mọi tiêu chí, nhưng tuần sau robot đâm vào một chân bàn mới. Soak của bạn đã bỏ sót loại lỗi nào, và có phải lỗi của soak không?
+   <details><summary>Hướng nghĩ</summary>
+
+   Lỗi môi trường mới (bàn mới không có trong bản đồ, chân bàn mảnh dưới mặt phẳng quét của cảm biến). Soak chỉ phủ môi trường **trong 72h đó**. Không phải lỗi của soak; là lỗi nếu bạn tuyên bố soak chứng minh nhiều hơn.
+
+   </details>
+3. **[Vì sao không]** Vì sao không cho robot sạc tự động qua đêm để soak "đủ 72 giờ liên tục"?
+   <details><summary>Hướng nghĩ</summary>
+
+   Sạc lithium không người trông là vi phạm quy tắc C1.6, và trạm sạc tự chế là một nguồn rủi ro mới cần FMEA riêng. Đổi định nghĩa soak: 72h giờ chạy tích lũy qua nhiều ngày, hoặc 72h liên tục mà đêm robot đỗ với công tắc chính tắt — ghi rõ vào hợp đồng.
+
+   </details>
+4. **[Phản biện]** "Đếm can thiệp tay là vô nghĩa vì bạn tự quyết định cái gì là can thiệp." Đáp lại thế nào?
+   <details><summary>Hướng nghĩ</summary>
+
+   Đúng nếu định nghĩa viết sau. Hợp đồng commit trước (có hash, ngày) là preregistration (→ F1.7); một người khác đọc log và định nghĩa phải đếm ra cùng số. Đó là oracle độc lập với người chạy thí nghiệm.
+
+   </details>
+
+### 10. Liên kết ra ngoài
+
+- **Hàng không — thử nghiệm bay tuyến (route proving).** Trước khi một hãng khai thác loại máy bay mới, nhà chức trách có thể yêu cầu các chuyến bay chứng minh trên tuyến thật, với tổ bay và quy trình thật. Giống: môi trường thật lộ lỗi mà thử nghiệm nhà sản xuất không thấy. Khác: hàng không có tiêu chí và giám sát viên độc lập; bạn có hợp đồng commit trước thay cho giám sát viên.
+- **Dược — thử nghiệm giai đoạn IV (hậu mãi).** Thuốc đã được duyệt vẫn được theo dõi tác dụng phụ hiếm trên dân số lớn, vì thử nghiệm trước duyệt không đủ cỡ mẫu để thấy chúng. Giống: soak 72h chỉ loại được lỗi thường gặp; lỗi hiếm chỉ lộ ra ở quy mô (câu 1). Khác: thuốc có hệ thống báo cáo bắt buộc; robot của bạn cần tự dựng luồng sự kiện an toàn.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Knightscope K5 rơi vào đài phun nước, Washington Harbour, 7/2017, ở đó khoảng một tuần | [chuẩn] | Washington Post, NPR, CBS News; nguyên nhân chưa công bố |
+| `RuntimeWatchdogSec` (system.conf, `/dev/watchdog`) khác `WatchdogSec=` (unit, `sd_notify`) | [chuẩn] | `man systemd-system.conf`, `man systemd.service` |
+| N100/EQ12 có watchdog phần cứng (`iTCO_wdt`) | [tự đo] | `ls /dev/watchdog*`, `wdctl` |
+| Kết quả mô phỏng ba cách đếm | [đã chạy] | Dữ liệu tổng hợp; thời gian khởi động 40 s là giả định |
+
+**Đã sửa so với bản gốc / Gemini (không đổi ngưỡng):**
+- Gốc: "completeness ≥ 99%" không nói cách đếm → theo từng luồng, mẫu số `seq` trong mỗi `boot_id` **cộng** freshness; ngưỡng giữ nguyên.
+- Gốc: "0 can thiệp tay" chưa có định nghĩa → định nghĩa trong hợp đồng commit trước (theo K3 Bài 17).
+- Gemini: "Kích hoạt Hardware Watchdog trên chipset Intel (`WatchdogSec=`)" → `WatchdogSec=` là watchdog của service; watchdog phần cứng là `RuntimeWatchdogSec=` trong system.conf, và chỉ bật sau khi F02/F03 PASS.
+- Gemini: "nhiệt CPU < 80 °C" như ngưỡng nghiệm thu → không có trong gate gốc; giữ "ghi lại + bộ đếm throttle" như K3 Bài 17.
+- Gemini: "giảm tốc tiếp cận xuống 0,25–0,3 m/s; tăng `inflation_radius` để giữ khoảng cách xã hội tối thiểu 1,0 m" → `inflation_radius` thổi phồng chi phí quanh **mọi** vật cản trong costmap (tường, bàn), không riêng người; đặt 1 m có thể chặn lối đi hẹp. Khoảng cách với người là việc của lớp riêng (layer người, giới hạn tốc độ theo vùng) và được đo ở C10.4, không đặt theo cảm tính.
+- Gemini: completeness = số nhận / (ODR danh định × thời gian) → mẫu số phụ thuộc ODR thật và reboot (→ F7.4; mô phỏng ở trên).
+- Gemini: `MemoryMax=` + restart để "tự phục hồi" khi rò RAM → che lỗi tích lũy; được phép như biện pháp tạm **chỉ khi** restart được đếm và độ dốc vẫn báo cáo.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** *The Site Reliability Workbook* (O'Reilly, 2018), chương "Data Processing Pipelines" (freshness, coverage).
+- **Giải thích:** K3 Bài 17 (soak đầu tiên của bạn) và → F7.6, F7.4.
+- **Đào sâu (tùy chọn):** Brendan Gregg, phương pháp USE (→ F7.3) áp cho từng tài nguyên của robot (pin, CPU, đĩa, USB).
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao "0 can thiệp" phải đi kèm SLI tiến triển; (2) vẽ lại dashboard sáu ô từ trí nhớ, mỗi ô một câu hỏi; (3) câu hỏi:
+
+  Soak 72h, robot chạy được 9 km, 0 sự cố. Cận trên 95% của tỉ lệ sự cố theo km là bao nhiêu? Muốn nói "dưới 1 sự cố / 100 km" với 95% tin cậy cần bao nhiêu km không sự cố?
+  <details><summary>Đáp án</summary>
+
+  Quy tắc ba: ≤ 3/9 ≈ **0,33 sự cố/km**. Muốn ≤ 0,01/km cần ≈ 3/0,01 = **300 km** không sự cố — khoảng 33 lần soak như vậy. Con số cho thấy vì sao công ty xe tự hành báo cáo hàng triệu dặm.
+
+  </details>
+
+---

@@ -384,3 +384,505 @@ Khuếch đại vi sai (chỉ đo hiệu hai điểm, bỏ phần chung), cách 
   </details>
 
 ---
+
+## Bài C5.2 — ROS 2 trong Docker trên robot: `ros2_control` + `diff_drive_controller`, udev, USB passthrough (8h)
+
+> **Vị trí:** C4.3 (giao thức, hardware interface) → **C5.2** → C5.3; `/odom` dùng ở C6, C8 · **Cần trước:** `CONVENTIONS.md` mục 2, 3, 6; K3 (ROS 2 cơ bản, Docker trên N100); C2.4 (bán kính bánh, khoảng cách bánh đo được) · **Sau bài này bạn quyết định được:** container nhìn thấy ESP32 bằng cách nào và còn thấy sau khi cắm lại không; giới hạn tốc độ đặt ở `diff_drive_controller` bao nhiêu và vì sao nó không thay được kẹp ở firmware.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Nhiều năm, máy Linux có hai card mạng có thể khởi động với `eth0` và `eth1` **đổi chỗ** cho nhau: tên được cấp theo thứ tự driver nào dò xong trước, và thứ tự đó không ổn định giữa các lần boot. Tường lửa, cấu hình IP gắn theo tên áp nhầm card. systemd/udev (bản 197, 2013) đưa ra "predictable network interface names" (`enp3s0`…) gắn tên theo **vị trí phần cứng** thay vì thứ tự dò `[chuẩn — tài liệu freedesktop.org "Predictable Network Interface Names"]`. `/dev/ttyACM0` của ESP32 là đúng bài toán đó: tên theo thứ tự cắm. Camera USB ở C7 cũng sẽ là `ttyACM`/`video` khác; ngày robot khởi động với cổng đổi chỗ, hardware interface gửi lệnh motor vào nhầm thiết bị.
+
+### 2. Mô hình tư duy
+
+```mermaid
+flowchart LR
+    subgraph HOST["Ubuntu 24.04 trên N100"]
+        UDEV["udev rule: VID 303a / PID 1001 / serial = MAC<br/>→ /dev/robot-esp32 (symlink)"]
+        subgraph C["container ROS 2 Jazzy (restart: unless-stopped, network host)"]
+            CM["controller_manager (ros2_control_node, 100 Hz)"]
+            HW["EspDiffDrive (hardware interface, C4.3)"]
+            DD["diff_drive_controller"]
+            JSB["joint_state_broadcaster"]
+            RSP["robot_state_publisher (URDF)"]
+        end
+    end
+    ESP["ESP32-S3"] -- USB --> UDEV --> HW
+    CM --- HW
+    CM --- DD
+    CM --- JSB
+    DD -- "/odom, TF odom→base_link (50 Hz)" --> OUT["các node khác, rosbag2 MCAP"]
+    JSB -- "/joint_states (100 Hz)" --> RSP
+    TEL["teleop (C5.3)"] -- "/diff_drive_controller/cmd_vel (TwistStamped)" --> DD
+```
+
+Ba câu bản chất:
+1. **`diff_drive_controller` làm động học và odometry; hardware interface chỉ chuyển rad/s.** Lệnh (v, ω) → vận tốc hai bánh bằng `wheel_separation` và `wheel_radius` (C2.4); encoder → odometry. Hai tham số đó sai thì mọi thứ sau (C6, Nav2) sai theo — C6 hiệu chuẩn chúng.
+2. **Container không "cắm" thiết bị; nó được cấp một nút thiết bị lúc tạo.** `--device /dev/robot-esp32` cấp nút mà symlink trỏ tới **lúc đó**; rút ra cắm lại, nút cũ trong container chết `[tự đo]`. Cách bền: mount `/dev` và cho phép theo số major (`device_cgroup_rules: ['c 166:* rmw']`, 166 là major của `ttyACM` `[chuẩn — danh sách số thiết bị của Linux; kiểm `ls -l /dev/ttyACM0`]`).
+3. **Giới hạn ở `diff_drive_controller` là giới hạn trên (v, ω), không trên từng bánh.** v = 0,5 m/s và ω = 1 rad/s đều "hợp lệ" mà bánh ngoài chạy nhanh hơn 0,5 m/s. Firmware kẹp từng bánh; cách nó kẹp (độc lập hay co tỉ lệ) quyết định robot còn đi đúng đường cong không:
+
+```python
+# [đã chạy] Kẹp 0,5 m/s ở đâu và kẹp thế nào: (v, ω) hợp lệ ở Nav2/diff_drive vẫn có thể vượt ở TỪNG bánh
+V_MAX, B = 0.5, 0.30          # giới hạn mỗi bánh (m/s), khoảng cách hai bánh (m) [ước lượng, đo ở C2.4]
+
+def wheels(v, w):             # động học vi sai: v_trái, v_phải
+    return v - w * B / 2, v + w * B / 2
+
+def body(vl, vr):             # ngược lại: (v, ω) và bán kính quay
+    v, w = (vl + vr) / 2, (vr - vl) / B
+    return v, w, (v / w if abs(w) > 1e-9 else float("inf"))
+
+def clamp_each(vl, vr):       # kẹp độc lập từng bánh
+    c = lambda x: max(-V_MAX, min(V_MAX, x)); return c(vl), c(vr)
+
+def clamp_scale(vl, vr):      # co cả hai cùng tỉ lệ
+    k = max(abs(vl), abs(vr), V_MAX) / V_MAX; return vl / k, vr / k
+
+print(f"{'lệnh (v, ω)':>16} | {'bánh T/P':>13} | {'kẹp từng bánh: R':>18} | {'co tỉ lệ: R':>12} | R mong muốn")
+for v, w in [(0.5, 0.0), (0.4, 1.0), (0.5, 1.0), (0.0, 4.0), (0.3, -3.0), (2.0, 0.5)]:
+    vl, vr = wheels(v, w)
+    _, _, r0 = body(vl, vr)
+    _, w1, r1 = body(*clamp_each(vl, vr))
+    v2, w2, r2 = body(*clamp_scale(vl, vr))
+    print(f"({v:4.1f}, {w:4.1f}) rad/s | {vl:5.2f} {vr:5.2f}  | {r1:8.3f} m (ω={w1:4.2f}) | {r2:8.3f} m | {r0:7.3f} m")
+```
+
+**Cấu hình (mẫu, kiểm theo bản cài):**
+
+```bash
+# [chưa chạy] /etc/udev/rules.d/99-robot.rules — serial lấy từ: udevadm info -a -n /dev/ttyACM0 | grep serial
+SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="XX:XX:XX:XX:XX:XX", \
+  SYMLINK+="robot-esp32", GROUP="dialout", MODE="0660"
+# tắt autosuspend cho đúng thiết bị đó (USB ngủ = khung đến muộn) [tự đo]
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="303a", ATTR{idProduct}=="1001", TEST=="power/control", ATTR{power/control}="on"
+# nạp lại: sudo udevadm control --reload && sudo udevadm trigger
+```
+
+```yaml
+# [chưa chạy] compose.yaml — image ghim digest, không ":latest"
+services:
+  robot:
+    image: ghcr.io/<bạn>/robot-jazzy@sha256:<digest>
+    network_mode: host          # DDS discovery đơn giản nhất trên một máy
+    ipc: host
+    restart: unless-stopped     # C5.4
+    volumes: ["/dev:/dev", "./config:/config:ro", "./bags:/bags"]
+    device_cgroup_rules: ["c 166:* rmw"]          # ttyACM*; thêm 188 nếu dùng cầu USB-UART (ttyUSB*)
+    environment: [ROS_DOMAIN_ID=17]
+    command: ros2 launch robot_bringup bringup.launch.py port:=/dev/robot-esp32
+```
+
+```yaml
+# [chưa chạy] config/controllers.yaml — tên tham số theo diff_drive_controller nhánh Jazzy; kiểm `ros2 param list`
+controller_manager:
+  ros__parameters:
+    update_rate: 100
+diff_drive_controller:
+  ros__parameters:
+    left_wheel_names: ["left_wheel_joint"]
+    right_wheel_names: ["right_wheel_joint"]
+    wheel_separation: 0.30        # C2.4 (đo), C6 hiệu chuẩn
+    wheel_radius: 0.0425          # bánh 85 mm (C2.1), C6 hiệu chuẩn
+    publish_rate: 50.0
+    odom_frame_id: odom
+    base_frame_id: base_link
+    enable_odom_tf: true
+    cmd_vel_timeout: 0.5          # s; mặc định của controller
+    linear.x.max_velocity: 0.5
+    linear.x.max_acceleration: 0.5      # C2.1
+    linear.x.max_deceleration: -1.0     # giới hạn phanh chống lật, decisions.md (C2.2); dấu theo quy ước của bản cài [tự đo]
+    angular.z.max_velocity: 2.0         # rad/s [ước lượng]
+```
+
+URDF cần khối `<ros2_control name="EspBase" type="system">` với `<plugin>` là hardware interface của bạn, tham số `port`, và hai `<joint>` có `command_interface velocity`, `state_interface position` + `velocity` (theo ví dụ diffbot của `ros2_control_demos`) `[tự đo]`.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Container stateless, `docker run` ở đâu cũng được | Container gắn với **phần cứng** của đúng robot này | Image tái lập được; quyền truy cập thiết bị và tên thiết bị là cấu hình của host, không nằm trong image | Image chạy trên laptop, trên robot không thấy cổng |
+| Service discovery bằng tên DNS | udev symlink theo serial | DNS cập nhật động; nút thiết bị trong container **không** tự cập nhật khi cắm lại | Rút USB một lần, controller_manager lỗi mãi tới khi restart container |
+| Rate limit ở API gateway | `max_velocity` ở `diff_drive_controller` | Gateway là điểm cuối; đây **không phải** điểm cuối — còn hardware interface, USB, firmware phía sau | Tin giới hạn Nav2/controller, bỏ kẹp firmware |
+
+**Chấm mô hình:**
+- *"Đặt `linear.x.max_velocity: 0.5` là robot không bao giờ quá 0,5 m/s."* **ĐÚNG MỘT PHẦN.** Đúng cho tâm robot khi đi thẳng. Gãy: (1) bánh ngoài khi quay vượt 0,5; (2) controller không thấy lỗi phía sau (encoder sai dấu, windup). **Phản ví dụ:** dòng (0,5; 1,0) trong mô phỏng — bánh phải 0,65 m/s.
+- *"Docker là sandbox, chạy robot trong Docker thì an toàn hơn."* **SAI** theo nghĩa vật lý: container có toàn quyền gửi lệnh motor qua `/dev`. Docker cho tái lập môi trường (`CONVENTIONS.md` mục 6), không cho an toàn chức năng.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | `controller_manager` | Tiến trình chạy vòng read → update controller → write ở `update_rate` | Một node ROS bình thường |
+| 🟢 | State / command interface | Biến mà hardware xuất ra (vị trí, vận tốc) và nhận vào (vận tốc đặt) | Topic |
+| 🟢 | udev rule, symlink | Quy tắc đặt tên/quyền cho thiết bị khi nó xuất hiện | Driver |
+| 🟢 | Device cgroup rule | Cho container quyền mở thiết bị theo số major/minor | `--privileged` (rộng hơn nhiều) |
+| 🟡 | `TwistStamped` vs `Twist` | Lệnh vận tốc có/không header thời gian; Jazzy `diff_drive_controller` nhận bản có header `[tự đo]` | Như nhau |
+| 🟡 | Restart policy | Docker tự chạy lại container theo điều kiện | Supervisor cho mọi lỗi |
+
+### 5. Dự đoán
+
+```markdown
+# C5.2 — dự đoán
+1. s7_clamp.py: lệnh (2,0; 0,5) với kẹp từng bánh độc lập → robot đi ___ ; với co tỉ lệ → ___
+2. Rút/cắm USB ESP32 khi container đang chạy, cấu hình --device: ___ ; cấu hình /dev + cgroup rule: ___
+3. `ros2 topic hz /odom` = ___ ; `/joint_states` = ___
+4. Quay tay bánh trái đúng 1 vòng (robot trên khối kê, DISARMED): position trong /joint_states đổi ___ rad
+5. Đẩy robot thẳng 1,00 m trên sàn (đo thước): /odom x = ___ (lệch do đâu?)
+```
+
+### 6. Làm
+
+1. **Image:** Dockerfile từ `ros:jazzy` + `ros2_control`, `ros2_controllers`, `joy`, `teleop_twist_joy`, package hardware interface của bạn; build trên laptop, ghim digest (`CONVENTIONS.md` mục 6: đa kiến trúc). Ghi phiên bản `ros2_control` thật: `ros2 pkg xml ros2_control | grep version` `[tự đo]`.
+2. **udev:** lấy serial bằng `udevadm info`, viết rule, kiểm `ls -l /dev/robot-esp32` sau 5 lần rút cắm (cả khi đổi cổng USB vật lý).
+3. **Compose** theo mẫu; `docker compose up -d`; `docker logs -f`.
+4. **URDF + controllers:** `wheel_separation`, `wheel_radius` từ C2.4; spawn `joint_state_broadcaster`, `diff_drive_controller` (`ros2 run controller_manager spawner …`); `ros2 control list_controllers` thấy `active` `[tự đo]`.
+5. **Kiểm trên khối kê:** `ros2 topic hz /odom`, `/joint_states`; `ros2 run tf2_ros tf2_echo odom base_link`; quay tay 1 vòng bánh (câu 4); gửi `TwistStamped` 0,1 m/s bằng `ros2 topic pub` trong 2 s: hai bánh cùng chiều tiến.
+6. **Rút cắm USB khi đang chạy** (bánh treo): hardware interface báo lỗi, firmware hết lease dừng bánh; cắm lại → symlink trở lại; ghi hệ thống tự phục hồi tới đâu (controller_manager có kích hoạt lại hardware không `[tự đo]`, hay cần restart container — khi đó restart policy + healthcheck là đường lui).
+7. **Ghi MCAP** một lần chạy: `ros2 bag record -s mcap /odom /joint_states /tf /diagnostics`; `mcap doctor` sạch (`CONVENTIONS.md` mục 5).
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+| Câu | Kết quả | Ghi chú |
+|---|---|---|
+| 1 | Kẹp từng bánh: hai bánh về 0,5/0,5 → **đi thẳng** (R = ∞) thay vì cong R = 4 m. Co tỉ lệ: giữ R = 4 m ở tốc độ thấp hơn | Các dòng khác: (0,5; 1,0) kẹp từng bánh cho R = 0,85 m thay vì 0,5 m. Đường cong sai = Nav2 bám đường sai |
+| 2 | `--device`: mất cổng tới khi tạo lại container `[tự đo]`; `/dev` + cgroup: thấy lại qua symlink | Hardware interface vẫn phải tự mở lại cổng |
+| 3 | ≈ 50 Hz và ≈ 100 Hz (theo `publish_rate`, `update_rate`) | Lệch nhiều → CPU, executor, hoặc hardware `read()` bị chặn |
+| 4 | 2π ≈ 6,28 rad (± vài count/2464) | Dấu âm → sửa một chỗ (URDF hoặc firmware) |
+| 5 | Gần 1 m, lệch vài phần trăm là bình thường | Đường kính hiệu dụng ≠ danh định, trượt; C6 hiệu chuẩn |
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| `diff_drive_controller` active nhưng bánh không quay | Gửi `Twist` thay `TwistStamped`, sai topic | `ros2 topic info -v /diff_drive_controller/cmd_vel` | Đúng kiểu, đúng topic |
+| Container không mở được cổng | Thiếu cgroup rule/nhóm `dialout`, sai major | `ls -l` major thật | Sửa rule |
+| `/odom` 50 Hz nhưng `/joint_states` giật | `read()` chặn chờ serial | Đo thời gian `read()` | Thread đọc riêng, `read()` chỉ copy (C4.3) |
+| Robot quay khi lệnh tiến | Trái/phải đảo, dấu bánh | Lệnh từng bánh | Sửa URDF/`config.h`, ghi `decisions.md` |
+| Không thấy topic từ laptop | DDS qua Wi-Fi, domain khác | `ROS_DOMAIN_ID`, multicast | Cấu hình DDS; hoặc Foxglove bridge |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot, mỗi con một ESP32 có serial khác nhau. udev rule theo serial gãy ở đâu?
+<details><summary>Hướng nghĩ</summary>
+
+Không thể viết tay rule cho từng robot; dùng rule theo VID/PID + vị trí cổng (`ID_PATH`), hoặc firmware tự báo vai trò khi kết nối. Thay ESP32 khi bảo hành không được làm đổi cấu hình. Đây là bài toán identity của thiết bị trong fleet.
+
+</details>
+
+2. **[Failure mode]** Container restart (do healthcheck) đúng lúc robot đang chạy 0,5 m/s. Chuỗi sự kiện là gì, ai dừng robot?
+<details><summary>Hướng nghĩ</summary>
+
+Hardware interface chết → CMD ngừng → firmware hết lease → giảm tốc theo a_phanh. Container lên lại → **không** tự ARM (C4.4). Nếu firmware không có lease, robot chạy với lệnh cuối cho tới khi container lên.
+
+</details>
+
+3. **[Vì sao không]** Vì sao không chạy ROS 2 trực tiếp trên host cho đỡ rắc rối thiết bị?
+<details><summary>Hướng nghĩ</summary>
+
+Được, và nhiều robot làm vậy. Docker mua tái lập (cùng image trên laptop, CI, robot; ghim phiên bản) và trả bằng cấu hình thiết bị, mạng, quyền. Quyết định dựa vào việc bạn có cần CI/HIL dùng cùng môi trường không (C11.2).
+
+</details>
+
+4. **[Nếu…thì]** Nếu `cmd_vel_timeout` đặt 0 (tắt), lớp nào còn dừng robot khi teleop chết?
+<details><summary>Hướng nghĩ</summary>
+
+Không lớp nào: `diff_drive_controller` giữ lệnh cuối, `write()` vẫn gửi CMD mới với lease mới; firmware thấy host khỏe. Lease chỉ bắt host/USB chết, không bắt nguồn lệnh chết (C4.3 câu 1).
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Hạ tầng — "pets vs cattle".** Backend coi máy chủ là gia súc thay được. Robot là lai: image là gia súc, nhưng thiết bị gắn trên nó (ESP32 có serial, hiệu chuẩn bánh) là thú cưng có tên. Giống: tách phần tái lập được khỏi phần định danh. Khác: phần định danh ở robot là vật lý, không xóa và tạo lại được.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú |
+|---|---|---|
+| Tham số `diff_drive_controller` (`cmd_vel_timeout` mặc định 0,5 s, `publish_rate` 50 Hz, `linear.x.max_velocity`…) | `[spec — file tham số nhánh jazzy]` / `[tự đo]` | Nhánh phát triển có thể mới hơn bản binary; kiểm `ros2 param list` |
+| Jazzy nhận `TwistStamped` trên `~/cmd_vel` | `[spec — header nhánh jazzy]` / `[tự đo]` | |
+| ESP32-S3 USB Serial/JTAG VID:PID 303a:1001 | `[tự đo]` | `lsusb` |
+| ttyACM major 166, ttyUSB 188 | `[chuẩn]` | `ls -l /dev/tty*` |
+| `--device` không theo kịp cắm lại | `[tự đo]` | Bước 6 |
+| Predictable interface names, systemd 197 | `[chuẩn]` | freedesktop.org |
+
+**Đã sửa so với bản gốc/Gemini:** K7 gốc đặt "dựng ROS 2 trên mini PC, odometry qua hardware interface `ros2_control`" ở Bài 8 bước 1 (sau khi đã điều hướng); chuyển về đây vì C6 cần `/odom` chuẩn. Thêm udev, quyền thiết bị trong container, và giới hạn tốc độ theo từng bánh — K7 gốc chỉ nói "giới hạn 0,5 m/s ở ESP32".
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** tài liệu `ros2_control` và `ros2_controllers` (diff_drive_controller) bản Jazzy; `ros2_control_demos` ví dụ diffbot; tài liệu udev (`man udev`); Docker Compose (`devices`, `device_cgroup_rules`, `restart`).
+- **Giải thích:** freedesktop.org, *Predictable Network Interface Names*.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao `--device` khác `/dev` + cgroup rule; (2) vẽ lại sơ đồ controller_manager; (3) v = 0,3 m/s, ω = 2 rad/s, B = 0,30 m: hai bánh bao nhiêu, có vượt 0,5 không?
+  <details><summary>Đáp án</summary>
+
+  v ∓ ωB/2 = 0,3 ∓ 0,3 → 0 và 0,6 m/s: bánh phải vượt 0,5; firmware co tỉ lệ về 0 và 0,5.
+
+  </details>
+
+---
+
+## Bài C5.3 — Teleop an toàn: deadman, giới hạn tốc độ, E-stop tạm (5h)
+
+> **Vị trí:** C5.2 → **C5.3** → C5.4; → K7 C10.1 (E-stop thật, relay giữ bằng watchdog độc lập), C10.2 (state machine) · **Cần trước:** C4.4 (lease, kẹp, ARM), → F2.1 (test là phép đo có dương tính giả) · **Sau bài này bạn quyết định được:** tốc độ teleop tối đa cho từng giai đoạn; khi một mắt xích hỏng, cái gì dừng robot và sau bao xa.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Đêm 18/3/2018 ở Tempe, Arizona, một xe thử nghiệm tự lái của Uber ATG đâm chết bà Elaine Herzberg đang dắt xe đạp qua đường. NTSB (báo cáo HAR-19/03, 2019) ghi nhận: hệ thống phát hiện bà khoảng 5,6 giây trước va chạm nhưng phân loại sai liên tục và không dự đoán được đường đi; phanh khẩn cấp tự động của chính hãng xe bị tắt khi chạy chế độ tự lái; người lái an toàn — lớp dự phòng cuối — đang nhìn điện thoại; và tổ chức thiếu văn hóa an toàn để thấy rằng một người ngồi giám sát nhiều giờ sẽ mất tập trung `[chuẩn — NTSB HAR-19/03]`.
+
+Teleop của bạn có một người trong vòng, giống người lái an toàn. Bài học: **một lớp an toàn dựa vào sự chú ý liên tục của người sẽ hỏng**; thiết kế phải làm cho *không chú ý* thành *dừng* (deadman), và phải có lớp không phụ thuộc người (lease, kẹp firmware, E-stop).
+
+### 2. Mô hình tư duy
+
+Mỗi mắt xích teleop hỏng theo một cách; mỗi cách có một lớp chặn riêng. Mô phỏng thời gian phát hiện và quãng dừng (trễ là `[ước lượng]`, thay bằng số đo của bạn):
+
+```python
+# [đã chạy] Teleop: mỗi đường hỏng dừng robot sau bao xa? (quãng = v·t_phát_hiện + v²/2a)
+import numpy as np
+rng = np.random.default_rng(7)
+V = 0.5                      # m/s, trần firmware
+A_CTRL = 1.0                 # m/s², giảm tốc có điều khiển = a_phanh trong decisions.md (C2.2) [ước lượng]
+A_COAST = 0.8                # m/s², trôi sau khi cắt điện motor (ma sát + hộp số) [tự đo ở C5]
+N = 20000
+
+def lat(*parts):             # cộng các trễ (ms) dạng (min, max) đều -> mẫu (s)
+    return sum(rng.uniform(a, b, N) for a, b in parts) / 1000
+
+paths = {  # tên: (mẫu thời gian phát hiện, gia tốc hãm)
+    "nhả deadman (teleop gửi 0)": (lat((5, 20), (0, 10), (0, 10), (0, 2), (0, 10)), A_CTRL),
+    #          tay cầm->host, joy/teleop, controller 100 Hz, USB, vòng MCU 100 Hz [ước lượng]
+    "teleop chết, cmd_vel_timeout 0,5 s": (0.5 + lat((0, 10), (0, 10)), A_CTRL),
+    "host treo, lease firmware 0,2 s": (0.2 + lat((0, 10)), A_CTRL),
+    "rút USB, lease firmware 0,2 s": (0.2 + lat((0, 10)), A_CTRL),
+    "E-stop tạm (cắt động lực)": (lat((5, 15)), A_COAST),
+    #          nhả tiếp điểm/relay [tự đo]
+    "tay cầm mất sóng, joy giữ giá trị cuối": (np.full(N, np.inf), A_CTRL),
+}
+print(f"{'đường hỏng':40s} {'t p50':>7} {'t p99':>7}  quãng p99")
+for name, (t, a) in paths.items():
+    if not np.isfinite(t).all():
+        print(f"{name:40s} {'∞':>7} {'∞':>7}  KHÔNG DỪNG"); continue
+    d = V * t + V**2 / (2 * a)
+    p50, p99 = np.percentile(t, 50), np.percentile(t, 99)
+    print(f"{name:40s} {p50*1e3:6.0f}ms {p99*1e3:6.0f}ms  {np.percentile(d, 99)*100:6.1f} cm")
+```
+
+| Đường hỏng | Lớp chặn | Nằm ở đâu |
+|---|---|---|
+| Người thả tay | Deadman (`require_enable_button`) → teleop gửi một lệnh 0 | `teleop_twist_joy` |
+| Teleop/joy chết, không còn `cmd_vel` | `cmd_vel_timeout` | `diff_drive_controller` |
+| Host/container treo, USB rút | Lease | Firmware (C4.4) |
+| Lệnh quá nhanh từ bất kỳ đâu | `scale_linear` → `max_velocity` → kẹp từng bánh | Teleop → controller → **firmware** |
+| Mọi phần mềm đều sai | E-stop tạm: mở chuỗi cuộn relay, cắt VM | Phần cứng (C1 + nút) |
+| **Tay cầm mất sóng nhưng `/joy` vẫn báo nút đang giữ** | Không lớp nào ở trên bắt được | Phải **test** và sửa (phần 6 bước 4) |
+
+Dòng cuối là lý do bài này tồn tại: `joy` có `autorepeat_rate` (mặc định 20 Hz) — phát lại trạng thái cuối khi không đổi `[spec — README joy]`. Khi dongle mất sóng, trạng thái cuối có thể là "nút deadman đang giữ, cần đẩy tới" và tiếp tục được phát, tùy driver báo mất thiết bị thế nào `[tự đo]`. Đó là heartbeat từ thread riêng (C4.3) ở tầng người dùng.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Session timeout / re-auth | Deadman | Session hết hạn thì yêu cầu đăng nhập lại; deadman hết thì **dừng vật lý ngay**, và cần ARM lại có chủ đích | Deadman "dính" (sticky button) cho đỡ mỏi tay |
+| Defense in depth | Năm lớp ở bảng trên | Lớp backend thường chung hạ tầng; ở đây các lớp phải **hỏng độc lập** (người, ROS, firmware, phần cứng) | Coi `max_velocity` và kẹp firmware là "trùng lặp", bỏ một cái |
+| Feature flag tắt tính năng | E-stop tạm | Flag là phần mềm, đi qua mọi tầng có thể treo; E-stop cắt năng lượng, không đi qua phần mềm nào | E-stop là một nút trên tay cầm gửi topic |
+
+**Chấm mô hình:**
+- *"Có deadman thì không cần E-stop."* **SAI.** Deadman nằm trên đường phần mềm (tay cầm → joy → teleop → controller → USB → firmware); mọi mắt xích đó có thể treo hoặc giữ trạng thái cũ. **Phản ví dụ:** dòng cuối của mô phỏng — tay cầm mất sóng, joy phát lại trạng thái cuối, robot không dừng.
+- *"Người điều khiển ở ngay đó, thấy nguy thì dừng — đủ an toàn."* **ĐÚNG MỘT PHẦN.** Đúng cho phút đầu. Gãy theo thời gian: sự chú ý giảm, phản xạ chậm. **Phản ví dụ:** Uber ATG 2018.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Deadman (enable button) | Nút phải giữ liên tục để lệnh có hiệu lực | Nút bật/tắt |
+| 🟢 | Teleop | Điều khiển từ xa có người trong vòng | Chế độ kém an toàn hơn tự hành (không nhất thiết) |
+| 🟢 | Quãng dừng | v·t_phát_hiện + v²/(2a) | Chỉ phần phanh |
+| 🟢 | E-stop tạm | Nút NC trong chuỗi cuộn relay của C1; bản đầy đủ ở C10.1 | Nút dừng phần mềm |
+| 🟡 | Dừng loại 0 | Cắt năng lượng ngay, robot trôi (IEC 60204-1) | Phanh |
+| 🟡 | Automation complacency | Người giám sát hệ tự động mất chú ý theo thời gian | Lười |
+
+### 5. Dự đoán
+
+```markdown
+# C5.3 — dự đoán
+1. s8_teleop.py (đoán trước): đường hỏng nào có quãng dừng p99 dài nhất mà vẫn dừng? đường nào không dừng?
+2. Quãng trôi khi nhấn E-stop tạm ở 0,5 m/s trên sàn của bạn: ___ cm (cần a_trôi: đoán, rồi đo)
+3. Tắt nguồn tay cầm khi đang giữ deadman và đẩy cần tới: robot ___
+4. `ros2 topic pub` lệnh 2 m/s thẳng vào controller (bỏ qua teleop): tốc độ đo ___ m/s
+```
+
+### 6. Làm
+
+1. **Cấu hình teleop:** `joy` + `teleop_twist_joy` với `require_enable_button: true`, `enable_button` = chỉ số nút bạn chọn (`ros2 topic echo /joy` để tìm) `[tự đo]`, `enable_turbo_button: -1` (tắt turbo), `scale_linear.x: 0.2` cho giai đoạn đầu, `publish_stamped_twist: true`, remap `cmd_vel` → `/diff_drive_controller/cmd_vel`. ARM firmware bằng một tổ hợp nút riêng (ví dụ giữ hai nút 1 s) qua một node nhỏ gọi lệnh ARM (C4.3) — không ARM tự động.
+2. **E-stop tạm:** nút NC nối tiếp cuộn relay (chuỗi: pack → cầu chì 1 A → nút → cuộn → GND, theo C1). Gắn nút ở chỗ với tới được khi robot chạy về phía bạn. ESTOP_SENSE vào GPIO41 (C4).
+   - ✅ Checkpoint trước khi cấp điện: nút nhả: thông mạch qua nút; nhấn: OL. Sau khi cấp điện, firmware DISARMED: nhấn/nhả → relay kêu "tách", VM driver (đo UT33D+) về 0 khi nhấn.
+3. **Trên khối kê:** 10 lần mỗi kiểu: thả deadman; kill node teleop; `docker stop`; rút USB; nhấn E-stop. Đo thời gian tới bánh dừng (STATE + logic analyzer), so với mô phỏng.
+4. **Tay cầm mất sóng:** giữ deadman, cần tới vừa phải (bánh treo); tắt nguồn tay cầm/rút dongle. Ghi robot làm gì. Nếu không dừng trong ≤ 1 s: thêm kiểm "tuổi" của `/joy` (node nhỏ chặn `cmd_vel` nếu `/joy` không đổi `header.stamp`/nội dung quá N ms — với autorepeat thì phải dựa vào sự kiện mất thiết bị của driver hoặc dùng tay cầm có báo kết nối) `[tự đo]`, rồi test lại tới khi dừng.
+5. **Lệnh vượt tốc:** `ros2 topic pub` (2,0; 0) và (0; 6) rad/s vào controller; rồi tắt controller, gửi CMD 2 m/s thẳng qua host_bench.py (C4) — tốc độ đo bằng encoder ≤ 0,5 m/s mọi trường hợp.
+6. **Lên sàn:** vùng trống 2 × 2 m, 0,2 m/s, 5 phút; rồi 0,5 m/s. Ghi MCAP. Đo quãng trôi E-stop 5 lần mỗi mức (Lắp bước 7).
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+| Câu | Kết quả | Ghi chú |
+|---|---|---|
+| 1 | Dài nhất mà vẫn dừng: teleop chết (chờ `cmd_vel_timeout` 0,5 s) → ~38 cm p99 ở 0,5 m/s. Không dừng: tay cầm mất sóng mà joy giữ trạng thái cuối | Nhả deadman ~15 cm, phần lớn là quãng phanh v²/2a ở 1 m/s²; lease 0,2 s ~23 cm |
+| 2 | Phụ thuộc ma sát + hộp số; mô phỏng giả định 0,8 m/s² → ~16 cm `[tự đo]` | Hộp số giảm tốc lớn (1:56) thường hãm nhanh khi mất điện `[ước lượng]` |
+| 3 | Chưa biết trước — là lý do có bước 4. Không dừng = lỗi phải sửa trước khi lên sàn | — |
+| 4 | ≤ 0,5 m/s ở mọi bánh | Không → quay lại C4.4 |
+
+Quãng dừng 15–40 cm ở 0,5 m/s là lý do vùng trống chạy thử và lý do bumper ở C10.1 (phản ứng ở tầng firmware, không qua host).
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Thả deadman, robot chạy thêm ~0,5 s | Teleop không gửi lệnh 0 khi nhả; chỉ dựa vào timeout | `ros2 topic echo` lúc nhả | Kiểm cấu hình teleop; bản teleop có `sent_disable_msg` `[tự đo]` |
+| E-stop nhấn, bánh vẫn có lực | Nút nối sai (NO), hoặc relay dính | Đo VM sau relay khi nhấn | Đấu NC; thay relay; C10.1 |
+| Robot giật khi nhả E-stop | Firmware không chốt; relay hút lại khi lệnh ≠ 0 | ESTOP_SENSE trong STATE | Chốt FAULT tới RESET (C4.4) |
+| Dừng oan khi chạy xa | Wi-Fi/Bluetooth tay cầm yếu, joy báo mất | Log `/joy` | Dongle gần, cáp nối dài USB cho dongle |
+
+### 9. Câu hỏi ngược
+
+1. **[Failure mode]** Liệt kê mọi thứ phải còn sống để thả deadman dừng được robot. So với danh sách cho E-stop tạm.
+<details><summary>Hướng nghĩ</summary>
+
+Deadman: tay cầm, sóng, dongle, USB, kernel, joy, teleop, DDS, controller_manager, hardware interface, USB, ESP32 firmware, driver. E-stop: nút, dây, cuộn relay, tiếp điểm. Chuỗi ngắn hơn hỏng ít hơn.
+
+</details>
+
+2. **[Quy mô]** 100 robot teleop từ xa qua Internet (vận hành viên ở xa). Lớp nào ở bảng trên còn nguyên, lớp nào phải thiết kế lại?
+<details><summary>Hướng nghĩ</summary>
+
+Deadman qua mạng có trễ và mất gói cỡ trăm ms tới giây: thành một lease mạng; tốc độ cho phép phải giảm theo trễ (quãng dừng ∝ v·t). Kẹp firmware và E-stop tại chỗ giữ nguyên; cần người tại chỗ hoặc vùng cách ly.
+
+</details>
+
+3. **[Nếu…thì]** Nếu tăng `cmd_vel_timeout` lên 2 s để "đỡ giật khi Wi-Fi chập chờn", quãng dừng ở đường "teleop chết" thành bao nhiêu?
+<details><summary>Hướng nghĩ</summary>
+
+≈ 0,5 × 2 + 0,125 ≈ 1,1 m. Đổi độ mượt lấy một mét chạy mù. Sửa đúng là đưa đường lệnh ra khỏi Wi-Fi, không nới timeout.
+
+</details>
+
+4. **[Liên ngành]** Đường sắt dùng "vigilance device": lái tàu phải tác động định kỳ, không chỉ giữ một cần. Vì sao giữ liên tục chưa đủ?
+<details><summary>Hướng nghĩ</summary>
+
+Người bất tỉnh có thể vẫn đè lên cần (trạng thái kẹt). Đòi tác động **thay đổi** định kỳ phân biệt được "còn sống" với "kẹt" — đúng bài tay cầm mất sóng phát lại trạng thái cuối.
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Đường sắt — deadman và vigilance.** Như câu 4: từ "giữ" chuyển sang "chứng minh còn sống bằng thay đổi". Giống: lease của firmware đòi CMD mới, không chấp nhận lặp lại. Khác: ở tàu, người là đối tượng giám sát; ở robot, cả người lẫn phần mềm.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú |
+|---|---|---|
+| Uber ATG Tempe 2018: phát hiện ~5,6 s trước, AEB hãng tắt, người lái mất tập trung | `[chuẩn]` | NTSB HAR-19/03 |
+| `teleop_twist_joy`: `require_enable_button` (mặc định true), `enable_button` (mặc định 5), `publish_stamped_twist`, gửi một lệnh 0 khi nhả | `[spec — mã nguồn teleop_twist_joy]` | Nhánh jazzy không đọc được lúc soạn; đã đọc nhánh rolling/humble — kiểm bản cài |
+| `joy` `autorepeat_rate` mặc định 20 Hz | `[spec — README joystick_drivers]` | Hành vi khi mất thiết bị `[tự đo]` |
+| Trễ trong mô phỏng teleop, a_trôi | `[ước lượng]` | Thay bằng số đo |
+
+**Đã sửa so với bản gốc/Gemini:** K7 gốc không có bài teleop; E-stop "tạm" ở C5 dùng đúng chuỗi cuộn relay của C1 thay vì một nút phần mềm; thêm test tay cầm mất sóng (lỗ hổng không lớp nào khác bắt).
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** NTSB, *Collision Between Vehicle Controlled by Developmental Automated Driving System and Pedestrian, Tempe, Arizona, March 18, 2018* (HAR-19/03); README `joy`, `teleop_twist_joy`.
+- **Giải thích:** IEC 60204-1 (mục dừng khẩn cấp, đọc tóm tắt).
+- **Tự kiểm tra:** (1) kể năm lớp và mỗi lớp hỏng thế nào; (2) vẽ lại bảng đường hỏng–lớp chặn; (3) 0,5 m/s, phát hiện 0,2 s, a = 1 m/s²: quãng dừng?
+  <details><summary>Đáp án</summary>
+
+  0,5 × 0,2 + 0,25 / 2 = 0,10 + 0,125 = 0,225 m.
+
+  </details>
+
+---
+
+## Bài C5.4 — Vận hành không màn hình: auto power on, SSH, restart policy (2h) (khung rút gọn)
+
+> **Vị trí:** C5.3 → **C5.4** → Gate C5; soak 72h ở → K7 C10.3 · **Cần trước:** K3 Bài 17 (72 giờ không ai trông), C5.2 · **Sau bài này bạn quyết định được:** robot tự lên được sau khi cắm pin không, và lên tới trạng thái nào thì dừng chờ người.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Ngày 21/1/2004 (sol 18), rover Spirit trên sao Hỏa ngừng gửi dữ liệu có nghĩa và rơi vào vòng khởi động lại liên tục. Nguyên nhân: hệ file trên bộ nhớ flash đầy file cũ, phần mềm khởi động cố gắn nó và hỏng mỗi lần. Đội JPL ra lệnh từ xa cho rover khởi động **không dùng flash**, dọn hệ file, và Spirit chạy tiếp thêm sáu năm `[chuẩn — tài liệu JPL về sự cố Spirit sol 18]`. Không ai cắm được màn hình vào một máy cách 100 triệu km; mọi thứ phải đi qua đường từ xa đã thiết kế sẵn, kể cả đường để sửa khi khởi động hỏng.
+
+### 2. Mô hình tư duy
+
+```
+cắm pin → (BIOS: State After G3 = Power On) → Ubuntu → docker.service → compose (restart: unless-stopped)
+       → container ROS 2 → controller_manager → hardware interface mở /dev/robot-esp32
+       → ESP32 đã ở DISARMED từ trước (nguồn buck 5 V) → hệ dừng ở trạng thái "sẵn sàng, chưa ARM"
+       → người: SSH để xem; tay cầm: tổ hợp ARM có chủ đích
+```
+
+Mục tiêu không phải "robot tự chạy lại" mà là "robot tự **lên tới trạng thái an toàn chờ lệnh**" và có đường vào từ xa để xem vì sao nếu không lên được.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| `restart: always` + orchestrator | `restart: unless-stopped` + BIOS power on | Backend restart xong là nhận traffic; robot restart xong **không** được nhận lệnh chuyển động cũ | Stack lên lại và chạy tiếp lệnh trong hàng đợi |
+| Server headless, SSH | Mini PC trên robot | Server có IPMI/console từ xa khi OS hỏng; N100 thì không — mất SSH là phải mang màn hình tới | Đổi cấu hình mạng qua SSH và tự khóa mình ngoài |
+
+### 6. Làm
+
+1. **BIOS:** cắm màn hình + bàn phím một lần, tìm mục kiểu "State After G3" / "AC Power Loss" / "Restore on AC Power Loss" → Power On; tắt "fast boot" nếu nó làm mất USB lúc khởi động `[tự đo — tên mục khác theo bản BIOS của EQ12]`. Chụp ảnh màn hình BIOS vào sổ.
+2. **SSH:** khóa công khai, tắt đăng nhập bằng mật khẩu; IP cố định (DHCP reservation) hoặc mDNS; ghi trong `decisions.md`.
+3. **Khởi động tự động:** `systemctl enable docker`; compose `restart: unless-stopped`; journald lưu bền (`Storage=persistent`) để đọc log của lần boot trước.
+4. **Thời gian:** chrony đồng bộ khi có mạng; ghi `clock_source` đúng (→ C7.2).
+5. **Thử:** rút XT60 khi đang chạy (robot trên khối kê, bánh treo), cắm lại, 5 lần. Đo: thời gian tới SSH được, tới `/odom` có dữ liệu; bánh không nhúc nhích tới khi ARM. Đọc `journalctl -b -1` để thấy lần tắt đột ngột.
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Cắm pin, mini PC không lên | BIOS chưa lưu; buck-boost cấp chậm/rung áp lúc cắm | Cắm adapter thật thay pin | Lưu BIOS; kiểm áp ra buck-boost lúc khởi động (INA226) |
+| Container lên trước khi `/dev/robot-esp32` có | Thứ tự khởi động | `docker logs` | Hardware interface thử mở lại cổng; hoặc healthcheck |
+| Hệ file hỏng sau vài lần rút pin | Tắt đột ngột khi đang ghi | `dmesg`, `fsck` | Ghi MCAP vào phân vùng riêng; lệnh tắt có chủ đích trước khi rút pin (C10.3 soak đếm lỗi này) |
+
+### 9. Câu hỏi ngược
+
+1. **[Failure mode]** Robot tự lên sau khi pin được thay, nhưng ESP32 đã ARM từ trước (không reset vì có nguồn riêng?) và host gửi lệnh cũ. Có thể xảy ra không?
+<details><summary>Hướng nghĩ</summary>
+
+Khi pin rút, cả buck 5 V mất điện → ESP32 reset → DISARMED. Nhưng nếu ESP32 được nuôi qua USB từ một nguồn khác (laptop debug) thì không. Trạng thái an toàn khi khởi động phải đúng với **mọi** đường nguồn; test bằng cách nghĩ ra đường nguồn lạ.
+
+</details>
+
+2. **[Quy mô]** 100 robot trong toà nhà, cập nhật image mỗi tuần. Restart policy + SSH đủ chưa?
+<details><summary>Hướng nghĩ</summary>
+
+Cần fleet management: phiên bản đang chạy của mỗi robot, rollout có canary, đường rollback không cần SSH tay (A/B partition hoặc image cũ giữ lại). Đây là chỗ kinh nghiệm backend của bạn có giá nhất — với thêm một điều kiện: mỗi bước rollout có thể làm robot di chuyển.
+
+</details>
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Docker docs — restart policies; `man journald.conf`; tài liệu JPL/NASA về sự cố Spirit sol 18 (2004).
+- **Tự kiểm tra:** (1) kể chuỗi từ cắm pin tới "sẵn sàng, chưa ARM"; (2) robot lên tới đâu thì dừng chờ người, và vì sao không xa hơn.
+
+---
+
+## Gate chặng 5
+
+Chặng mới (`_KE-HOACH-K7.md` mục 7: "C5 — lắp hoàn chỉnh, teleop an toàn"); mang theo ngưỡng đáp ứng bước của K7 gốc Bài 3, đo lại khi bánh chạm đất. Mọi số ở `build-log/measurements.jsonl` và MCAP.
+
+| # | Tiêu chí | PASS khi | FAIL action |
+|---|---|---|---|
+| 1 | Kiểm nguội | Bảng cold-01…10 đủ, PASS, ghi **trước** lần cắm pin đầu (timestamp) | Không cắm pin |
+| 2 | Cấp điện có bậc | Bậc a–d bằng nguồn bàn rồi bằng pin; dòng từng bậc ghi bằng INA226; không cầu chì nào đứt | Lùi một bậc, tìm lỗi |
+| 3 | Nhiễu | Bài tra tấn 200 lần đảo chiều + 10 phút teleop: 0 reset ESP32 không do bật nguồn, 0 lần USB ngắt, 0 count trôi khi bánh đứng; `bad_crc` = 0 hoặc giải thích được | Thang sửa ở C5.1 bước 5 |
+| 4 | ROS 2 | `/odom` ≈ 50 Hz, `/joint_states` ≈ 100 Hz, TF `odom → base_link`; quay tay 1 vòng bánh → 2π rad; `/dev/robot-esp32` ổn định qua 5 lần rút cắm; một MCAP qua `mcap doctor` | C5.2 phần 8 |
+| 5 | PI khi chạm đất (K7 gốc Bài 3) | Bánh chạm đất, đủ tải: vọt lố < 10 %, xác lập < 200 ms, sai số xác lập ~0 | Chỉnh lại; mô phỏng F5.8 với τ mới |
+| 6 | Teleop an toàn | 10/10 mỗi kiểu: thả deadman, kill teleop, `docker stop`, rút USB → dừng; tay cầm mất sóng → dừng ≤ 1 s; lệnh 2 m/s và quay tại chỗ tối đa → ≤ 0,5 m/s đo bằng encoder trên sàn; giảm tốc ≤ a_phanh của `decisions.md` | **Không** chạy sàn quá vùng thử tới khi PASS |
+| 7 | E-stop tạm | 10/10 cắt VM (đo) và dừng; nhả không tự chạy lại; quãng trôi ở 0,2 và 0,5 m/s ghi vào sổ (5 lần mỗi mức) | Sửa đấu nối; C10.1 làm bản đầy đủ (20/20) |
+| 8 | Không màn hình | 5 lần rút/cắm pin: SSH được, `/odom` có dữ liệu, bánh không chuyển động tới khi ARM có chủ đích; thời gian lên ghi vào sổ | C5.4 phần 8 |
+
+Gate PASS → C6 (odometry). Tiêu chí 1, 6, 7 không có ngoại lệ.

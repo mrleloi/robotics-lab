@@ -171,3 +171,5 @@ Các agent soạn song song, không đọc được file của nhau lúc viết.
 - Thuật ngữ: **dòng hãm** = stall current (rotor bị giữ đứng); **dòng phanh** = braking (H-bridge brake). Định nghĩa ở C3.1/C3.2; C4, C10 dùng đúng.
 - Lấy mẫu encoder: tiêu chí là chu kỳ lấy mẫu nhỏ hơn khe ngắn nhất giữa hai cạnh vài lần, không phải "trên Nyquist" (C3.3).
 - Giới hạn gia tốc phanh (chống lật, C2.2) lưu vào `decisions.md`, firmware C4.4 kẹp theo đó.
+- PCNT ESP-IDF về 0 khi chạm limit → bật `accum_count` + watch point ở hai limit (mẹo trừ int16 không đủ). Lệnh động lực mang **lease** (đề xuất 200 ms) trên mỗi CMD; tiêu chí gate vẫn timeout ≤ 500 ms. FAULT dùng coast trừ khi C2.2 cho phép phanh.
+- Diễn giải CONVENTIONS mục 7: vòng điều khiển nằm trong ESP32; dây USB dùng giao thức tối thiểu có spec + test; phía ROS dùng `ros2_control`.

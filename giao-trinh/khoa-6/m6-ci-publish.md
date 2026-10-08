@@ -70,7 +70,7 @@ flowchart LR
 Bốn ý bản chất:
 
 1. **Verdict là một phép đo, và nó có tỉ lệ sai** (→ F2.1). Cùng một PR, chạy lại với seed root khác, có thể ra verdict khác. "Ba PR giả cho verdict đúng" là một câu về **tỉ lệ**, không phải về một lần chạy. Bạn phải biết mỗi loại PR ra PASS, FAIL, INCONCLUSIVE với xác suất bao nhiêu, và các con số đó phải khớp với thiết kế (α, power, MDE).
-2. **Định nghĩa PASS quyết định PR không đổi gì sẽ ra gì.** Bản gốc (Bài 13): PASS là "không tệ hơn baseline một cách có ý nghĩa". Khi viết thành quy tắc trên khoảng tin cậy của hiệu Δ, cách đúng là FAIL khi cận trên < 0, PASS khi cận dưới ≥ −MDE, còn lại là INCONCLUSIVE. Với quy tắc này, một PR không đổi gì ra PASS với xác suất bao nhiêu? Bạn sẽ tính ở phần 5, và con số đó quyết định N.
+2. **Định nghĩa PASS quyết định PR không đổi gì sẽ ra gì.** Bản gốc (Bài 13): PASS là "không tệ hơn baseline một cách có ý nghĩa". Khi viết thành quy tắc trên CI 95% của hiệu Δ = p_PR − p_base, cách đúng là **đúng quy tắc của Bài 13**: FAIL khi cận trên < 0, PASS khi cận dưới ≥ −MDE (biên non-inferiority δ, ở đây chọn bằng MDE), còn lại INCONCLUSIVE; cộng ERROR khi phép so không hợp lệ. CI tính bằng **Newcombe** (ghép hai khoảng Wilson), cùng hàm với Bài 13, để một PR cho cùng verdict ở cả hai nơi. Với quy tắc này, một PR không đổi gì ra PASS với xác suất bao nhiêu? Bạn sẽ tính ở phần 5, và con số đó quyết định N.
 3. **Vòng kín cộng với một bộ tối ưu sinh ra áp lực Goodhart** (→ F2.8). Mỗi lần gọi gate làm rò một ít thông tin về bộ eval. Thử K biến thể vô dụng rồi giữ cái tốt nhất thì bộ eval đã biến thành dữ liệu huấn luyện qua phép chọn lọc. Không cần dòng code gian lận nào.
 4. **Determinism vừa giúp vừa hại.** CRN (cùng seed cho baseline và PR) cho phép so sánh có power cao (Bài 1). Nhưng seed cố định cũng có nghĩa là bài thi cố định, và bài thi cố định thì học thuộc được. Lời giải: dùng CRN **bên trong** một lần gate, và lấy seed **mới** cho mỗi lần gate. Seed dẫn xuất từ một bí mật nên ghi được vào provenance sau khi chạy, tức là vẫn tái lập được nhưng không đoán trước được.
 
@@ -87,7 +87,7 @@ Bốn ý bản chất:
 
 **Chấm mô hình:**
 
-- *"Agent tự sửa cho tới khi CI xanh là một tự động hóa an toàn"* (suy từ vốn pipeline agent của bạn). **ĐÚNG MỘT PHẦN.** An toàn khi oracle là đặc tả chính xác và agent không sửa được oracle. Gãy khi oracle là phép đo thống kê: K lần thử biến thể vô dụng cho xác suất ít nhất một lần báo "cải thiện có ý nghĩa" khoảng `1 − (1 − α/2)^K`. Phản ví dụ: `b18_verdict.py` phần (2).
+- *"Agent tự sửa cho tới khi CI xanh là một tự động hóa an toàn"* (suy từ vốn pipeline agent của bạn). **ĐÚNG MỘT PHẦN.** An toàn khi oracle là đặc tả chính xác và agent không sửa được oracle. Gãy khi oracle là phép đo thống kê: K lần thử biến thể vô dụng, mỗi lần so với một lần chạy baseline riêng, cho xác suất ít nhất một lần báo "cải thiện có ý nghĩa" khoảng `1 − (1 − α/2)^K`; so với **cùng** một lần chạy baseline thì xác suất đó thấp hơn nhưng mức "cải thiện" của cái thắng vẫn bị thổi phồng. Phản ví dụ: `b18_verdict.py` phần (2).
 - *"INCONCLUSIVE thì chạy thêm episode cho tới khi có kết luận."* **ĐÚNG MỘT PHẦN.** Hướng đúng, cách làm sai. Kiểm định lặp lại ở 5 lần nhìn, mỗi lần với ngưỡng danh nghĩa 5%, cho tỉ lệ dương tính giả tổng khoảng 14% (Armitage, McPherson & Rowe, 1969) [chuẩn]. Cách đúng là thiết kế tuần tự (group sequential, alpha spending) khai báo trước, hoặc một bước hai có n cố định khai trước. Phản ví dụ: A/A, cứ INCONCLUSIVE là thêm 200 episode rồi kiểm lại, tối đa 5 lần. Tỉ lệ FAIL giả cao hơn hẳn mức 2.5% bạn tưởng.
 - *"Có bộ giữ kín là hết Goodhart."* **ĐÚNG MỘT PHẦN.** Mỗi lần dùng bộ giữ kín làm nó rò một ít, nên phải xoay vòng và giới hạn số lần hỏi. Quan trọng hơn: bộ giữ kín vẫn nằm **trong sim**, nên tối ưu theo nó vẫn là tối ưu theo lỗi của sim. Phản ví dụ: một policy học dựa vào creep của tiếp xúc mềm qua cả bộ công khai lẫn bộ giữ kín, và chỉ cờ UNTESTED_CHANNEL của Bài 17 hoặc robot thật mới lộ ra điều đó. Recht và cộng sự (2019) dựng lại tập test ImageNet và thấy độ chính xác giảm khoảng 11–14 điểm, phần lớn do lệch phân bố chứ không do tái dùng tập test [chuẩn]: lệch miền thường lớn hơn rò qua tái dùng.
 
@@ -108,7 +108,7 @@ Bốn ý bản chất:
 
 Dùng p0 (success baseline của task chính), MDE, α và power **của chính bạn** từ Bài 12–13. Commit `prediction.md` trước khi chạy code ở phần 6.
 
-**A. Tỉ lệ verdict.** Tính N mỗi arm bằng công thức hai tỉ lệ ở Bài 12. Với quy tắc ở phần 2 (FAIL nếu cận trên < 0; PASS nếu cận dưới ≥ −MDE; còn lại INCONCLUSIVE), dự đoán tỉ lệ PASS/FAIL/INCONCLUSIVE và tỉ lệ "báo cải thiện" (cận dưới > 0) cho 5 PR giả: Δ = +MDE, −MDE, 0 (A/A, seed root khác), −MDE/2, +MDE/2. Phương pháp: Δ̂ ~ N(Δ, se²), `se ≈ √(2·p0(1−p0)/N)`; ví dụ `P(PASS) ≈ Φ((Δ + MDE)/se − z_{α/2})`. Rồi trả lời: muốn A/A ra PASS ≥95% thì N phải là bao nhiêu?
+**A. Tỉ lệ verdict.** Tính N mỗi arm bằng công thức non-inferiority của Bài 13 (câu 2): `N ≈ (z_{α/2} + z_β)² · 2p0(1−p0) / MDE²`. Với quy tắc ở phần 2 (FAIL nếu cận trên < 0; PASS nếu cận dưới ≥ −MDE; còn lại INCONCLUSIVE), dự đoán tỉ lệ PASS/FAIL/INCONCLUSIVE và tỉ lệ "báo cải thiện" (cận dưới > 0) cho 5 PR giả: Δ = +MDE, −MDE, 0 (A/A, seed root khác), −MDE/2, +MDE/2. Phương pháp (xấp xỉ chuẩn, đủ để dự đoán; mô phỏng dùng Newcombe): Δ̂ ~ N(Δ, se²), `se ≈ √(2·p0(1−p0)/N)`; ví dụ `P(PASS) ≈ Φ((Δ + MDE)/se − z_{α/2})`. Rồi trả lời: muốn A/A ra PASS ≥95% thì N phải là bao nhiêu?
 
 **B. Goodhart.** Bộ eval công khai có 200 kịch bản. Agent thử K = 30 biến thể, **không biến thể nào tốt hơn thật**, và giữ cái có điểm cao nhất. Dự đoán "cải thiện" của biến thể thắng trên bộ công khai và trên bộ giữ kín. Phương pháp: kỳ vọng max của K biến chuẩn độc lập có cận trên `σ·√(2 ln K)`; nghĩ xem phần nhiễu nào thật sự được chọn lọc khi mọi biến thể so với **cùng một** lần chạy baseline.
 
@@ -162,9 +162,15 @@ p0, MDE, alpha, power = 0.60, 0.10, 0.05, 0.80
 za, zb = norm.ppf(1 - alpha/2), norm.ppf(power)
 N = int(np.ceil((za + zb)**2 * 2*p0*(1-p0) / MDE**2))        # n mỗi arm (xấp xỉ, hai tỉ lệ độc lập)
 
-def verdict(kb, kc, n):
+def wilson(k, n, z=za):
+    p = k/n; d = 1 + z*z/n
+    c = (p + z*z/(2*n)) / d; h = z*np.sqrt(p*(1-p)/n + z*z/(4*n*n)) / d
+    return c - h, c + h
+
+def verdict(kb, kc, n):                                        # CI Newcombe của Δ, GIỐNG HỆT K6 Bài 13
     pb, pc = kb/n, kc/n; d = pc - pb
-    se = np.sqrt(pb*(1-pb)/n + pc*(1-pc)/n); lo, hi = d - za*se, d + za*se
+    (lb, ub), (lc, uc) = wilson(kb, n), wilson(kc, n)
+    lo = d - np.sqrt((pc-lc)**2 + (ub-pb)**2); hi = d + np.sqrt((uc-pc)**2 + (pb-lb)**2)
     v = np.where(hi < 0, "FAIL", np.where(lo >= -MDE, "PASS", "INCONCLUSIVE"))
     return v, lo > 0                                           # cờ "cải thiện có ý nghĩa"
 
@@ -194,8 +200,10 @@ for trial in range(300):
 print(f"\nK = {K} biến thể vô dụng: 'cải thiện' của biến thể thắng trên bộ công khai "
       f"{np.mean(wins_pub):+.3f} ± {np.std(wins_pub):.3f};  trên bộ giữ kín {np.mean(wins_hold):+.3f}"
       f" ± {np.std(wins_hold):.3f}")
-print(f"xác suất ít nhất một biến thể vô dụng được báo 'cải thiện có ý nghĩa' (≈ 1-(1-α/2)^K): "
-      f"{1 - (1 - alpha/2)**K:.0%}")
+kb = rng.binomial(N, p0, 4000); kc = rng.binomial(N, p0, (K, 4000))   # K biến thể, MỘT lần chạy baseline
+shared = np.any([verdict(kb, kc[j], N)[1] for j in range(K)], axis=0).mean()
+print(f"P(≥1 biến thể vô dụng báo 'cải thiện có ý nghĩa'): baseline riêng mỗi lần ≈ 1-(1-α/2)^K = "
+      f"{1 - (1 - alpha/2)**K:.0%} | baseline chung (mô phỏng) {shared:.0%}")
 ```
 
 **Bước 3. Dựng ranh giới thông tin** (bổ sung, theo sơ đồ phần 2):
@@ -218,17 +226,17 @@ print(f"xác suất ít nhất một biến thể vô dụng được báo 'cả
 | PR | PASS | FAIL | INCONCLUSIVE | Báo cải thiện |
 |---|---|---|---|---|
 | +MDE | ≈100% | 0% | 0% | ≈84% |
-| −MDE | ≈2% | ≈80% | ≈17% | 0% |
+| −MDE | ≈2.6% | ≈80% | ≈17% | 0% |
 | A/A (không đổi gì, seed khác) | ≈80% | ≈3% | ≈17–18% | ≈2.4% |
 | −MDE/2 | ≈28% | ≈29% | ≈43% | 0% |
 | +MDE/2 | ≈99% | ≈0% | ≈1% | ≈28% |
 
-- **A/A chỉ ra PASS khoảng 80%**, đúng bằng power của thiết kế, vì `P(cận dưới ≥ −MDE | Δ = 0)` đối xứng với `P(cận trên < 0 | Δ = −MDE)`. Muốn A/A PASS ≥95% thì N ≈ 624 mỗi arm [ước lượng, cùng công thức với z_β = 1.645]. Đây là quyết định thiết kế bạn phải ghi vào README: hoặc chấp nhận ~1/5 PR không đổi gì ra INCONCLUSIVE, hoặc trả thêm khoảng 65% episode.
+- **A/A chỉ ra PASS khoảng 80%**, đúng bằng power của thiết kế, vì `P(cận dưới ≥ −MDE | Δ = 0)` đối xứng với `P(cận trên < 0 | Δ = −MDE)`. Muốn A/A PASS ≥95% thì N ≈ 624 mỗi arm (cùng công thức với z_β = 1.645; mô phỏng Newcombe ở N = 624: A/A PASS 95.0%). Đây là quyết định thiết kế bạn phải ghi vào README: hoặc chấp nhận ~1/5 PR không đổi gì ra INCONCLUSIVE, hoặc trả thêm khoảng 65% episode.
 - Thay đổi "nhỏ hơn ngưỡng" chỉ ra INCONCLUSIVE **khi nó âm**; nếu dương thì ra PASS. Hàng thứ tư trong bảng của bản gốc chỉ đúng một chiều.
-- Hỏng thật −MDE vẫn lọt PASS khoảng 2%. Gate không phải bộ lọc tuyệt đối. Đây là lý do có nightly với N lớn hơn.
+- Hỏng thật −MDE vẫn lọt PASS khoảng 2.6% (danh nghĩa α/2 = 2.5%). Gate không phải bộ lọc tuyệt đối. Đây là lý do có nightly với N lớn hơn.
 - PR sửa comment, cùng seed, harness bit-exact: Δ̂ = 0 chính xác, CI suy biến, PASS. Lần chạy đó kiểm được đường ống (plumbing) và cache; nó **không** kiểm được tính chất thống kê nào. A/A thật phải dùng seed root khác.
 
-**Goodhart** (K = 30 biến thể vô dụng, bộ 200 kịch bản, 300 lần lặp): biến thể thắng "cải thiện" ≈ +6.2 ± 3.6 điểm trên bộ công khai, nhưng ≈ −0.4 ± 4.5 điểm trên bộ giữ kín. Với K = 30, xác suất ít nhất một biến thể vô dụng được báo "cải thiện có ý nghĩa" ≈ 53%. Vì sao không phải `σ·√(2 ln K)` ≈ +12 điểm (σ ≈ 0.045 là độ lệch chuẩn của Δ̂ một biến thể): baseline **chung** cho cả 30 biến thể nên chỉ nhiễu riêng của biến thể (≈ σ/√2) được chọn lọc, và kỳ vọng max của 30 biến chuẩn ≈ 2.04 lần độ lệch chuẩn, không phải √(2 ln 30) ≈ 2.61 (cận trên). 2.04 × 0.045/√2 ≈ +6.5 điểm, khớp mô phỏng.
+**Goodhart** (K = 30 biến thể vô dụng, bộ 200 kịch bản, 300 lần lặp): biến thể thắng "cải thiện" ≈ +6.2 ± 3.6 điểm trên bộ công khai, nhưng ≈ −0.4 ± 4.5 điểm trên bộ giữ kín. Với K = 30, xác suất ít nhất một biến thể vô dụng được báo "cải thiện có ý nghĩa" ≈ 53% nếu mỗi lần so với một lần chạy baseline riêng (công thức), ≈ 26% nếu cả 30 so với **cùng** một lần chạy baseline (mô phỏng): các phép so tương quan qua nhiễu chung của baseline, nên ít lần "thắng" hơn, nhưng khi baseline xui thì nhiều biến thể thắng cùng lúc. Vì sao không phải `σ·√(2 ln K)` ≈ +12 điểm (σ ≈ 0.045 là độ lệch chuẩn của Δ̂ một biến thể): baseline **chung** cho cả 30 biến thể nên chỉ nhiễu riêng của biến thể (≈ σ/√2) được chọn lọc, và kỳ vọng max của 30 biến chuẩn ≈ 2.04 lần độ lệch chuẩn, không phải √(2 ln 30) ≈ 2.61 (cận trên). 2.04 × 0.045/√2 ≈ +6.5 điểm, khớp mô phỏng.
 
 **Bảng của bản gốc**, đọc theo nghĩa tỉ lệ:
 
@@ -239,7 +247,7 @@ print(f"xác suất ít nhất một biến thể vô dụng được báo 'cả
 | Không thay đổi | PASS, không báo gì có ý nghĩa | PASS ≈ power (hoặc ≥95% nếu thiết kế N cho non-inferiority); báo cải thiện ≈ α/2 |
 | Thay đổi nhỏ hơn ngưỡng phát hiện | INCONCLUSIVE, kèm số episode cần thêm | Đúng cho thay đổi âm; con số "cần thêm" phải đi qua thiết kế tuần tự, không cộng dồn rồi nhìn lại |
 
-Tỉ lệ R = 20 lần của bạn sẽ tản: với tỉ lệ thật 80%, 20 lần cho khoảng 12–19 lần PASS là bình thường (Wilson, → F1.4).
+Tỉ lệ R = 20 lần của bạn sẽ tản: với tỉ lệ thật 80%, 20 lần cho 12–19 lần PASS là bình thường (khoảng 95% của phân bố nhị thức Bin(20, 0.8); → F1.4).
 
 </details>
 
@@ -277,10 +285,11 @@ Tỉ lệ R = 20 lần của bạn sẽ tản: với tỉ lệ thật 80%, 20 l�
 | Volkswagen: EPA 18/9/2015; NOx ngoài đường ~40 lần giới hạn; phát hiện bằng đo ngoài chu trình | [chuẩn] | EPA Notice of Violation (9/2015); báo cáo ICCT/WVU (2014) |
 | Agent lập trình viết code riêng cho test hoặc sửa test | [chuẩn] | Claude 3.7 Sonnet system card (Anthropic, 2025); METR (2025). Kiểm câu chữ trong nguồn |
 | 5 lần nhìn ở 5% danh nghĩa → α tổng ~14%; ImageNetV2 giảm ~11–14 điểm | [chuẩn] | Armitage và cộng sự (1969); Recht và cộng sự (ICML 2019) |
-| Bảng tỉ lệ verdict, Goodhart; N ≈ 624 | [tự đo] / [ước lượng] | `b18_verdict.py` (numpy 2.5, scipy 1.18); công thức hai tỉ lệ với z_β = 1.645 |
+| Bảng tỉ lệ verdict, Goodhart; N ≈ 624 | [đã chạy] mô phỏng | `b18_verdict.py` (numpy 2.5, scipy 1.18), CI Newcombe như Bài 13; N từ công thức non-inferiority với z_β = 1.645, kiểm bằng mô phỏng |
 | Cú pháp GitHub Actions, giới hạn giờ runner | [tự đo] | Tài liệu GitHub Actions hiện hành |
 
 **Đã sửa so với bản gốc / Gemini:**
+- Reviewer sửa: bản trước của bài minh họa verdict bằng CI Wald trong khi Bài 13 dùng Newcombe, nên cùng một PR có thể cho hai verdict khác nhau ở biên. Thống nhất về Newcombe (cùng hàm với Bài 13), chạy lại: số đổi trong vòng ±0.6 điểm phần trăm. Thêm mô phỏng "baseline chung" cho Goodhart (26%, không phải 53%).
 - Bản gốc: "Cả ba phải cho verdict đúng", ngầm hiểu là một lần chạy. Verdict là biến ngẫu nhiên → đổi thành tỉ lệ trên R lần với seed root khác, so với α và power đã thiết kế.
 - Bản gốc: "Không thay đổi → PASS". Với quy tắc non-inferiority ở biên MDE và N tính cho power 80%, A/A chỉ PASS khoảng 80% → nêu rõ đánh đổi và cách tính N cho ≥95%.
 - Bản gốc: "Thay đổi nhỏ hơn ngưỡng → INCONCLUSIVE" chỉ đúng cho thay đổi âm. "Kèm số episode cần thêm" phải đi qua thiết kế tuần tự, không được cộng dồn rồi nhìn lại.

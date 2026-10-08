@@ -475,16 +475,16 @@ Hai sửa so với bản gốc: câu "cần n ≈ …" là **MDE của thiết k
 
 <details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
 
-**Câu 1** (Fleiss, không hiệu chỉnh liên tục):
+**Câu 1** (Fleiss, không hiệu chỉnh liên tục, làm tròn lên như `n_indep`):
 
 | p₀→p₁ | Chênh | Bản gốc | Tính lại |
 |---|---|---|---|
-| 0.50→0.70 | 20 điểm | ~90 | 93 |
-| 0.50→0.60 | 10 điểm | ~385 | 387 |
+| 0.50→0.70 | 20 điểm | ~90 | 94 |
+| 0.50→0.60 | 10 điểm | ~385 | 388 |
 | 0.50→0.55 | 5 điểm | ~1.560 | 1.565 |
 | 0.80→0.90 | 10 điểm | ~196 | 199 |
-| 0.80→0.85 | 5 điểm | ~903 | 905 |
-| 0.90→0.95 | 5 điểm | — | 434 |
+| 0.80→0.85 | 5 điểm | ~903 | 906 |
+| 0.90→0.95 | 5 điểm | — | 435 |
 
 Cohen's h (`statsmodels`) lệch vài phần trăm; dưới ~5% là bình thường. Kết luận của bản gốc giữ nguyên: phát hiện 5 điểm quanh p = 0.5 cần ~1.500 episode mỗi nhóm, và Module 3 tồn tại để trả khoản này.
 
@@ -505,7 +505,7 @@ Bản gốc nói "n = 50, chênh có thể tới 10–15 điểm" — thấp hơ
 
 **Câu 4:** không có số chung. ψ nhỏ → theo cặp rẻ hơn nhiều lần; ψ càng gần mức của hai run trên cùng kịch bản nhưng seed độc lập → lợi ích chỉ còn phần chặn độ khó kịch bản; chạm `p₀(1−p₁) + p₁(1−p₀)` (hai run hoàn toàn độc lập) thì hết lợi.
 
-**Câu 5:** 39/50 → Wilson [64.8, 87.2]. 71% của 50 là 35.5 — không phải số nguyên, nên con số đã làm tròn; 35/50 → [56.2, 80.9], 36/50 → [58.3, 82.5]. Tỉ lệ không khớp k/n nguyên là dấu hiệu đầu tiên để hỏi lại n. CI Newcombe của hiệu khoảng [−10, +23] điểm. n mỗi bên để phát hiện 7 điểm (0.71→0.78): **≈ 610**, không phải ~700 như bản gốc và Gemini.
+**Câu 5:** 39/50 → Wilson [64.8, 87.2]. 71% của 50 là 35.5 — không phải số nguyên, nên con số đã làm tròn; 35/50 → [56.2, 80.9], 36/50 → [58.3, 82.5]. Tỉ lệ không khớp k/n nguyên là dấu hiệu đầu tiên để hỏi lại n. CI Newcombe của hiệu khoảng [−10, +24] điểm (với 35.5/50; 35 hay 36 thành công dời mỗi đầu ~1 điểm). n mỗi bên để phát hiện 7 điểm (0.71→0.78): **≈ 610**, không phải ~700 như bản gốc và Gemini.
 
 **Bước 6** [ước lượng]: m = 50, ICC 0.05 → DEFF ≈ 3.5; ICC 0.2 → DEFF ≈ 11, tức 20 × 50 = 1.000 episode có giá trị như ~90 episode độc lập cho câu hỏi về phân bố. Thường thì nhiều kịch bản, m = 1–5, hiệu quả hơn.
 
@@ -561,6 +561,7 @@ Bản gốc nói "n = 50, chênh có thể tới 10–15 điểm" — thấp hơ
 | API `statsmodels` | [tự đo] | Kiểm theo bản cài |
 
 **Đã sửa so với bản gốc/Gemini:**
+- **Reviewer sửa:** bảng câu 1 cột "Tính lại" lệch 1 so với chính `n_indep` (93/387/905/434 → 94/388/906/435, làm tròn lên); CI hiệu câu 5 [−10, +23] → [−10, +24].
 - **Bản gốc, Số phải ra:** "n = 50, hai run giống hệt chênh tới 10–15 điểm" → thực tế p95 ≈ 20 điểm ở p = 0.6.
 - **Bản gốc + Gemini, Tự kiểm tra:** "cần ~700 episode mỗi bên cho 7 điểm" → ≈ 610; lập luận "hai CI chồng nhau" → thay bằng CI của hiệu (K6 Bài 10).
 - **Gemini, Nếu ra khác:** "phán quyết dựa trên p-value < 0.05" → p ≥ 0.05 không có nghĩa "không khác"; in CI của hiệu và MDE, Bài 13 thêm biên δ.
@@ -609,7 +610,7 @@ Bản gốc định nghĩa PASS = "không tệ hơn baseline một cách có ý 
   (5) ERROR          provenance lệch (Bài 10), sim_unstable khác nhau giữa arm (Bài 11), harness lỗi
 ```
 
-Quy tắc ba nhánh, **dùng chung với K6 Bài 18** (CI khép kín), xét theo thứ tự trên CI 95% hai phía của Δ (mỗi phía là một kiểm định một phía ở 2.5%; bài này tính CI bằng Newcombe, Bài 18 minh họa bằng Wald — cùng quy tắc, khác cách tính khoảng):
+Quy tắc ba nhánh, **dùng chung với K6 Bài 18** (CI khép kín), xét theo thứ tự trên CI 95% hai phía của Δ (mỗi phía là một kiểm định một phía ở 2.5%; CI của hiệu tính bằng **Newcombe** — ghép hai khoảng Wilson — ở cả bài này lẫn Bài 18, cùng một hàm, để một PR không thể nhận hai verdict khác nhau ở hai nơi):
 - **FAIL** ⇔ cận trên < 0 (tệ hơn có ý nghĩa).
 - **PASS** ⇔ không FAIL **và** cận dưới ≥ −δ. Đây là **kiểm định non-inferiority** [chuẩn], cùng loại mà y học dùng để chứng minh thuốc mới "không kém hơn quá δ" thuốc cũ. Bài 18 gọi biên này là MDE: chọn δ bằng MDE của thiết kế (Bài 12), và δ là một quyết định sản phẩm khai báo trước.
 - **INCONCLUSIVE** ⇔ còn lại. **ERROR** ⇔ phép so sánh không hợp lệ — tách khỏi INCONCLUSIVE, vì "thiếu bằng chứng" và "dụng cụ hỏng" cần hai hành động khác nhau.

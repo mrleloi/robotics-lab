@@ -469,3 +469,508 @@ TF tĩnh trong URDF là của **thiết kế**, không của **từng con**: l�
 </details>
 
 ---
+
+## Bài C7.2 — Timestamp trên robot: source time ESP32 vs host (7h)
+
+> **Vị trí:** C7.1 → **C7.2** → C7.3 (ghi) · **Cần trước:** → F4.6 (thời điểm của một phép đo), → F4.3 (đồng hồ trong máy tính), → F4.1 (ppm, drift), → F3.3 (event time vs processing time); K5 Bài 9 bước 7 (ping hai chiều ESP32 ↔ host), K5 Bài 8 (fit offset → drift) · **Sau bài này bạn quyết định được:** mỗi luồng trên robot đóng dấu bằng đồng hồ nào, ghi giá trị gì vào `header.stamp` và `clock_source`; ánh xạ ESP32 → host cần cập nhật bao lâu một lần; và sai số thời gian của từng luồng là bao nhiêu ms, ghi vào ngân sách.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+25/2/1991, Dhahran, Ả Rập Xê Út: một tổ hợp Patriot không đánh chặn được tên lửa Scud; 28 lính Mỹ chết. Báo cáo của GAO (IMTEC-92-26) chỉ ra nguyên nhân: đồng hồ hệ thống đếm thời gian theo phần mười giây và đổi ra giây bằng số dấu phẩy tĩnh 24 bit; 0,1 không biểu diễn chính xác được trong nhị phân, sai số nhỏ đó tích lũy, và sau khoảng 100 giờ chạy liên tục thời gian lệch ~0,34 s. Với mục tiêu bay ~1.676 m/s, cổng theo dõi lệch hơn nửa ki-lô-mét `[chuẩn — GAO/IMTEC-92-26, 1992]`.
+
+Bài học không phải "dùng float 64 bit". Bài học là **sai số thời gian nhân với vận tốc thành sai số không gian**. Trên robot của bạn: gyro quay 2 rad/s, timestamp lệch 20 ms là 0,04 rad (hơn 2°) sai lệch hướng khi ghép với ảnh; một camera chạy 0,3 m/s với stamp lệch 50 ms là 1,5 cm pose marker đặt sai chỗ.
+
+### 2. Mô hình tư duy
+
+**Một mẫu IMU đi qua bốn đồng hồ** (ASCII timing, không theo tỉ lệ):
+
+```
+thời gian thật ─────┬──────────────────────────────────────────────────────────────►
+                    │ mẫu được lấy (bên trong IMU, sau bộ lọc: trễ nhóm của DLPF)
+IMU INT    ─────────┘‾‾‾‾\______                         
+ESP32 ISR             ▲ t_src = esp_timer (µs từ lúc boot, thạch anh ESP32, trôi ~ppm)
+                      │ đọc I2C 14 byte (~0,3 ms ở 400 kHz), đóng gói + seq
+USB / serial               ═══[ hàng đợi TX ESP32 ]═══[ lịch USB ]═══[ driver host ]═══►
+host                                                          ▲ t_rx = CLOCK của host
+                                                              │ lúc process đọc được byte
+ROS 2 publish                                                       ▲ header.stamp = ???
+CPU host bận (Nav2, nén ảnh, GC) ─────────────[█████ 30 ms █████]──── gói dồn lại rồi xả cùng lúc
+```
+
+`t_src` có **thứ tự và khoảng cách đúng** (ISR chạy trong vài µs sau data-ready) nhưng ở **trục thời gian của ESP32**: gốc là lúc boot, tốc độ lệch host vài chục ppm. `t_rx` ở **đúng trục** của host nhưng mang toàn bộ trễ và jitter của đường đi. Không cái nào tự nó là đáp án. Đáp án là **ánh xạ** `t_src` sang trục host bằng một mô hình `t_host ≈ (t_src − b)/(1 + a)` (offset b, skew a), ước lượng từ các lượt ping hai chiều ít bị xếp hàng nhất (K5 Bài 9 bước 7, → F4.4), và **ghi cả hai** để làm lại được.
+
+**Mô phỏng — 30 phút IMU 200 Hz, CPU host đôi khi bận.** Tham số trễ USB và tỉ lệ "kẹt" là kịch bản `[ước lượng]`; bạn đo phân bố thật ở mục 6.
+
+```python
+# [đã chạy] IMU 200 Hz: đóng dấu lúc host NHẬN vs lúc ESP32 LẤY MẪU (ánh xạ bằng ping hai chiều, K5 Bài 9 bước 7)
+import numpy as np
+rng = np.random.default_rng(7)
+T, ODR, SKEW, OFF0 = 1800.0, 200, 25e-6, 3.7    # 30 phút; đồng hồ ESP32 nhanh 25 ppm; lệch gốc 3,7 s (đếm từ lúc boot)
+esp = lambda t: t * (1 + SKEW) + OFF0           # đồng hồ ESP32 theo thời gian thật t (trục host)
+def usb_delay(n):                                # trễ ESP32 -> host: USB + lập lịch; 2 % gói kẹt sau lúc CPU bận
+    d = 0.0005 + rng.exponential(0.0007, n)
+    stall = rng.random(n) < 0.02
+    return d + stall * rng.uniform(0.005, 0.040, n)
+ASYM = 0.0003                                   # chiều ESP32->host chậm hơn chiều host->ESP32 0,3 ms [giả định]
+t_true = np.arange(0, T, 1 / ODR)               # thời điểm lấy mẫu thật
+t_src = esp(t_true) + rng.normal(5e-6, 2e-6, t_true.size)        # ISR data-ready đóng dấu, trễ vài µs
+t_rx = t_true + usb_delay(t_true.size) + ASYM
+t_rx = np.maximum.accumulate(t_rx)              # cổng serial giao theo thứ tự: gói sau không tới trước gói trước
+# Ping hai chiều mỗi 1 s: host t1 -> ESP32 t2=t3 -> host t4
+t1 = np.arange(0.5, T, 1.0); d_up, d_dn = usb_delay(t1.size), usb_delay(t1.size) + ASYM
+t2 = esp(t1 + d_up); t4 = t1 + d_up + d_dn
+rtt = t4 - t1; off = t2 - (t1 + t4) / 2          # offset ước lượng (giả định đối xứng)
+keep = np.zeros(t1.size, bool)
+for k in range(0, t1.size, 30):                  # mỗi cửa sổ 30 s giữ ping có RTT nhỏ nhất (ít xếp hàng nhất)
+    keep[k + np.argmin(rtt[k:k + 30])] = True
+a, b = np.polyfit(t1[keep], off[keep], 1)        # off(t) ≈ a·t + b  -> skew và offset
+t_map = (t_src - b) / (1 + a)                    # nghịch đảo: đưa timestamp nguồn về trục host
+for name, s in [("host nhận (t_rx)", t_rx), ("nguồn đã ánh xạ", t_map)]:
+    e = (s - t_true) * 1e3; j = np.diff(s) * 1e3
+    print(f"{name:18s} sai số stamp (ms): p50 {np.median(e):6.3f}  p99 {np.percentile(e, 99):6.3f}  max {e.max():6.2f}"
+          f" | dt p1/p99 = {np.percentile(j, 1):5.2f}/{np.percentile(j, 99):5.2f} ms (đúng: 5,00)")
+print(f"skew ước lượng {a*1e6:.2f} ppm (thật {SKEW*1e6:.0f}); offset thô t_rx − t_src trôi "
+      f"{((t_rx - t_src)[-1] - (t_rx - t_src)[0])*1e3:.1f} ms sau {T/60:.0f} phút")
+```
+
+**Ba ý bản chất:**
+1. Sai số của stamp lúc nhận có **đuôi**: trung vị nhỏ, p99 lớn, và lớn nhất đúng lúc robot bận nhất (đang điều hướng, đang nén ảnh). Đuôi đó làm `dt` giữa hai mẫu liên tiếp gần 0 rồi gấp nhiều lần chu kỳ: bất kỳ phép tích phân nào dùng `dt` từ stamp (góc từ gyro) sai đúng lúc đó.
+2. Ánh xạ nguồn → host cho sai số nhỏ và **không phụ thuộc tải**, nhưng có một bias không quan sát được: nửa phần bất đối xứng của đường đi–về (`ASYM` trong mô phỏng). Đó là sai số loại B, ghi biên của nó vào ngân sách (→ F4.7), không giả vờ bằng 0.
+3. Camera không có đồng hồ nguồn chung với ESP32. Stamp của ảnh thường là lúc driver host nhận frame (hoặc timestamp của kernel cho buffer `[tự đo theo driver]`), muộn hơn **giữa phơi sáng** một lượng gồm phơi sáng/2, đọc cảm biến, nén MJPEG trong camera và truyền USB (→ F4.6). Lượng đó phần lớn **hằng số** cho một cấu hình cố định (đó là lý do khóa exposure ở C7.1), nên đo một lần bằng tương quan chéo với gyro và ghi vào calibration.
+
+**Quyết định cho từng luồng** (mặc định đề xuất; bạn đổi được nếu số đo nói khác):
+
+| Luồng | `header.stamp` | `clock_source` (metadata) | Ghi thêm |
+|---|---|---|---|
+| IMU | `t_src` đã ánh xạ về trục host | `estimated` (ánh xạ từ `esp32_timer`) | `/esp32/time_reference` (`time_ref` = `t_src` thô, `header.stamp` = `t_rx`), tham số ánh xạ trong Metadata record |
+| Encoder / odom | lúc controller `read()` trên host | `host_unsynced` | sai số ≤ chu kỳ controller + trễ USB; ghi trong ngân sách |
+| Camera | lúc driver nhận, **trừ** trễ hằng số đã đo | `estimated` sau khi bù; `host_unsynced` trước khi đo | trễ camera–IMU đo được → `calibration_id` của camera |
+| Pin, chẩn đoán | lúc host nhận | `host_unsynced` | — |
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Event time vs processing time (Kafka/Flink, → F3.3) | `t_src` vs `t_rx` | Trong backend, event time do đồng hồ producer gán và **mặc nhiên** coi là cùng trục (NTP). ESP32 không có NTP, gốc là lúc boot, tốc độ lệch ppm: event time **phải được ánh xạ** trước khi so với bất kỳ thứ gì | Ghép IMU với ảnh bằng `t_src` thô: lệch hàng giây (gốc boot), trôi thêm hàng chục ms mỗi giờ |
+| NTP: bốn timestamp, chọn mẫu RTT nhỏ (→ F4.4) | Ping hai chiều host ↔ ESP32 qua USB | Hai đầu cùng một cáp 30 cm, nên RTT nhỏ; nhưng hướng vào/ra của USB có lịch khác nhau, bất đối xứng không đo được bằng chính ping | Báo "sai số đồng bộ 0,02 ms" (độ tản của fit) trong khi bias bất đối xứng lớn hơn nhiều lần |
+| Distributed tracing: span timestamp từ nhiều máy | Ghép luồng nhiều nguồn trên robot | Tracing chấp nhận lệch vài ms vì chỉ cần thứ tự gần đúng; ghép cảm biến cần sai số nhân với vận tốc nhỏ hơn dung sai vật lý | Dùng tiêu chuẩn "vài ms là đủ" của tracing cho gyro 2 rad/s |
+
+**Chấm mô hình:**
+
+1. *"`header.stamp` là thời điểm phép đo xảy ra."* **SAI** như một mặc định. Nó là bất kỳ giá trị nào code publish gán vào; nhiều driver gán `now()` lúc nhận. **Phản ví dụ:** mô phỏng: stamp lúc nhận lệch tới hàng chục ms ở p99 dù trường tên là `stamp`.
+2. *"Ngay từ đầu người ta tạo ra buffer để đỡ thời gian trồi sụt; mọi thiết bị có clock riêng, phải có buffer để các giao thức hoạt động ổn định"* (mô hình của bạn ở K3 lượt 7). **ĐÚNG MỘT PHẦN.** Đúng: hai miền clock khác nhau gặp nhau qua hàng đợi, và hàng đợi hấp thụ jitter. Gãy: buffer hấp thụ jitter của **luồng**, nhưng **phá** thông tin thời điểm: sau hàng đợi TX, thời điểm byte tới không còn nói gì về thời điểm mẫu được lấy. **Phản ví dụ:** cột `dt` của stamp lúc nhận: hàng đợi xả 6 gói một lúc, `dt ≈ 0` sáu lần liên tiếp. Thông tin thời gian phải được **đóng dấu trước** buffer (ISR) và mang theo trong payload.
+3. *"Chuyển hết sang CLOCK_MONOTONIC là hết lỗi timestamp."* **ĐÚNG MỘT PHẦN** (F4.3 đã chấm bản Gemini của câu này). Monotonic không nhảy lùi, nhưng vẫn là đồng hồ của **host lúc nhận**, vẫn mang toàn bộ trễ đường đi, và không so được giữa hai lần boot. **Phản ví dụ:** mô phỏng dùng đúng một đồng hồ host đơn điệu cho `t_rx` mà p99 vẫn lớn.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Source time / receive time | Lúc mẫu được lấy (đồng hồ nguồn) / lúc host nhận (đồng hồ host) | Hai tên của cùng một thứ |
+| 🟢 | Offset, skew, drift | Lệch gốc; lệch tốc độ (ppm); skew thay đổi theo nhiệt/thời gian | "Lệch đồng hồ" một con số |
+| 🟢 | Ánh xạ đồng hồ (clock mapping) | Mô hình đưa timestamp nguồn về trục host, cập nhật định kỳ | Đồng bộ đồng hồ ESP32 (ESP32 không bị chỉnh) |
+| 🟢 | `clock_source` | Metadata nói timestamp đến từ đâu (`CONVENTIONS.md` mục 4) | Thông tin trang trí |
+| 🟢 | `boot_id` | Định danh lần boot; monotonic chỉ so được trong cùng `boot_id` | — |
+| 🟡 | Trễ nhóm của bộ lọc | Bộ lọc thông thấp trong IMU làm mẫu "muộn" một lượng cố định | Trễ USB |
+| 🟡 | `sensor_msgs/TimeReference` | Message chuẩn mang một mốc thời gian ngoài (`time_ref`) kèm lúc nhận | Message riêng tự chế |
+| 🔴 | Hardware timestamping qua PTP cho USB | Không có trên USB-serial; PTP chỉ cho Ethernet có PHC (K5 Bài 9) | — |
+
+### 5. Dự đoán
+
+**Đề:**
+1. Thạch anh của module ESP32-S3: dung sai bao nhiêu ppm? Sau 1 giờ, offset thô `t_rx − t_src` trôi tối đa bao nhiêu ms?
+2. Robot rảnh vs robot chạy Nav2 + nén ảnh: p50 và p99 của `t_rx − t_mẫu thật` (ước lượng qua `t_rx` − ánh xạ) là bao nhiêu?
+3. Ánh xạ nguồn → host cập nhật bằng ping mỗi 1 s, fit trên cửa sổ 5 phút: sai số còn lại là bao nhiêu? Bị chặn dưới bởi gì?
+4. Trễ ảnh camera so với IMU (đã ánh xạ): bao nhiêu ms, dấu nào? Phần nào là hằng số?
+5. Với `ω = 2 rad/s`, sai số góc khi ghép ảnh với gyro trước và sau bù trễ camera là bao nhiêu độ?
+
+**Tham số cần tra:** dung sai thạch anh trên module (datasheet module ESP32-S3-WROOM, mục clock `[spec — kiểm]`); độ phân giải `esp_timer_get_time()` (µs, ESP-IDF `[spec]`); trễ nhóm DLPF đã chọn ở C7.1 (datasheet IMU); exposure đã khóa (C7.1).
+
+**Phương pháp:** câu 1: ppm × 3600 s. Câu 2–3: chạy mô phỏng với phân bố trễ bạn đoán, rồi so với đo. Câu 4: tương quan chéo giữa `|ω_z|` gyro và độ dịch ảnh giữa hai frame (→ F4.6, F5.6). Câu 5: `Δθ ≈ ω·Δt`.
+
+```markdown
+# prediction.md — K7 C7.2
+commit: <hash>
+| Đại lượng | Dự đoán | Nguồn / cách tính |
+|---|---|---|
+| Dung sai thạch anh (ppm) → trôi 1 h (ms) | | |
+| t_rx − t_thật: p50 / p99, rảnh (ms) | | |
+| t_rx − t_thật: p50 / p99, tải nặng (ms) | | |
+| Sai số sau ánh xạ (ms) và giới hạn | | |
+| Trễ camera − IMU (ms, dấu) | | |
+| Sai góc ở 2 rad/s trước / sau bù (độ) | | |
+## Tôi sẽ ngạc nhiên nếu...
+```
+
+### 6. Làm
+
+1. **Firmware: đóng dấu ở ISR.** Trong ISR data-ready (C4.1), ghi `t_src = esp_timer_get_time()` (int64, µs `[spec — ESP-IDF]`) và tăng `seq`; task đọc I2C sau đó, gói `{seq, t_src, raw[14]}` vào frame của giao thức C4.3. Không đọc I2C trong ISR. Đo bằng logic analyzer: cạnh INT tới cạnh chân đánh dấu trong ISR (nếu C4.2 có chân đánh dấu) phải ở mức µs.
+2. **Ping hai chiều.** Thêm vào giao thức C4.3 một cặp lệnh ping/pong: host gửi `t1` (host), ESP32 trả `t2 = t3` (`esp_timer`), host ghi `t4`. Mỗi 1 s. Đây là bước 7 của K5 Bài 9, chuyển lên robot. Publish mỗi pong thành `/esp32/time_reference` (`header.stamp` = `t4`, `time_ref` = `t2`, `source = "esp32-01"`), cộng RTT trong `/diagnostics`.
+3. **Ánh xạ trên host.** Node nhận IMU (hardware interface hoặc node riêng, xem quyết định dưới) giữ cửa sổ 5 phút các pong, mỗi 30 s chọn pong RTT nhỏ nhất, fit tuyến tính offset theo thời gian, ánh xạ `t_src` → `header.stamp`. Ghi tham số ánh xạ (`a`, `b`, RTT nhỏ nhất, cửa sổ) mỗi lần cập nhật vào `/diagnostics` để niêm phong (C7.3) đưa vào Metadata record. Khi ESP32 reset (`t_src` nhảy về gần 0, `seq` về 0): bỏ cửa sổ cũ, đánh dấu sự kiện, chờ đủ pong mới.
+   - **Quyết định cần ghi `decisions.md`:** IMU đi qua `ros2_control` (`imu_sensor_broadcaster` của `ros2_controllers` publish `sensor_msgs/Imu`, stamp theo thời điểm cập nhật của controller manager `[tự đo theo phiên bản]`) hay qua node riêng publish stamp đã ánh xạ. Bắt đầu bằng cách nào đơn giản với kiến trúc C5 của bạn, **nhưng** luôn ghi `/esp32/time_reference` và `seq` để ánh xạ lại được offline; chuyển sang node riêng nếu bước 4 cho thấy stamp theo controller vượt ngân sách.
+4. **Đo trong 30 phút rảnh + 30 phút tải.** Tải: chạy Nav2 rỗng hoặc `stress-ng --cpu 4` `[tự đo]` cộng nén ảnh camera. Từ bag: phân bố `t_rx − t_map` (p50/p99/max), `dt` giữa mẫu IMU theo `t_rx` và theo `t_map`, skew ước lượng theo thời gian (có đổi khi robot ấm lên không?), số `seq` bị nhảy (mất mẫu).
+5. **Camera ↔ IMU.** Đặt robot trước một cảnh nhiều chi tiết (giá sách). Xoay robot qua lại bằng teleop (hoặc nhấc tay xoay nhẹ khi motor tắt) 10–20 lần trong 30 s. Tính tốc độ dịch ảnh giữa hai frame (ví dụ tương quan pha của ảnh xám) và `|ω_z|` của gyro; tương quan chéo hai chuỗi → trễ camera − IMU (→ F4.6). Lặp ba lần; trễ phải ổn định trong vài ms. Ghi vào calibration của camera (`calibration_id` mới), kèm exposure, độ phân giải, fps.
+6. **Đồng hồ host.** Ghi `timedatectl` / trạng thái chrony: host đồng bộ NTP không; NTP có được phép **nhảy** (step) giữa phiên không `[tự đo cấu hình]`. Ghi `boot_id` (`/proc/sys/kernel/random/boot_id`) vào metadata mỗi file. Đây là điều kiện để `clock_source = host_unsynced` có nghĩa.
+7. **Ngân sách sai số thời gian** (→ F4.7, K5 Bài 12): bảng mỗi luồng → nguồn sai số → loại A/B → biên. Kết luận bằng số: ghép IMU–ảnh đáng tin tới bao nhiêu ms.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Bảng bản gốc (dòng đồng hồ), đã sửa cách đọc:**
+
+| Kiểm tra | Bản gốc | Đọc đúng |
+|---|---|---|
+| Offset clock ESP32 ↔ mini PC | "Vài chục ms nếu không sync, và **trôi theo thời gian**" | Offset **thô** là tùy ý (gốc `esp_timer` là lúc boot, cỡ giây tới giờ). Thứ có nghĩa là phần **trôi**: vài chục ppm × 3600 s = **vài chục tới ~100 ms mỗi giờ** `[ước lượng với 10–30 ppm]`. Nếu không ánh xạ, sai lệch "vài chục ms" xuất hiện sau chừng một giờ, và tiếp tục lớn |
+
+**Mô phỏng** (25 ppm, trễ USB 0,5 ms + mũ 0,7 ms, 2 % kẹt 5–40 ms, bất đối xứng 0,3 ms):
+
+| Cách đóng dấu | p50 | p99 | max | `dt` p1/p99 (đúng 5 ms) |
+|---|---|---|---|---|
+| Host lúc nhận | ~1,4 ms | ~31 ms | ~45 ms | ~0 / ~27 ms |
+| Nguồn đã ánh xạ | ~0,16 ms | ~0,17 ms | ~0,18 ms | ~4,99 / ~5,01 ms |
+
+Skew ước lượng 25,01 ppm; trôi thô ~45 ms sau 30 phút. Sai số còn lại sau ánh xạ gần đúng bằng **nửa bất đối xứng** (0,15 ms): ping không thấy nó. Trên robot, p99 lúc nhận khi tải nặng có thể lớn hơn mô phỏng; số đo của bạn là số đúng.
+
+**Camera** `[ước lượng]`: ảnh muộn hơn IMU vài chục ms với MJPEG 720p qua USB (phơi sáng/2 + đọc cảm biến ~một khung + nén + truyền); dấu: stamp lúc nhận **muộn** hơn giữa phơi sáng. Phần hằng số chiếm phần lớn; jitter còn lại cỡ vài ms. Ở 2 rad/s, 30 ms là ~3,4°; sau bù, vài ms là dưới 0,5°.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Skew ước lượng nhảy giữa các cửa sổ | ESP32 reset (gốc đổi); RTT tối thiểu không đủ nhỏ | `seq` về 0? RTT min theo thời gian | Xử lý reset; cửa sổ dài hơn; ping dày hơn |
+| Skew trôi chậm theo giờ chạy | Nhiệt độ ESP32/thạch anh đổi (→ F4.1) | Ghi nhiệt độ chip cạnh skew | Cửa sổ fit ngắn hơn; ghi skew theo thời gian vào metadata |
+| `t_map` có bước nhảy vài ms mỗi lần cập nhật fit | Cập nhật tham số đột ngột | Vẽ `t_map − t_rx` quanh lúc cập nhật | Chuyển tham số mượt (nội suy), hoặc ghi ánh xạ theo đoạn và ánh xạ lại offline |
+| Tương quan chéo camera–gyro có nhiều đỉnh | Xoay tuần hoàn quá đều | — | Xoay không đều (ngẫu nhiên) |
+| Mất mẫu (`seq` nhảy) chỉ khi tải nặng | Hàng đợi RX host tràn; ESP32 bỏ gói khi TX đầy | Đếm theo tải | Tăng buffer, giảm ODR nếu cần, nhưng **đếm** mất (→ F3.9) |
+
+### 9. Câu hỏi ngược
+
+1. **[Vì sao không]** Vì sao không đồng bộ luôn đồng hồ ESP32 theo host (chỉnh `esp_timer`) thay vì ánh xạ trên host?
+<details><summary>Hướng nghĩ</summary>
+
+Chỉnh đồng hồ nguồn làm `t_src` nhảy hoặc đổi tốc độ giữa chừng, phá thứ tự và khoảng cách của chính dữ liệu thô; và mất khả năng làm lại phép ánh xạ offline với mô hình tốt hơn. Ánh xạ ở người dùng giữ dữ liệu thô bất biến (giống log append-only, → F3.1).
+
+</details>
+
+2. **[Quy mô]** 100 robot, mỗi con một ESP32, dữ liệu từ mọi robot ghép với nhau ở server (ví dụ hai robot thấy cùng một người). Đồng hồ nào là trục chung, và cái gì gãy trước?
+<details><summary>Hướng nghĩ</summary>
+
+Host mỗi robot cần đồng bộ về một trục chung (NTP/PTP qua mạng, → F4.4–F4.5); ánh xạ ESP32 → host vẫn cần cho từng robot. Gãy trước: host chạy NTP bị step giữa phiên, và robot không có mạng nhiều giờ. Metadata phải nói từng đoạn đang ở trục nào và tin được tới đâu.
+
+</details>
+
+3. **[Failure mode]** Ánh xạ của bạn có một bug: dùng `a` với dấu ngược. Trong 5 phút đầu không ai thấy gì. Sau 2 giờ thì sao? Rule nào ở C7.4 bắt được?
+<details><summary>Hướng nghĩ</summary>
+
+Dấu skew sai làm sai số lớn dần tuyến tính: 2 × skew × thời gian. Sau 2 giờ cỡ hàng trăm ms. Rule so `t_map` với `t_rx`: `t_map` không bao giờ được **muộn hơn** `t_rx` (mẫu không thể được lấy sau khi đã nhận), và `t_rx − t_map` không được trôi. Một rule nhân quả rẻ và mạnh.
+
+</details>
+
+4. **[Liên ngành]** Thiên văn vô tuyến (VLBI) ghép tín hiệu của các kính thiên văn cách nhau hàng nghìn km. Mỗi trạm ghi dữ liệu kèm đồng hồ maser hydro tại chỗ, rồi ghép **sau** ở trung tâm xử lý. Giống và khác cách bạn làm với ESP32 ở đâu?
+<details><summary>Hướng nghĩ</summary>
+
+Giống: đóng dấu ở nguồn bằng đồng hồ tại chỗ, ghi thô, ánh xạ/ghép offline với mô hình đồng hồ ước lượng sau. Khác: VLBI cần độ ổn định cực cao (maser), robot dùng thạch anh thường và bù bằng ước lượng skew liên tục.
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Hàng không: flight data recorder.** Dữ liệu từ nhiều hệ con được ghi với khung thời gian của recorder; khi điều tra, nhóm phân tích phải căn lại độ trễ riêng của từng tham số. Giống: ghi thô kèm nguồn thời gian, căn chỉnh sau. Khác: FDR có chuẩn về tần số và trễ cho từng tham số; robot của bạn phải tự đo.
+- **Tài chính: timestamp giao dịch theo quy định.** Các sàn và công ty giao dịch ở châu Âu phải đồng bộ đồng hồ với UTC trong một dung sai quy định và chứng minh được nguồn thời gian (MiFID II RTS 25) `[chuẩn]`. Giống: `clock_source` là bằng chứng bắt buộc, không phải chi tiết. Khác: họ đồng bộ đồng hồ; bạn ánh xạ sau.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Patriot Dhahran 1991: lệch ~0,34 s sau ~100 h, 28 người chết | [chuẩn] | GAO/IMTEC-92-26 |
+| `esp_timer_get_time()` int64 µs từ lúc boot | [spec] | ESP-IDF API reference |
+| Ánh xạ bằng ping RTT nhỏ nhất + fit tuyến tính; bias = nửa bất đối xứng | [chuẩn] + [đã chạy] | Mô phỏng; K5 Bài 9 bước 7 |
+| Phân bố trễ USB và tỉ lệ kẹt trong mô phỏng | [ước lượng] | Đo ở bước 4 |
+| `imu_sensor_broadcaster` stamp theo controller manager | [tự đo] | Đọc mã nguồn theo phiên bản |
+| Trễ camera vài chục ms | [ước lượng] | Đo ở bước 5 |
+| MiFID II RTS 25 | [chuẩn] | — |
+
+**Đã sửa so với bản gốc/Gemini:**
+- Bản gốc: "Offset clock ESP32 ↔ mini PC: vài chục ms nếu không sync". Offset thô là tùy ý (gốc boot); con số có nghĩa là **tốc độ trôi** (ppm → ms/giờ). Sửa cách đọc, giữ ý "trôi theo thời gian".
+- Bản gốc bước 3 nói "đo offset bằng phương pháp của Khóa 5 Bài 9 bước 7": giữ, và nói rõ phương pháp đó cho ánh xạ có bias bất đối xứng không quan sát được.
+- Gemini (Bài 5, "Nếu ra khác"): "chuyển sang `CLOCK_MONOTONIC` hoặc timer phần cứng" cho timestamp không đơn điệu: monotonic không bỏ trễ đường đi; timer phần cứng của MCU phải được **ánh xạ** trước khi dùng (F4.3 đã ghi lỗi này).
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** GAO, *Patriot Missile Defense: Software Problem Led to System Failure at Dhahran, Saudi Arabia* (IMTEC-92-26, 1992); ESP-IDF API reference, `esp_timer`.
+- **Giải thích:** → F4.6 và F4.7 của giáo trình này; tài liệu `sensor_msgs/TimeReference` (ROS 2 `common_interfaces`).
+- **Đào sâu (tùy chọn):** Furgale, Rehder & Siegwart, *Unified Temporal and Spatial Calibration for Multi-Sensor Systems* (IROS 2013): ước lượng trễ camera–IMU như một tham số hiệu chuẩn (bộ công cụ Kalibr).
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao `t_src` thô và `t_rx` đều không phải đáp án; (2) vẽ lại timing diagram bốn đồng hồ; (3) câu dưới.
+
+<details><summary>File MCAP cũ chỉ có IMU với stamp lúc nhận, không có /esp32/time_reference. Có cứu được thời điểm lấy mẫu không?</summary>
+
+Một phần. Nếu payload có `seq` và ODR cố định, dựng lại lưới thời gian `t_k = t_0 + k/ODR` rồi fit `t_0` và skew theo **đường bao dưới** của `t_rx − k/ODR` (mẫu ít bị trễ nhất). Không có `seq` thì mất gói và dồn gói không phân biệt được. Bài học: luôn ghi `seq` và tham chiếu đồng hồ, kể cả khi chưa dùng.
+
+</details>
+
+---
+
+## Bài C7.3 — Sidecar MCAP, upload, audit (9h)
+
+> **Vị trí:** C7.2 → **C7.3** → C7.4 (data contract) · **Cần trước:** K5 Bài 13 (ingest MCAP, `chunk_size`, `kill -9`), K5 Bài 14 (hàm `upload()` multipart resumable, chỉ xóa local khi băm khớp), K5 Bài 15 (index Parquet + DuckDB), K2 Bài 7 (`mcap recover`), K2 Bài 11–12 (bảy lớp lỗi L1–L7, tool `lerobot-audit`); → F3.1, F3.5, F3.9; K7 C4.2 (jitter vòng điều khiển) · **Sau bài này bạn quyết định được:** ghi luồng nào ở tần số nào vào file nào; khi nào một file được coi là xong, được rời robot, được xóa khỏi robot; mất mạng bao lâu thì robot vẫn không mất dữ liệu; và sidecar có được phép ảnh hưởng vòng điều khiển không (không), chứng minh bằng đo.
+
+**Câu hỏi của bài (giữ từ bản gốc):** robot chạy xong, dữ liệu đi đâu?
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Bản gốc viết: "Đây là chỗ Khóa 5 vào việc. Không có khái niệm mới, chỉ có tích hợp", và kết thúc bằng một khoảnh khắc: công cụ audit bạn viết ở Khóa 2 để kiểm dataset của người khác giờ tìm ra lỗi trong dữ liệu do chính robot bạn tạo ra. Câu chuyện của bài là câu chuyện đó, và nó chỉ xảy ra nếu bạn **không** sửa dữ liệu bằng tay trước khi chạy tool.
+
+Phía bên kia: ở K2 Bài 9 bạn đã gặp lý do LeRobot đổi định dạng sang v3.0: quá nhiều file nhỏ, khởi tạo chậm, khó streaming. Những người làm dataset robot cộng đồng đã khổ vì quyết định ghi file của **phía robot**. Robot của bạn bây giờ là phía đó.
+
+### 2. Mô hình tư duy
+
+**Đường đi của một file** (mỗi mũi tên là một điều kiện kiểm được, không phải một lời hứa):
+
+```mermaid
+flowchart LR
+  T["topic ROS 2<br/>(C7.1–C7.2)"] --> R["SIDECAR: rosbag2 → MCAP<br/>split mỗi N phút<br/>container riêng, ưu tiên thấp"]
+  R -->|"file đóng xong<br/>(hoặc recover sau kill)"| S["NIÊM PHONG<br/>mcap doctor · contract C7.4<br/>+ metadata · sha256 · manifest"]
+  S -->|"qua contract"| Q[("hàng đợi upload<br/>trên đĩa robot")]
+  S -->|"block"| X[("quarantine<br/>KHÔNG upload, KHÔNG xóa")]
+  Q -->|"Wi-Fi có mạng<br/>upload() K5 B14"| O[("object store<br/>key = sha256")]
+  O -->|"tải về, băm lại khớp"| D["XÓA local"]
+  O --> A["audit K2 + index K5 B15<br/>+ Foxglove"]
+```
+
+**Ba ý bản chất:**
+1. **Sidecar là một tiến trình khác, trên một máy khác vòng điều khiển.** Vòng PID chạy trên ESP32 (C4); sidecar chạy trên mini PC. Kiến trúc này làm ảnh hưởng **có thể** bằng 0, chứ không **tự động** bằng 0: đường duy nhất nối hai bên là USB-serial, và nếu firmware **chờ** khi hàng đợi TX đầy (host đọc chậm vì CPU bận), vòng điều khiển trễ theo. Phải đo.
+2. **File chỉ "xong" khi đã niêm phong.** Trước đó nó là trạng thái tạm. Niêm phong = kiểm (`mcap doctor`, contract), gắn metadata mà message chuẩn không có (`CONVENTIONS.md` mục 4), băm, viết manifest. Băm **lúc niêm phong**, không lúc upload (K5 Bài 14 đã giải thích vì sao).
+3. **Robot là một nút biên không tin được mạng.** Dung lượng đĩa chia cho tốc độ ghi là số giờ robot chịu được mất mạng (→ F7.1: hàng đợi là một bể chứa). Khi đầy: chính sách drop **có đếm** (→ F3.9), viết ra trước.
+
+**Niêm phong bằng code** (chạy được không cần ROS; trên robot, đầu vào là file rosbag2 đã đóng):
+
+```python
+# [đã chạy với mcap 1.5.0] "Niêm phong" một file MCAP đã đóng: chép sang file mới + metadata, băm, viết manifest
+import hashlib, json, os, sys
+from mcap.reader import make_reader
+from mcap.writer import Writer, CompressionType
+
+def seal(src, dst, file_meta, channel_meta):
+    """file_meta: dict[str,str] -> Metadata record 'robot'. channel_meta: {topic: dict[str,str]}."""
+    with open(src, "rb") as fi, open(dst + ".part", "wb") as fo:
+        r = make_reader(fi); w = Writer(fo, compression=CompressionType.ZSTD); w.start()
+        schemas, chans, n = {}, {}, 0
+        for sch, ch, msg in r.iter_messages(log_time_order=False):   # giữ thứ tự ghi gốc
+            if sch is not None and sch.id not in schemas:
+                schemas[sch.id] = w.register_schema(sch.name, sch.encoding, sch.data)
+            if ch.id not in chans:
+                meta = {**ch.metadata, **channel_meta.get(ch.topic, {})}
+                chans[ch.id] = w.register_channel(ch.topic, ch.message_encoding,
+                                                  schemas.get(ch.schema_id, 0), meta)
+            w.add_message(chans[ch.id], msg.log_time, msg.data, msg.publish_time, msg.sequence); n += 1
+        for m in r.iter_metadata():                                   # giữ metadata cũ (vd. của rosbag2)
+            w.add_metadata(m.name, m.metadata)
+        w.add_metadata("robot", file_meta); w.finish()
+    os.replace(dst + ".part", dst)                                    # nguyên tử: không ai thấy file dở
+    h = hashlib.sha256(open(dst, "rb").read()).hexdigest()
+    manifest = {"file": os.path.basename(dst), "sha256": h, "messages": n, "source": os.path.basename(src), **file_meta}
+    json.dump(manifest, open(dst + ".manifest.json", "w"), indent=1)
+    return manifest
+
+if __name__ == "__main__":                                            # thử trên một file giả 2 kênh
+    with open("demo.mcap", "wb") as f:
+        w = Writer(f); w.start()
+        s = w.register_schema("demo/Imu", "jsonschema", b"{}")
+        ci = w.register_channel("/imu/data_raw", "json", s); co = w.register_channel("/odom", "json", s)
+        for i in range(1000):
+            w.add_message(ci, i * 5_000_000, json.dumps({"seq": i}).encode(), i * 5_000_000, i)
+            if i % 4 == 0: w.add_message(co, i * 5_000_000, b"{}", i * 5_000_000, i // 4)
+        w.finish()
+    m = seal("demo.mcap", "sealed.mcap",
+             {"metadata_version": "1", "robot_id": "rb-01", "boot_id": "b-0042", "firmware_version": "a1b2c3d",
+              "clock_source": "estimated", "clock_map": json.dumps({"skew_ppm": 25.0, "offset_s": 3.7})},
+             {"/odom": {"calibration_id": "odom-01@2026-11-20-c"}, "/imu/data_raw": {"calibration_id": "imu-01@2026-11-25-a"}})
+    with open("sealed.mcap", "rb") as f:
+        r = make_reader(f); sm = r.get_summary()
+        print({c.topic: c.metadata for c in sm.channels.values()})
+        print([(x.name, x.metadata["robot_id"]) for x in r.iter_metadata() if x.name == "robot"])
+        print("số message theo kênh:", {sm.channels[k].topic: v for k, v in sm.statistics.channel_message_counts.items()})
+    print("manifest:", {k: m[k] for k in ("sha256", "messages")})
+```
+
+Đã chạy: metadata kênh (`calibration_id` cho `/odom`, `/imu/data_raw`) và Metadata record `robot` đọc lại đúng; đếm 1000/250 message. Giới hạn đã biết: hàm chỉ chép message và metadata (attachment của file nguồn bị bỏ: kiểm rosbag2 của bạn có ghi attachment không `[tự đo]`); băm đọc cả file vào RAM, file lớn thì băm theo khối như `sha256()` của K5 Bài 14. Chép lại tốn I/O bằng kích thước file; phương án rẻ hơn là để metadata trong manifest JSON đi kèm (mất tính tự mô tả của MCAP). Chọn một, ghi `decisions.md`.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Sidecar container (log shipper cạnh service) | rosbag2 trong container riêng cạnh `ros2_control` | Log shipper backend chỉ tranh CPU/IO. Ở đây có **đường vật lý** ngược về MCU (serial) và có pin: sidecar tốn CPU là tốn **Wh** | Tin "khác process thì không ảnh hưởng", không đo jitter; hoặc sidecar ăn 20 % pin không ai biết |
+| Log rotation + shipping (Fluent Bit, Vector) có buffer đĩa | Split MCAP + hàng đợi upload trên đĩa robot | Log backend mất vài dòng thì sao; ở đây **một file** có thể là phiên duy nhất của một lỗi hiếm, và mất mạng hàng giờ là bình thường | Xóa file sau khi "đã gửi" (200 OK) thay vì sau khi băm lại khớp |
+| Dead-letter queue | Quarantine cho file FAIL contract | DLQ backend thường được xử lý lại tự động; file robot sai thường cần **người** xem (TF sai, cảm biến hỏng) | Tự động "sửa" dữ liệu sai rồi đẩy tiếp: dataset nhiễm lỗi có hệ thống |
+
+**Chấm mô hình:**
+
+1. *"Bản chất không có realtime forward 100 % nào; luôn có buffer ở giữa để kiểm soát ổn định, như proxy hứng streaming 24/7"* (mô hình của bạn ở K3 lượt 6). **ĐÚNG MỘT PHẦN.** Đúng: sidecar là một chuỗi buffer (hàng đợi subscriber, cache của rosbag2, chunk MCAP, hàng đợi upload). Gãy: mỗi buffer là một **chỗ mất dữ liệu khi crash** và một **chỗ drop khi đầy**; proxy backend thường thả request và client thử lại, robot không gửi lại được quá khứ. **Phản ví dụ:** `kill -9` sidecar: mọi thứ trong chunk chưa đóng biến mất (K5 Bài 13 tính được bao nhiêu giây); không client nào gửi lại.
+2. *"Sidecar chạy trên mini PC nên ảnh hưởng tới jitter vòng điều khiển bằng 0"* (bản gốc, Gemini lặp lại "giữ nguyên mức ban đầu"). **ĐÚNG MỘT PHẦN.** Đúng nếu firmware **không bao giờ chờ** khi gửi. **Phản ví dụ:** firmware gọi ghi USB-CDC có timeout trong task vòng điều khiển; CPU host bận 50 ms, host không đọc, buffer TX đầy, lệnh ghi chờ, chu kỳ PID trễ. Bước 6 mục 6 kiểm đúng chuyện này.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Sidecar ghi dữ liệu | Tiến trình riêng subscribe và ghi, không nằm trong đường điều khiển | Một node "logger" trong cùng process với controller |
+| 🟢 | Split / rotate | Đóng file sau N phút hoặc N MB, mở file mới | Chỉ để file nhỏ hơn (còn giới hạn vùng mất khi crash) |
+| 🟢 | Niêm phong (seal) | Kiểm + gắn metadata + băm; từ đây file bất biến | Đóng file |
+| 🟢 | Manifest | JSON đi kèm file: hash, đếm, metadata, nguồn | Index (index là ở server, K5 Bài 15) |
+| 🟢 | Quarantine | Nơi giữ file FAIL contract: không upload, không xóa | Thùng rác |
+| 🟡 | Storage preset/zstd của rosbag2 MCAP | Cấu hình nén và chunk của plugin MCAP `[tự đo]` | — |
+| 🟡 | Layout Foxglove | File JSON mô tả panel; commit trong repo | Cấu hình cá nhân, không cần lưu |
+
+### 5. Dự đoán
+
+**Đề:**
+1. Dung lượng mỗi giờ chạy (giữ đề bản gốc: "tính trước, đo sau"), từng luồng và tổng, chưa nén và sau zstd.
+2. Ổ trống X GB, chừa 20 % an toàn: robot chịu mất mạng bao nhiêu giờ chạy?
+3. `kill -9` sidecar giữa phiên: mất bao nhiêu **giây** dữ liệu mỗi luồng (K5 Bài 13 đề 3)?
+4. Jitter p99 vòng điều khiển (C4.2) khi sidecar ghi + CPU host tải nặng, so với C4 không có sidecar.
+5. Tool audit K2 chạy trên một phiên 30 phút của robot: lớp lỗi nào (L1–L7) bạn đoán sẽ có phát hiện thật?
+
+**Tham số cần tra:** kích thước CDR của từng message (tính tay từ định nghĩa `.msg` như K5 Bài 13 đề 1: header, chuỗi, mảng covariance 9 hoặc 36 số `double`); kích thước ảnh MJPEG thật (`ros2 topic bw` ở C7.1); overhead record MCAP (spec MCAP, Message record); `chunk_size` của plugin MCAP trong rosbag2 `[tự đo]`; dung lượng trống (`df -h`).
+
+**Công thức:** byte/giờ = Σ (byte/message + overhead) × Hz × 3600; giờ chịu mất mạng = 0,8 × trống / byte/giờ; giây mất khi kill ≈ chunk_size / tốc độ byte gộp.
+
+```markdown
+# prediction.md — K7 C7.3
+commit: <hash>
+| Luồng | B/message | Hz | MB/giờ |
+|---|---|---|---|
+| /imu/data_raw | | 200 | |
+| /joint_states | | 100 | |
+| /odom | | 50 | |
+| /camera_front/image/compressed | | | |
+| khác (cmd, battery, diagnostics, time_reference) | | | |
+| **Tổng chưa nén / sau zstd** | | | |
+Giờ chịu mất mạng: __ · Giây mất khi kill: __ · Jitter p99 có sidecar + tải: __ µs (C4: __ µs)
+Lớp lỗi K2 dự đoán có phát hiện thật: __
+## Tôi sẽ ngạc nhiên nếu...
+```
+
+### 6. Làm
+
+Giữ đủ 7 bước của bản gốc Bài 5; thêm niêm phong, quarantine, fault injection và đo jitter có chủ đích.
+
+1. **Sidecar trên mini PC** ghi MCAP song song với vòng điều khiển (bản gốc bước 1): container riêng (C5.2), chạy `ros2 bag record` với storage `mcap`, split theo thời gian (ví dụ 5 phút), preset nén zstd, danh sách topic tường minh (không `-a`), QoS khớp publisher (IMU/ảnh thường `best_effort`) `[tự đo — cờ cụ thể: `-s mcap`, `--max-bag-duration`, `--storage-preset-profile`, `--qos-profile-overrides-path` theo bản Jazzy bạn cài]`. Đặt `nice`/giới hạn CPU cho container. Backpressure: cache của recorder có giới hạn, đếm message bị drop (→ F3.9, K5 Bài 17 nếu đã học).
+2. **Các luồng ghi** (bản gốc bước 2): encoder + vận tốc 100 Hz, lệnh PWM 100 Hz, IMU 200 Hz, pose odometry 50 Hz, pin, camera 10–30 fps; thêm `/esp32/time_reference`, `/tf_static`, `/diagnostics` (bảng mục 7 của chặng).
+3. **Timestamp** (bản gốc bước 3): ESP32 đóng dấu ở nguồn, mini PC đóng dấu lúc nhận, **ghi cả hai** và `clock_source`; offset đo theo K5 Bài 9 bước 7 (đã làm ở C7.2).
+4. **Message chuẩn** (bản gốc bước 4) theo `CONVENTIONS.md`: `nav_msgs/Odometry` có covariance (số đo C6.3 bước 14, không phải số mẫu), `sensor_msgs/JointState`, `sensor_msgs/Imu` (covariance từ nhiễu đo ở C7.1 bước 5, không để 0), `sensor_msgs/BatteryState`, frame theo REP-105, lấy từ `ros2_control` và rosbag2, không tự đóng gói. Metadata có version: `calibration_id` (chính là hệ số UMBmark của C6), `clock_source`, `sequence` (đếm mất gói qua `/diagnostics`).
+5. **Niêm phong** (thêm): một dịch vụ nhỏ theo dõi thư mục bag; mỗi file đóng xong → `mcap doctor` → contract C7.4 → `seal()` (mục 2) với metadata từ `calib/`, `firmware_version`, `boot_id`, tham số ánh xạ đồng hồ → hàng đợi upload hoặc quarantine. File không đóng đúng (sidecar bị kill) → `mcap recover` (K2 Bài 7) trước, ghi `recovered=true` vào manifest.
+6. **Upload resumable** (bản gốc bước 5): dùng `upload()` của K5 Bài 14 (multipart, key theo sha256, hỏi server đã có part nào, tải về băm lại trước khi xóa local). Thứ tự: cũ trước. Khi đĩa vượt ngưỡng: dừng ghi luồng ảnh trước, IMU/odom sau cùng, **đếm** và ghi sự kiện vào `/diagnostics` (chính sách viết trước, → F3.9).
+7. **Fault injection (thêm):** (a) `kill -9` sidecar giữa phiên, khởi động lại: đếm giây mất mỗi luồng, so dự đoán; (b) tắt Wi-Fi 30 phút giữa upload, bật lại: upload tiếp từ part dở, không tạo object trùng; (c) robot vẫn chạy teleop bình thường trong cả (a) và (b).
+8. **Jitter vòng điều khiển (thêm, kiểm câu bản gốc):** logic analyzer trên chân đánh dấu vòng lặp mà bạn dùng ở C4.2, 10 phút mỗi điều kiện: không sidecar / sidecar ghi / sidecar ghi + CPU host tải nặng + upload. So p99 với số Gate C4.
+9. **Chạy tool audit Khóa 2** (bản gốc bước 6) lên dữ liệu robot thật. `lerobot-audit` đọc định dạng LeRobot, không đọc MCAP: viết **adapter** chuyển một file MCAP thành chuỗi thời gian mà detector cần (timestamp, `state` = vận tốc bánh đo, `action` = lệnh vận tốc bánh, khung ảnh). Lớp áp dụng được: L1 (đơn điệu), L2 (rớt/jitter: theo `seq` và `dt`), L4 (kênh đơ khi lệnh đổi), L5 (lệch pha lệnh → vận tốc), L6 (vật lý: đơn vị, dải); L3/L7 áp dụng một phần (số ảnh so với fps khai báo; metadata so với dữ liệu). Ghi lớp nào **không áp dụng** và vì sao, như K2 Bài 11 yêu cầu. Nó tìm thấy gì?
+10. **Index** (thêm): chạy extractor của K5 Bài 15 trên file đã upload: tóm tắt mỗi giây vào Parquet, truy vấn DuckDB "những đoạn robot quay nhanh hơn 1 rad/s".
+11. **Foxglove** (bản gốc bước 7): mở file từ object store, dựng layout: pose 2D (`/odom`, TF), vận tốc hai bánh đo vs lệnh, PWM, IMU (gyro z cạnh ω từ bánh), ảnh, `/diagnostics`. Xuất layout JSON vào `foxglove/layout-c07.json`, commit.
+12. Đo dung lượng thật một giờ chạy (đề 1); so dự đoán.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Bảng bản gốc (giữ, sửa cách đọc dòng đầu):**
+
+| Kiểm tra | Bản gốc | Đọc đúng |
+|---|---|---|
+| Sidecar ảnh hưởng jitter vòng điều khiển | **0**: nó chạy trên mini PC, vòng điều khiển trên ESP32. Chứng minh bằng đo lại (C4.2) | Đích là 0 **trong sai số đo** (p99 ba điều kiện không khác nhau quá độ phân giải logic analyzer và độ dao động giữa hai lần đo cùng điều kiện). Nếu điều kiện "tải nặng" làm p99 tăng: firmware đang chờ TX; sửa firmware (gửi không chặn, bỏ gói **có đếm**), không sửa sidecar |
+| Offset clock ESP32 ↔ mini PC | Vài chục ms nếu không sync, trôi theo thời gian | Xem C7.2 mục 7 |
+| Tool Khóa 2 chạy trên dữ liệu robot | **Tìm thấy lỗi thật**: rớt gói, rớt frame camera, có thể lệch pha | Thường gặp nhất `[ước lượng]`: L2 trên ảnh (rớt frame khi CPU bận, khi phơi sáng tự động dài), L2 trên IMU khi tải nặng, L5 (trễ lệnh → vận tốc vài chục ms, bình thường cho motor có quán tính: đó là FP nếu ngưỡng viết cho tay máy), L1 nếu có luồng stamp bằng wall clock mà NTP chỉnh giữa phiên |
+| Dữ liệu mỗi giờ chạy | Tính trước, đo sau | Dưới đây |
+
+**Dung lượng** `[ước lượng — tính từ định nghĩa message, kiểm bằng file thật]`:
+
+| Luồng | B/message (CDR + record MCAP ~31 B) | Hz | MB/giờ chưa nén |
+|---|---|---|---|
+| IMU (`Imu`: 3 mảng covariance 9 `double`, quaternion, 2 vector, header) | ~355 (CDR ~324) | 200 | ~255 |
+| JointState (2 khớp, 3 mảng, 2 tên) | ~150–200 | 100 | ~55–70 |
+| Odometry (2 covariance 36 `double`) | ~750 | 50 | ~135 |
+| Camera MJPEG 720p (50–150 KB/ảnh) | — | 15 | ~2.700–8.100 |
+| **Tổng** | | | **~3–9 GB/giờ, camera chiếm > 90 %** |
+
+zstd nén mạnh các luồng nhiều số 0 (covariance, quaternion không dùng) nhưng gần như không nén được JPEG `[ước lượng]`. Hệ quả: quyết định về camera (độ phân giải, fps, chỉ ghi khi cần) là quyết định duy nhất đáng kể về dung lượng. Bản Gemini viết IMU "~50 B/message": thấp hơn ~6 lần, vì quên covariance và header.
+
+**Kill -9:** mất tối đa khoảng một chunk chưa đóng; khi có ảnh trong cùng file, đó chỉ là phần giây (K5 Bài 13 tính ~0,4 s với hai camera); IMU một mình thì hàng chục giây. Số của bạn phụ thuộc `chunk_size` của rosbag2.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Jitter p99 tăng khi sidecar + tải | Firmware chặn khi gửi; ESP32 in log text trong vòng lặp | Logic analyzer: chân đánh dấu trễ đúng lúc host bận | Gửi không chặn từ task riêng, ring buffer, đếm gói bỏ (C4) |
+| File sau `kill -9` không mở được | Chưa có summary/index | `mcap doctor` | `mcap recover` (K2 Bài 7); split ngắn hơn |
+| IMU trong bag thưa hơn 200 Hz | QoS không khớp; cache recorder đầy; CPU | `ros2 bag info`, đếm `seq` | QoS `best_effort` khớp; tăng cache có giới hạn; đếm drop |
+| Upload xong mà file local vẫn còn | Băm lại không khớp → đúng là phải giữ | Log uploader | Điều tra (đĩa, ghi đè sau niêm phong); quarantine |
+| Upload tạo hai object cho một file | Key theo tên file/UUID thay vì sha256 | So key | Key theo nội dung (K5 Bài 14) |
+| Foxglove không hiện TF | `/tf_static` không có trong file (recorder khởi động sau `robot_state_publisher`, QoS transient local) | `ros2 bag info` | Ghi `/tf_static` với QoS durability đúng `[tự đo]`, hoặc chép TF vào metadata lúc niêm phong |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot, mỗi con 8 giờ/ngày. Dung lượng mỗi ngày, băng thông uplink văn phòng cần, và cái gì gãy trước: đĩa robot, Wi-Fi, object store hay chi phí?
+<details><summary>Hướng nghĩ</summary>
+
+Nhân số của bạn: hàng TB/ngày nếu ghi camera liên tục. Wi-Fi văn phòng chung gãy trước đĩa. Lời giải không phải băng thông lớn hơn mà là **ghi có chọn lọc**: luồng nhẹ ghi liên tục, ảnh chỉ ghi quanh sự kiện (trigger), giữ ring buffer vài phút trên robot. Đó là quyết định sản phẩm, có hậu quả cho dataset C11.5.
+
+</details>
+
+2. **[Failure mode]** Thiết kế một lỗi mà toàn bộ pipeline (niêm phong, upload, băm lại, audit) đều xanh nhưng dữ liệu vẫn sai cho C8.
+<details><summary>Hướng nghĩ</summary>
+
+`calibration_id` trong metadata trỏ tới hồ sơ UMBmark cũ trong khi controller đã nạp hồ sơ mới (metadata đọc từ file, không từ tham số đang chạy). Mọi băm khớp vì băm chứng minh toàn vẹn, không chứng minh đúng. Sửa: niêm phong đọc tham số **từ chính controller đang chạy** (`ros2 param`), và contract so tham số đó với `calib/`.
+
+</details>
+
+3. **[Vì sao không]** Vì sao không ghi thẳng lên object store qua Wi-Fi (streaming), bỏ đĩa robot?
+<details><summary>Hướng nghĩ</summary>
+
+Wi-Fi văn phòng mất kết nối là chuyện thường; streaming biến mỗi lần mất mạng thành mất dữ liệu, hoặc biến bộ nhớ RAM thành hàng đợi không giới hạn. Đĩa robot là buffer có thể tính bằng giờ. Streaming hợp cho một luồng nhẹ để giám sát trực tiếp (dashboard), không cho bản ghi chuẩn.
+
+</details>
+
+4. **[Liên ngành]** Hộp đen máy bay ghi liên tục vào bộ nhớ chịu va đập, vòng tròn ghi đè, chỉ giữ N giờ cuối; dữ liệu được lấy ra sau sự cố. Robot của bạn nên giống hộp đen ở đâu, khác ở đâu?
+<details><summary>Hướng nghĩ</summary>
+
+Giống: ring buffer cục bộ cho luồng đầy đủ (ảnh), giữ lại khi có sự kiện. Khác: robot còn cần dữ liệu **bình thường** để huấn luyện và đánh giá (C11), không chỉ dữ liệu quanh sự cố; nên có hai lớp: ghi liên tục luồng nhẹ, ghi có trigger luồng nặng.
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Thiên văn quan sát: pipeline từ kính về trung tâm dữ liệu.** Đài quan sát ghi tại chỗ, kiểm chất lượng và gắn metadata (header FITS) trước khi chuyển, giữ bản gốc tới khi trung tâm xác nhận. Giống: niêm phong ở nguồn, xóa sau xác nhận. Khác: kính thiên văn có đường truyền ổn định theo lịch; robot có Wi-Fi văn phòng.
+- **Y tế: hồ sơ thiết bị theo dõi bệnh nhân.** Máy theo dõi lưu cục bộ khi mất kết nối với hệ thống trung tâm và đồng bộ lại sau; dữ liệu thiếu phải được đánh dấu là thiếu, không nội suy im lặng. Cùng nguyên tắc đếm drop của F3.9.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| `seal()` giữ message, metadata kênh, Metadata record | [đã chạy] | mcap 1.5.0 Python; attachment không chép |
+| Cờ `ros2 bag record` (`-s mcap`, split, preset, QoS override) | [tự đo] | Theo bản Jazzy cài |
+| Kích thước CDR `Imu` ~324 B | [ước lượng] | Tính từ định nghĩa message + căn lề CDR; kiểm bằng `ros2 bag info` (byte/message) |
+| Ảnh MJPEG 720p 50–150 KB | [ước lượng] | Đo ở C7.1 |
+| Kill -9 mất ~một chunk | [chuẩn] | K5 Bài 13 đã đo với writer Python; rosbag2 `[tự đo]` |
+| `lerobot-audit` không đọc MCAP, cần adapter | [chuẩn] | K2 M2 viết cho định dạng LeRobot |
+
+**Đã sửa so với bản gốc/Gemini:**
+- Bản gốc: jitter "0" do kiến trúc. Sửa: 0 là đích phải chứng minh trong sai số đo, và chỉ ra cơ chế phá nó (firmware chặn khi TX đầy).
+- Bản gốc: "chạy tool audit Khóa 2" như thể chạy thẳng được. Tool đọc định dạng LeRobot; thêm adapter và bảng lớp lỗi áp dụng / không áp dụng.
+- Gemini: IMU "~50 B/message" (thấp ~6 lần); "dung lượng sau 1 giờ khớp dự đoán với sai số < 15 %" là ngưỡng Gemini tự đặt, bản gốc chỉ nói "tính trước, đo sau": không đưa vào gate; "cấu hình writer flush chunk mỗi 5–10 giây": chunk MCAP đóng theo **kích thước**, không theo thời gian trong writer Python (K5 Bài 13); giới hạn vùng mất bằng split file hoặc chunk nhỏ hơn.
+- Gemini: covariance `/odom` "từ phương sai 10 lần chạy UMBmark": xem C6.3 mục 11.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** MCAP Specification (mcap.dev/spec): Metadata record, Channel metadata, Chunk; tài liệu rosbag2 (README của `ros2/rosbag2`, mục storage plugin MCAP).
+- **Giải thích:** Foxglove docs (docs.foxglove.dev), mục layouts và MCAP.
+- **Đào sâu (tùy chọn):** → F3.5 (upload resumable, ngữ nghĩa object store), → F3.9 (drop policy).
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao xóa file sau "200 OK" là sai; (2) vẽ lại sơ đồ đường đi của một file; (3) câu dưới.
+
+<details><summary>Niêm phong tính sha256 trên file đã nén zstd. Sau này bạn đổi mức nén và niêm phong lại cùng dữ liệu: hash đổi. Đó là lỗi không?</summary>
+
+Không phải lỗi, nhưng là một quyết định: hash của **bytes file** là danh tính của file, không của **nội dung logic**. Nếu cần danh tính logic (cùng message dù nén khác), băm theo message (ví dụ hash từng chunk sau giải nén, hoặc hash của danh sách message) và ghi cả hai vào manifest (→ F3.8).
+
+</details>
+
+---
