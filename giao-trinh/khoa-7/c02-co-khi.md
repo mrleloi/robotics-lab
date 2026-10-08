@@ -224,3 +224,275 @@ Copy vào `build-log/c02.md`, một mục mỗi buổi:
 ```
 
 ---
+
+## Bài C2.1 — Lực, mô-men, chọn motor và tỉ số truyền bằng số (6h)
+
+> **Vị trí:** (mở đầu C2) → **C2.1** → C2.2 · **Cần trước:** K1 Bài 1 (bốn đại lượng), → F1.1 (con số nào là ước lượng); không cần C1 · **Sau bài này bạn quyết định được:** mua JGB37-520 tỉ số truyền nào với bánh đường kính nào, cho khối lượng và tốc độ của bạn; và chuyển con số dòng đỉnh, dòng chạy đều cho C1.2 (power budget) và C3 (chọn driver).
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 1902–1903, anh em Wright cần một động cơ cho chiếc Flyer. Họ đã có số liệu lực nâng và lực cản đo bằng ống gió tự làm, nên tính được trước **cần bao nhiêu lực đẩy** và từ đó bao nhiêu công suất. Không nhà sản xuất động cơ ô tô nào họ hỏi chịu làm một động cơ đủ nhẹ cho công suất đó, nên thợ máy Charlie Taylor của họ đúc một động cơ khối nhôm khoảng 12 mã lực; còn cánh quạt thì họ tự thiết kế bằng lý thuyết, vì không có tài liệu nào về cánh quạt máy bay `[chuẩn — lịch sử được ghi chép rộng rãi, ví dụ Smithsonian National Air and Space Museum]`. Thứ đáng học không phải động cơ nhôm. Đó là **thứ tự**: yêu cầu (lực, tốc độ) → con số → rồi mới chọn hoặc làm phần cứng.
+
+Người mới dựng robot thường làm ngược: mua motor "trông khỏe", lắp, thấy robot ì hoặc bò lên dốc không nổi, rồi mua motor khác. Với robot chở mini PC và pin, sai lầm còn đắt hơn: motor tỉ số truyền quá thấp thì kéo dòng lớn, nóng và làm sụt nguồn; quá cao thì robot không bao giờ đạt tốc độ, và (phần ít ai biết) **chính rotor của motor trở thành một khối lượng ảo** mà bạn phải tăng tốc mỗi lần khởi hành.
+
+### 2. Mô hình tư duy
+
+```
+  LỰC Ở MẶT ĐẤT                  MÔ-MEN Ở BÁNH            Ở TRỤC MOTOR (qua hộp số N, hiệu suất η)
+                                                          
+       ▲ N (pháp tuyến)          τ_bánh = F_bánh · r      τ_motor = τ_bánh / (N·η)
+  ┌────┴────┐  → F kéo           ω_bánh = v / r           ω_motor = ω_bánh · N
+  │  m·a    │                                              Công suất: τ·ω gần như KHÔNG đổi qua
+  └────┬────┘                                              hộp số (trừ tổn hao η) — hộp số chỉ
+   ●───┼───● ← dốc θ                                       đổi tỉ lệ giữa mô-men và tốc độ.
+       ▼ m·g
+  F_tổng = m·a  +  m·g·sinθ  +  C_rr·m·g·cosθ  (+ quán tính rotor quy đổi, xem dưới)
+            tăng tốc   leo dốc       cản lăn
+
+  ĐƯỜNG ĐẶC TÍNH MOTOR DC (ở một điện áp)        dòng I = I0 + (I_hãm − I0)·τ/τ_hãm
+  tốc độ                                           
+  ω0 ●╲                                            hai điểm làm việc phải nằm DƯỚI đường:
+     │  ╲   ✚ chạy đều (mô-men nhỏ, cần tốc độ)    ✚ chạy đều: cần ω đủ (kể cả dư cho PID)
+     │    ╲                                        ✖ đỉnh (tăng tốc + dốc): cần τ, không cần ω tối đa
+     │      ╲  ✖ đỉnh                              áp pin thấp → cả đường dịch xuống (ω0 ∝ V)
+     │        ╲                                    
+     └─────────●── mô-men                          
+              τ_hãm (stall)                       
+```
+
+Năm câu bản chất:
+
+1. **Mọi thứ bắt đầu từ lực ở mặt đất.** Ba thành phần: tăng tốc (`m·a`), leo dốc (`m·g·sinθ`), cản lăn (`C_rr·m·g·cosθ`). Cản lăn nhỏ nhưng **luôn có**; tăng tốc và dốc lớn nhưng **thỉnh thoảng**. Chia đều cho hai bánh kéo (caster không kéo).
+2. **Hộp số là bộ đổi tỉ lệ, không phải bộ khuếch đại.** Nhân mô-men lên N lần thì chia tốc độ đi N lần; công suất cơ không tăng `[chuẩn]`. Chọn N là chọn **điểm làm việc** trên đường đặc tính của cùng một motor.
+3. **Đường đặc tính motor DC gần như thẳng** từ tốc độ không tải `ω0` (mô-men 0) tới mô-men hãm `τ_hãm` (tốc độ 0), và dòng tăng tuyến tính theo mô-men `[chuẩn — từ mô hình R + back-EMF, C3.1]`. Hai con số đầu mút đọc được trên trang người bán; đường giữa là suy ra.
+4. **Không chồng mọi trường hợp xấu nhất lên một điểm.** Lúc tăng tốc lên dốc, robot chưa cần tốc độ tối đa; lúc chạy tốc độ tối đa trên sàn phẳng, nó không cần mô-men đỉnh. Kiểm **hai điều kiện riêng**: mô-men đỉnh đủ (và không quá gần mô-men hãm), tốc độ khi chạy đều đủ (ở áp pin thấp nhất, có dư cho PID).
+5. **Hộp số nhân quán tính rotor lên N².** Rotor quay nhanh hơn bánh N lần; động năng `½·J·ω²` của nó quy về bánh thành một khối lượng tịnh tiến tương đương `J_rotor·N²/r²` mỗi motor `[chuẩn — quy đổi quán tính qua hộp số]`. Với N lớn, con số này cùng cỡ khối lượng cả robot.
+
+**Mô phỏng: ba tỉ số truyền JGB37-520, hai điều kiện, có quán tính rotor.** Số trong `cands` là số **ví dụ** kiểu trang người bán (có listing ghi 12 V 1:56: 178 rpm không tải, mô-men hãm 7,2 kg·cm, dòng hãm 2,4 A; listing khác ghi khác `[spec người bán, mâu thuẫn giữa các listing — tự đo ở C3.1]`). Thay bằng số của lô bạn định mua.
+
+```python
+# [đã chạy] Chọn tỉ số truyền bằng số: mô-men cần (tăng tốc + dốc + lăn) vs đường đặc tính motor
+import numpy as np
+G = 9.81
+# --- Yêu cầu (thay bằng số của bạn) ---
+m      = 6.0             # kg: mục tiêu 5 kg + 20% dự phòng
+v_max  = 0.5             # m/s: tốc độ cứng tối đa
+a_req  = 0.5             # m/s^2: tới 0,5 m/s trong 1 s
+slope  = np.radians(5)   # dốc nhẹ (ram dốc văn phòng)
+c_rr   = 0.03            # hệ số cản lăn: bánh cao su + caster trên sàn cứng/thảm mỏng
+r      = 0.085 / 2       # m: bán kính bánh 85 mm
+J_rot  = 1.5e-6          # kg·m²: quán tính rotor motor cỡ 520 [ước lượng: ~30 g, bán kính ~1 cm]
+V_min, V_rated = 12.0, 12.0   # V: áp pack thấp nhất (C1.1) / áp danh định motor
+headroom = 1.25          # dư 25% tốc độ cho vòng PID (C4.2)
+# --- Ứng viên: (tên, N, rpm không tải @V_rated ở trục ra, mô-men hãm kg·cm, I0 A, I_stall A) ---
+# Số VÍ DỤ kiểu trang người bán JGB37-520; thay bằng số của lô bạn mua, rồi đo lại ở C3
+cands = [("1:30", 30, 333, 3.9, 0.15, 2.4), ("1:56", 56, 178, 7.2, 0.15, 2.4),
+         ("1:90", 90, 110, 12.0, 0.15, 2.4)]
+rpm_need = v_max / (2*np.pi*r) * 60 * headroom
+F_flat = m * c_rr * G                                      # chạy đều trên sàn phẳng, N
+print(f"rpm bánh cần (kể cả dư {headroom}) = {rpm_need:.0f}")
+for name, N, rpm0, ts_kgcm, I0, Is in cands:
+    m_rot = 2 * J_rot * N**2 / r**2                        # rotor quy về khối lượng tịnh tiến
+    F = (m + m_rot) * a_req + m * G * (np.sin(slope) + c_rr * np.cos(slope))
+    tau_w = F * r / 2                                      # mô-men đỉnh mỗi bánh, N·m
+    ts = ts_kgcm * 0.0981                                  # kg·cm -> N·m
+    frac = tau_w / ts                                      # phần mô-men hãm dùng lúc đỉnh
+    frac_c = (F_flat * r / 2) / ts                         # lúc chạy đều
+    rpm_cruise = rpm0 * V_min / V_rated * (1 - frac_c)     # đặc tính thẳng, pin yếu
+    I_peak, I_cruise = I0 + (Is - I0) * frac, I0 + (Is - I0) * frac_c
+    ok_t, ok_v = frac <= 0.5, rpm_cruise >= rpm_need       # hai điều kiện TÁCH RIÊNG
+    print(f"{name}: rotor ≈ {m_rot:4.1f} kg tương đương | đỉnh {tau_w/0.0981:4.2f} kg·cm = "
+          f"{frac*100:3.0f}% hãm ({'đạt' if ok_t else 'trượt'}) | rpm chạy đều "
+          f"{rpm_cruise:4.0f} ({'đạt' if ok_v else 'trượt'}) | I đỉnh {I_peak:.2f} A, "
+          f"I đều {I_cruise:.2f} A")
+```
+
+Vì sao ngưỡng "≤50% mô-men hãm" cho đỉnh: ở 50% mô-men hãm motor cho công suất cơ lớn nhất nhưng hiệu suất không quá ~50% và dòng bằng nửa dòng hãm; nhiệt cuộn dây tỉ lệ `I²R` `[chuẩn]`. Các listing JGB37 ghi "mô-men định mức" (chạy liên tục) chỉ cỡ 1/4–1/3 mô-men hãm `[spec người bán]`. Đỉnh ngắn (≈1 s) được phép lên gần 50%; chạy đều phải nằm dưới định mức. Đây là quy tắc kỹ thuật thô, không phải định luật; bạn được đổi nếu có lý do và ghi vào `decisions.md`.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Capacity planning: tính QPS đỉnh và trung bình, chọn instance có dư | Tính mô-men đỉnh và chạy đều, chọn tỉ số truyền có dư | Instance to hơn chỉ tốn tiền. Tỉ số truyền "to hơn" (N lớn) **làm hỏng** điều kiện kia: mất tốc độ và tăng quán tính rotor theo N². Không có lựa chọn "cứ lớn cho chắc" | Mua 1:90 "cho khỏe" → robot không bao giờ đạt 0,5 m/s khi pin yếu; PID bão hòa ở tốc độ cao |
+| Chọn họ instance (CPU-optimized vs memory-optimized) cùng giá, đổi tỉ lệ tài nguyên | Cùng một motor, đổi N là đổi tỉ lệ mô-men/tốc độ ở cùng công suất | Instance type đổi được trong 5 phút. Hộp số đổi là tháo robot, mua motor mới, và mọi hệ số encoder (count/vòng) đổi theo | Coi tỉ số truyền là "cấu hình chỉnh sau" → phải làm lại C3, C6 |
+| Không cộng p99 của từng service để ra p99 hệ thống (các đỉnh không đồng thời) | Không chồng đỉnh tăng tốc + dốc + tốc độ tối đa vào một điểm | Ở backend, cộng p99 cho ra con số **quá bi quan** nhưng vẫn an toàn. Ở đây, chồng điều kiện có thể loại **mọi** motor (thử: bỏ tách hai điều kiện trong code), đẩy bạn sang motor to gấp đôi, nặng hơn, ăn dòng hơn | Over-provision → motor nặng → khối lượng tăng → vòng lặp tính lại |
+| Headroom 20–30% để autoscaler kịp phản ứng | Dư 25% tốc độ cho PID | PID cần dư để **sửa sai số** (tải đổi, pin sụt), không phải để "kịp scale". Không dư thì ở tốc độ đặt tối đa, bộ điều khiển bão hòa và mất điều khiển | Đặt `headroom = 1.0` → robot chạy 0,5 m/s trên sàn phẳng lúc pin đầy, chậm dần khi pin yếu mà không ai biết |
+
+**Chấm mô hình:**
+
+- *"Motor có tỉ số truyền lớn hơn thì mạnh hơn, nên an toàn hơn."* **ĐÚNG MỘT PHẦN.** Đúng là mô-men hãm ở trục ra tăng gần tỉ lệ N. Sai ở "an toàn hơn": tốc độ giảm cùng tỉ lệ, quán tính rotor quy đổi tăng theo N², và hộp số tỉ số cao có thể **gãy răng** trước khi motor đạt mô-men hãm (người bán thường ghi "mô-men cho phép" của hộp số thấp hơn mô-men hãm × N `[tự đo — đọc kỹ listing]`). Phản ví dụ: trong mô phỏng, 1:90 qua điều kiện mô-men dễ nhất nhưng trượt điều kiện tốc độ.
+- *"Chọn motor theo công suất (W) là đủ."* **ĐÚNG MỘT PHẦN.** Công suất cho biết motor **có thể** làm được việc đó ở **một** điểm làm việc nào đó; nó không nói điểm đó có trùng với tốc độ bánh bạn cần không. Phản ví dụ: cùng một motor 520, ba tỉ số truyền cho ba kết quả đạt/trượt khác nhau.
+- *"Khối lượng robot là thứ duy nhất phải tăng tốc."* **SAI** với gearmotor tỉ số cao. Phản ví dụ: dòng `rotor ≈ … kg tương đương` của mô phỏng (gập ở phần 7).
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Mô-men xoắn (torque), N·m | Lực × cánh tay đòn; thứ làm bánh quay | "Lực" — cùng lực, bánh to cần mô-men lớn hơn |
+| 🟢 | kg·cm (kgf·cm) | Đơn vị người bán hay dùng; 1 kgf·cm ≈ 0,0981 N·m `[chuẩn]` | Khối lượng × khoảng cách |
+| 🟢 | Tỉ số truyền N | Số vòng motor cho một vòng trục ra | "Càng lớn càng khỏe" (xem chấm mô hình) |
+| 🟢 | Tốc độ không tải, mô-men hãm (stall torque) | Hai đầu mút đường đặc tính ở một điện áp | Hai giới hạn vận hành bình thường — motor không nên làm việc gần cả hai |
+| 🟢 | Hệ số cản lăn C_rr | Lực cản lăn chia cho trọng lượng | Ma sát trượt (μ) — hai thứ khác hẳn, cùng cỡ thì sai |
+| 🟡 | Quán tính quy đổi (reflected inertia) | Quán tính phía motor nhìn từ phía bánh, nhân N² | Không đáng kể (đúng với N nhỏ, sai với N lớn) |
+| 🟡 | Hiệu suất hộp số η | Phần công suất qua được hộp số | Hằng số — thay đổi theo tải, nhiệt, mỡ |
+| 🔴 | Thiết kế bánh răng, mô-đun răng | Kỹ sư cơ khí | — |
+
+### 5. Dự đoán
+
+**Đề:** với robot mục tiêu ≤5 kg (dùng 6 kg để tính), tốc độ tối đa 0,5 m/s, tăng tốc 0,5 m/s², dốc 5°, bánh 85 mm:
+
+1. Tính **bằng tay** (máy tính bỏ túi, không chạy code): lực kéo tổng (chưa tính quán tính rotor), mô-men mỗi bánh (N·m và kg·cm), số vòng/phút bánh cần ở 0,5 m/s.
+2. Đoán: trong ba tỉ số 1:30, 1:56, 1:90, cái nào qua cả hai điều kiện? Cái nào trượt, trượt điều kiện nào?
+3. Đoán độ lớn của "khối lượng tương đương" của hai rotor ở 1:56: nhỏ hơn 0,5 kg, cỡ 1–2 kg, hay cỡ khối lượng robot?
+4. Dòng đỉnh mỗi motor ở tỉ số bạn chọn.
+5. Nếu bạn đổi sang bánh 65 mm, kết luận ở câu 2 đổi thế nào? (đoán hướng trước, rồi sửa `r` trong code)
+
+**Tham số cần tra:** trang người bán (hoặc datasheet nếu có) của đúng mã JGB37-520 bạn định mua: điện áp danh định, rpm không tải ở trục ra, dòng không tải, mô-men hãm, dòng hãm, mô-men định mức, mô-men cho phép của hộp số; ghi rõ **listing nào** (link, ngày). Áp pack thấp nhất: lấy từ C1.1 khi đã chọn hóa học pin; chưa có thì dùng 12 V. C_rr: chưa đo thì 0,03 `[ước lượng]`, sẽ đo ở bước 6 phần Làm.
+
+**Công thức:** `F = m·a + m·g·sinθ + C_rr·m·g·cosθ`; `τ_bánh = F·r/2`; `rpm = v/(2πr)·60`; `m_rotor_tđ = 2·J·N²/r²`; `I = I0 + (I_hãm − I0)·τ/τ_hãm`.
+
+```markdown
+# prediction.md — K7 C2.1
+commit: <hash>  ngày: <yyyy-mm-dd>
+## Đầu vào (nguồn từng dòng)
+- m = 6.0 kg (mục tiêu 5 kg + 20%)   v_max = 0.5 m/s   a = 0.5 m/s²   θ = 5°   C_rr = 0.03 (ước lượng)
+- Bánh D = ... mm (đo thước kẹp)   V_min pack = ... V (nguồn: C1.1 / tạm 12 V)
+- Listing motor: <link, ngày> — rpm0 = ..., τ_hãm = ... kg·cm, I0 = ... A, I_hãm = ... A
+## Tính tay
+| Đại lượng | Giá trị | Cách tính |
+|---|---|---|
+| F tổng (N), chưa có rotor | | |
+| τ mỗi bánh (N·m / kg·cm) | | |
+| rpm bánh cần (có dư 25%) | | |
+## Đoán
+- Tỉ số qua cả hai điều kiện: ...   trượt: ... (điều kiện ...)
+- Khối lượng rotor tương đương ở 1:56: ...
+- I đỉnh mỗi motor: ... A
+- Bánh 65 mm: ...
+## Tôi sẽ ngạc nhiên nếu...
+```
+
+### 6. Làm
+
+1. Commit `prediction.md`.
+2. Chạy script với số mặc định; so với tính tay của bạn (lệch >5% → tìm lỗi đơn vị, thường là kg·cm ↔ N·m hoặc đường kính ↔ bán kính).
+3. Thay `cands` bằng số của **listing thật** bạn định mua (ít nhất 3 tỉ số). Thay `V_min` bằng số của C1.1 nếu đã có.
+4. **Độ nhạy (→ F6.6, dạng tối thiểu):** chạy lại với `c_rr` = 0,015 và 0,06; `J_rot` gấp đôi và một nửa; `m` = 5 và 7 kg. Ghi bảng: tham số nào làm đổi **quyết định** (tỉ số nào thắng), tham số nào chỉ đổi con số. Quyết định không đổi qua cả dải → yên tâm mua.
+5. Ghi `hw/motor_sizing.md`: đầu vào, bảng kết quả, bảng độ nhạy, quyết định (tỉ số, bánh), dòng đỉnh và dòng chạy đều **mỗi motor** để chuyển cho C1.2 và C3. Ghi một dòng vào `decisions.md`. Rồi mới mua.
+6. **Sau Lắp bước 6 (khung đã có khối lượng thật):** đo C_rr. Buộc cân hành lý vào khung ở độ cao trục bánh, kéo robot **thật chậm và đều** trên sàn văn phòng (và một lần trên thảm nếu có), đọc lực khi đã lăn đều (không đọc lúc giật ra). Lặp 5 lần mỗi mặt sàn, lấy trung vị. `C_rr ≈ F/(m·g)`. Sai số: cân hành lý phân giải 10 g ≈ 0,1 N `[spec — loại bạn mua]`, so với lực cỡ 1–3 N là 3–10%; tay kéo không đều là sai số lớn hơn — đó là lý do lấy trung vị. Lưu ý: motor chưa nối điện vẫn quay theo qua hộp số, nên số đo **gồm** ma sát hộp số và motor bị kéo ngược — đúng cái bạn cần cho chạy thật? Ghi câu trả lời của bạn vào `motor_sizing.md` (gợi ý ở câu hỏi ngược 4).
+7. Chạy lại script với C_rr đo được và khối lượng từ `mass_budget.csv`. Quyết định còn đứng không?
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Tính tay (đầu vào mặc định):** `a + g·sin5° + 0,03·g·cos5° = 0,5 + 0,855 + 0,293 = 1,648 m/s²` → F ≈ 9,9 N → τ mỗi bánh ≈ 9,9 × 0,0425 / 2 ≈ 0,21 N·m ≈ **2,14 kg·cm**. rpm bánh ở 0,5 m/s: 0,5/(π·0,085)·60 ≈ 112 rpm; có dư 25% → **140 rpm**. Thành phần lớn nhất là **dốc**, không phải tăng tốc; cản lăn nhỏ nhất nhưng là thứ duy nhất có mặt **mọi lúc**.
+
+**Output script (số listing ví dụ):**
+
+| Tỉ số | Rotor tương đương (2 motor) | Mô-men đỉnh mỗi bánh | % mô-men hãm | rpm chạy đều (12 V) | I đỉnh / I đều mỗi motor | Kết luận |
+|---|---|---|---|---|---|---|
+| 1:30 | ~1,5 kg | 2,30 kg·cm | 59% (trượt) | 300 (đạt) | 1,48 / 0,37 A | Nhanh nhưng làm việc quá gần mô-men hãm |
+| **1:56** | **~5,2 kg** | 2,71 kg·cm | 38% (đạt) | 169 (đạt) | 1,00 / 0,27 A | **Qua cả hai** |
+| 1:90 | ~13,5 kg | 3,60 kg·cm | 30% (đạt) | 106 (trượt) | 0,82 / 0,22 A | Khỏe nhưng không đạt tốc độ |
+
+- Rotor tương đương ở 1:56 **gần bằng khối lượng robot**. Với 1:90 nó gấp đôi robot. Con số này dựa trên `J_rot` ước lượng; nếu J thật chỉ bằng một nửa, kết luận "1:56 thắng" vẫn đứng (thử ở bước 4). Đây cũng là lý do robot tỉ số cao "ì" khi khởi hành dù mô-men hãm lớn.
+- Nếu không tách hai điều kiện (chồng đỉnh và tốc độ tối đa vào một điểm), **cả ba** tỉ số đều trượt. Đó là bản chạy đầu tiên khi viết bài này.
+- Bánh 65 mm (`r = 0.0325`): rpm cần tăng (~183 rpm có dư), mô-men cần giảm → điểm làm việc dịch về phía tỉ số thấp; 1:56 không còn đạt tốc độ khi pin 12 V. Kết luận: **bánh và tỉ số truyền chọn cùng nhau**.
+- I đỉnh ~1 A mỗi motor là dòng **tăng tốc theo kế hoạch**. Lúc khởi động từ đứng yên với lệnh bậc thang, motor chạm gần **dòng hãm** trong vài ms (C3.1) — đó mới là con số chọn driver và cầu chì.
+- C_rr đo bằng kéo (bước 6) trên sàn gạch thường ra **cao hơn** con số giáo khoa của bánh cao su đơn thuần, vì gồm caster và hộp số bị kéo ngược `[ước lượng — tự đo]`.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Tính tay lệch script ~10 lần | kg·cm vs N·m; hoặc mm vs m | In từng số hạng | Đơn vị SI trong code, đổi ở biên |
+| Tính tay lệch script đúng 2 lần | Quên chia hai bánh, hoặc dùng đường kính thay bán kính | — | — |
+| Không tỉ số nào đạt | Khối lượng/dốc quá tham vọng; hoặc pin quá thấp áp | Chạy độ nhạy | Bỏ yêu cầu dốc (văn phòng không dốc?), bánh to hơn, hoặc họ motor lớn hơn; ghi quyết định |
+| Listing ghi mô-men hãm nhưng không ghi dòng hãm | Phổ biến | — | Ước bằng `V/R` với R đo ở Lắp bước 1 (C3.1 đo kỹ) |
+| C_rr đo được rất lệch giữa các lần kéo | Kéo không đều; đọc lúc giật | Quay video màn hình cân | Kéo bằng sợi dây dài, đi bộ đều; bỏ 1 m đầu |
+| Hai listing cùng mã cho số khác xa nhau | Người bán sao chép bảng của motor khác | So rpm × N: phải ra cùng tốc độ motor gốc | Tin số đo ở C3 hơn listing; mua 1 motor thử trước |
+
+### 9. Câu hỏi ngược
+
+1. **[Nếu…thì]** Nếu robot sau này chở thêm loa và amp (C12) nặng 1 kg đặt cao, phép tính ở bài này đổi ở những chỗ nào? Chỗ nào **không** đổi?
+<details><summary>Hướng nghĩ</summary>
+
+Lực tăng tuyến tính theo m ở ba số hạng; quán tính rotor không đổi (không phụ thuộc m). Tốc độ chạy đều gần như không đổi vì cản lăn nhỏ. Thứ đổi nhiều hơn nằm ở bài sau: trọng tâm cao lên. Đó là lý do khối lượng thiết kế có dự phòng 20%.
+
+</details>
+
+2. **[Vì sao không]** Vì sao không dùng motor bước (stepper) hay BLDC với driver FOC, vốn chính xác hơn và không cần encoder (stepper) hoặc hiệu suất cao hơn (BLDC)?
+<details><summary>Hướng nghĩ</summary>
+
+Stepper mất bước âm thầm khi quá tải (đúng loại lỗi "không có dấu hiệu" như mất count encoder), mô-men giảm mạnh ở tốc độ cao, ăn dòng cả khi đứng yên. BLDC + FOC tốt hơn nhiều về hiệu suất nhưng thêm một tầng firmware phức tạp. Câu hỏi đúng: thứ bạn muốn học ở K7 là data infra quanh robot hay điều khiển motor? Ghi lựa chọn vào `decisions.md`.
+
+</details>
+
+3. **[Quy mô]** Đội 100 robot giao hàng trong tòa nhà; mỗi robot chở tải khác nhau mỗi chuyến (0–3 kg). Bạn có `motor_sizing.md` cho robot rỗng. Cái gì gãy trước: động cơ quá nhiệt, pin hết sớm, hay vòng điều khiển được tinh chỉnh cho khối lượng rỗng?
+<details><summary>Hướng nghĩ</summary>
+
+Nghĩ về thứ bị ảnh hưởng **liên tục** (cản lăn, nhiệt ∝ I²) và thứ bị ảnh hưởng **ở đỉnh** (tăng tốc, phanh, chống lật C2.2). Khối lượng thay đổi là một tham số ẩn mà PID không biết. Đội xe thật thường ước lượng tải từ dòng motor lúc tăng tốc: đó là system ID trực tuyến (→ F6.4).
+
+</details>
+
+4. **[Failure mode]** Bạn đo C_rr bằng cách kéo robot chưa cấp điện. Kể một cách con số này sai **có hệ thống** so với lúc robot tự chạy, và hướng sai.
+<details><summary>Hướng nghĩ</summary>
+
+Khi bị kéo, hộp số chạy ngược chiều truyền lực (bánh kéo motor); hiệu suất ngược của hộp số khác chiều thuận, và motor bị kéo ngược có ma sát chổi than. Khi tự chạy, motor gánh ma sát hộp số **bên trong** đường đặc tính (dòng không tải). Có bị tính hai lần không?
+
+</details>
+
+5. **[Liên ngành]** Xe đạp có líp nhiều tầng. Người đạp xe chuyển số để giữ cadence (vòng đạp/phút) gần một khoảng. Điều đó tương ứng với cái gì trong bài, và chỗ nào khác?
+<details><summary>Hướng nghĩ</summary>
+
+Giống: hộp số đặt điểm làm việc trên đường đặc tính của "động cơ". Khác: robot của bạn có **một** tỉ số cố định, nên chọn sai là sai suốt đời; và đường đặc tính của người không thẳng như motor DC.
+
+</details>
+
+6. **[Phản biện]** "Cứ mua motor to hơn hai cỡ cho chắc, pin thừa sức." Bạn phản bác bằng ba con số nào trong `motor_sizing.md`?
+<details><summary>Hướng nghĩ</summary>
+
+Khối lượng motor (vào lại phương trình), dòng hãm (vào driver, cầu chì, C1), và mô-men phanh khi phanh gấp (vào chống lật, C2.2). "To hơn" không miễn phí ở cả ba.
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Thang máy và đối trọng.** Motor thang máy không nâng cả cabin: đối trọng cân bằng cabin cộng khoảng nửa tải định mức, nên motor chỉ gánh phần chênh. Giống: tách thành phần "luôn có" khỏi phần "thỉnh thoảng". Khác: robot không có đối trọng cho dốc; thứ gần nhất là chọn N sao cho trường hợp thường xuyên nằm ở vùng hiệu suất tốt.
+- **Hàng không, chân vịt bước thay đổi (variable-pitch propeller).** Máy bay cánh quạt đổi bước cánh để động cơ làm việc gần vòng tua tối ưu ở cả cất cánh (cần lực đẩy) và bay bằng (cần tốc độ). Đây chính là "hai điểm làm việc" của bài, được giải bằng một hộp số biến thiên. Robot rẻ không có thứ đó, nên phải thỏa hiệp bằng tính toán.
+- **Điện toán đám mây, chọn instance theo profile.** Cùng giá, đổi tỉ lệ tài nguyên. Khác: ở đây bạn chỉ có **một** lần chọn, và sai thì phải tháo máy.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| `F = m·a + m·g·sinθ + C_rr·m·g·cosθ` | [chuẩn] | Cơ học Newton |
+| Hộp số giữ công suất trừ tổn hao | [chuẩn] | — |
+| Đường đặc tính motor DC gần thẳng, dòng tuyến tính theo mô-men | [chuẩn] | Từ mô hình R + back-EMF; C3.1 kiểm |
+| Quán tính quy đổi `J·N²` | [chuẩn] | Động năng bảo toàn qua hộp số |
+| `J_rot ≈ 1,5·10⁻⁶ kg·m²` cho motor cỡ 520 | [ước lượng] | Từ khối lượng/bán kính rotor đoán; chạy độ nhạy |
+| JGB37-520 12 V 1:56: 178 rpm, 7,2 kg·cm, 2,4 A hãm | [spec người bán] | Listing khác ghi khác (có bảng ghi dòng hãm 1,2 A cho dải tỉ số thấp); đo ở C3.1 |
+| C_rr = 0,03 | [ước lượng] | Đo ở bước 6 |
+| 1 kgf·cm = 0,0981 N·m | [chuẩn] | — |
+| Lịch sử động cơ Wright Flyer | [chuẩn] | Smithsonian NASM |
+
+**Đã sửa so với bản gốc:** K7 gốc chỉ ghi "2 motor DC có hộp số và encoder đủ mô-men cho tổng khối lượng" mà không có phương pháp; bài này thêm phương pháp hai điều kiện, quán tính rotor, và độ nhạy. K7 gốc lấy ví dụ 1:34 với bánh 65 mm; với robot chở mini PC + pin ~5 kg ở 0,5 m/s, ví dụ mặc định ở đây đổi sang bánh 85 mm và chọn tỉ số bằng tính toán (kết quả có thể khác với số listing của bạn).
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** trang người bán/datasheet motor của bạn (lưu bản PDF hoặc ảnh chụp vào repo, vì listing đổi).
+- **Giải thích:** Hughes & Drury, *Electric Motors and Drives* — chương motor DC (đặc tính mô-men–tốc độ) và chương về hộp số/quán tính quy đổi.
+- **Đào sâu (tùy chọn):** Siegwart, Nourbakhsh & Scaramuzza, *Introduction to Autonomous Mobile Robots* — chương về cơ cấu di chuyển có bánh.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao "tỉ số lớn hơn cho chắc" là sai; (2) vẽ lại đường đặc tính với hai điểm làm việc từ trí nhớ; (3) câu dưới.
+
+  Robot 4 kg, bánh 100 mm, chỉ chạy sàn phẳng, tăng tốc 0,3 m/s², C_rr 0,02. Mô-men đỉnh mỗi bánh (bỏ quán tính rotor)?
+  <details><summary>Đáp án</summary>
+
+  F = 4 × (0,3 + 0,02 × 9,81) ≈ 4 × 0,496 ≈ 1,98 N; τ = 1,98 × 0,05 / 2 ≈ 0,050 N·m ≈ 0,50 kg·cm. Rất nhỏ: dốc mới là thứ quyết định motor.
+
+  </details>
+
+---

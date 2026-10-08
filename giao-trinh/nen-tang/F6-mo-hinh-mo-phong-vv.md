@@ -651,7 +651,7 @@ Dòng cuối là chỗ "sai số tích lũy" và "hỗn loạn" gặp nhau. Mộ
 **Chấm mô hình:**
 
 - *"Integrator bậc cao hơn luôn tốt hơn."* **ĐÚNG MỘT PHẦN.** Đúng cho quỹ đạo ngắn, hệ trơn, sai số mỗi bước. Gãy ở ba chỗ: (1) với tiếp xúc, bậc thực tế sụp về thấp, ưu thế mất; (2) tốn nhiều lần tính lực mỗi bước (RK4: bốn lần), nên cùng ngân sách tính toán, bậc thấp với h nhỏ có thể thắng; (3) không bảo toàn cấu trúc (năng lượng, diện tích pha) qua thời gian dài. Phản ví dụ: mặc định của MuJoCo là Euler bán ẩn, bậc một [spec: MuJoCo docs, `option/integrator`; tự đo: mặc định `mjINT_EULER` ở 3.15.0].
-- *"Năng lượng của sim không bảo toàn thì sim có bug."* **ĐÚNG MỘT PHẦN.** Với hệ không ma sát, năng lượng trôi **có hệ thống** là dấu hiệu integrator hoặc dt không hợp (verification). Nhưng năng lượng dao động bị chặn quanh giá trị đúng là bình thường với integrator symplectic, và với ma sát/tiếp xúc, tính chất đúng là "không tăng", không phải "không đổi" (F2.4). Phản ví dụ: Euler bán ẩn trên lò xo cho |ΔE| dao động mỗi chu kỳ mà không có bug nào.
+- *"Năng lượng của sim không bảo toàn thì sim có bug."* **ĐÚNG MỘT PHẦN.** Với hệ không ma sát, năng lượng trôi **có hệ thống** là dấu hiệu integrator hoặc dt không hợp (verification). Nhưng năng lượng dao động bị chặn quanh giá trị đúng là bình thường với integrator symplectic, và với ma sát/tiếp xúc, tính chất đúng là "không tăng", không phải "không đổi" (F2.4). Phản ví dụ: có integrator cho năng lượng của lò xo dao động mỗi chu kỳ mà không có bug nào (bài tập mục 5 cho bạn tìm ra cái nào).
 - *"Sai số tích lũy theo số bước, nên chạy lâu thì sim càng sai."* **ĐÚNG MỘT PHẦN.** Với integrator không ổn định hoặc trôi có hệ thống: đúng. Với integrator symplectic trên hệ dao động: sai số **năng lượng** bị chặn, sai số **pha** tăng tuyến tính. Với hệ hỗn loạn: sai số quỹ đạo bão hòa ở cỡ không gian trạng thái, còn thống kê có thể vẫn đúng. "Sai" nghĩa là sai đại lượng nào phải nói rõ.
 
 ### 4. Thuật ngữ
@@ -1520,7 +1520,7 @@ Ba ý bản chất:
 **Chấm mô hình:**
 
 - *"Đã đẩy từng tham số tới ±2σ, đầu ra vẫn trong giới hạn, vậy an toàn ở mức ~95%."* **SAI.** ±2σ từng trục không nói gì về xác suất của tổ hợp; và với k tham số độc lập, xác suất **mọi** tham số cùng trong ±2σ là 0,954ᵏ, nhưng vùng hỏng có thể nằm ngay trong hộp đó (góc). Phản ví dụ: mục 5.
-- *"Tham số giải thích nhiều phương sai nhất là tham số cần đo kỹ nhất."* **ĐÚNG MỘT PHẦN.** Đúng khi mục tiêu là dự đoán chính xác (K6 Bài 16: L chiếm phần lớn bất định của chu kỳ, đo L kỹ là đúng). Sai khi mục tiêu là tránh hỏng và tham số có cạnh dốc. Phản ví dụ: mục 5, tham số ít phương sai nhất lại là tham số dẫn hỏng.
+- *"Tham số giải thích nhiều phương sai nhất là tham số cần đo kỹ nhất."* **ĐÚNG MỘT PHẦN.** Đúng khi mục tiêu là dự đoán chính xác một đại lượng trơn, không ngưỡng (K6 Bài 16 phần F dùng đúng kiểu phân tích này cho chu kỳ con lắc; tự tìm tham số trội ở đó). Sai khi mục tiêu là tránh hỏng và tham số có cạnh dốc. Phản ví dụ: mục 5, tham số ít phương sai nhất lại là tham số dẫn hỏng.
 - *"Cộng sai số theo căn tổng bình phương (GUM) là đủ, Monte Carlo là thừa."* **ĐÚNG MỘT PHẦN.** Đủ khi mô hình gần tuyến tính trong dải bất định và phân bố gần chuẩn (GUM Supplement 1 nói rõ điều kiện và đề xuất Monte Carlo khi không thỏa [spec: JCGM 101:2008]). Có ngưỡng (phanh bị ma sát chặn) hay phân bố lệch thì không.
 
 ### 4. Thuật ngữ
@@ -1634,7 +1634,7 @@ Checklist khi đọc một phân tích độ nhạy hoặc bất định:
 
 (a) Bản Gemini K3 Bài 8: *"Ở tầng web/API thông thường, bạn lập latency budget bằng cách cộng dồn thời gian xử lý qua các service"*, và trong cùng bảng: chặng không khí loa → mic 30 cm là *"0.87 ms... tuy nhỏ nhưng bắt buộc phải trừ ra trong các phép đo ở Bài 9"*, trong khi chặng Submit form → Sheet được dự đoán *"1–3 s"*.
 
-(b) K6 Bài 16 (bản giáo trình), phần F: *"Độ nhạy của T(30°): u(L) = 3 mm → ≈ 4.3 ms; u(θ₀) = 2° → ≈ 3.4 ms; u(g) → ≈ 1.5 ms; u(r) = 2 mm → ≈ 0.1 ms. Monte Carlo gộp: σ ≈ 5.6 ms. L chiếm phần lớn; đo bán kính quả nặng kỹ hơn là phí giờ."*
+(b) Bản gốc K6 Bài 6: *"Sweep dùng để trả lời 'tham số này ảnh hưởng thế nào'. Randomization dùng để trả lời 'policy này có bền không'. Trộn hai cái sẽ không trả lời được câu nào."* Bài làm kèm: sweep ma sát 10 điểm, sweep vị trí vật lưới 5×5, randomization 100 mẫu.
 
 (c) Một câu hay gặp trong báo cáo eval: *"Chạy 500 episode Monte Carlo trên phân bố DR, 0 lần va chạm, vậy xác suất va chạm bằng 0."*
 
@@ -1642,7 +1642,7 @@ Checklist khi đọc một phân tích độ nhạy hoặc bất định:
 
 (a) **ĐÚNG MỘT PHẦN.** Cộng dồn đúng cho **trung bình** (kỳ vọng của tổng = tổng kỳ vọng). Không đúng cho p99 hay cho ngân sách có cam kết đuôi; ở đó cần phân bố từng tầng và Monte Carlo (hoặc ít nhất biết các tầng có tương quan không). Về 0,87 ms: "bắt buộc trừ" chỉ đúng cho phép đo mà nó nằm trong và có độ bất định nhỏ hơn nó (đo GPIO → mic ở Bài 9, độ phân giải cỡ chục µs). Trong ngân sách end-to-end có một chặng bất định cỡ giây, 0,87 ms nằm dưới sàn nhiễu hàng nghìn lần; trừ hay không không đổi kết luận nào. Độ nhạy quyết định cái gì đáng trừ.
 
-(b) **ĐÚNG**, và là ví dụ dùng đúng độ nhạy theo phương sai: câu hỏi là "đo cái gì để dự đoán chu kỳ chính xác hơn", mô hình gần tuyến tính trong dải bất định, không có ngưỡng, nên OAT + Monte Carlo cho cùng kết luận và S₁ trả lời đúng câu hỏi. Khác với mục 5 ở đúng hai điểm: câu hỏi là phương sai (không phải hỏng), và không có cạnh dốc.
+(b) **ĐÚNG MỘT PHẦN.** Tách hai mục đích là đúng và hữu ích. Hai chỗ cần sửa: (1) sweep ma sát 10 điểm với mọi thứ khác ở danh định là **OAT**: trả lời "ảnh hưởng thế nào **quanh danh định**", mù với tương tác (lưới 5×5 vị trí vật thì phủ được tương tác của hai tọa độ đó). (2) "Trộn không trả lời được câu nào" quá tay: 100 mẫu randomization, **nếu ghi lại tham số đã lấy mẫu**, chính là một Monte Carlo, dùng được cho độ nhạy toàn cục và phân bổ hỏng (mục 2, câu hỏi ngược 2). Câu đúng hơn: sweep trả lời câu hỏi cục bộ có cấu trúc; randomization có metadata trả lời câu hỏi toàn cục; không có metadata thì nó chỉ trả lời "bền không".
 
 (c) **SAI.** 0/500 cho cận trên 95% của xác suất va chạm ≈ 3/500 = 0,6% (rule of three, K4 Bài 7). Thêm hai câu hỏi: phân bố DR có phủ θ* không (F6.5), và va chạm có nằm ở góc tham số mà 500 mẫu hầu như không chạm tới không (mục 2).
 
@@ -1686,7 +1686,7 @@ Checklist khi đọc một phân tích độ nhạy hoặc bất định:
 - **K3 Bài 8:** dựng ngân sách độ trễ bằng Monte Carlo trên phân bố từng tầng (đo hoặc giả định có căn cứ), báo p50/p99 của tổng; so với cộng p99 từng tầng; khẳng định (a).
 - **K4 Bài 8:** độ nhạy theo lớp khi quantize là OAT trên lớp; nhớ tương tác (hai lớp cùng 4-bit có thể tệ hơn tổng hai lớp riêng).
 - **K6 Bài 5–6:** ghi tham số đã lấy mẫu vào metadata mỗi episode để mọi chạy đêm đều dùng được cho phân bổ hỏng (câu hỏi ngược 2); "góc tương tác" của Bài 6 là mục 2 ở đây.
-- **K6 Bài 14:** khi chọn tham số để đo (system ID) thay vì randomize, dùng câu hỏi hỏng, không chỉ S₁. **K6 Bài 16:** khẳng định (b) là trường hợp S₁ dùng đúng.
+- **K6 Bài 14:** khi chọn tham số để đo (system ID) thay vì randomize, dùng câu hỏi hỏng, không chỉ S₁. **K6 Bài 16 phần F:** đó là trường hợp câu hỏi phương sai là đúng câu hỏi (dự đoán chu kỳ, không có ngưỡng).
 
 ### 10. Độ tin cậy
 
@@ -1699,7 +1699,7 @@ Checklist khi đọc một phân tích độ nhạy hoặc bất định:
 | Tham số phanh, μ, f | [ước lượng] | Bài tập; đo thật ở K6 Bài 17, K7 C2.4 |
 | Bảng mục 5 | [đã chạy] | numpy 2.5.3, seed 3; S₁ xấp xỉ bằng 20 bin, không phải ước lượng Sobol chuẩn |
 
-Đã sửa so với bản gốc/Gemini: (Gemini K3 Bài 8) "lập latency budget bằng cách cộng dồn" → đúng cho trung bình, không cho p99; "0,87 ms bắt buộc phải trừ" → chỉ khi lớn hơn độ bất định của phép đo chứa nó.
+Đã sửa so với bản gốc/Gemini: (Gemini K3 Bài 8) "lập latency budget bằng cách cộng dồn" → đúng cho trung bình, không cho p99; "0,87 ms bắt buộc phải trừ" → chỉ khi lớn hơn độ bất định của phép đo chứa nó. (Bản gốc K6 Bài 6) "trộn sweep và randomization không trả lời được câu nào" → randomization có ghi tham số là Monte Carlo dùng được cho độ nhạy toàn cục; sweep một trục là OAT.
 
 ### 11. Đọc thêm và tự kiểm tra
 

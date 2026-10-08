@@ -1811,3 +1811,288 @@ Checklist để chấm một chẩn đoán "lỗi phần mềm" hoặc một đ�
     Chưa đủ. Cần đo rail min trước/sau (ADC min-hold hoặc INA226), chạy đủ lâu với nội dung âm thanh tệ nhất (bass dài), và kiểm biên còn lại tới ngưỡng BOD. Tụ có thể chỉ đẩy vấn đề sang đoạn bass dài hơn R·C.
 
     </details>
+
+---
+
+## F5.8 — Vòng điều khiển: PID, tần số lấy mẫu, trễ trong vòng, vì sao jitter phá ổn định (6h)
+
+> **Dùng cho:** K7 C4.2 (bắt buộc), C4.4, C10.1, C11.1, C11.4 · **Cần trước:** F5.3, F5.5, F5.6 (trễ của bộ lọc); F5.7 (đọc lướt) · **Sau viên nang này bạn đánh giá được:** một khẳng định "vòng chạy 100 Hz, jitter p99 < X µs nên ổn" có trả lời đúng câu hỏi ổn định không; một đề xuất "thêm bộ lọc / chuyển PID sang host / chạy nhanh hơn" làm biên ổn định tốt lên hay xấu đi.
+
+### 1. Câu chuyện
+
+Ngày 25/4/1992, nguyên mẫu YF-22 thứ hai bay thấp qua đường băng Edwards trong một chuỗi thử nghiệm. Phi công Tom Morgenfeld thu càng sau lần tiếp cận thứ hai; máy bay bước vào một dao động dọc do phi công gây ra (pilot-induced oscillation, PIO), đập xuống đường băng, phi công thoát ra an toàn. Các phân tích sau đó chỉ ra hai yếu tố: luật điều khiển đổi đặc tính giữa cấu hình càng thả và càng thu, và **giới hạn tốc độ** (rate limiting) của mặt điều khiển `[chuẩn: Aviation Week 1992; tài liệu tổng quan PIO của Systems Technology Inc.]`. Khi mặt điều khiển chạm giới hạn tốc độ, đầu ra **trễ** so với lệnh; trễ pha cộng với phản xạ của phi công biến một vòng kín ổn định thành dao động. Bản F-22 sản xuất sửa bằng phần mềm điều khiển bay.
+
+Phi công + máy bay là một vòng kín; vòng PID vận tốc bánh của bạn cũng vậy. Toán của hai vòng giống nhau ở một điểm: **trễ trong vòng ăn biên pha**, và khi biên hết, hệ dao động — không cần phần cứng hỏng, không cần bug.
+
+### 2. Mô hình tư duy
+
+```mermaid
+flowchart LR
+  SP["vận tốc đặt"] --> E(("−"))
+  E --> PID["PI(D) tính trên ESP32"] --> ZOH["giữ PWM tới chu kỳ sau<br/>(trễ ≈ T/2)"] --> M["motor + bánh<br/>(quán tính τ)"]
+  M --> ENC["encoder → PCNT<br/>vận tốc = Δđếm/T<br/>(trung bình trên T: trễ ≈ T/2)"]
+  ENC --> F["bộ lọc vận tốc<br/>(trễ nhóm, F5.6)"] --> E
+  HOST["host (nếu PID ở host):<br/>+ USB + Linux, có đuôi (F5.4)"] -.-> PID
+```
+
+**Ngân sách trễ.** Tổng trễ trong vòng θ = trễ đo (trung bình trên chu kỳ, bộ lọc) + trễ tính + trễ giữ (ZOH) + trễ truyền (nếu PID ở xa). Trễ θ không đổi biên độ, chỉ trừ pha: ở tần số cắt ω_c (nơi độ lợi vòng bằng 1), nó lấy đi **ω_c·θ radian** biên pha `[chuẩn]`.
+
+Với motor bậc nhất K/(τs + 1) và PI có Ti = τ (triệt cực), vòng hở là ω_c/s nhân e^(−sθ): biên pha = 90° − ω_c·θ. Hệ mất ổn định khi ω_c·θ = π/2:
+
+> θ_max = π / (2·ω_c) — tần số cắt càng cao (vòng càng "nhanh"), càng ít chịu được trễ.
+
+**Jitter** là trễ **thay đổi theo chu kỳ**. Hai trường hợp khác nhau:
+- Jitter nhỏ so với θ (100 µs khi θ cỡ 10 ms): gần như vô hại cho ổn định; nó là **chỉ báo sức khỏe kiến trúc firmware**.
+- Jitter cỡ θ, hoặc cú trễ hiếm nhưng dài (WiFi, ghi flash, host GC): biên pha "trung bình" không còn mô tả được hệ; vòng có thể mất ổn định dù trễ trung bình vẫn trong ngân sách.
+
+**Tần số lấy mẫu** không "càng cao càng tốt" với encoder: vận tốc = Δđếm/T. Ở 100 Hz, một bánh quay chậm cho Δđếm cỡ vài xung → lượng tử vận tốc thô; ở 1 kHz, Δđếm còn 0–1 → vận tốc thành chuỗi 0 và 1 (F5.5). Chọn T theo băng thông cần (thường fs ≥ 10–20 × băng thông vòng `[chuẩn, quy tắc kinh nghiệm]`) và theo độ phân giải encoder, không theo "nhanh nhất có thể".
+
+Mô phỏng: motor bậc nhất τ = 80 ms `[ước lượng]`, PI ở 100 Hz chỉnh cho ω_c = 40 rad/s. (A) trễ đo d chu kỳ cố định; (B) cùng d = 2, thêm trễ áp lệnh: cố định, ngẫu nhiên cùng trung bình, và cú trễ hiếm. Plant được tích phân chính xác giữa các sự kiện, lệnh áp đúng thứ tự.
+
+```python
+# [đã chạy] F5.8 — PI vận tốc bánh ở 100 Hz: trễ trong vòng và jitter phá ổn định thế nào
+import numpy as np
+tau, K, T = 0.08, 1.0, 0.010            # motor bậc nhất: hằng số thời gian 80 ms [ước lượng]; chu kỳ 10 ms
+Kp, Ti = 3.2, tau                       # PI, Ti = tau -> tần số cắt wc = Kp*K/tau = 40 rad/s
+
+def simulate(d=0, fixed=0.0, jitter=0.0, spike_p=0.0, spike=0.0, sim_t=8.0, seed=0):
+    rng = np.random.default_rng(seed)
+    y, u_now, integ, t = 0.0, 0.0, 0.0, 0.0
+    hist, pending, err = [], [], []      # y đã đo; (thời điểm áp, u); sai số theo thời gian
+    def advance(t0, t1, y, u):          # nghiệm chính xác của motor bậc nhất với u giữ nguyên
+        a = np.exp(-(t1 - t0) / tau); return a * y + K * u * (1 - a)
+    for k in range(int(sim_t / T)):
+        tk = k * T
+        for (ta, ua) in sorted(pending):            # áp các lệnh đến hạn trước tk
+            if ta <= tk:
+                y = advance(t, ta, y, u_now); t, u_now = ta, ua
+        pending = [p for p in pending if p[0] > tk]
+        y = advance(t, tk, y, u_now); t = tk
+        hist.append(y)
+        e = 1.0 - hist[max(0, k - d)]               # đo cũ d chu kỳ (trễ cảm biến/truyền)
+        integ += e * T / Ti
+        u = Kp * (e + integ)
+        lat = fixed + rng.uniform(0, jitter)        # trễ tính toán/áp lệnh: cố định + ngẫu nhiên
+        if rng.random() < spike_p: lat += spike     # cú trễ hiếm (WiFi, flash, log)
+        last = max([p[0] for p in pending], default=tk)
+        pending.append((max(tk + lat, last), u))    # giữ thứ tự lệnh
+        err.append(e)
+    err = np.abs(np.array(err)); n1 = int(1.0 / T)
+    return np.max(hist) - 1.0, err[-n1:].max()      # vọt lố; |e| lớn nhất trong 1 s cuối
+
+wc = Kp * K / tau
+print(f"wc = {wc:.0f} rad/s; trễ tối đa lý thuyết theta_max = pi/(2wc) = {np.pi/(2*wc)*1e3:.1f} ms")
+print("\nTrễ cố định (d chu kỳ) | vọt lố | |e| 1 s cuối")
+for d in range(0, 5):
+    os_, tail = simulate(d=d)
+    print(f"  d={d} ({d*10:2d} ms)          | " + (f"{os_*100:6.1f}%" if os_ < 10 else "phân kỳ") + f" | {tail:9.3g}")
+print("\nd=2, thêm trễ áp lệnh (20 seed)    | |e| 1 s cuối, trung vị | số seed |e|>0,5")
+cases = [("cố định 12 ms", dict(fixed=0.012)), ("đều 4–20 ms (TB 12)", dict(fixed=0.004, jitter=0.016)),
+         ("đều 0–24 ms (TB 12)", dict(jitter=0.024)),
+         ("cố định 12 ms + 1% cú +40 ms", dict(fixed=0.012, spike_p=0.01, spike=0.040)),
+         ("cố định 10 ms + 5% cú +40 ms", dict(fixed=0.010, spike_p=0.05, spike=0.040))]
+for name, kw in cases:
+    r = np.array([simulate(d=2, seed=s, **kw)[1] for s in range(20)])
+    print(f"  {name:31s} | {np.median(r):12.3g}          | {np.sum(r > 0.5):2d}/20")
+```
+
+Mô hình bỏ qua bão hòa PWM, vùng chết, lượng tử encoder, ma sát — mỗi thứ làm biên **xấu hơn**. Kết quả đúng về hình dạng, không phải con số cho motor của bạn.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Autoscaler đọc metric trễ 1–2 phút, scale lên rồi xuống liên tục | Vòng kín có trễ dao động | Bạn đã sửa bằng cooldown (giảm độ lợi) theo kinh nghiệm; ở đây có công thức θ_max = π/(2ω_c) để tính trước | Tăng Kp để "phản ứng nhanh" mà không tính trễ → dao động |
+| TCP congestion control (AIMD) phản ứng theo RTT | Vòng phản hồi qua kênh có trễ | TCP chịu dao động (răng cưa) là thiết kế; bánh xe dao động là rung, mòn, lệch quỹ đạo | Chấp nhận "dao động nhỏ" trong vòng vận tốc → odometry sai (K7 C6) |
+| Retry với timeout cố định | Watchdog/timeout lệnh ở MCU | Timeout ngắn hơn trễ đuôi của kênh → dừng oan; dài hơn → chạy mù lâu | Đặt timeout theo p50 của kênh |
+| Chuyển logic lên service trung tâm cho dễ deploy | Đặt PID trên host thay vì MCU | Thêm trễ USB + đuôi lập lịch Linux vào θ | Biên pha mất, vòng dao động khi host bận (bài tập mục 5) |
+
+**Chấm mô hình:**
+
+- *"Chạy PID nhanh hơn luôn tốt hơn."* — **ĐÚNG MỘT PHẦN.** Đúng: T nhỏ hơn thì trễ ZOH và trễ đo nhỏ hơn. Gãy: (1) vận tốc từ encoder lượng tử thô hơn khi T nhỏ (Δđếm ít đi); (2) ESP32 tốn CPU hơn, jitter tương đối tăng; (3) không cải thiện gì nếu θ bị chi phối bởi bộ lọc hoặc kênh truyền. *Phản ví dụ:* encoder 1320 xung/vòng bánh `[ước lượng]`, bánh 1 vòng/s, ở 1 kHz: Δđếm ≈ 1,3 mỗi chu kỳ — vận tốc nhảy giữa 1 và 2 xung, nhiễu ±40%; phải lọc → thêm trễ, mất phần lợi.
+- *"Trễ chỉ làm phản ứng chậm hơn."* — **SAI.** Trễ trong vòng kín đổi **ổn định**, không chỉ tốc độ. *Phản ví dụ:* mô phỏng mục 2, trễ đo 40 ms → phân kỳ, cùng hệ số PID ổn định ở 10 ms.
+
+**Tên chuẩn của thứ bạn đã làm:** autoscaler với cooldown, rate limiter thích nghi, controller của Kubernetes — đều là **điều khiển phản hồi**. Thứ còn thiếu: mô hình plant (τ, K), khái niệm **tần số cắt và biên pha**, và thói quen **đo trễ toàn vòng** (từ lúc đọc cảm biến tới lúc lệnh có hiệu lực) như một con số hạng nhất.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | PID (P, I, D) | Lệnh = hệ số × (sai số + tích phân sai số + đạo hàm sai số) | "Thuật toán làm mượt" |
+| 🟢 | Vòng vận tốc bánh thường là PI | D khuếch đại nhiễu lượng tử vận tốc | "Thiếu D là sai" |
+| 🟢 | Trễ trong vòng (loop delay) | Từ lúc đo tới lúc lệnh tương ứng có hiệu lực | "Thời gian tính PID" |
+| 🟡 | Tần số cắt ω_c, biên pha | Tần số độ lợi vòng = 1; khoảng pha còn lại trước khi dao động | — |
+| 🟢 | Anti-windup | Ngừng tích phân khi đầu ra bão hòa | — |
+| 🟢 | Bù vùng chết (feedforward) | Cộng offset vượt ma sát ngoài PID | "Để I tự lo" |
+| 🟢 | Vọt lố, thời gian xác lập, sai số xác lập | Ba số mô tả đáp ứng bước | — |
+| 🟡 | ZOH | Giữ lệnh không đổi giữa hai lần cập nhật — trễ trung bình T/2 | — |
+| 🔴 | Bode/Nyquist đầy đủ, H∞, thiết kế miền z | — | — |
+
+### 5. Bài tập dự đoán
+
+**Đề.** Trước khi chạy khối Python ở mục 2, ghi:
+
+1. θ_max theo công thức. Trễ hiệu dụng khi d = 0 không phải 0 — vì sao, bao nhiêu? Từ đó, d lớn nhất còn ổn định là bao nhiêu?
+2. Vọt lố tăng thế nào từ d = 0 tới d = 3 (đơn điệu? gần tuyến tính?).
+3. Phần (B), d = 2 (đo cũ 20 ms) + trễ áp lệnh: cố định 12 ms → tổng trễ hiệu dụng ≈ ? So với θ_max: ổn định hay không? Ngẫu nhiên đều 4–20 ms và 0–24 ms (cùng trung bình 12 ms): ca nào tệ hơn, có ca nào mất ổn định trong phần lớn seed?
+4. 1% chu kỳ bị thêm 40 ms: trung bình chỉ tăng 0,4 ms. Bạn dự đoán gì?
+5. **Áp vào robot:** nếu PID chạy trên host, gửi lệnh qua USB-serial, và host có đuôi đánh thức như bài tập F5.1/F5.4 của bạn, bạn đặt ω_c tối đa bao nhiêu để còn biên pha 45°?
+
+```markdown
+# prediction.md — F5.8
+θ_max = … ms; trễ hiệu dụng ở d=0 ≈ … ms vì …; d lớn nhất ổn định = …
+vọt lố d=0..3: … / … / … / …
+(B) cố định 12 ms: tổng ≈ … ms → …; đều 4–20: …; đều 0–24: … (… /20 seed mất ổn định)
+1% cú +40 ms: …
+PID trên host: θ ước lượng … ms → ω_c ≤ … rad/s
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+```
+wc = 40 rad/s; trễ tối đa lý thuyết theta_max = pi/(2wc) = 39.3 ms
+
+Trễ cố định (d chu kỳ) | vọt lố | |e| 1 s cuối
+  d=0 ( 0 ms)          |   -0.0% |  2.22e-16
+  d=1 (10 ms)          |   14.3% |         0
+  d=2 (20 ms)          |   55.6% |  2.22e-16
+  d=3 (30 ms)          |   96.9% |  0.000179
+  d=4 (40 ms)          | phân kỳ |  1.61e+10
+
+d=2, thêm trễ áp lệnh (20 seed)    | |e| 1 s cuối, trung vị | số seed |e|>0,5
+  cố định 12 ms                   |       0.0406          |  0/20
+  đều 4–20 ms (TB 12)             |       0.0983          |  0/20
+  đều 0–24 ms (TB 12)             |         2.04          | 16/20
+  cố định 12 ms + 1% cú +40 ms    |        0.458          | 10/20
+  cố định 10 ms + 5% cú +40 ms    |          149          | 19/20
+```
+
+1. θ_max ≈ 39,3 ms. Ở d = 0 vẫn có trễ giữ lệnh ≈ T/2 = 5 ms. Tổng trễ ≈ 10·d + 5 ms: d = 3 → 35 ms (< 39,3, còn ổn định nhưng dao động tắt rất chậm: sai số 1 s cuối vẫn 1,8·10⁻⁴), d = 4 → 45 ms (> 39,3) → **phân kỳ**. Công thức dự đoán đúng ranh giới.
+2. 0% → 14% → 56% → 97%: tăng nhanh hơn tuyến tính khi gần ranh giới. Không có cảnh báo sớm kiểu "chậm hơn một chút" — chất lượng sụp dồn ở cuối.
+3. Cố định 12 ms: tổng ≈ 20 + 12 + 5 = 37 ms < 39,3 → ổn định (0/20). Đều 4–20 ms: hơi tệ hơn, vẫn ổn định. **Đều 0–24 ms, cùng trung bình 12 ms: 16/20 seed mất ổn định.** Cùng trễ trung bình, độ biến thiên lớn đủ đẩy hệ qua ranh giới — đây là "jitter phá ổn định", đã chạy thật.
+4. **10/20 seed mất ổn định** — trung bình chỉ tăng 0,4 ms nhưng cú trễ hiếm khi trúng lúc hệ gần biên thì đủ. Với 5% cú, gần như mọi seed phân kỳ. Đuôi, không phải trung bình, quyết định.
+5. Ví dụ đuôi F5.1 của máy soạn: max có tải 20–50 ms. Muốn biên 45° (π/4) với θ ≈ 50 ms (đuôi) + ~15 ms (USB, xử lý, ZOH) `[ước lượng]`: ω_c ≤ (π/4)/0,065 ≈ 12 rad/s — chậm hơn 3 lần vòng trên MCU, và vẫn chỉ là "biên theo trễ cố định" trong khi trễ thật biến thiên. Đây là lý do định lượng để PID vận tốc ở MCU (F5.1).
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist để chấm một khẳng định về vòng điều khiển:
+
+1. Có số **trễ toàn vòng** (đo → tính → lệnh có hiệu lực), gồm cả bộ lọc và ZOH, không? Hay chỉ có "chu kỳ 10 ms"?
+2. Có **ω_c** (hoặc băng thông, thời gian lên) để so với trễ không? Không có thì "jitter X µs" không trả lời được câu hỏi ổn định.
+3. Jitter được báo kèm **đuôi và cú hiếm** (max, số lần vượt, thời gian đo) hay chỉ p99?
+4. PID tính với **dt danh định hay dt đo được**? Đạo hàm có lọc? Có anti-windup, bù vùng chết?
+5. Sim của vòng có **mô hình trễ** không? Sim thiếu trễ cho vọt lố thấp hơn thật (K7 C11.1).
+6. Thay đổi đề xuất (thêm lọc, đổi tần số, dời PID sang host, thêm log) làm θ tăng hay giảm, bao nhiêu?
+
+**Khẳng định mẫu:**
+
+(a) *Gemini K7 Bài 3:* "Bộ điều khiển PID dựa trên giả định toán học rằng Δt là một hằng số chính xác. Nếu chu kỳ 10 ms bị trôi thành 8 ms hoặc 14 ms do scheduler của hệ điều hành, phép tính đạo hàm và tích phân sẽ sai lệch hoàn toàn."
+
+(b) *K7 gốc, Bài 5:* "Sidecar ảnh hưởng jitter vòng điều khiển: **0** — nó chạy trên mini PC, vòng điều khiển chạy trên ESP32."
+
+(c) *Roadmap mục 2.4:* "Trong control loop 1kHz, một lần jitter 5ms có thể làm robot mất ổn định. Jitter quan trọng hơn latency trung bình."
+
+(d) *Roadmap mục 2.4:* "Control loop 1kHz → mỗi chu kỳ 1ms, ngân sách jitter thường <100µs."
+
+<details><summary>🔒 Đáp án</summary>
+
+(a) **ĐÚNG MỘT PHẦN.** Đúng: nếu code dùng dt danh định mà chu kỳ thật là 14 ms, tích phân bị đếm thiếu ~29% trong chu kỳ đó và đạo hàm (Δe/dt) sai cùng tỉ lệ — một sai số **có cận, tỉ lệ với độ lệch**, không phải "sai lệch hoàn toàn"; dùng dt đo được sửa phần lớn. Gãy ở chỗ quan trọng hơn: tác hại chính của chu kỳ trôi là **trễ biến thiên trong vòng** (mục 5: cùng trễ trung bình, độ biến thiên lớn → 16/20 mất ổn định), thứ mà dùng dt đo được **không** sửa. Và nguồn "scheduler của hệ điều hành" chỉ đúng nếu PID chạy trên Linux hoặc trong task FreeRTOS dùng `vTaskDelay`.
+
+(b) **ĐÚNG MỘT PHẦN.** Đúng về tranh chấp CPU: sidecar không chạy trên ESP32. Gãy: (1) "0" không phải kết quả đo được — kết quả đúng là "không phân biệt được trong độ phân giải và độ dài đo"; (2) vẫn có đường ghép: tốc độ và thời điểm host gửi khung qua USB làm thay đổi tải ISR/task giao tiếp trên ESP32; host bận làm lệnh vận tốc đến trễ (trễ setpoint, không phải trễ vòng trong, nhưng vẫn ảnh hưởng quỹ đạo); USB cấp nguồn/chung GND (F5.7). Gate gốc yêu cầu **chứng minh bằng đo lại** — giữ, và báo số đo kèm sai số thay vì "0".
+
+(c) **SAI** như phát biểu chung. Mô phỏng: trễ **cố định** 40 ms với jitter bằng 0 đã phân kỳ; trễ trung bình là thứ ăn biên trước. Jitter và cú hiếm làm **tệ thêm** (mục 5), nhưng không "quan trọng hơn". "Một lần jitter 5 ms làm mất ổn định" cũng không đúng tự thân: một cú lẻ thường gây một xung nhiễu rồi tắt (ổn định là thuộc tính tiệm cận); nó nguy hiểm khi lặp đủ dày hoặc hệ đã sát biên. Câu đúng: "đo trễ trung bình **và** đuôi; so với θ_max của vòng".
+
+(d) **CHƯA RÕ.** "< 100 µs" không suy ra được từ "1 kHz" mà từ **ω_c** của vòng: 100 µs trễ thêm ở ω_c = 40 rad/s chỉ lấy 0,004 rad ≈ 0,23° biên pha — vô hại; ở một vòng dòng điện băng thông hàng nghìn rad/s thì đáng kể. Với gate gốc K7 "jitter p99 < 100 µs" (giữ nguyên, không đổi ngưỡng): hãy đọc nó như **chỉ báo kiến trúc firmware lành mạnh** (timer phần cứng, task đúng ưu tiên, không ghi flash trong vòng nóng), còn câu hỏi ổn định được trả lời bằng θ toàn vòng và ω_c. *Đề xuất (không thay tiêu chí):* bổ sung vào báo cáo gate một dòng "θ đo được / θ_max ước lượng".
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Nếu…thì]** Nếu bạn thêm EMA α = 0,2 cho vận tốc encoder ở 100 Hz để đồ thị đẹp hơn, θ tăng bao nhiêu và d tương đương là mấy?
+   <details><summary>Hướng nghĩ</summary>
+
+   Trễ EMA ≈ (1−α)/α = 4 mẫu = 40 ms (F5.6) — một mình nó đã vượt θ_max 39 ms của ví dụ. Hoặc giảm ω_c, hoặc lọc nhẹ hơn, hoặc đổi cách đo vận tốc (thời gian giữa xung ở tốc độ thấp).
+
+   </details>
+2. **[Quy mô]** 100 robot, mỗi con motor hơi khác (K, τ lệch ±20%) và pin ở mức sạc khác nhau. Một bộ hệ số PID cho cả đội: biên pha phân bố thế nào, và bạn giám sát gì trên dữ liệu đội để phát hiện con sắp dao động?
+   <details><summary>Hướng nghĩ</summary>
+
+   K lớn hơn → ω_c lớn hơn → biên nhỏ hơn với cùng θ. Giám sát vọt lố/đỉnh phổ của sai số vận tốc theo robot theo thời gian (F5.6) như một chỉ số sức khỏe; cảnh báo khi tiến gần ngưỡng — đó là việc data infra làm được mà firmware không làm.
+
+   </details>
+3. **[Failure mode]** Robot chạy tốt trên sàn gạch, dao động khi lên thảm. Không đổi code. Vì sao?
+   <details><summary>Hướng nghĩ</summary>
+
+   Plant đổi: ma sát và tải khác → K, τ khác, vùng chết khác; bão hòa PWM thường xuyên hơn → windup. Hệ số tối ưu cho một plant không phải cho mọi plant; cần anti-windup và kiểm biên ở điều kiện xấu nhất.
+
+   </details>
+4. **[Phản biện]** "Dùng MPC hoặc RL thì không cần lo biên pha." Bạn đồng ý tới đâu?
+   <details><summary>Hướng nghĩ</summary>
+
+   Mọi bộ điều khiển phản hồi đều chịu trễ trong vòng; MPC có thể **mô hình hóa** trễ nếu biết nó (và tốn CPU — K7 C11.4), RL policy chạy ở tần số thấp hơn với trễ inference có đuôi. Câu hỏi không biến mất, chỉ đổi dạng: trễ có được mô hình và đo không.
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Hàng không:** PIO (YF-22 1992) — phi công là một phần của vòng, giới hạn tốc độ của bộ chấp hành tạo trễ pha. *Giống:* trễ ăn biên pha. *Khác:* có con người thích nghi trong vòng, nên còn yếu tố "phi công đổi độ lợi" theo căng thẳng.
+- **Sinh lý học:** hô hấp Cheyne–Stokes ở bệnh nhân suy tim được giải thích một phần bằng trễ tuần hoàn trong vòng điều hòa CO₂ — tín hiệu tới cảm biến hóa học muộn, vòng dao động `[chuẩn, mức giải thích sinh lý học]`. *Giống:* trễ trong vòng + độ lợi cao → dao động. *Khác:* không có "firmware" để giảm độ lợi.
+
+### 9. Áp vào khóa chính
+
+- **K7 C4.2:** đo **ba** số, không phải một: jitter chu kỳ (gate gốc), trễ toàn vòng θ (GPIO lật lúc đọc PCNT và lúc ghi PWM, logic analyzer), và đáp ứng bước (τ, K ước lượng). Tính θ_max cho hệ số PID đang dùng; ghi "θ / θ_max" vào báo cáo.
+- **K7 C4.4:** timeout lệnh từ host và kẹp tốc độ là vòng ngoài; chọn timeout từ đuôi của kênh, không từ p50.
+- **K7 C10.1:** thời gian phản ứng E-stop là một trễ trong "vòng an toàn"; đo bằng cùng phương pháp GPIO.
+- **K7 C11.1:** sim twin phải có trễ đo được và bộ lọc thật; thiếu trễ thì sim đẹp hơn thật một cách có hệ thống.
+- **K7 C11.4:** MPC mua được gì phụ thuộc trễ và CPU; dùng cùng khung "θ, ω_c, biên".
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| YF-22 25/4/1992, PIO, rate limiting góp phần, sửa bằng phần mềm | `[chuẩn]` | Aviation Week (Dornheim, 1992); tài liệu PIO của Systems Technology Inc.; Wikipedia "Pilot-induced oscillation" để định hướng |
+| Trễ θ lấy đi ω_c·θ rad biên pha; PI triệt cực → PM = 90° − ω_c·θ | `[chuẩn]` | Giáo khoa điều khiển; mô phỏng mục 2 khớp ranh giới (d = 3 ổn định, d = 4 phân kỳ) |
+| Jitter cùng trung bình có thể làm mất ổn định | `[chuẩn]` + mô phỏng | Cervin và cộng sự (Jitterbug/TrueTime, Lund); mô phỏng mục 2: 16/20 seed |
+| fs ≥ 10–20 × băng thông vòng | `[chuẩn, quy tắc kinh nghiệm]` | Åström & Wittenmark, *Computer-Controlled Systems* |
+| τ = 80 ms, encoder 1320 xung/vòng | `[ước lượng]` | Đo ở K7 C3.4 (đường cong PWM → vận tốc) và C3.3 |
+| Cheyne–Stokes và trễ tuần hoàn | `[chuẩn]` | Mức giải thích; không dùng cho kết luận y khoa |
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** K. J. Åström, R. M. Murray, *Feedback Systems: An Introduction for Scientists and Engineers* (bản 2, Princeton, 2021; bản PDF miễn phí trên trang của tác giả) — chương PID và chương về trễ/biên ổn định.
+- **Giải thích:** Brian Douglas, loạt video "Control Systems Lectures" và "Understanding PID Control" (MathWorks/YouTube) — xem phần về trễ và biên pha.
+- **Đào sâu (tùy chọn):** A. Cervin, D. Henriksson, B. Lincoln, J. Eker, K.-E. Årzén, "How Does Control Timing Affect Performance?", *IEEE Control Systems Magazine*, 2003.
+- **Tự kiểm tra:** (1) giải thích cho backend engineer vì sao autoscaler dao động, bằng θ và ω_c; (2) vẽ lại sơ đồ vòng ở mục 2, ghi trễ ở mỗi khối; (3) câu hỏi:
+  - *Vòng 100 Hz, PI triệt cực, ω_c = 20 rad/s; trễ đo T/2, ZOH T/2, bộ lọc MA 4 mẫu. Biên pha còn bao nhiêu?*
+    <details><summary>Đáp án</summary>
+
+    θ = 5 + 5 + 15 (MA 4 mẫu: (4−1)/2 = 1,5 mẫu = 15 ms) = 25 ms. ω_c·θ = 0,5 rad ≈ 28,6°. PM ≈ 90° − 28,6° ≈ 61°. Đổi MA sang EMA α = 0,2 (40 ms) → θ = 50 ms → PM ≈ 33°.
+
+    </details>
+
+---
+
+## Tranh luận đang mở trong nghề
+
+1. **Vòng điều khiển trên Linux RT hay trên MCU riêng?** Một phía (nhiều nhóm robot công nghiệp, cộng đồng `ros2_control` + EtherCAT): Linux PREEMPT_RT trên nhân cô lập đủ cho vòng 1 kHz, bớt một con chip, một firmware, một giao thức, và debug bằng công cụ Linux. Phía kia (đa số robot di động nhỏ, giới nhúng): MCU cho cận trên đơn giản, khởi động nhanh, sống sót khi Linux treo, và tách miền lỗi; chi phí một con ESP32 là không đáng kể. Điểm còn cãi: khi nào độ phức tạp của "hai thế giới" (giao thức, phiên bản firmware) đắt hơn rủi ro thời gian của "một thế giới".
+2. **micro-ROS hay giao thức serial tự viết?** Phía micro-ROS: chung kiểu message, chung công cụ, không phải tự phát minh framing/CRC/heartbeat. Phía serial tự viết: ít tầng, kiểm soát được đuôi trễ và bộ nhớ trên MCU, dễ đo; micro-ROS cần agent trên host và thêm phụ thuộc. Với người mới, cả hai đều hợp lý — K7 C4.3 bắt bạn so bằng số đo.
+3. **Đo thời gian (measurement-based) hay phân tích tĩnh WCET trên chip đa nhân có cache?** Giới hàng không/ô tô cần cận chứng minh được và chuyển dần sang phương pháp xác suất (MBPTA) vì phân tích tĩnh trên đa nhân hiện đại quá bi quan; phía phản đối cho rằng giả định thống kê của MBPTA khó kiểm. Với robot của bạn, câu hỏi thực tế là "đo bao lâu, dưới tải nào thì đủ tin" — chưa có câu trả lời chung.
+4. **Ghi raw ở tần số cao hay lọc/hạ tốc ở edge?** Data platform muốn raw (tái xử lý được, không có bộ lọc ẩn); băng thông, lưu trữ, CPU của robot muốn lọc ở MCU. Phía giữa: ghi raw ngắn hạn trong ring buffer, chỉ đẩy lên khi có sự kiện (giống thiên văn vô tuyến), và luôn ghi cấu hình bộ lọc vào metadata. Chưa có chuẩn ngành cho robot dữ liệu.
+
+## Bài kiểm tra cuối khóa nền
+
+**Hồ sơ thời gian và tín hiệu của vòng vận tốc bánh** — gắn vào robot của bạn (K7 C3–C4). Làm được hai mức: chỉ laptop (dùng mô phỏng và số ước lượng, đánh dấu `[ước lượng]`) hoặc có phần cứng (thay bằng số đo, đánh dấu `[tự đo]`).
+
+**Đầu ra:** một tệp `timing-dossier.md` + một script Python ≤ 80 dòng, commit `prediction.md` trước khi đo.
+
+1. **Ranh giới (F5.1):** bảng chức năng → MCU/Linux → hậu quả khi trễ → cận trên cần đạt.
+2. **Đường dữ liệu (F5.2):** encoder vào PCNT hay ngắt? Tính tốc độ cạnh tối đa từ PPR và tốc độ không tải; nếu có ngắt, tính phần CPU. Mọi buffer trên đường host ↔ MCU: dung lượng, mức đầy mục tiêu, trễ theo Little.
+3. **Lịch task (F5.3):** bảng task (ưu tiên, nhân, chu kỳ, C ước lượng/đo, tài nguyên chung); cận trên thời gian đáp ứng của task điều khiển theo "việc mình + chen + chặn". Đánh dấu mọi đoạn tắt ngắt/ghi flash.
+4. **Lấy mẫu (F5.5):** độ phân giải vận tốc ở 100 Hz và 1 kHz với encoder của bạn; ODR + DLPF của IMU và tần số rung motor dự kiến → có alias không, gập về đâu.
+5. **Trễ vòng và biên (F5.6, F5.8):** liệt kê từng thành phần của θ (đo, lọc, tính, ZOH, truyền); tính θ_max với ω_c bạn chọn; chạy lại mô phỏng F5.8 với τ, K, θ của bạn (đo được hoặc ước lượng) và một kịch bản jitter lấy từ phân bố thật (bài tập F5.1/F5.4 hoặc số đo GPIO).
+6. **Nguồn và watchdog (F5.7):** bảng chế độ hỏng (task điều khiển treo, task giao tiếp treo, host im lặng, brownout, ESP32 treo) × tầng watchdog bắt được nó × trạng thái đầu ra sau khi bắt. Ô nào trống là việc phải làm ở K7 C4.4/C10.1.
+7. **Tự chấm:** áp checklist mục 6 của từng viên nang lên chính hồ sơ của bạn; mỗi mục ghi ĐÚNG/ĐÚNG MỘT PHẦN/CHƯA RÕ kèm lý do. Nhờ một LLM chấm lại bằng prompt "chấm mô hình" (quy chuẩn), rồi tự kiểm từng điểm nó nói — ghi chỗ nó sai.
+
+**Đạt khi:** mọi con số có nhãn ([tự đo]/[ước lượng]/[spec]), θ/θ_max được tính, có ít nhất một kết luận bạn **đổi ý** sau khi chạy mô phỏng với số của mình, và bảng watchdog không còn ô "chưa biết" ở dòng "ESP32 treo".

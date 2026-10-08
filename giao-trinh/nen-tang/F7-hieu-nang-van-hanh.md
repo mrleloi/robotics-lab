@@ -10,7 +10,7 @@ Bạn đã vận hành hệ high-load. F7 không dạy lại SLO hay Prometheus;
 - **K3 Bài 11–12** — thấy RTF 0,9 là "còn dư 10%", trong khi đó là utilization 0,9, ngay trên đầu gối của hàng đợi.
 - **K4 Bài 12** — chép "N100 ≈ 0,7 TFLOPS" và "VLA batch 1 là compute-bound" từ bản Gemini rồi vẽ roofline sai từ trục tung.
 - **K6 Bài 8** — thấy `%CPU` 100% và tưởng máy đang tính, trong khi bốn nhân đang chờ chung một kênh RAM.
-- **K5 Bài 18, K3 Bài 17, K7 C10.3** — chạy soak 7 ngày / 72h, báo "completeness 99,6%, PASS" trong khi một luồng chết trọn tuần; hoặc báo FAIL vì mẫu số tính từ ODR danh định sai 1,5%.
+- **K5 Bài 18, K3 Bài 17, K7 C10.3** — chạy soak 7 ngày / 72h rồi báo một con số completeness mà không nói nó gộp thế nào và mẫu số lấy từ đâu — hai câu hỏi quyết định PASS hay FAIL.
 - **K5 Bài 19, K7 C10** — "bisect" bốn tầng bằng cách dò tuần tự từ trên xuống, và viết postmortem kiểu "tôi quên cắm dây".
 
 ## Mindset cốt lõi
@@ -389,7 +389,7 @@ f thật khi cả 4 nhân bận lâu thấp hơn 3,4 GHz (giới hạn công su�
 
 - *Mô hình của bạn ở K3 lượt 12–13:* "người ta giảm dần các giới hạn rào cản… đẩy toàn bộ dữ liệu điện thô lên tầng ứng dụng… tận dụng tối đa giới hạn vật lý… ví dụ như nvidia." — **ĐÚNG MỘT PHẦN.** Đúng: phần cứng AI được thiết kế để chạy gần trần vật lý. Gãy: trần đang chặn hầu hết hệ không phải tốc độ transistor mà là **di chuyển dữ liệu** (bức tường bộ nhớ, năng lượng mỗi byte DRAM gấp trăm lần mỗi FLOP). Xu hướng thật là ngược với "đẩy dữ liệu thô lên": đưa tính toán lại gần dữ liệu (HBM xếp chồng sát GPU, lượng tử hóa để giảm byte, xử lý ngay trên cảm biến). Phản ví dụ: decode LLM batch 1 trên GPU cao cấp dùng một phần nhỏ sức tính vì chờ đọc trọng số.
 - *"GPU mạnh hơn nên model nào cũng compute-bound trên GPU, memory-bound trên CPU yếu."* — **SAI.** Ngược chiều: GPU có ridge cao (π/β lớn), nên cùng một kernel *dễ* memory-bound trên GPU hơn. Phản ví dụ ở mục 5.
-- *"Đo được 30 GFLOP/s trên N100, peak 200 → hiệu suất 15%, kernel tệ."* — **ĐÚNG MỘT PHẦN.** Chỉ kết luận được khi biết I. Với decode fp32 (I ≈ 0,5), trần thật là β·I ≈ 19 GFLOP/s; 30 GFLOP/s lúc đó nghĩa là có dữ liệu nằm trong cache hoặc phép đo sai — không phải kernel tệ.
+- *"Đo được 30 GFLOP/s trên N100, peak 200 → hiệu suất 15%, kernel tệ."* — **ĐÚNG MỘT PHẦN.** Chỉ kết luận được khi biết I. Với decode fp32 (I ≈ 0,5), trần thật là β·I, thấp hơn peak cả chục lần; khi đó một con số vượt β·I nghĩa là dữ liệu nằm trong cache hoặc phép đo sai — không phải kernel tệ.
 
 **Tên chuẩn của thứ bạn đã làm:** tính "request này đọc bao nhiêu byte từ DB" rồi so với throughput đĩa là roofline một chiều (chỉ có trần β). Thiếu chiều thứ hai: sức tính, và vị trí ridge.
 
@@ -673,7 +673,7 @@ Cùng thời, phía service: Google mô tả "bốn tín hiệu vàng" (latency,
 **Chấm mô hình:**
 
 - *"CPU 100% nghĩa là phần cứng đang làm việc hết sức."* — **SAI.** Utilization là tỉ lệ thời gian *có việc được lên lịch*, không phải tỉ lệ đơn vị tính được dùng. Phản ví dụ: GEMV ở F7.2 giữ một nhân 100% nhưng dùng ~5% sức tính vì chờ RAM; IPC dưới 1 là dấu hiệu.
-- *"Profiler chỉ ra hàm chậm, sửa hàm đó là xong."* — **ĐÚNG MỘT PHẦN.** Đúng cho phần on-CPU. Gãy ở phần chờ (I/O, khóa, lập lịch) và ở hàm "chậm" vì bị gọi quá nhiều lần chứ không vì chậm mỗi lần. Phản ví dụ ở mục 5: 55% thời gian thật của vòng lặp nằm ở chờ, flame graph on-CPU không có ô nào cho nó.
+- *"Profiler chỉ ra hàm chậm, sửa hàm đó là xong."* — **ĐÚNG MỘT PHẦN.** Đúng cho phần on-CPU. Gãy ở phần chờ (I/O, khóa, lập lịch) và ở hàm "chậm" vì bị gọi quá nhiều lần chứ không vì chậm mỗi lần. Phản ví dụ: vòng lặp ở mục 5 — cộng thời gian chờ USB và chờ mutex rồi so với FIR; flame graph on-CPU không có ô nào cho phần chờ.
 - *"Metrics đủ nhiều thì không cần profiling."* — **SAI.** Metrics trả lời "tài nguyên nào, lúc nào"; profiling trả lời "code nào". USE chỉ đường, profiler đi đường.
 
 **Tên chuẩn của thứ bạn đã làm:** "đo trên host yên tĩnh" là một nửa của **active benchmarking** (Gregg): nửa kia là *trong lúc* benchmark chạy, dùng công cụ USE để xác nhận nút thắt đúng là thứ bạn nghĩ đang đo.
@@ -922,7 +922,7 @@ Ba SLI pipeline thường gặp và cái chúng **không** bắt:
 
 **Chấm mô hình:**
 
-- *"Completeness ≥ 99% nghĩa là pipeline được phép mất 1% dữ liệu ở đâu cũng được."* — **ĐÚNG MỘT PHẦN.** Đúng về số học của budget. Gãy: (1) gộp sai cách thì 1% có thể là *toàn bộ* một luồng ít message; (2) 1% dồn vào một lần 100 phút liên tục khác hẳn 1% rải đều về giá trị dữ liệu (một episode mất trọn camera thì vô dụng cho train). Phản ví dụ: mục 5, BME280 chết trọn tuần mà completeness gộp vẫn 99,56%.
+- *"Completeness ≥ 99% nghĩa là pipeline được phép mất 1% dữ liệu ở đâu cũng được."* — **ĐÚNG MỘT PHẦN.** Đúng về số học của budget. Gãy: (1) gộp sai cách thì 1% có thể là *toàn bộ* một luồng ít message; (2) 1% dồn vào một lần 100 phút liên tục khác hẳn 1% rải đều về giá trị dữ liệu (một episode mất trọn camera thì vô dụng cho train). Phản ví dụ: tự tính kịch bản A ở mục 5 (một luồng 1 Hz chết trọn tuần) trước khi mở đáp án.
 - *"Đặt SLO 100% cho an toàn."* — **SAI.** SLO 100% không có budget nên không có quyết định nào được ra từ nó: mọi thay đổi đều là rủi ro không đo được, và hệ vật lý (cảm biến, USB, nguồn) không bao giờ đạt 100%. An toàn (E-stop, K7 C10.1) không phải SLO; nó là ràng buộc phần cứng không có budget.
 - *"SLO là để báo cáo."* — **SAI.** SLO là để **ra quyết định**: dừng thêm tính năng khi budget cạn, chọn alert, chọn ưu tiên sửa. Một SLO không thay đổi hành vi của ai là một metric trang trí (→ F7.5).
 
@@ -1379,7 +1379,7 @@ FMEA (Failure Mode and Effects Analysis) có gốc từ quân đội Mỹ (MIL-P
 **Chấm mô hình:**
 
 - *"Soak đủ lâu không lỗi thì hệ bền."* — **ĐÚNG MỘT PHẦN.** Đúng cho lỗi ngẫu nhiên có MTBF nhỏ so với T. Mù với lỗi theo thời điểm và lỗi tích lũy chưa chạm ngưỡng. Phản ví dụ: Patriot (100 giờ), Boeing 787 (248 ngày): mọi soak ngắn hơn đều PASS.
-- *"RPN cao nhất là ưu tiên số một."* — **SAI** như một quy tắc. Phản ví dụ ở mục 5: một lỗi S = 10 có RPN thấp hơn lỗi S = 2. Vì vậy AIAG–VDA 2019 xét S trước, rồi mới O, D.
+- *"RPN cao nhất là ưu tiên số một."* — **SAI** như một quy tắc. Phản ví dụ: tự xếp bốn dòng ở mục 5(a) trước khi mở đáp án. Vì vậy AIAG–VDA 2019 xét S trước, rồi mới O, D.
 - *"FMEA phủ mọi cách hệ hỏng."* — **SAI.** FMEA xét từng lỗi đơn lẻ mà người viết nghĩ ra. Không phủ lỗi kết hợp, lỗi chung nguồn (một sụt áp làm cả ESP32 và mini PC reset cùng lúc), hay lỗi ở chính cơ chế phát hiện.
 
 **Tên chuẩn của thứ bạn đã làm:** "chạy qua đêm xem có crash không" là **soak test**; ghi lại những gì có thể hỏng và cách xử lý trong design doc là một **FMEA không chấm điểm**; test `kill -9` là **fault injection** (F2.5).
@@ -1803,7 +1803,7 @@ Checklist khi đọc một quy trình bisect hoặc một postmortem:
 
 **3. SLO cho hệ vật lý có ý nghĩa tới đâu?** SLO sinh ra cho dịch vụ có hàng triệu yêu cầu và người dùng chịu được thỉnh thoảng lỗi. Phía hoài nghi: deadline mỗi tick, an toàn, và mẫu số nhỏ (một robot, 72 giờ) làm khái niệm budget méo mó. Phía ủng hộ: ở cấp *pipeline dữ liệu* và *đội robot*, SLO là ngôn ngữ duy nhất để quyết định ưu tiên giữa tính năng và độ tin cậy. Viên nang F7.4 đi giữa: SLO cho dữ liệu và vận hành, ràng buộc phần cứng không có budget cho an toàn.
 
-**4. Roofline có còn là câu hỏi đầu tiên cho inference batch 1 ở biên?** Với model nhỏ và batch 1, độ trễ thường bị chặn bởi chi phí cố định (khởi chạy kernel, overhead framework Python, đồng bộ) trước khi chạm trần nào của roofline; nhiều người làm edge đo "latency floor" trước. Phía roofline đáp: overhead cũng là một trần (đo được bằng model rỗng, như K4 Bài 2 làm với harness), và chỉ roofline mới nói được tối ưu nào có trần cao hơn. Bài báo vla.cpp (2026) là một điểm dữ liệu cho phía "compute utilization" — trên phần cứng và model của họ.
+**4. Roofline có còn là câu hỏi đầu tiên cho inference batch 1 ở biên?** Với model nhỏ và batch 1, độ trễ thường bị chặn bởi chi phí cố định (khởi chạy kernel, overhead framework Python, đồng bộ) trước khi chạm trần nào của roofline; nhiều người làm edge đo "latency floor" trước. Phía roofline đáp: overhead cũng là một trần (đo được, như K4 Bài 3 đo overhead của chính harness), và chỉ roofline mới nói được tối ưu nào có trần cao hơn. Bài báo vla.cpp (2026) là một điểm dữ liệu cho phía "compute utilization" — trên phần cứng và model của họ.
 
 ## Bài kiểm tra cuối khóa nền (6–8h, tính vào giờ K5 Bài 18–19 hoặc làm riêng)
 

@@ -10,3 +10,6 @@
 - K5 Bài 11: hàng sáng đầu tiên ứng với lúc readout, không phải lúc bắt đầu phơi sáng; công thức (t_pulse+t_exp)/t_row. (w-F4)
 - K5 Bài 12 (Gemini): nhầm resolution với uncertainty (52 µs / 41.7 ns). (w-F4)
 - `CLOCK_MONOTONIC` vẫn bị NTP slew (Gemini K3/K7). (w-F4)
+- K4 Bài 12 (gốc + Gemini + bản Kiro nếu lặp lại): N100 ≈ 0,7 TFLOPS sai (CPU 0,19–0,22, iGPU ~0,29); "batch 1 compute-bound" tùy pha; ridge N100 ~5 FLOP/byte vs 4090 ~82 → cùng kernel dễ memory-bound trên GPU hơn (lập luận "một kênh RAM nên đừng giả định compute-bound" của gốc ngược chiều); "SM Active" không tách compute với chờ bộ nhớ. EQ12 dùng 1 khe SO-DIMM DDR5-4800 (β lý thuyết 38,4 GB/s). (w-F7)
+- K5 Bài 18: completeness tính theo từng luồng, mẫu số theo `seq` (ODR thật), ngưỡng 99% giữ. K5 Bài 19: quy trình tuần tự không phải "bisect"; "byte đúng trên dây nhưng MCU đọc sai" là tầng firmware. (w-F7)
+- Kiểm throttle bằng `turbostat`, không chỉ `dmesg`. (w-F7)

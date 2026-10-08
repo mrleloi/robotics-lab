@@ -3,7 +3,7 @@
 > **Vị trí:** C0 (xưởng, an toàn) → **C1** → C2 (cơ khí), C5 (lắp hoàn chỉnh dùng bo nguồn này) · **Cần trước:** K1 trọn; tốt nhất sau K3 Bài 5–6 (amp, brownout); C0 trọn (nguồn bàn CV/CC → K7 C0.4, đồ gá đo sụt áp → K7 C0.3); viên nang → F5.7, F1.1 · **Chạy song song với:** K2–K3
 > **Làm ra được:** bo phân phối nguồn trên tấm đế: pin → cầu chì chính → công tắc chính → (a) nhánh motor qua relay E-stop → đầu ra cho driver; (b) buck-boost 12 V cho mini PC; (c) buck 5 V cho ESP32/logic · bảng power budget có số đo, log dòng–áp ≥1 kHz từ INA226, `wiring/wires.csv` đầy đủ · **Sau chặng này bạn quyết định được:** pin hóa học nào, mấy S; mini PC cần buck hay buck-boost; mỗi nhánh dây cỡ nào, cầu chì bao nhiêu ampe; robot chạy được bao lâu và dòng đỉnh có làm BMS cắt cả hệ không.
 
-Chặng nguy hiểm nhất của K7. C0 cho bạn tay nghề với nguồn bàn có trần dòng vài ampe. C1 đưa vào một vật **không có trần dòng hữu ích**: pack lithium chập mạch có thể đẩy ra hàng trăm ampe trước khi BMS kịp cắt (Bài C1.1 tính con số này). Toàn bộ chặng xoay quanh một nguyên tắc: **pin là thứ cuối cùng được cắm vào**. Mọi khối được thử trên nguồn bàn có giới hạn dòng trước, từng khối một.
+Chặng nguy hiểm nhất của K7. C0 cho bạn tay nghề với nguồn bàn có trần dòng vài ampe. C1 đưa vào một vật **không có trần dòng hữu ích**: pack lithium chập mạch có thể đẩy ra hàng trăm ampe trước khi BMS kịp cắt (mô phỏng ở → K7 C0.2; Bài C1.1 so ba cấu hình pack). Toàn bộ chặng xoay quanh một nguyên tắc: **pin là thứ cuối cùng được cắm vào**. Mọi khối được thử trên nguồn bàn có giới hạn dòng trước, từng khối một.
 
 Chặng này chưa cần motor và driver (C3 mới có). Tải motor được thay bằng **tải giả**: bóng đèn ô tô 12 V 21 W (dây tóc nguội có điện trở thấp nên có dòng khởi động, giống motor) và điện trở công suất. Nếu đã có motor, có thể dùng thêm một motor kẹp chặt, không gắn bánh.
 
@@ -54,7 +54,7 @@ Dòng dữ liệu mới: ESP32 đọc INA226 qua I2C ở ~1,5 kHz → USB serial
 ## 1. An toàn của chặng
 
 **Rủi ro cụ thể của C1** (theo mức nặng):
-1. **Ngắn mạch pack.** Dòng hàng trăm ampe `[ước lượng — Bài C1.1 tính]`: dây đỏ rực trong vài giây, tia lửa hồ quang, kim loại bắn, bỏng tay. Hay xảy ra nhất khi: tuốt dây đang nối pin, dụng cụ kim loại rơi qua hai cực, hai đầu dây trần chạm nhau, cắm XT60 ngược bằng đầu tự hàn sai.
+1. **Ngắn mạch pack.** Dòng hàng trăm ampe `[ước lượng — → K7 C0.2]`: dây đỏ rực trong vài giây, tia lửa hồ quang, kim loại bắn, bỏng tay. Hay xảy ra nhất khi: tuốt dây đang nối pin, dụng cụ kim loại rơi qua hai cực, hai đầu dây trần chạm nhau, cắm XT60 ngược bằng đầu tự hàn sai.
 2. **Thermal runaway** (cell tự nóng lên không dừng, Bài C1.1): do sạc sai hóa học, sạc quá áp, pin bị đâm/móp, chập ngoài kéo dài, pin hỏng do xả quá sâu rồi bị sạc lại. Khói pin chứa khí độc và dễ cháy; cháy pin khó dập.
 3. **Dây quá nóng / cháy vỏ** do dây quá nhỏ so với dòng, hoặc cầu chì to hơn sức chịu của dây.
 4. **Đầu ra DC-DC sai áp** (biến trở chưa chỉnh, module sai): 16 V vào mini PC hoặc 12 V vào chân 5 V của ESP32 làm cháy thiết bị đắt tiền.
@@ -105,7 +105,7 @@ Giá `[ước lượng 10/2026]`, kiểm lại ở cửa hàng. Nơi mua theo `d
 | Tải giả | Bóng đèn ô tô 12 V 21 W (loại P21W) + đuôi; điện trở nhôm 10 Ω 50 W | Bóng nguội có dòng khởi động cao hơn dòng chạy nhiều lần → luyện đo dòng đỉnh mà chưa cần motor (Bài C1.5) | 50–150k | Đo điện trở nguội của bóng (ghi lại) | Một motor JGB37 kẹp ê tô, không bánh |
 | Nhiệt kế hồng ngoại | −30…+300 °C | Kiểm nhiệt mối nối, dây, DC-DC trong Gate | 200–400k | Đo cốc nước đá và nước sôi | Cặp nhiệt (nếu đồng hồ có) |
 | Jack DC đực 5,5×2,5 mm có dây | Dây ≥18 AWG | Đầu vào mini PC `[spec — adapter EQ12 ghi 5,5×2,5 mm; tự đo cực tính trên nhãn]` | 20–50k | Đo cực tính bằng UT33D+ trước khi cắm | — |
-| Dây silicon, XT60, ferrule, co nhiệt | 14, 16, 18, 22 AWG đỏ/đen | Đã mua ở C0, bổ sung | 100–200k | — | — |
+| Dây silicon, XT60, ferrule, co nhiệt | 14, 16, 18, 22 AWG đỏ/đen; 18 AWG cam; 22 AWG tím (quy ước C0.5) | Đã mua ở C0, bổ sung | 100–200k | — | — |
 
 **Tổng C1 `[ước lượng]`:** ~2,5–5tr. Pack và buck-boost là phần lớn.
 
@@ -148,8 +148,8 @@ Cỡ dây, chiều dài là đề xuất ban đầu `[ước lượng]`; Bài C1
                                                           1000µF ═══ ĐẦU RA ĐỘNG LỰC    │       │
                                                           (sát tải)  → driver (C3) /    │       │
                                                                        tải giả ở C1      │       │
-                                                                            BUCK-BOOST → 12 V ── 18AWG ── jack 5,5×2,5 → MINI PC
-                                                                                  BUCK → 5 V ── 22AWG JST ── 5V/GND ESP32, INA226 VS
+                                                                            BUCK-BOOST → 12 V ── 18AWG cam ── jack 5,5×2,5 → MINI PC
+                                                                                  BUCK → 5 V ── 22AWG tím, JST ── 5V/GND ESP32, INA226 VS
   INA226: IN+ / IN− nối hai mép shunt bằng 2 dây 24–26 AWG xoắn đôi (Kelvin); VBUS nối phía tải của shunt;
           SDA/SCL/3V3/GND về ESP32 bằng JST 4 chân; GND INA226 nối GND sao (không qua dây motor).
 ```
@@ -161,14 +161,16 @@ Cỡ dây, chiều dài là đề xuất ban đầu `[ước lượng]`; Bài C1
 | W01 | PACK+ | B+ → F0 | 14 | đỏ | ≤0,10 | (không — đoạn không bảo vệ, giữ ngắn) |
 | W02 | PACK+ | F0 → SW → shunt → thanh cái | 14 | đỏ | ~0,3 | F0 15 A |
 | W03 | GND | B− → điểm sao | 14 | đen | ~0,3 | F0 (cùng mạch vòng) |
-| W10/W11 | MOT+ / MOT_GND | FA → relay → đầu ra; về điểm sao | 16 | đỏ/đen | ~0,3 | FA 10 A |
+| W10/W11 | MOT+ / MOT_GND | FA → relay → đầu ra; về điểm sao | 16 | đỏ (nhãn MOT)/đen | ~0,3 | FA 10 A |
 | W20/W21 | VIN_PC / GND | FB → buck-boost; về điểm sao | 18 | đỏ/đen | ~0,25 | FB 5 A |
-| W22/W23 | 12V_PC / GND | buck-boost → jack mini PC | 18 | đỏ/đen | ~0,4 | (giới hạn dòng của DC-DC) |
+| W22/W23 | 12V_PC / GND | buck-boost → jack mini PC | 18 | **cam**/đen | ~0,4 | (giới hạn dòng của DC-DC) |
 | W30/W31 | VIN_5V / GND | FC → buck 5 V; về điểm sao | 22 | đỏ/đen | ~0,25 | FC 2 A |
-| W40 | ESTOP_COIL | FD → nút → cuộn → GND | 22 | vàng | ~0,5 | FD 1 A |
-| W50 | SENSE± | mép shunt → INA226 | 24–26 xoắn | trắng/xanh | ~0,1 | không cần (dòng µA) |
+| W40 | ESTOP_COIL | FD → nút → cuộn → GND | 22 | có nhãn đỏ ở hai đầu (quy ước C0.5) | ~0,5 | FD 1 A |
+| W32/W33 | 5V / GND | buck 5 V → ESP32, INA226 VS | 22 | **tím**/đen | ~0,3 | (giới hạn dòng của buck) |
+| W50 | SENSE± | mép shunt → INA226 | 24–26 xoắn đôi | màu không trùng net nguồn + nhãn SENSE | ~0,1 | không cần (dòng µA) |
+| W60 | I2C | INA226 → ESP32 (JST 4 chân) | 26 | Qwiic: đen GND, đỏ 3V3*, xanh dương SDA, vàng SCL | ~0,2 | — |
 
-Mã `F0, FA…FD` và `W01…` dán nhãn thật trên dây và cầu chì.
+Màu theo quy ước dây của → K7 C0.5: **đỏ VBAT, cam 12 V, tím 5 V, đen GND, I2C theo Qwiic**. *Cáp Qwiic dùng đỏ cho 3,3 V; trong bo nguồn đây là ngoại lệ duy nhất của "đỏ = VBAT", nên đầu JST của cáp I2C phải có nhãn "3V3". Mã `F0, FA…FD` và `W01…` dán nhãn thật trên dây và cầu chì.
 
 ## 5. Trình tự chặng
 
@@ -200,7 +202,7 @@ Thứ tự: khái niệm pin → nhận pin (chưa nối gì) → đo tải từ
     - ✅ Checkpoint (đồng hồ, không nguồn): điện trở thanh cái + ↔ điểm sao GND với công tắc ON, mọi cầu chì cắm, chưa nối tải: **không được gần 0 Ω** (DC-DC có tụ đầu vào nên số tăng dần là bình thường). Mỗi đầu ra (12 V, 5 V, động lực) ↔ GND: không gần 0 Ω. Bấm E-stop: thông mạch qua tiếp điểm relay không đổi (relay chưa có điện, tiếp điểm NO đang hở).
     - Nếu sai: gần 0 Ω → tìm chập bằng cách rút từng cầu chì nhánh cho tới khi số đổi.
 11. **Lắp bước 6 — Cấp điện lần đầu bằng nguồn bàn giả lập pin**
-    - Làm: nguồn bàn nối vào XT60 đực của bo (thay pin) qua dây ≥18 AWG; V_set 13,2 V, I_set 0,3 A; công tắc chính OFF → OUTPUT ON → công tắc chính ON. Đo áp mỗi nhánh không tải. Sau đó thêm tải **từng cái một**, tăng I_set vừa đủ: ESP32 → tải giả bóng đèn (nhả E-stop) → mini PC.
+    - Làm: nguồn bàn nối vào XT60 đực của bo (thay pin) qua dây ≥18 AWG; V_set 13,2 V, I_set 0,3 A; công tắc chính OFF → OUTPUT ON → công tắc chính ON (đặt I_set, CC khác OCP, và tụ đầu ra nguồn bàn xả vào tải khi nối nóng: → K7 C0.4, không lặp ở đây). Đo áp mỗi nhánh không tải. Sau đó thêm tải **từng cái một**, tăng I_set vừa đủ: ESP32 → tải giả bóng đèn (nhả E-stop) → mini PC.
     - ✅ Checkpoint: không tải, dòng nguồn bàn chỉ vài chục mA (dòng tĩnh của DC-DC và cuộn relay khi nhả E-stop: cộng dòng cuộn đã đo); E-stop bấm → áp đầu ra động lực về ~0 V, 12 V và 5 V không đổi.
     - Nếu sai: nguồn bàn vào CC ngay lúc bật mà không tải → có chập hoặc tụ lớn đang nạp; OUTPUT OFF, đo lại bước 5.
 12. **Học Bài C1.5**, **Lắp bước 7 — Gắn INA226, firmware log, đo dòng đỉnh** trên nguồn bàn (Bài C1.5 phần 6).
@@ -276,9 +278,9 @@ Copy vào `build-log/c01.md`, một mục mỗi buổi:
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
-Ngày 7/1/2013, một chiếc Boeing 787 của Japan Airlines đậu ở sân bay Boston Logan, hành khách đã xuống. Thợ máy thấy khói trong khoang điện tử phía sau: pin lithium-ion của APU (8 cell nối tiếp, GS Yuasa) đang cháy. Chín ngày sau, chuyến ANA 692 hạ cánh khẩn cấp ở Takamatsu vì pin chính cùng loại bốc khói. FAA cấm bay toàn bộ đội 787 Mỹ đăng ký ngày 16/1/2013, lần đầu tiên sau nhiều thập kỷ một dòng máy bay chở khách bị cấm bay `[chuẩn — tin rộng rãi]`. Báo cáo cuối của NTSB (2014) kết luận: **chập mạch bên trong một cell** khởi phát thermal runaway, lan sang các cell bên cạnh, gây khói và lửa. Lỗi được quy cho thiết kế và chứng nhận: Boeing không đưa vào yêu cầu thiết kế để hạn chế hậu quả nặng nhất của chập trong một cell, và FAA không phát hiện thiếu sót đó. Bằng chứng thời đó chỉ về cell 6; nguyên nhân gốc của chỗ chập không bao giờ được xác định chắc chắn `[spec — NTSB, điều tra DCA13IA037, báo cáo cuối 2014]`.
+Câu chuyện Boeing 787 (2013) bạn đã đọc ở → K7 C0.2: chập **trong** một cell, lan ra cả pin. Đây là câu chuyện thứ hai, ở cỡ gần với bạn hơn. Tháng 8/2016 Samsung bán Galaxy Note 7; vài tuần sau, máy bắt đầu cháy khi đang sạc hoặc để yên. Samsung thu hồi, thay bằng máy dùng pin của nhà cung cấp thứ hai; máy thay thế cũng cháy; tháng 10/2016 Samsung dừng hẳn sản phẩm `[chuẩn — tin rộng rãi]`. Tháng 1/2017 Samsung công bố kết quả điều tra (cùng UL, Exponent, TÜV Rheinland): hai lỗi **khác nhau** ở hai loại pin. Pin A: điện cực âm bị uốn ở góc trên bên phải vỏ pin, dẫn tới chập trong. Pin B: ba-via (burr) mối hàn cao ở điện cực dương xuyên qua băng cách điện và lớp separator, chạm điện cực âm; một số pin thiếu hẳn băng cách điện `[chuẩn — công bố của Samsung 1/2017, báo chí kỹ thuật thuật lại]`.
 
-Pin có mạch giám sát, có bảo vệ sạc. Không thứ nào ngăn được một lỗi **nằm trong** cell. Cách sửa của Boeing (vỏ thép, cách nhiệt giữa các cell, ống thoát khí ra ngoài thân máy bay) không ngăn cell hỏng; nó **chứa** hậu quả. Đây là bài học trung tâm của bài này: BMS là một lớp bảo vệ có phạm vi xác định, và bạn phải biết phạm vi đó.
+Cả hai pin đều có mạch bảo vệ, cả hai điện thoại đều có quản lý sạc tinh vi. Không mạch nào ngăn được một mẩu kim loại xuyên qua separator **bên trong** cell. Đây là bài học trung tâm: BMS là một lớp bảo vệ có phạm vi xác định; bạn phải biết phạm vi đó, và mọi thứ ngoài phạm vi phải có lớp khác (chọn hóa học ổn định hơn, pack có nguồn gốc, sạc có người trông, chỗ sạc chứa được lửa).
 
 ### 2. Mô hình tư duy
 
@@ -311,7 +313,7 @@ Bốn điều bản chất:
 
 | BMS làm (khi thông số ghi có) | BMS KHÔNG làm |
 |---|---|
-| Cắt sạc khi một cell vượt ngưỡng quá áp (OV) | Ngăn chập **trong** cell (lỗi sản xuất, móp, đâm thủng) → thermal runaway vẫn xảy ra (787, Note 7 ở Bài C1.6) |
+| Cắt sạc khi một cell vượt ngưỡng quá áp (OV) | Ngăn chập **trong** cell (lỗi sản xuất, móp, đâm thủng) → thermal runaway vẫn xảy ra (Note 7; 787 ở C0.2) |
 | Cắt xả khi một cell dưới ngưỡng thấp áp (UV) | Báo trước cho mini PC tắt đúng cách: cắt UV là **cắt cứng**, mini PC mất điện như rút phích |
 | Cắt xả khi dòng vượt ngưỡng quá dòng (OC) sau một khoảng trễ | Bảo vệ **dây nhánh** của bạn: ngưỡng OC của pack 20–30 A, dây 22 AWG của nhánh 5 V cháy trước đó rất lâu |
 | Cắt rất nhanh khi ngắn mạch (SC), thường cỡ trăm µs `[ước lượng — đọc thông số BMS của bạn]` | Bảo vệ đoạn dây **trước** MOSFET; bảo vệ khi chính MOSFET hỏng chập (hỏng kiểu "luôn đóng" là kiểu hỏng có thật của MOSFET) |
@@ -339,12 +341,11 @@ So ba lựa chọn cho robot này (số cell điển hình `[ước lượng]`; 
 | Circuit breaker / rate limiter ở gateway | BMS cắt khi quá dòng | Breaker bảo vệ **downstream** khỏi tải; BMS bảo vệ **chính pin** khỏi bạn. Nó không biết nhánh nào đang quá tải; và lỗi nằm trong cell thì không có request nào để chặn | Tin "có BMS rồi khỏi cầu chì nhánh" → dây nhỏ cháy trong khi BMS thấy dòng tổng vẫn dưới ngưỡng |
 | Graceful shutdown khi nhận SIGTERM | Ngắt mềm theo áp pin trước ngưỡng UV | BMS cắt UV là SIGKILL. Không có SIGTERM trừ khi bạn tự đo áp (INA226, Bài C1.5) và tự tắt mini PC trước | Hệ file mini PC hỏng, MCAP mất đuôi (C7) vì mỗi lần pin cạn là một lần rút phích |
 | Dung lượng đĩa: 1 TB là 1 TB | "6 Ah" | Dung lượng lấy ra được phụ thuộc dòng, nhiệt độ, tuổi, và áp cắt bạn chọn; 1C và 0,2C cho số khác nhau | Runtime thật ngắn hơn bảng tính; chạy tới UV thường xuyên làm pin già nhanh hơn |
-| Blast radius: cô lập lỗi bằng cell/shard | Cách nhiệt giữa các cell, vỏ chứa (787 sau sửa) | Cell là shard có thể **làm nóng shard bên cạnh**: lỗi lan qua vật lý, không qua mạng | Thiết kế "một cell hỏng không sao" mà không có rào nhiệt = bài học 787 |
+| Supply chain: dependency có lỗ hổng từ upstream | Cell có lỗi sản xuất (Note 7) | Không có "bản vá": cell lỗi chỉ thay được bằng cách thu hồi vật lý; không quét được bằng công cụ | Mua pack rẻ không nguồn gốc vì "có BMS rồi" |
 
 **Chấm mô hình:**
-- *"Pack có BMS thì an toàn, cứ cắm vào là được."* — **SAI.** BMS che lỗi về áp và dòng ở cực pack. Phản ví dụ: 787 có giám sát và bảo vệ sạc; chập trong cell vẫn thành cháy. Gần hơn với bạn: BMS ngưỡng OC 25 A; nhánh 5 V dây 22 AWG chập ở 15 A → BMS không cắt, dây nóng chảy vỏ.
-- *"Áp cao hơn thì nguy hiểm hơn, nên 3S an toàn hơn 4S."* — **ĐÚNG MỘT PHẦN.** Ở dải dưới 60 V DC, rủi ro chính với người là **năng lượng và dòng** (bỏng, cháy), không phải giật `[chuẩn — C0.2]`. Pack 3S cùng Wh có Ah lớn hơn và dòng lớn hơn cho cùng công suất; dây phải to hơn. Phản ví dụ: 3S 65 Wh và 4S 77 Wh chập ngoài đều cho dòng hàng trăm A (phần 7).
-- Mô hình của bạn ở K3 lượt 11, *"mọi thiết bị chung nguồn luôn có trường hợp sụt nguồn… chiếm dụng nguồn chung"* — chấm ở Bài C1.2.
+- *"Pack có BMS thì an toàn, cứ cắm vào là được."* — **SAI.** BMS che lỗi về áp và dòng ở cực pack. Phản ví dụ: Note 7 có mạch bảo vệ; burr mối hàn xuyên separator vẫn thành cháy. Gần hơn với bạn: BMS ngưỡng OC 25 A; nhánh 5 V dây 22 AWG chập ở 15 A → BMS không cắt, dây nóng chảy vỏ.
+- *"Áp cao hơn thì nguy hiểm hơn, nên 3S an toàn hơn 4S."* — **ĐÚNG MỘT PHẦN.** Ở dải dưới 60 V DC, rủi ro chính với người là **năng lượng và dòng** (bỏng, cháy), không phải giật `[chuẩn — C0.2]`. Pack 3S cùng Wh có Ah lớn hơn và dòng lớn hơn cho cùng công suất; dây phải to hơn. Phản ví dụ: 3S 65 Wh và 4S 77 Wh chập ngoài đều cho dòng hàng trăm A (phần 7; mô phỏng dây nóng ở → K7 C0.2).
 
 ### 4. Thuật ngữ
 
@@ -456,7 +457,7 @@ Chạy code phần 5 với số điển hình:
    "Ít nguy hiểm hơn" khác "không nguy hiểm": LFP vẫn có năng lượng lớn, vẫn cháy dây khi chập ngoài, khí thoát ra vẫn độc và dễ cháy. Quy tắc không phụ thuộc hóa học rẻ hơn quy tắc có điều kiện mà người mệt phải nhớ.
 
    </details>
-5. **[Liên ngành]** 787 sửa bằng cách chứa hậu quả, không loại bỏ nguyên nhân. Ở hệ thống phần mềm của bạn, đâu là chỗ bạn đã chọn "chứa" thay vì "ngăn"?
+5. **[Liên ngành]** 787 (C0.2) sửa bằng cách chứa hậu quả (hộp thép, thoát khí), không loại bỏ nguyên nhân. Ở hệ thống phần mềm của bạn, đâu là chỗ bạn đã chọn "chứa" thay vì "ngăn"?
    <details><summary>Hướng nghĩ</summary>
 
    Bulkhead, sandbox, cgroup memory limit, giới hạn blast radius của deploy. Chứa là đúng khi không thể chứng minh nguyên nhân đã hết, như chập trong cell.
@@ -465,7 +466,8 @@ Chạy code phần 5 với số điển hình:
 
 ### 10. Liên kết ra ngoài
 
-- **Hàng không (787):** giống: lỗi một thành phần không được phép lan; khác: phần mềm có thể restart thành phần hỏng, cell đã runaway thì không có "restart", chỉ có chứa và thoát khí.
+- **Điện tử tiêu dùng (Note 7):** giống: một lỗi sản xuất lọt qua QA đi tới hàng triệu thiết bị; Samsung sau đó công bố quy trình kiểm pin 8 bước. Khác: bạn không có QA nhà máy, "QA" của bạn là mua pack có nguồn gốc, kiểm khi nhận và sạc có người trông.
+- **Hàng không (787, C0.2):** giống: lỗi một thành phần không được phép lan; khác: phần mềm có thể restart thành phần hỏng, cell đã runaway thì không có "restart", chỉ có chứa và thoát khí.
 - **Lưu trữ điện lưới (BESS):** các trạm pin quy mô MW chuyển nhiều sang LFP vì lý do an toàn nhiệt và tuổi thọ, chấp nhận mật độ năng lượng thấp hơn `[ước lượng — xu hướng ngành]`; cùng trao đổi bạn vừa làm ở bảng so sánh, ở quy mô lớn hơn triệu lần.
 - **Y sinh (máy tạo nhịp):** dùng pin sơ cấp lithium (không sạc), hóa học chọn vì đường xả có thể dự báo được để báo "sắp thay pin" trước nhiều tháng. Giống: SOC đọc được từ áp là một tính năng an toàn. Khác: LFP của bạn có đường phẳng, đọc áp gần như vô ích ở giữa dải.
 
@@ -473,7 +475,7 @@ Chạy code phần 5 với số điển hình:
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| Kết luận NTSB về 787 (chập trong cell, lan runaway, lỗi thiết kế/chứng nhận) | [spec] | NTSB, điều tra DCA13IA037, báo cáo cuối 2014 |
+| Hai lỗi pin Note 7 (điện cực uốn; burr mối hàn + thiếu băng cách điện) | [chuẩn] | Công bố Samsung 22–23/1/2017 và tóm tắt của UL/Exponent/TÜV; ghép lỗi với nhà cung cấp là do báo chí, Samsung không nêu chính thức |
 | Dải áp NMC 3,0–4,2 V, LFP 2,5–3,65 V mỗi cell | [chuẩn] | Ngưỡng UV thật do BMS của bạn quyết định |
 | R_cell 20–30 mΩ; mật độ năng lượng; tuổi thọ chu kỳ | [ước lượng] | Tra datasheet cell; tuổi thọ phụ thuộc độ sâu xả, nhiệt |
 | Thời gian cắt SC của BMS cỡ trăm µs | [ước lượng] | Đọc thông số BMS; không tự thử bằng chập |
@@ -483,7 +485,7 @@ Chạy code phần 5 với số điển hình:
 
 ### 12. Đọc thêm và tự kiểm tra
 
-- **Nguồn gốc:** NTSB, *Auxiliary Power Unit Battery Fire, Japan Airlines Boeing 787-8, Boston, MA, January 7, 2013* (Aircraft Incident Report NTSB/AIR-14/01); datasheet cell của pack bạn mua.
+- **Nguồn gốc:** Samsung Newsroom, infographic "Galaxy Note7: What We Discovered" (1/2017); datasheet cell của pack bạn mua.
 - **Giải thích:** Battery University (Cadex), các mục về Li-ion và LiFePO4 — đọc có phê phán, số liệu thường là giá trị điển hình.
 - **Đào sâu (tùy chọn):** datasheet một IC BMS 4S phổ biến (ví dụ họ BQ769x0 của TI): đọc phần ngưỡng và độ trễ để thấy BMS "nhìn" gì.
 - **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao "pack có BMS" không thay cầu chì; (2) vẽ lại sơ đồ pack + BMS; (3) Pack 4S2P cell 3,5 Ah: 1C là bao nhiêu A? Dòng 7 A là bao nhiêu C?
