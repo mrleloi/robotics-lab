@@ -1,14 +1,25 @@
-# Khóa 1 — Phần C: Đo thật (14h)
+# Khóa 1 · Phần C — Đo thật (14h)
 
-Từ phần này trở đi mọi bài đi theo một quy trình duy nhất: **viết dự đoán bằng số → `git commit` → rồi mới cắm que đo**. `prediction.md` là preregistration của bạn (→ F1.7): một bản ghi có timestamp chứng minh bạn đã đoán trước khi nhìn số. Gate Khóa 1 (→ `d-du-lieu-tren-day.md`, Bài 14) kiểm đúng thứ tự commit này.
+Từ phần này, mọi bài đi theo cùng một vòng: **viết dự đoán bằng số → `git commit` → mới cắm que đo → so → giải thích chỗ lệch**. `prediction.md` là preregistration của bạn (→ F1.7): một bản ghi có timestamp chứng minh bạn đã đoán trước khi nhìn số. Nếu đo trước rồi mới "dự đoán", bạn sẽ luôn đúng và không học được gì. Gate Khóa 1 (Bài 14, trong `phan-d-du-lieu-tren-day.md`) kiểm đúng thứ tự commit này.
 
-| Bài | Giờ | Viên nang nền nên đọc cùng lúc |
-|---|---|---|
-| 9 — Voltage divider | 5h | F1.1 (bắt buộc), F6.6 (lướt phần Monte Carlo) |
-| 10 — LED và điện trở | 4h | F1.1, F6.1 |
-| 11 — Đọc trọn một datasheet | 5h | F2.1 (lướt), F3.7 (lướt) |
+Bạn mang vào phần này từ Bài 1–8: Ohm và công suất, "điện áp luôn là giữa hai điểm", GND là mốc, đo áp song song / đo dòng nối tiếp / đo trở khi rời mạch, mã màu điện trở, sai số `±(a% + b digit)` của đồng hồ, breadboard đã kiểm, PulseView chạy được, và hàn được chân module.
 
-Bản gốc chỉ ghi Phần C = 14h, không chia theo bài; cách chia trên là đề xuất.
+| Bài | Giờ | Viên nang nền nên đọc cùng lúc | Thư mục lab |
+|---|---|---|---|
+| 9 — Voltage divider | 5 | F1.1 (bắt buộc: sai số dụng cụ, lan truyền), F1.7, F6.6 (lướt phần Monte Carlo) | `lab/01-voltage-divider/` |
+| 10 — LED và điện trở | 5 | F1.1, F6.1; F1.6 nếu làm phần fit tùy chọn | `lab/02-led-current/` |
+| 11 — Đọc trọn một datasheet | 4 | F2.1 (lướt), F3.7 (lướt), F1.2 (đoạn "typical không phải phân bố") | `lab/03-datasheet/` |
+
+Bản gốc chỉ ghi Phần C = 14h, không chia theo bài; cách chia trên là đề xuất. Phần mô phỏng và câu hỏi ngược thêm khoảng 1h mỗi bài; tuần chật thì làm phần 5–8 trước, phần 9–10 để tuần sau.
+
+**Cấu trúc một thư mục lab** (dùng cho cả Khóa 1):
+
+```
+lab/01-voltage-divider/
+  prediction.md     ← commit TRƯỚC khi cắm mạch (Bài 14 kiểm bằng script)
+  analysis.md       ← bảng dự đoán / đo / chênh lệch kèm sai số, và lời giải thích
+  photos/           ← ảnh mạch, ảnh màn hình đồng hồ ở các phép đo quan trọng
+```
 
 ---
 
@@ -23,6 +34,8 @@ Thế kỷ 19, đo một suất điện động là chuyện khó vì mọi vôn
 Vấn đề đó không biến mất. Đồng hồ kim (VOM) của thợ điện tử thế kỷ 20 ghi độ nhạy bằng "Ω/V" (kiểu 20 kΩ/V): trên thang 10 V, đồng hồ chỉ là một điện trở 200 kΩ cắm song song vào mạch. Vôn kế đèn điện tử (VTVM) rồi đồng hồ số với trở kháng vào cỡ 10 MΩ ra đời phần lớn vì lý do này `[chuẩn]`. Đồng hồ UT33D+ của bạn là hậu duệ của lịch sử đó, nhưng **10 MΩ vẫn không phải vô cùng**. Bài này cho bạn tự tay nhìn thấy chỗ nó không còn là vô cùng.
 
 Divider là mạch phổ biến nhất trong điện tử: đọc biến trở, đo mức pin bằng ADC, hạ mức một tín hiệu 5 V chậm xuống 3.3 V. Nó cũng là nơi người mới hay mắc một lỗi kinh điển: dùng divider làm **nguồn** hạ áp. Lỗi đó là chủ đề thí nghiệm phá ở cuối bài.
+
+Bài này cũng là thí nghiệm đầu tiên có `prediction.md` thật, nên cần biết vì sao "dự đoán trước" không phải nghi thức. Kaplan và Irvin (PLOS ONE, 2015) xem lại các thử nghiệm lâm sàng lớn về tim mạch do NHLBI (Mỹ) tài trợ: trước năm 2000, khi chưa bắt buộc đăng ký trước kết cục chính, khoảng 57% báo lợi ích; sau khi bắt buộc, còn khoảng 8% `[chuẩn — "Likelihood of Null Effects of Large NHLBI Clinical Trials Has Increased over Time"]`. Thuốc không tệ đi; người ta chỉ không còn chọn kết cục *sau khi* thấy số. `prediction.md` là phiên bản một người của cơ chế đó.
 
 ### 2. Mô hình tư duy
 
@@ -58,6 +71,7 @@ Divider là mạch phổ biến nhất trong điện tử: đọc biến trở, 
 
 - *"Divider là bộ hạ áp: muốn có 3.3 V từ 5 V thì dùng 1k/2k rồi cấp cho module."* — **SAI.** Divider chỉ cho đúng Vout khi tải ≫ Rth. Phản ví dụ: 1k/2k có Rth ≈ 667 Ω; một ESP32 khi bật WiFi kéo hàng trăm mA, tương đương tải chỉ vài chục ohm, nên Vout sụp xuống một phần nhỏ của 3.3 V và chip reset. Hạ áp để **cấp nguồn** là việc của regulator (LDO/buck) — chúng có trở kháng ra cỡ mΩ nhờ vòng hồi tiếp. Divider chỉ dùng cho **tín hiệu** đi vào một đầu vào trở kháng cao.
 - *Mô hình của bạn ở K3 lượt 11:* "mọi thiết bị khi chung nguồn … luôn có trường hợp sụt nguồn … vì chiếm dụng nguồn chung là xảy ra." — **ĐÚNG MỘT PHẦN.** Đúng là sụt áp xảy ra ở mọi hệ chung nguồn. Gãy ở cơ chế: không phải "chiếm dụng" một bể tài nguyên có hạn (kiểu connection pool cạn), mà là **dòng tổng chạy qua trở kháng chung** (trở kháng ra của nguồn + dây + mối nối) sinh ra sụt áp `I·Z`. Phản ví dụ: một adapter 3 A nuôi ESP32 qua một sợi jumper dài mảnh vẫn có thể làm ESP32 reset ở vài trăm mA — nguồn còn dư rất nhiều "dung lượng", nhưng trở kháng của dây đủ để sụt áp. Divider là trường hợp cực đoan và dễ tính nhất của cùng hiện tượng (Rth chính là Z chung). Ở K3 Bài 6 bạn sẽ gặp phiên bản động: dòng tăng đột ngột qua điện cảm của dây.
+- *"Điện trở ±5% nghĩa là mỗi lần đo giá trị dao động ±5%."* — **SAI.** Dung sai là độ phân tán **giữa các con** khi sản xuất (sai số hệ thống của một con cụ thể), không phải nhiễu giữa các lần đo. Phản ví dụ: đo một con "10 kΩ" mười lần, cả mười lần ra cùng một số (ví dụ 9.87 kΩ) trong phạm vi 1 digit. Lấy trung bình nhiều lần đo không làm hẹp được dải dung sai.
 - *"Que đo chỉ đọc, giống `SELECT` — không đổi dữ liệu."* — **ĐÚNG MỘT PHẦN.** Gần đúng khi Rm ≫ Rth (cặp 10k/10k). Sai rõ khi Rth tiến tới cỡ Rm/20. Phản ví dụ: chính thí nghiệm phá ở bước 5. Đồng hồ ở chế độ đo dòng thì còn tệ hơn: nó chèn một điện trở shunt vào mạch (Bài 10).
 
 ### 4. Thuật ngữ
@@ -219,7 +233,7 @@ Rm suy ngược từ cặp 1M/1M (R đo ±1%): p5/p50/p95 ≈ 7.3 / 10.0 / 15.5 
 Đọc bảng:
 
 - **Ba cặp không có cùng dải chấp nhận.** Cặp 1k/10k (k ≈ 0.91) gần như miễn nhiễm dung sai: worst-case chỉ ~±0.9% cộng sai số đồng hồ. Cặp 10k/1k (k ≈ 0.09) gánh gần trọn dung sai của cả hai điện trở: worst-case ~±9%. Với điện trở ±5%, cặp 10k/1k **có thể trượt tiêu chí 5% mà không có lỗi gì** (~1/5 khả năng nếu dung sai phân bố đều; thực tế phân bố thường hẹp hơn dải in trên vạch, nên tỉ lệ thật thấp hơn `[ước lượng]`). Nếu trượt: tính lại dự đoán với R đo ở bước 0. Sai lệch còn lại phải nằm trong sai số đồng hồ (~1%) — khi đó ghi PASS kèm giải thích. Đây là cách đọc đúng tiêu chí gốc, không phải nới tiêu chí.
-- Ngược lại, cặp 1k/10k lệch 3% là **đáng ngờ** dù vẫn "dưới 5%": dung sai không giải thích được mức đó. Hãy nghi Vin đổi giữa hai lần đo, hoặc đọc nhầm mã màu.
+- Ngược lại, cặp 1k/10k lệch 3% là **đáng ngờ** dù vẫn "dưới 5%": dung sai không giải thích được mức đó. Hãy nghi Vin đổi giữa hai lần đo, hoặc đọc nhầm mã màu. Với cặp này, ngưỡng 5% còn **quá lỏng**: cắm nhầm 1.2 kΩ thay cho 1 kΩ cho Vout ≈ 4.46 V (−1.8%), vẫn lọt tiêu chí. Ngưỡng cố định cho ba phép đo có độ nhạy khác nhau thì lỏng chỗ này, chặt chỗ kia — đó là lý do có cột "dự đoán theo R đo".
 - **1M/1M: Vout thấp hơn khoảng 4–5%** (với Rm ≈ 10 MΩ: 1 MΩ // 10 MΩ ≈ 0.909 MΩ → Vout ≈ 0.476·Vin). Bản gốc gọi đây là "thấp hơn rõ rệt" — thực ra mức này **ngang dung sai ±5%**, nên chỉ nhìn Vout thì không chứng minh được gì. Hai cách làm hiệu ứng tải hiện rõ: dự đoán theo R đo ở bước 0 (dự đoán chặt còn ~1–2%, chênh 4–5% nổi bật), hoặc **kiểm KVL**: tổng V_R1 + V_R2 thiếu ~5% so với Vin ở cặp 1M, trong khi cặp 10k cho tổng khớp Vin trong sai số đồng hồ. Vì mỗi lần đo, đồng hồ song song với *điện trở đang đo* và kéo áp của nó xuống.
 - **Rm suy ngược có khoảng bất định rộng** (thấy trong Monte Carlo), vì Rm chỉ ảnh hưởng ~5% tới Vout, nên 1% sai số của R hay đồng hồ phóng to lên nhiều lần trong Rm. Một phép đo gián tiếp càng ít nhạy với đại lượng cần tìm, sai số càng bị phóng đại. Muốn đo Rm chặt hơn: dùng R2 lớn hơn (10 MΩ), để Rm chiếm phần lớn hơn trong `R2 // Rm`.
 - Mô phỏng coi sai số đồng hồ ở mỗi lần đo là độc lập. Thật ra phần `a%` là sai số tỉ lệ, tương quan giữa các lần đo trên cùng thang, nên tỉ số Vout/Vin thật chặt hơn mô phỏng. Đó là lý do bước 4 có cột tỉ số.
@@ -254,6 +268,9 @@ Rm suy ngược từ cặp 1M/1M (R đo ±1%): p5/p50/p95 ≈ 7.3 / 10.0 / 15.5 
 6. **[Liên ngành]** Ngành điện lực có khái niệm "lưới yếu" khi nối một nhà máy điện gió vào điểm có trở kháng lưới lớn. Nó giống divider bị tải ở chỗ nào?
    <details><summary>Hướng nghĩ</summary>Tra "short circuit ratio" (SCR). Đó là cùng tỉ số Rth/RL, nhìn từ phía nguồn. Khác biệt: lưới là AC, có thành phần cảm kháng, và tải không thụ động.</details>
 
+7. **[Quy mô]** Robot ở K7 đọc điện áp pin 4S (tới ~16.8 V) bằng ADC của ESP32 (tối đa ~3.3 V) qua một divider nối thường trực vào pin 24/7. Chọn R1, R2 cỡ kΩ hay MΩ? Đánh đổi là gì?
+   <details><summary>Hướng nghĩ</summary>R nhỏ → dòng xả pin thường trực lớn (bao nhiêu mAh mỗi tháng?); R lớn → Rth lớn nhìn từ ADC, mà ADC lấy mẫu bằng tụ (câu 1). Tìm xem người ta thêm gì ở điểm giữa (một tụ nhỏ) để có cả hai. → K7 C1.2.</details>
+
 ### 10. Liên kết ra ngoài
 
 - **Đo lường điện thế kỷ 19–20 (phương pháp bù, VTVM).** Giống: cả ngành dụng cụ đo tiến hóa để giảm dòng hút từ mạch bị đo. Khác: phương pháp bù triệt tiêu hiệu ứng tải bằng cân bằng (dòng = 0 lúc đọc), còn đồng hồ số chỉ làm nó nhỏ đi (Rm lớn), không triệt tiêu. Hệ quả: với đồng hồ số bạn luôn phải hỏi "Rth của điểm đo là bao nhiêu".
@@ -270,6 +287,7 @@ Rm suy ngược từ cặp 1M/1M (R đo ±1%): p5/p50/p95 ≈ 7.3 / 10.0 / 15.5 
 | Trở kháng vào DCV của UT33D+ ≈ 10 MΩ | [ước lượng] | Không tìm thấy trong tài liệu chính hãng; review độc lập báo ~10–11 MΩ. Bước 7 đo nó → `[tự đo]` |
 | Chân 5V của DevKit thấp hơn 5.00 V | [tự đo] | Phụ thuộc cổng USB, cáp, và việc board có diode bảo vệ trên đường 5V hay không |
 | Tỉ lệ trượt ~21% của cặp 10k/1k | [ước lượng] | Dưới giả định dung sai phân bố đều trong ±5%; phân bố thật của nhà sản xuất thường hẹp hơn |
+| Kaplan & Irvin 2015: ~57% → ~8% thử nghiệm báo lợi ích sau khi bắt buộc đăng ký trước | [chuẩn] | PLOS ONE 10(8), 2015 |
 | Poggendorff 1841, phương pháp bù | [chuẩn] | Lịch sử đo lường điện; chi tiết năm có thể kiểm trong tài liệu lịch sử dụng cụ đo |
 
 **Đã sửa so với bản gốc:**
@@ -296,9 +314,9 @@ Rm suy ngược từ cặp 1M/1M (R đo ±1%): p5/p50/p95 ≈ 7.3 / 10.0 / 15.5 
 
 ---
 
-## Bài 10 — LED và điện trở: tại sao, bằng số (4h)
+## Bài 10 — LED và điện trở: tại sao, bằng số (5h)
 
-> **Vị trí:** Bài 9 (divider) → **Bài 10** → Bài 11 (datasheet) · **Cần trước:** Bài 1 (hiểu nhầm 2: LED cháy vì dòng), Bài 5 (đo dòng: cắt mạch, nối tiếp), Bài 9 (dụng cụ đo là một phần của mạch), F1.1, F6.1 (mô hình có miền hiệu lực) · **Sau bài này bạn quyết định được:** chọn điện trở hạn dòng cho một linh kiện phi tuyến ở một điện áp nguồn cho trước, và nhận ra khi nào "khoảng dư điện áp" quá nhỏ để điện trở còn giữ được dòng ổn định (ví dụ LED xanh dương chạy thẳng từ 3.3 V).
+> **Vị trí:** Bài 9 (divider) → **Bài 10** → Bài 11 (datasheet) · **Cần trước:** Bài 1 (LED không phải điện trở; đường tải), Bài 5 (đo dòng: cắt mạch, nối tiếp), Bài 9 (dụng cụ đo là một phần của mạch), F1.1, F6.1 (mô hình có miền hiệu lực) · **Sau bài này bạn quyết định được:** chọn điện trở hạn dòng cho một linh kiện phi tuyến ở một điện áp nguồn cho trước, và nhận ra khi nào "khoảng dư điện áp" quá nhỏ để điện trở còn giữ được dòng ổn định (ví dụ LED xanh dương chạy thẳng từ 3.3 V).
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
@@ -374,6 +392,7 @@ fig.tight_layout(); plt.show()
 | Rate limiter đặt trước một service không có backpressure | Điện trở trước LED | Rate limiter là **trần cứng**: vượt thì từ chối. Điện trở là **giới hạn mềm**: dòng tỉ lệ với `Vs − V_f`, nguồn tăng thì dòng tăng theo. Trần cứng thật là driver dòng không đổi (constant-current) | Tưởng "có điện trở là an toàn ở mọi nguồn" → đổi sang nguồn 12 V với cùng 330 Ω là quá dòng |
 | `const V_F = 2.0` trong config | V_f thật | Hằng số trong code là sự thật; V_f là **một hàm** `f(I, T, từng con)`. Gần với "latency của service" — số đó chỉ có nghĩa kèm tải và percentile | Dùng V_f datasheet như hằng số → dự đoán lệch vài phần trăm và tưởng đồng hồ sai |
 | Proxy inline đo throughput | Đồng hồ ở chế độ mA chèn nối tiếp | Proxy thêm độ trễ nhưng ít đổi throughput khi chưa bão hòa. Ampe kế chèn một **điện trở shunt** vào vòng: nó làm dòng giảm trực tiếp (burden voltage), tất định | Coi số của ampe kế là ground truth |
+| Retry storm: lỗi → retry → thêm tải → thêm lỗi | Thermal runaway: nóng → V_f giảm → dòng tăng → nóng hơn | Retry storm tự dừng khi client backoff/bỏ cuộc; runaway chỉ dừng khi có **phản hồi âm** (điện trở: dòng tăng → sụt trên R tăng → phần dư cho LED giảm) hoặc khi linh kiện chết | Mắc LED song song không điện trở riêng, tin rằng "các LED giống nhau thì chia đều" |
 | Đối soát hai nguồn số liệu (billing vs metrics) | So `V_R/R` với dòng đo trực tiếp | Hai đường ở đây **dùng chung một đồng hồ** và cùng phụ thuộc R thật, nên không độc lập hoàn toàn: khớp nhau là điều kiện cần, chưa phải bằng chứng đúng | Thấy khớp → kết luận "đúng" trong khi cả hai cùng lệch theo một sai số chung |
 
 **Chấm mô hình:**
@@ -442,6 +461,8 @@ KVL: V_R + V_LED vs Vs: chấp nhận nếu lệch < __ %
 
 **Bước 1 — dự đoán, commit** (phần 5).
 
+**Bước 1b — đo trước khi lắp.** Đo R thật (Ω, rời mạch). Kiểm chiều LED bằng chế độ diode của đồng hồ (ký hiệu ▶|): que đỏ vào chân dài, que đen chân ngắn — đồng hồ hiện một con số (V hoặc mV tùy đồng hồ) và nhiều LED đỏ sáng mờ; đảo que thì hiện `OL`. Đây là V_f ở **dòng rất nhỏ** (dòng thử của chế độ diode, tra manual) — một điểm nữa trên đường cong, miễn phí; ghi lại cho bước 6.
+
 **Bước 2 — dựng.** 5V → điện trở 330 Ω → chân dài của LED (anode, +) → chân ngắn (cathode, −) → GND. Nếu chân đã bị cắt bằng nhau, tìm cạnh vát phẳng trên vành nhựa: cạnh đó là cathode (−).
 
 **Bước 3 — đo ba thứ:**
@@ -449,11 +470,34 @@ KVL: V_R + V_LED vs Vs: chấp nhận nếu lệch < __ %
 2. Điện áp trên LED (hai chân LED). Đo luôn Vs ngay lúc đó.
 3. Dòng: **cắt mạch** (rút đầu GND của LED ra), chuyển que đỏ sang lỗ mA và núm sang thang `20 mA` DC, nối đồng hồ **nối tiếp** vào chỗ cắt. Xong thì **trả que đỏ về lỗ VΩ ngay** — để que ở lỗ mA rồi đi đo áp là chập nguồn qua shunt (Bài 5).
 
-**Bước 4 — kiểm tra chéo.** Lấy V trên điện trở chia cho R **đo được** (không phải 330 danh định). So với dòng đo trực tiếp. Đây là câu hỏi số 2 trong "Ba câu hỏi để tự biết mình đo đúng" ở phần đầu Khóa 1. Kèm **tổng kiểm KVL:** `V_R + V_LED` so với `Vs` — tổng điện áp rơi trên một vòng kín bằng điện áp cấp. Không khớp thì một trong ba số đo sai, hoặc Vs đã đổi giữa các lần đo.
+**Bước 4 — kiểm tra chéo.** Lấy V trên điện trở chia cho R **đo được** (không phải 330 danh định). So với dòng đo trực tiếp. Đây là câu hỏi số 2 trong "Bốn câu hỏi để tự biết mình đo đúng" (`00-tong-quan.md` mục 3). Kèm **tổng kiểm KVL:** `V_R + V_LED` so với `Vs` — tổng điện áp rơi trên một vòng kín bằng điện áp cấp. Không khớp thì một trong ba số đo sai, hoặc Vs đã đổi giữa các lần đo.
 
 **Bước 5 — nhìn thấy burden (mới).** Đo dòng ở thang `20 mA`, rồi ở thang `200 mA`. Hai thang dùng shunt khác nhau. Ghi cả hai số kèm sai số từng thang. Câu hỏi để trả lời trong `analysis.md`: chênh lệch giữa hai thang lớn hơn hay nhỏ hơn sai số đồng hồ? Nếu lớn hơn, đó là dấu vết của burden: đồng hồ đã làm thay đổi dòng nó đo `[tự đo]`.
 
 **Bước 6 — vẽ đường cong của chính con LED của bạn (mới, 30 phút).** Thay R lần lượt bằng 1 kΩ, 330 Ω, 150 Ω (với 150 Ω, kiểm lại phần 5: dòng và công suất có còn trong định mức không trước khi cắm). Mỗi lần ghi V_LED và I (tính từ V_R/R đo). Ba điểm (I, V_f) là ba điểm trên đường cong thật. Vẽ chúng lên cùng hình với mô phỏng ở phần 2, xem mô hình đồ chơi lệch ở đâu.
+
+**Bước 6b (tùy chọn, +1h, → F1.6) — fit đường cong.** Lặp với 5 điện trở (2.2 kΩ, 1 kΩ, 470 Ω, 330 Ω, 220 Ω — dòng lớn nhất ~14 mA, an toàn cho LED 5 mm), cộng điểm của chế độ diode. Mỗi điểm: I = V_R/R_đo, V = V_LED. Fit `V = a + b·ln(I) + Rs·I` — tuyến tính theo (a, b, Rs) nên giải bằng bình phương tối thiểu:
+
+```python
+# [đã chạy] Fit mô hình LED từ vài điểm (I, V): V = a + b·ln(I) + Rs·I, tuyến tính theo a, b, Rs
+import numpy as np
+
+# Dữ liệu MẪU sinh từ mô hình đồ chơi ở phần 2 (n=2, Rs=10 Ω), làm tròn theo độ phân giải đồng hồ.
+# THAY bằng số đo của bạn: dòng (A) và V_LED (V)
+I = np.array([1.51e-3, 3.26e-3, 6.78e-3, 9.52e-3, 13.99e-3])
+V = np.array([1.681, 1.739, 1.812, 1.857, 1.921])
+
+A = np.column_stack([np.ones_like(I), np.log(I), I])   # ma trận thiết kế
+(a, b, Rs), *_ = np.linalg.lstsq(A, V, rcond=None)
+VT = 0.02585
+print(f"n·VT = {b*1e3:.1f} mV  ->  n ≈ {b/VT:.2f}")
+print(f"Rs ≈ {Rs:.1f} Ω")
+print(f"Is ≈ {np.exp(-a/b):.2e} A")
+print("residual (mV):", np.round((V - A @ np.array([a, b, Rs])) * 1e3, 2))
+# 5 điểm, 3 tham số: chỉ 2 bậc tự do. Residual nhỏ KHÔNG chứng minh mô hình đúng (→ F1.6)
+```
+
+Với dữ liệu mẫu, fit trả lại tham số gần với tham số đã sinh ra nó. Với LED thật, n thường ra lớn hơn 2 `[ước lượng]`, và n với Rs "đánh đổi" nhau khi dữ liệu nhiễu: bỏ một điểm rồi fit lại để thấy tham số nhảy bao nhiêu.
 
 **Bước 7 — câu giải thích bằng lời.** Viết vào `analysis.md`, bằng lời của bạn, vì sao V_f đo được không bằng V_f trên datasheet. Đây là **tiêu chí số 4 của Gate Khóa 1** (Bài 14).
 
@@ -503,7 +547,8 @@ KVL: V_R + V_LED vs Vs: chấp nhận nếu lệch < __ %
 | LED không sáng, không nóng | Cắm ngược chiều | Thang diode của đồng hồ: chiều thuận LED sáng mờ | Đảo LED |
 | LED sáng rất mờ | Điện trở quá lớn (33 kΩ thay vì 330 Ω) | Đo R bằng thang Ω | Thay đúng con |
 | LED sáng chói rồi tắt hẳn, có mùi khét | Quên điện trở → dòng phá hủy | — | LED đã chết. Đây là lý do mua nhiều LED |
-| Dòng đo ra 0 khi chuyển sang mA | Que đỏ đúng lỗ nhưng dòng vượt thang, hoặc cầu chì thang mA đã đứt từ lần trước | Thông mạch qua cầu chì (manual chỉ cách), hoặc thử thang 10 A với lỗ 10 A | Thay cầu chì đúng loại ghi trong manual |
+| Đồng hồ hiện `OL`/`1` ở thang mA | Dòng vượt thang (> 20 mA) — vượt thang **không** hiện 0 | Chuyển thang 200 mA | Kiểm vì sao dòng lớn thế: thiếu điện trở? |
+| Dòng đo ra 0 khi chuyển sang mA | Cầu chì thang mA đã đứt từ lần trước, hoặc que đỏ sai lỗ (10 A với thang mA, hoặc VΩ) | Thông mạch qua cầu chì (manual chỉ cách), hoặc thử thang 10 A với lỗ 10 A | Thay cầu chì đúng loại ghi trong manual |
 | Đồng hồ đo dòng làm mạch tắt hẳn | Chưa nối tiếp đúng — mạch vẫn hở; hoặc cầu chì đứt | Lần lại đường dòng bằng tay | Nối lại |
 | V_R/R lệch dòng đo 3–8% | Dùng R danh định thay vì R đo; burden của shunt | Bước 4 với R đo; bước 5 | Ghi cả hai nguồn sai số vào `analysis.md` |
 | `V_R + V_LED` lệch Vs > 2% | Vs đổi giữa các lần đo; que tiếp xúc kém | Đo ba số liền nhau, kẹp cá sấu | Đo lại liên tiếp |
@@ -528,7 +573,7 @@ KVL: V_R + V_LED vs Vs: chấp nhận nếu lệch < __ %
 
 - **Chấn lưu (ballast) trong chiếu sáng.** Giống: tải không tự giới hạn dòng cần một phần tử nối tiếp để giữ dòng. Khác: đèn huỳnh quang dùng cuộn cảm (ít tỏa nhiệt hơn điện trở trên lưới AC); LED công suất dùng driver dòng không đổi có hồi tiếp, không dùng điện trở, vì điện trở phí năng lượng tỉ lệ với khoảng dư.
 - **Cost model của query planner.** PostgreSQL có các hằng số như `random_page_cost` — một con số danh định cho một quan hệ thật ra phụ thuộc phần cứng và tải. Giống: "hằng số" là một điểm trên đường cong, phải hiệu chỉnh theo máy. Khác: planner chỉ cần thứ tự tương đối đúng để chọn kế hoạch; mạch cần giá trị tuyệt đối đúng để không cháy.
-- **Dược lý (liều–đáp ứng).** Xem câu hỏi 6.
+- **Mạng — điều khiển tắc nghẽn TCP.** AIMD là phản hồi âm: mất gói → giảm cửa sổ. Thiếu nó, mạng có thể rơi vào congestion collapse — vòng phản hồi dương giữa retransmit và nghẽn, cùng cấu trúc với thermal runaway. Khác: TCP phục hồi khi tải giảm; LED đã cháy thì không.
 
 ### 11. Độ tin cậy và sửa lỗi
 
@@ -547,6 +592,8 @@ KVL: V_R + V_LED vs Vs: chấp nhận nếu lệch < __ %
 - Số kỳ vọng V_f 1.85–1.95 V nằm ngoài khối niêm phong ở bản gốc → chuyển vào 🔒.
 - Bản gốc không nhắc ampe kế làm thay đổi dòng nó đo → thêm burden voltage (bước 5), nối tiếp bài học của Bài 9.
 - Làm rõ hai ngưỡng: < 5% (kiểm chéo hai phép đo) và < 10% (tính vs đo, tiêu chí gate) là hai phép so sánh khác nhau, giữ cả hai.
+- "Dòng đo ra 0 khi chuyển sang mA — … dòng vượt thang": vượt thang hiện `OL`/`1`, không hiện 0. Đọc 0 gần như luôn là cầu chì đứt hoặc sai lỗ. Tách thành hai dòng.
+- Thêm chế độ diode (V_f ở dòng nhỏ) và phần fit tùy chọn.
 - Kiểm chéo dùng **R đo được** thay vì 330 Ω danh định, để không lẫn dung sai R vào sai số đo dòng.
 
 ### 12. Đọc thêm và tự kiểm tra
@@ -567,13 +614,13 @@ KVL: V_R + V_LED vs Vs: chấp nhận nếu lệch < __ %
 
 ---
 
-## Bài 11 — Đọc trọn một datasheet (5h)
+## Bài 11 — Đọc trọn một datasheet (4h)
 
 > **Vị trí:** Bài 10 (LED) → **Bài 11** → Bài 12 (I2C + ACK, dùng địa chỉ và register map bạn rút ra ở đây) · **Cần trước:** Bài 3 (bus, clock), Bài 9–10 (dung sai, "danh định ≠ thật"), F2.1 (lướt: test và spec đều là phép đo có sai), F3.7 (lướt: validate theo vật lý) · **Sau bài này bạn quyết định được:** một linh kiện có được phép nối vào hệ của bạn không (điện áp, giao tiếp, địa chỉ, ngân sách dòng), thiết kế theo con số nào (max, không phải typ), và con chip trả lời trên bus có đúng là con bạn nghĩ không.
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
-Ariane 5, chuyến bay 501 (1996): hệ dẫn đường quán tính (SRI) được dùng lại từ Ariane 4, nơi nó đã chạy tốt. Phần mềm chuyển một giá trị liên quan đến vận tốc ngang từ số thực 64 bit sang số nguyên 16 bit; với quỹ đạo của Ariane 4, giá trị đó không bao giờ vượt phạm vi, nên phép chuyển không được bảo vệ. Ariane 5 bay nhanh hơn, giá trị tràn, cả hai SRI dừng, tên lửa tự hủy khoảng 40 giây sau khi cất cánh `[chuẩn — báo cáo của ủy ban điều tra ESA/CNES, 1996]`. Thành phần không hỏng. Nó bị dùng **ngoài điều kiện hoạt động mà nó đã được kiểm chứng**, và không ai đọc lại các điều kiện đó khi đổi hệ.
+Tàu con thoi Challenger (28/1/1986) phóng trong buổi sáng lạnh hơn rõ rệt mọi lần trước; Ủy ban Rogers kết luận vòng đệm O-ring ở mối nối tên lửa đẩy mất khả năng bịt kín, và kỹ sư nhà thầu đã cảnh báo trước về O-ring ở nhiệt độ thấp — vùng mà dữ liệu bay không bao phủ `[chuẩn — Rogers Commission Report, 1986]`. Mười năm sau, Ariane 5, chuyến bay 501 (1996): hệ dẫn đường quán tính (SRI) được dùng lại từ Ariane 4, nơi nó đã chạy tốt. Phần mềm chuyển một giá trị liên quan đến vận tốc ngang từ số thực 64 bit sang số nguyên 16 bit; với quỹ đạo của Ariane 4, giá trị đó không bao giờ vượt phạm vi, nên phép chuyển không được bảo vệ. Ariane 5 bay nhanh hơn, giá trị tràn, cả hai SRI dừng, tên lửa tự hủy khoảng 40 giây sau khi cất cánh `[chuẩn — báo cáo của ủy ban điều tra ESA/CNES, 1996]`. Thành phần không hỏng. Nó bị dùng **ngoài điều kiện hoạt động mà nó đã được kiểm chứng**, và không ai đọc lại các điều kiện đó khi đổi hệ.
 
 Datasheet là bản ghi những điều kiện đó cho một con chip. Tutorial nói bạn *gõ gì*; datasheet nói con chip *làm gì, trong điều kiện nào, với bảo đảm nào*. Nguyên tắc số 3 của cả lộ trình: datasheet > tutorial (`00-lo-trinh-tong.md`). Bài này đọc trọn datasheet BME280 của Bosch — cảm biến bạn cắm ở Bài 12 — và tập một kỹ năng mà nghề backend gần như không dạy: đọc một tài liệu mà **mỗi con số đều đi kèm điều kiện**.
 
@@ -599,12 +646,12 @@ Datasheet là bản ghi những điều kiện đó cho một con chip. Tutorial
 
 ```mermaid
 flowchart LR
-  A[Absolute Maximum Ratings<br/>cái gì làm chết chip] --> B[Recommended Operating /<br/>Electrical Characteristics<br/>min-typ-max + điều kiện]
-  B --> C[Pin description<br/>chân nào làm gì, chân nào không được để hở]
-  C --> D[Interface: I2C/SPI<br/>địa chỉ, cách chọn giao tiếp, timing]
-  D --> E[Register map<br/>API của chip]
-  E --> F[Phần còn lại, từ đầu tới cuối<br/>kể cả chú thích nhỏ]
-  F --> G[Errata / revision history<br/>nếu có]
+  A["Absolute Maximum Ratings<br/>cái gì làm chết chip"] --> B["Recommended Operating /<br/>Electrical Characteristics<br/>min-typ-max + điều kiện"]
+  B --> C["Pin description<br/>chân nào làm gì, chân nào không được để hở"]
+  C --> D["Interface: I2C/SPI<br/>địa chỉ, cách chọn giao tiếp, timing"]
+  D --> E["Register map<br/>API của chip"]
+  E --> F["Phần còn lại, từ đầu tới cuối<br/>kể cả chú thích nhỏ"]
+  F --> G["Errata / revision history<br/>nếu có"]
 ```
 
 | Datasheet | Thứ tương ứng trong nghề của bạn | Khác ở đâu |
@@ -674,9 +721,15 @@ Datasheet: (chưa mở)
 5. Số thanh ghi tôi phải biết để đọc được nhiệt độ: __
 6. Thời gian tôi cần để đọc trọn: __ h. Số chỗ tôi đoán sẽ không hiểu: __
 7. Module tôi mua có: LDO (có/không), điện trở pull-up I2C (có/không, giá trị __), chân SDO nối __
+Độ tự tin của tôi cho từng câu (0–100%): __
+
+## Tính toán (viết SAU khi tìm công thức ở lượt đọc 1, TRƯỚC khi đo ở bước 9 — commit lần hai)
+8. Forced mode, oversampling ×1/×1/×1 (T/P/H): t_typ = __ ms · t_max = __ ms · (max − typ)/typ = __ %
+   Oversampling ×16 cả ba: t_typ = __ ms · t_max = __ ms
+   Firmware của tôi sẽ chờ __ ms, hoặc poll bit __ của thanh ghi __, vì __
 ```
 
-`git commit -m "lab03: prediction"`.
+`git commit -m "lab03: prediction"`. Câu 8 commit riêng sau khi tìm được công thức measurement time (phụ lục cuối datasheet).
 
 ### 6. Làm
 
@@ -701,7 +754,14 @@ Ghi cả ba vào `analysis.md`; đây là dự đoán đầu vào cho Bài 12.
 2. Địa chỉ I2C của nó là gì, và làm sao đổi được?
 3. Đọc thanh ghi nào để biết chip còn sống, và giá trị đúng là gì? Nếu đọc ra một giá trị khác nhưng "gần giống", nghĩa là gì?
 
-**Bước 8 — so với `prediction.md`.** Câu nào trực giác của bạn lệch nhiều nhất? Lệch theo hướng nào (đánh giá cao hay thấp)? Một dòng trong `analysis.md`.
+**Bước 8 — "bảng hợp đồng" và so với `prediction.md`.** Trong `analysis.md`, 6–8 dòng, mỗi dòng một thông số bạn sẽ dựa vào trong khóa này (VDD, VDDIO, dòng ngủ, dòng trung bình 1 Hz, sai số tuyệt đối nhiệt độ/áp suất, thời gian đo, tần số I2C tối đa):
+
+| Thông số | min | typ | max | Đơn vị | Điều kiện | Trang | Tôi dựa vào cột nào, cho quyết định gì |
+|---|---|---|---|---|---|---|---|
+
+Rồi so với `prediction.md`: câu nào trực giác lệch nhiều nhất, theo hướng nào? Một dòng.
+
+**Bước 9 (làm sau Bài 12, tùy chọn) — đo thời gian đo thật.** Khi đã đọc được chip ID trên PulseView, viết sketch nhỏ: ghi `ctrl_meas` ở forced mode, rồi đọc `status` liên tục tới khi bit `measuring` về 0. Trên PulseView, đo từ STOP của lệnh ghi tới lần đọc đầu tiên thấy bit đó = 0. Lặp ≥20 lần, ghi phân bố (min, median, max), không ghi một số. Sai số phương pháp: bằng khoảng cách giữa hai lần poll (vài trăm µs ở 100 kHz), lớn hơn nhiều so với độ phân giải analyzer — ghi rõ.
 
 ### 7. Số phải ra
 
@@ -709,7 +769,7 @@ Ghi cả ba vào `analysis.md`; đây là dự đoán đầu vào cho Bài 12.
 
 **Tiêu chí của bản gốc (giữ nguyên):** register map viết tay đối chiếu đúng **≥ 90%** với datasheet; có ít nhất `0xD0` (chip ID, giá trị `0x60`), một thanh ghi cấu hình, một thanh ghi dữ liệu.
 
-Số dưới đây kiểm theo **BST-BME280-DS001-12, revision 1.3 (05/2016)** `[spec]`; bản mới hơn có thể đánh số bảng khác.
+Số dưới đây kiểm theo một bản revision 1.x của datasheet BME280 (mã tài liệu BST-BME280-DS001 ở bản cũ, DS002 ở bản mới) `[spec — đối chiếu revision bạn tải]`; bản khác có thể đánh số bảng khác, đối chiếu theo tên mục.
 
 | Câu | Đáp án | Ở đâu |
 |---|---|---|
@@ -724,6 +784,31 @@ Số dưới đây kiểm theo **BST-BME280-DS001-12, revision 1.3 (05/2016)** `
 - *Thứ tự cấp nguồn:* **cấm giữ chân giao tiếp ở mức cao khi VDDIO tắt** — dòng qua diode bảo vệ ESD có thể làm hỏng chip vĩnh viễn. Nghĩa là: tắt nguồn cảm biến trong khi ESP32 vẫn cấp pull-up 3.3 V lên SDA/SCL là một cách giết chip từ từ.
 
 **Dòng tiêu thụ** (để so với dự đoán câu 3): ngủ 0.1 µA typ / 0.3 µA max; trong lúc đo áp suất cỡ 714 µA (ghi chú: max ở −40 °C); trung bình ~3.6 µA ở 1 Hz đo cả ba đại lượng `[spec]`. Bốn bậc độ lớn giữa ngủ và đang đo — đó là lý do ngân sách năng lượng tính theo **chu kỳ hoạt động**, không theo một con số.
+
+**Câu 8 — thời gian đo** `[spec — phụ lục measurement time; hằng số công thức max khớp BME280_SensorAPI của Bosch: 1250 µs + 2300 µs·osrs + 575 µs cho mỗi kênh P/H]`. `t_typ = 1 + 2·osrs_t + (2·osrs_p + 0.5) + (2·osrs_h + 0.5)` ms; `t_max = 1.25 + 2.3·osrs_t + (2.3·osrs_p + 0.575) + (2.3·osrs_h + 0.575)` ms:
+
+| Oversampling T/P/H | t_typ | t_max | (max − typ)/typ |
+|---|---|---|---|
+| ×1 / ×1 / ×1 | **8 ms** | **9.3 ms** | ≈ +16% |
+| ×16 / ×16 / ×16 | **98 ms** | **112.8 ms** | ≈ +15% |
+
+Firmware chờ theo **max** (cộng biên), hoặc poll bit `measuring` (bit 3 của `status` 0xF3). Chờ theo typ là đặt cược vào một phân bố nhà sản xuất không công bố. Bước 9: các lần đo nằm giữa typ và max, gần typ hơn, cộng sai số khoảng poll; một lần vượt max đáng kể → kiểm phương pháp trước (mốc bắt đầu đặt sai?).
+
+**Bảng tham chiếu register map** (để chấm ≥90%; khớp driver Zephyr và BME280_SensorAPI):
+
+| Địa chỉ | Tên | R/W | Ghi chú |
+|---|---|---|---|
+| 0x88–0xA1 | calib00…calib25 | R | Hệ số hiệu chuẩn T, P (+ một byte H) |
+| 0xD0 | id | R | 0x60 cho BME280 |
+| 0xE0 | reset | W | Ghi 0xB6 để soft reset |
+| 0xE1–0xF0 | calib26…calib41 | R | Hệ số hiệu chuẩn độ ẩm |
+| 0xF2 | ctrl_hum | R/W | osrs_h; chỉ có hiệu lực sau khi ghi ctrl_meas |
+| 0xF3 | status | R | bit 3 `measuring`, bit 0 `im_update` |
+| 0xF4 | ctrl_meas | R/W | osrs_t [7:5], osrs_p [4:2], mode [1:0] (00 sleep, 01/10 forced, 11 normal) |
+| 0xF5 | config | R/W | t_sb [7:5], filter [4:2], spi3w_en [0] |
+| 0xF7–0xF9 | press_msb/lsb/xlsb | R | Áp suất raw 20 bit |
+| 0xFA–0xFC | temp_msb/lsb/xlsb | R | Nhiệt độ raw 20 bit |
+| 0xFD–0xFE | hum_msb/lsb | R | Độ ẩm raw 16 bit |
 
 **Câu 4 dự đoán:** chip trả số thô; phải dùng **hệ số hiệu chuẩn riêng từng con** đọc từ vùng 0x88–0xA1 và 0xE1–0xF0 để đổi sang °C/Pa/%RH (→ K5 Bài 4).
 
@@ -745,17 +830,19 @@ Số dưới đây kiểm theo **BST-BME280-DS001-12, revision 1.3 (05/2016)** `
 
 ### 9. Câu hỏi ngược
 
-1. **[Nếu…thì]** Nếu trên cùng bus I2C có một module khác kéo pull-up lên 5 V, còn BME280 chạy VDDIO 3.3 V, thì vi phạm điều gì trong datasheet, và triệu chứng có xuất hiện ngay không?
+1. **[Nếu…thì]** Nếu firmware chờ đúng thời gian **typical** rồi đọc dữ liệu, chuyện gì xảy ra trên một số con chip hoặc ở nhiệt độ thấp? Dữ liệu ghi xuống trông thế nào, và audit tool ở K2 có phát hiện được không?
+   <details><summary>Hướng nghĩ</summary>Đọc trước khi đo xong thì nhận giá trị của lần đo trước (nhờ shadowing). Dữ liệu không sai hẳn, nó **trễ một chu kỳ** và đôi khi lặp lại. So "giá trị lặp" và "timestamp lệch một chu kỳ" với "frozen channel" trong bảy lớp lỗi của K2 Bài 11.</details>
+2. **[Nếu…thì]** Nếu trên cùng bus I2C có một module khác kéo pull-up lên 5 V, còn BME280 chạy VDDIO 3.3 V, thì vi phạm điều gì trong datasheet, và triệu chứng có xuất hiện ngay không?
    <details><summary>Hướng nghĩ</summary>Tìm abs max của **chân giao tiếp** (không phải chân nguồn), nó tính theo VDDIO. Dòng chạy qua diode bảo vệ vào nguồn 3.3 V. Có thể chạy được nhiều ngày — "chạy được" không phải bằng chứng an toàn. Lời giải: mạch dịch mức cho I2C (loại dùng MOSFET hai chiều).</details>
-2. **[Quy mô]** 100 robot, module BME280 mua từ ba nhà bán khác nhau. Ở bước nào trong pipeline (nhận hàng, firmware boot, ingest dữ liệu) bạn phát hiện một con BMP280 trà trộn, và ghi nhận nó vào đâu?
+3. **[Quy mô]** 100 robot, module BME280 mua từ ba nhà bán khác nhau. Ở bước nào trong pipeline (nhận hàng, firmware boot, ingest dữ liệu) bạn phát hiện một con BMP280 trà trộn, và ghi nhận nó vào đâu?
    <details><summary>Hướng nghĩ</summary>Chip ID đọc lúc boot là kiểm rẻ nhất; ghi vào metadata `source_device_id`/loại chip của MCAP (`CONVENTIONS.md`). Kiểm theo vật lý ở tầng ingest (kênh độ ẩm luôn trống hoặc hằng) là lưới thứ hai. Hỏi thêm: firmware nên từ chối chạy hay chạy ở chế độ suy giảm và báo cáo?</details>
-3. **[Failure mode]** Robot tắt nguồn cảm biến để tiết kiệm pin, nhưng ESP32 vẫn bật và chân I2C của nó vẫn kéo lên 3.3 V. Datasheet nói gì, và lỗi này trông thế nào sau ba tháng ngoài hiện trường?
+4. **[Failure mode]** Robot tắt nguồn cảm biến để tiết kiệm pin, nhưng ESP32 vẫn bật và chân I2C của nó vẫn kéo lên 3.3 V. Datasheet nói gì, và lỗi này trông thế nào sau ba tháng ngoài hiện trường?
    <details><summary>Hướng nghĩ</summary>Tìm điều cấm về thứ tự cấp nguồn ở bước 5. Hư hỏng tích lũy, không tái hiện được ở bàn, phân bố theo số chu kỳ bật/tắt chứ không theo thời gian chạy — loại lỗi mà soak test ngắn không bắt được (→ F7.6).</details>
-4. **[Vì sao không]** Vì sao không dùng thư viện Adafruit/SparkFun và bỏ qua datasheet? Thư viện đã chạy được.
+5. **[Vì sao không]** Vì sao không dùng thư viện Adafruit/SparkFun và bỏ qua datasheet? Thư viện đã chạy được.
    <details><summary>Hướng nghĩ</summary>Thư viện chọn sẵn chế độ đo, oversampling, filter — tức là chọn sẵn đánh đổi nhiễu/độ trễ/năng lượng cho bạn. Khi dữ liệu có vấn đề, không biết các lựa chọn đó thì không phân biệt được lỗi cảm biến, lỗi cấu hình hay lỗi thư viện. Datasheet là thứ cho phép bạn **đánh giá** thư viện, không chỉ dùng nó.</details>
-5. **[Liên ngành]** Đồng hồ tốc độ của máy bay có cung xanh, cung vàng, và vạch đỏ V_NE (never exceed). Ánh xạ chúng vào ba tầng con số của datasheet. Chỗ nào ánh xạ không khớp?
+6. **[Liên ngành]** Đồng hồ tốc độ của máy bay có cung xanh, cung vàng, và vạch đỏ V_NE (never exceed). Ánh xạ chúng vào ba tầng con số của datasheet. Chỗ nào ánh xạ không khớp?
    <details><summary>Hướng nghĩ</summary>Cung xanh ≈ recommended; cung vàng (chỉ khi không khí êm) ≈ vùng giữa rec max và abs max; vạch đỏ ≈ abs max. Khác: phi công có đồng hồ hiển thị liên tục; con chip không có cảnh báo nào khi bạn đi vào cung vàng — bạn phải tự đo.</details>
-6. **[Phản biện]** "Chép tay register map là phí thời gian khi có thể copy bảng từ PDF." Bảo vệ hoặc bác bỏ.
+7. **[Phản biện]** "Chép tay register map là phí thời gian khi có thể copy bảng từ PDF." Bảo vệ hoặc bác bỏ.
    <details><summary>Hướng nghĩ</summary>Mục tiêu không phải bản sao mà là buộc sự chú ý đi qua từng bitfield và từng ghi chú. Thử đo: sau khi chép tay, bạn trả lời được bao nhiêu câu ở bước 5 mà không mở lại PDF? Nếu bạn tìm được cách khác đạt cùng kết quả (ví dụ tự viết test decode từng bitfield), đó là phản biện hợp lệ.</details>
 
 ### 10. Liên kết ra ngoài
@@ -768,9 +855,11 @@ Số dưới đây kiểm theo **BST-BME280-DS001-12, revision 1.3 (05/2016)** `
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| Các số BME280 trong 🔒 (điện áp, abs max, địa chỉ, chip ID, dòng, ctrl_hum, shadowing, power-on) | [spec] | Kiểm trực tiếp trên BST-BME280-DS001-12 rev 1.3 khi soạn bài; đối chiếu lại với bản bạn tải |
+| Các số BME280 trong 🔒 (điện áp, abs max, địa chỉ, chip ID, dòng, ctrl_hum, shadowing, power-on) | [spec] | Khớp giữa hai bản soạn độc lập và với BME280_SensorAPI/driver Zephyr; người hợp nhất không mở lại PDF — đối chiếu với revision bạn tải |
 | Typ đo ở 25 °C, min/max từ corner lots trên toàn dải nhiệt | [spec] | Phần quy ước đầu mục 1 của datasheet BME280; các hãng khác có quy ước tương tự nhưng phải đọc từng tài liệu |
 | Module BMP280 bị bán dưới tên BME280 | [ước lượng] | Hiện tượng phổ biến trên chợ module giá rẻ; Bài 12 kiểm bằng chip ID |
+| Công thức measurement time typ/max | [spec] | Phụ lục measurement time; khớp `bme280_defs.h` của BME280_SensorAPI |
+| Challenger (Rogers Commission 1986) | [chuẩn] | Rogers Commission Report |
 | Ariane 501 | [chuẩn] | Báo cáo ủy ban điều tra ESA/CNES (J. L. Lions, 1996) |
 | Vùng giữa rec max và abs max "không hỏng nhưng không bảo đảm" | [chuẩn] | Quy ước chung của datasheet; một số hãng ghi rõ câu này ngay dưới bảng Abs Max |
 
@@ -779,6 +868,8 @@ Số dưới đây kiểm theo **BST-BME280-DS001-12, revision 1.3 (05/2016)** `
 - Bảng gốc đặt "cấp 5 V vào chip 3.3 V là hỏng" dưới mục Electrical Characteristics → giới hạn phá hủy thuộc **Absolute Maximum Ratings**; Electrical Characteristics/Recommended Operating là vùng thiết kế. Tách ba tầng.
 - "Vượt [abs max] là chết chip" → chính xác hơn: vượt thì không còn bảo đảm gì, có thể hỏng ngay hoặc suy giảm ngầm; và **giữa rec max và abs max** chip cũng không được bảo đảm hoạt động đúng.
 - Đáp án ba câu hỏi và giá trị chip ID đưa vào 🔒.
+- Bản gốc không có `prediction.md` cho bài này, trong khi gate tiêu chí 2 đòi cả 5 lab có `prediction.md` commit trước `analysis.md`. Thêm phần dự đoán (hiệu chuẩn trực giác + tính measurement time) và một phép đo thật tùy chọn (bước 9).
+- Bản gốc ví chip ID với `/health`: chip ID là kiểm **danh tính và giao tiếp** (gần `/version`), không phải health của phép đo.
 - Thêm: phân biệt BMP280/BME280 qua chip ID, ngữ nghĩa ctrl_hum/burst read, điều cấm về thứ tự cấp nguồn, đối chiếu module bằng đồng hồ (dự đoán địa chỉ và pull-up cho Bài 12).
 
 ### 12. Đọc thêm và tự kiểm tra

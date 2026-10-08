@@ -1,53 +1,69 @@
 # Khóa 2 · Module 2 — Dataset audit tool (60h, trần 85h) ★
 
-Tương ứng milestone **M3**, artifact công khai đầu tiên. Nguồn xương sống: `khoa-2-du-lieu-robot-khong-can-robot.md` (Bài 9–15 + Gate Module 2). Tổng quan khóa và Module 1 ở `00-tong-quan.md`, `m1-mcap-cong-cu.md`.
+> **Milestone:** M3, artifact công khai đầu tiên · **Cần trước:** Gate Module 1 (`m1-mcap-cong-cu.md`) · học đúng lúc: F3.6, F3.2 (trước Bài 9), F1.2 (Bài 10), F2.1, F3.7 (Bài 11), F2.5, F1.4, F2.4 (Bài 12), F1.5, F1.7 (Bài 13–15) · **Artifact:** repo công khai `lerobot-audit` + một bài viết tiếng Anh + ít nhất một báo cáo lỗi gửi ra ngoài. Nguồn xương sống: `khoa-2-du-lieu-robot-khong-can-robot.md` (Bài 9–15 + Gate Module 2).
+
+Module này biến một câu hỏi mơ hồ ("dataset này có sạch không?") thành một **phép đo có sai số**. Bạn đọc định dạng LeRobot từ file thô, nhìn dữ liệu bằng mắt, định nghĩa bảy lớp lỗi bằng toán, viết detector, **đo chính detector** bằng lỗi tiêm vào, rồi chạy trên dataset thật và báo cáo ra ngoài một cách trung thực.
 
 ```mermaid
 flowchart LR
-  B9["Bài 9<br/>format LeRobot<br/>6h"] --> B10["Bài 10<br/>nhìn bằng tay<br/>6h"]
-  B10 --> B11["Bài 11<br/>7 lớp lỗi + toán<br/>8h"]
-  B11 --> B12["Bài 12<br/>detector + test cài lỗi<br/>+ đường cong ngưỡng<br/>20h"]
-  B12 --> B13["Bài 13<br/>chạy trên dataset thật<br/>8h"]
-  B13 --> B14["Bài 14<br/>report + báo ra ngoài<br/>8h"]
-  B14 --> B15["Bài 15<br/>bài viết tiếng Anh<br/>4h"]
-  B15 --> G["Gate M3<br/>+60 ngày chờ tín hiệu"]
+  B9["Bài 9<br/>format LeRobot v3.0<br/>từ file thô · 6h"] --> B10["Bài 10<br/>nhìn bằng mắt · 6h"]
+  B10 --> B11["Bài 11<br/>7 lớp lỗi + oracle · 8h"]
+  B11 --> B12["Bài 12<br/>detector + tiêm lỗi<br/>TPR/FPR có CI · 20h"]
+  B12 --> B13["Bài 13<br/>dataset thật<br/>bội so sánh · 8h"]
+  B13 --> B14["Bài 14<br/>report + báo ra ngoài · 8h"]
+  B14 --> B15["Bài 15<br/>bài viết tiếng Anh · 4h"]
+  B15 --> G["Gate M2 = M3 PASS<br/>+60 ngày chờ tín hiệu"]
   B13 -. "detector báo sai" .-> B12
   B13 -. "dữ liệu thật có đặc tính chưa mô phỏng" .-> B10
 ```
 
-**Hai điều bạn cần biết trước khi mở Bài 9**, vì chúng thay đổi thiết kế tool so với bản gốc (chi tiết ở phần 11 từng bài):
+| Bài | Giờ | Viên nang nền cần trước | Quyết định ra được |
+|---|---|---|---|
+| 9 | 6 | F3.6, F3.2, F3.7 | Tool hỗ trợ phiên bản format nào, đọc thô hay qua `LeRobotDataset` |
+| 10 | 6 | F1.2, F1.7 | Lớp lỗi nào đáng tự động hóa, lớp nào chỉ người thấy; mỗi kênh là đại lượng gì |
+| 11 | 8 | F2.1, F3.7, F3.4, F4.6, F5.5 | Mỗi lớp lỗi đối chiếu với oracle nào, khi nào trả INCONCLUSIVE |
+| 12 | 20 | F2.5, F1.4, F2.4, F2.2, F2.3 | Ngưỡng nào được ship, kèm TPR/FPR và khoảng tin cậy; detector nào được làm fail CI |
+| 13 | 8 | F1.5, F1.7 | Phát hiện nào đủ chắc để báo ra ngoài |
+| 14 | 8 | F1.7 | Báo ở kênh nào, dạng khẳng định hay câu hỏi |
+| 15 | 4 | F1.7 | Bài viết khẳng định gì, không khẳng định gì |
 
-1. Format hiện hành là **LeRobotDataset v3.0**, nhiều episode chung một file parquet và một file mp4; bản gốc mô tả v2.x (một file mỗi episode). Hai bản không tương thích ngược `[spec: LeRobot docs "LeRobotDataset v3.0"; source `src/lerobot/datasets/utils.py`]`. Tool phải đọc `codebase_version` rồi rẽ nhánh, hoặc tuyên bố rõ chỉ hỗ trợ một bản.
-2. Mỗi detector trong module này là **một dụng cụ đo**, có dương tính giả và âm tính giả (→ F2.1). Module này không xong khi tool "chạy được"; nó xong khi bạn nói được tỉ lệ sai của chính tool, bằng số, có căn cứ công khai.
+**Ba điều cần biết trước khi mở Bài 9**, vì chúng thay đổi thiết kế tool so với bản gốc (chi tiết ở phần 11 từng bài):
+
+1. Format hiện hành là **LeRobotDataset v3.0**: nhiều episode chung một file parquet và một file mp4, ranh giới episode nằm trong bảng `meta/episodes/`. Bản gốc mô tả v2.x (một file mỗi episode). Hai bản không tương thích ngược `[spec: LeRobot docs "LeRobotDataset v3.0"; source `src/lerobot/datasets/utils.py`, kiểm 10/2026]`. Tool phải đọc `codebase_version` rồi rẽ nhánh, hoặc từ chối có thông báo.
+2. Câu hỏi "cột `timestamp` được **đo** hay được **tính**?" (Bài 9, câu dự đoán 4) quyết định vài kiểm tra trông nghiêm túc của bản gốc có độ nhạy thật hay bằng không (Bài 11).
+3. Mỗi detector là **một dụng cụ đo** có dương tính giả và âm tính giả (→ F2.1). Module này không xong khi tool "chạy được"; nó xong khi bạn nói được tỉ lệ sai của chính tool, bằng số, có khoảng tin cậy (→ F1.4), có tính tới bội so sánh (→ F1.5).
+
+**Về dữ liệu dùng trong bài:** các bảng số "đã đo" ở Bài 9–13 lấy trên hai dataset v3.0 tải sẵn ở `data/lerobotpusht` và `data/libero` của workspace (thư mục bị gitignore, chưa ghim revision Hub) — gắn `[tự đo]`. Trên máy khác, tải lại bản tương ứng từ HF Hub (`lerobot/pusht`; repo libero `[tự đo]`), ghim revision, và chạy lại trước khi tin con số. Script `src/download_hf_dataset.py` tải `lerobot/robomme`; dùng nó làm dataset thứ ba.
 
 ---
 
+
 ## Bài 9 — LeRobot dataset format từ zero (6h)
 
-> **Vị trí:** Gate M2 (Bài 8b) → **Bài 9** → Bài 10 · **Cần trước:** F3.6 (Parquet, columnar, catalog), F3.2 (file tự mô tả, schema evolution), F3.7 (data contract), K2 Bài 4 (index MCAP) · **Sau bài này bạn quyết định được:** tool của bạn hỗ trợ phiên bản format nào (v2.1, v3.0 hay cả hai), và đọc dữ liệu qua lớp nào (file thô hay `LeRobotDataset`), kèm lý do viết được thành một đoạn trong README.
+> **Vị trí:** Gate Module 1 (MCAP) → **Bài 9** → Bài 10 · **Cần trước:** F3.6 (Parquet, columnar, catalog), F3.2 (file tự mô tả, schema evolution), F3.7 (data contract), K2 Bài 4 (index MCAP) · **Sau bài này bạn quyết định được:** tool của bạn hỗ trợ phiên bản format nào (v2.1, v3.0 hay cả hai), đọc dữ liệu qua lớp nào (file thô hay `LeRobotDataset`), và từ chối gì một cách có kiểm soát — viết được thành một đoạn trong README.
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
-Trước LeRobot, mỗi phòng lab robot lưu demonstration theo một kiểu: HDF5 một file mỗi episode (bộ ALOHA), TFRecord theo RLDS của Google (dùng cho Open X-Embodiment), pickle, rosbag. Muốn train một policy trên dữ liệu của lab khác là phải viết converter, và mỗi converter là một chỗ mới để dữ liệu lệch nhau `[chuẩn]`. LeRobot (Hugging Face, 2024) đặt một format chung trên HF Hub: bảng parquet cho tín hiệu số, mp4 cho camera, thư mục `meta/` mô tả mọi thứ.
+Trước LeRobot, mỗi lab lưu demonstration một kiểu (HDF5 của ALOHA, TFRecord theo RLDS cho Open X-Embodiment, rosbag); mỗi converter giữa chúng là một chỗ mới để dữ liệu lệch nhau `[chuẩn]`. LeRobot (Hugging Face, 2024) đặt một format chung trên HF Hub: parquet cho tín hiệu số, mp4 cho camera, `meta/` mô tả mọi thứ.
 
-Bản v2.x lưu **một file parquet và một file mp4 mỗi episode**. Khi số episode lên hàng trăm nghìn, cách này gãy ở hệ thống file: quá nhiều file nhỏ, khởi tạo chậm, streaming khó. v3.0 gộp nhiều episode vào một file lớn và chuyển ranh giới episode vào metadata dạng bảng; tài liệu chính thức nêu lý do là "lower file-system pressure", "fewer, larger files ⇒ faster initialization and fewer issues at scale" `[spec: LeRobot docs, mục "What's new in v3"]`. Đây là bài toán data engineering quen thuộc (small files problem của HDFS/S3), và đó là cửa vào ngành bằng đúng nghề của bạn. Hệ quả cho bạn: **chính format đã đổi một lần trong vòng chưa tới hai năm**, nên câu "format file ổn định hơn API" của bản gốc chỉ đúng bên trong một phiên bản.
+Bản v2.x lưu **một parquet và một mp4 mỗi camera mỗi episode**. Khi dataset cộng đồng lên hàng trăm nghìn episode, cách này gãy ở hệ thống file: quá nhiều file nhỏ, khởi tạo chậm, streaming khó. Tháng 9/2025 nhóm LeRobot công bố **v3.0**, ra cùng gói `lerobot` 0.4.0 (10/2025): gộp nhiều episode vào một file lớn và chuyển ranh giới episode vào metadata dạng bảng; tài liệu nêu lý do "lower file-system pressure: fewer, larger files ⇒ faster initialization and fewer issues at scale" `[spec: LeRobot docs "LeRobotDataset v3.0"; HF blog release v0.4.0]`. Đây là "small files problem" của HDFS/S3 mà bạn đã gặp, giải bằng compaction và catalog. Hệ quả cho người làm audit: **một tool viết cho v2.x đọc sai v3.0 mà không crash** (ví dụ đếm file để suy số episode), và câu "format file ổn định hơn API" của bản gốc chỉ đúng bên trong một phiên bản.
 
 ### 2. Mô hình tư duy
 
-Một LeRobot dataset là **ba kho dữ liệu nối với nhau bằng khóa**. Mỗi khóa nối là một chỗ dữ liệu có thể lệch.
+Một LeRobot dataset v3.0 là **ba kho dữ liệu nối với nhau bằng khóa** — một bảng fact (frames), một bảng dimension (episodes), và blob video. Mỗi khóa nối là một chỗ dữ liệu có thể lệch.
 
 ```mermaid
 flowchart TB
   subgraph META["meta/ (hợp đồng)"]
     INFO["info.json<br/>codebase_version, fps, features,<br/>total_episodes, total_frames,<br/>data_path, video_path (template)"]
-    EPS["episodes/chunk-*/file-*.parquet<br/>episode_index, length, tasks,<br/>dataset_from_index, dataset_to_index,<br/>data/chunk_index, data/file_index,<br/>videos/&lt;cam&gt;/from_timestamp, to_timestamp"]
-    ST["stats.json<br/>mean/std/min/max (+quantile)<br/>dùng để chuẩn hóa khi train"]
+    EPS["episodes/chunk-*/file-*.parquet<br/>1 dòng = 1 episode: length,<br/>dataset_from_index, dataset_to_index,<br/>data/chunk_index, data/file_index,<br/>videos/KEY/from_timestamp, to_timestamp"]
+    ST["stats.json<br/>min/max/mean/std (+quantile)<br/>dùng để chuẩn hóa khi train"]
     TK["tasks.parquet<br/>task_index → câu lệnh"]
   end
-  subgraph DATA["data/ (bảng, 1 dòng = 1 frame)"]
+  subgraph DATA["data/ (1 dòng = 1 frame, nhiều episode mỗi file)"]
     PQ["chunk-000/file-000.parquet<br/>timestamp, frame_index, episode_index,<br/>index, task_index, observation.state, action"]
   end
-  subgraph VID["videos/&lt;cam&gt;/ (ảnh)"]
+  subgraph VID["videos/KEY/ (ảnh)"]
     MP4["chunk-000/file-000.mp4<br/>nhiều episode nối đuôi"]
   end
   EPS -- "dataset_from/to_index (khóa: index)" --> PQ
@@ -61,73 +77,87 @@ flowchart TB
 | Đơn vị file | 1 parquet + 1 mp4 mỗi camera **mỗi episode** | nhiều episode mỗi file, cắt theo dung lượng |
 | Đường dẫn data | `data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet` `[tự đo]` | `data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet` `[spec: utils.py]` |
 | Đường dẫn video | `videos/chunk-…/{video_key}/episode_….mp4` `[tự đo]` | `videos/{video_key}/chunk-…/file-….mp4` `[spec: utils.py]` |
-| Ranh giới episode | tên file | bảng `meta/episodes/` (chỉ số dòng, khoảng thời gian video) |
-| Task | `meta/tasks.jsonl` | `meta/tasks.parquet` `[spec: utils.py]` |
-| Episode | `meta/episodes.jsonl` (+ `episodes_stats.jsonl` ở v2.1) | `meta/episodes/chunk-*/file-*.parquet` |
+| Ranh giới episode | tên file | bảng `meta/episodes/` (khoảng index, khoảng thời gian video) |
+| Task / episode meta | `meta/tasks.jsonl`, `meta/episodes.jsonl` (+ `episodes_stats.jsonl` ở v2.1) | `meta/tasks.parquet`, `meta/episodes/chunk-*/file-*.parquet` |
+
+Tham số đầu vào của hai dataset trong `data/`, đọc từ `meta/info.json` (đây là "datasheet", được đọc trước) `[tự đo]`:
+
+| Trường | `data/lerobotpusht` | `data/libero` |
+|---|---|---|
+| `codebase_version`, `robot_type` | `v3.0`, `unknown` | `v3.0`, `panda` |
+| `fps` | `10` (int) | `10.0` (float) |
+| `total_episodes` / `total_frames` | 206 / 25 650 | 1 693 / 273 465 |
+| Camera (`dtype: video`) | `observation.image` 96×96, AV1 | `observation.images.image`, `…image2` 256×256, AV1 |
+| `observation.state` / `action` | float32[2] (`names` 2 tên) / float32[2] | float32[8] (`names: ["state"]`) / float32[7] |
+| `data_files_size_in_mb` / `video_files_size_in_mb` | 100 / 500 | 100 / 500 |
 
 Bốn câu về bản chất:
 
-- **Ảnh không được tra bằng chỉ số, mà bằng thời gian.** Khi train, thư viện lấy frame video ở thời điểm `from_timestamp + timestamp` và nhận frame gần nhất nếu lệch không quá `tolerance_s` `[spec: dataset_reader.py, video_utils.py; mặc định 1e-4 s — tự đo theo phiên bản]`. Vậy cột `timestamp` trong parquet không chỉ là một phép đo; nó là **địa chỉ** trỏ vào video.
-- **Metadata là hợp đồng mà code downstream tin mù quáng.** Normalization dùng `stats.json`, sampler dùng `length`, decoder dùng `from_timestamp`. Sai metadata không làm gì crash, chỉ làm sai mọi thứ dựa trên nó.
-- **Nén video là đánh đổi dung lượng lấy hai rủi ro:** mất random access rẻ (phải giải mã từ keyframe gần nhất), và thêm một luồng có thể lệch số frame với bảng.
-- **Đọc thô hay đọc qua wrapper** là quyết định đo lường: wrapper che những thứ bạn đang đi tìm, nhưng cũng mã hóa ngữ nghĩa (dịch thời gian video, dung sai) mà bạn phải tự cài lại đúng, nếu không tool của bạn sẽ báo nhầm.
+- **Ảnh không được tra bằng chỉ số, mà bằng thời gian.** Khi train, thư viện lấy frame video ở thời điểm `from_timestamp + timestamp` và nhận frame gần nhất nếu lệch không quá `tolerance_s` (mặc định 1e-4 s), lệch quá thì ném `FrameTimestampError` `[spec: lerobot_dataset.py, video_utils.py, main 10/2026; tự đo theo phiên bản]`. Cột `timestamp` vì vậy là **địa chỉ** trỏ vào video, không chỉ là một phép đo.
+- **Metadata là hợp đồng mà code downstream tin mù quáng.** Chuẩn hóa dùng `stats.json`, sampler dùng `length`, decoder dùng `from_timestamp`. Sai metadata không làm gì crash, chỉ làm sai mọi thứ dựa trên nó.
+- **Nén video là đánh đổi dung lượng lấy hai rủi ro:** mất random access rẻ (giải mã từ keyframe gần nhất) và thêm một luồng có thể lệch số frame với bảng.
+- **Đọc thô hay đọc qua wrapper** là quyết định đo lường: wrapper che thứ bạn đang tìm, nhưng cũng mã hóa ngữ nghĩa (dịch thời gian video, dung sai) mà bạn phải tự cài lại đúng, nếu không tool sẽ báo nhầm.
 
 ### 3. Cầu nối từ backend
 
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
-| Bảng Parquet + blob store (ảnh trên S3, cột chứa key) | parquet cho số, mp4 cho ảnh | Ảnh không có key; tra bằng **thời gian thực số** trong một file nén liên khung, có dung sai | Bạn so "số dòng = số ảnh" theo key rồi yên tâm, trong khi lệch xảy ra ở trục thời gian |
-| Iceberg/Delta manifest: metadata nói file nào chứa dòng nào, kèm min/max cột | `meta/episodes/` + `stats.json` | Ở data lake, min/max sai chỉ làm query chậm (prune sai). Ở đây `stats.json` đi thẳng vào chuẩn hóa đầu vào model | Coi stats lệch là lỗi "hiệu năng", bỏ qua; model nhận đầu vào lệch thang đo |
-| Kafka offset trong segment | `index`, `dataset_from_index`/`dataset_to_index` | Offset Kafka là số nguyên tuyệt đối; ở v3 ranh giới video là **giây kiểu float**, cộng dồn qua các episode trong file | Kiểm offset dòng xong là thôi, quên kiểm khoảng thời gian video |
-| ORM vs raw SQL | `LeRobotDataset` vs đọc parquet/mp4 trực tiếp | ORM thường không âm thầm sửa dữ liệu; wrapper ở đây có logic dịch thời gian, dung sai, và có thể từ chối nạp bản cũ (`BackwardCompatibilityError`) `[spec: utils.py]` | Đọc thô nhưng bỏ quên phép dịch `from_timestamp` → báo lỗi L3 giả cho mọi episode sau episode đầu |
+| Data lake: compaction + catalog (Hive metastore, Iceberg manifest kèm min/max cột) | v3.0 gộp file, `meta/episodes` là catalog, `stats.json` là thống kê | Iceberg có transaction log và snapshot nguyên tử; `meta/episodes` chỉ là parquet thường, không gì bảo đảm nó khớp `data/`. Và stats sai ở data lake chỉ làm prune sai; ở đây đi thẳng vào chuẩn hóa đầu vào model | Tin catalog như nguồn sự thật, bỏ sót đúng lớp lỗi L7 |
+| Bảng fact + dimension | `data/*.parquet` + `meta/episodes` | Khóa nối là **khoảng** (`from_index..to_index`, `from_timestamp..to_timestamp`), và khoảng thời gian là float cộng dồn (`27.900000000000002`) | So `==` trên float, báo lệch giả hàng loạt |
+| Schema trong Parquet footer | `info.json → features` + schema Arrow | Hai nguồn schema không ai bắt buộc khớp (libero: `names` 1 phần tử, `shape` 8) | Reader tin `names` để đặt tên cột, crash hoặc gán nhầm |
+| ORM vs raw SQL | `LeRobotDataset` vs đọc parquet/mp4 trực tiếp | Wrapper có logic dịch thời gian, dung sai, và từ chối nạp bản cũ (`BackwardCompatibilityError`) `[spec: utils.py]`; API đổi nhanh hơn format | Đọc thô nhưng quên phép dịch `from_timestamp` → báo L3 giả cho mọi episode sau episode đầu |
 
 **Chấm mô hình:**
 
-- *"LeRobot dataset là một bảng parquet có thêm cột ảnh."* → **SAI.** Ảnh nằm ở mp4 và được tra bằng thời gian. Phản ví dụ: hai dataset có parquet giống hệt nhau từng byte nhưng một cái có mp4 thừa một frame ở giữa; bảng không đổi, mọi cặp (ảnh, hành động) sau điểm đó đều lệch.
-- *"Đọc thô luôn đúng hơn đọc qua wrapper."* → **ĐÚNG MỘT PHẦN.** Đọc thô cho bạn thấy dữ liệu chưa qua xử lý, nhưng bạn phải tái tạo đúng ngữ nghĩa mà model nhìn thấy. Phản ví dụ: ở v3, đếm toàn bộ packet của `file-000.mp4` rồi so với `length` của episode 0 sẽ luôn FAIL dù dữ liệu lành, vì file chứa nhiều episode. Cách mạnh nhất là chạy cả hai và so (differential testing → F2.4): chỗ hai đường đọc bất đồng chính là phát hiện.
-- *"Format file ổn định hơn API thư viện."* (bản gốc) → **ĐÚNG MỘT PHẦN.** Ổn định bên trong một `codebase_version`; giữa v2.1 và v3.0 thì đường dẫn, số file, nơi chứa task và episode đều đổi. Tool phải đọc template `data_path`/`video_path` từ `info.json` thay vì hard-code.
+- *"LeRobot dataset là vài bảng parquet, đọc bằng pandas là xong, như data warehouse."* → **ĐÚNG MỘT PHẦN.** Phần bảng thì đúng. Gãy ở chỗ ảnh nằm trong mp4, nối qua thời gian, và các bảng không có ràng buộc toàn vẹn. Phản ví dụ: parquet và `meta/episodes` khớp từng byte, nhưng mp4 thừa một frame ở giữa; bảng không đổi, mọi cặp (ảnh, hành động) sau điểm đó lệch một nhịp. Pandas không bao giờ thấy.
+- *"Đọc thô luôn đúng hơn đọc qua wrapper."* → **ĐÚNG MỘT PHẦN.** Đọc thô cho thấy dữ liệu chưa qua xử lý, nhưng bạn phải tái tạo đúng ngữ nghĩa model nhìn thấy. Phản ví dụ: ở v3, đếm toàn bộ packet của `file-000.mp4` rồi so với `length` của episode 0 luôn FAIL dù dữ liệu lành. Ngược lại, một "lỗi" mà thư viện xử lý được (frame gần nhất trong dung sai) có thể vô hại với người train. Cách mạnh nhất là chạy cả hai và so (differential testing → F2.4): chỗ hai đường đọc bất đồng chính là phát hiện.
+- *"Format file ổn định hơn API thư viện."* (bản gốc) → **ĐÚNG MỘT PHẦN.** Ổn định trong một `codebase_version`; giữa v2.1 và v3.0 thì đường dẫn, số file, nơi chứa task và episode đều đổi. Tool phải đọc template `data_path`/`video_path` từ `info.json` thay vì hard-code.
 
 ### 4. Thuật ngữ
 
 | Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
 |---|---|---|---|
 | 🟢 | episode | Một lần thực hiện nhiệm vụ từ đầu tới cuối | Một file (đúng ở v2, sai ở v3) |
-| 🟢 | frame | Một dòng parquet = một bước thời gian, kèm ảnh ở cùng thời điểm | Một frame video (ảnh chỉ là một phần của frame dữ liệu) |
-| 🟢 | `observation.state` | Vector trạng thái đo được của robot, thường là vị trí khớp | Trạng thái "thật" (nó là số đo, có lượng tử và trễ) |
-| 🟢 | `action` | Vector lệnh tại frame đó; với teleop leader–follower thường là vị trí tay leader `[tự đo theo dataset]` | Kết quả chuyển động (đó là state ở các frame sau) |
-| 🟢 | `codebase_version` | Phiên bản format ghi trong `info.json` | Phiên bản thư viện bạn cài |
-| 🟢 | `features` | Khai báo tên, dtype, shape của mọi cột và camera | Schema được kiểm khi ghi (chỉ một phần) |
-| 🟢 | `from_timestamp`/`to_timestamp` | Khoảng thời gian của episode trong file mp4 dùng chung (v3) | Thời điểm thật lúc thu |
+| 🟢 | frame / `index` / `frame_index` | Một dòng parquet; `index` toàn cục, `frame_index` đếm lại từ 0 trong mỗi episode | Hai cột trùng nghĩa; hoặc "một frame video" |
+| 🟢 | `observation.state` / `action` | Vector trạng thái đo được / vector lệnh tại frame đó | Trạng thái "thật" (nó là số đo có lượng tử, trễ); "kết quả chuyển động" |
+| 🟢 | `codebase_version` | Phiên bản **format** (`v2.0`, `v2.1`, `v3.0`) ghi trong `info.json` | Phiên bản gói `lerobot` (hai hệ số khác nhau) |
+| 🟢 | `meta/episodes` | Bảng một dòng mỗi episode: độ dài, khoảng index, file chứa, khoảng thời gian video | Log phụ |
+| 🟢 | `from_timestamp`/`to_timestamp` | Vị trí (giây) của episode bên trong mp4 dùng chung | Timestamp của frame trong parquet |
 | 🟢 | `stats.json` | Thống kê dùng để chuẩn hóa khi train | Thông tin trang trí |
-| 🟡 | chunk / file index | Cách chia file theo dung lượng (mặc định data 100 MB, video 200 MB, 1000 file/chunk `[spec: utils.py, tự đo theo phiên bản]`) | Ranh giới episode |
+| 🟡 | chunk / file index, `*_files_size_in_mb` | Cách chia file theo dung lượng; là **ngưỡng trên** (mặc định code: data 100 MB, video 200 MB, 1000 file/chunk `[spec: utils.py]`; dataset chuyển đổi có thể khai 500) | Kích thước thật của file; ranh giới episode |
 | 🟡 | `tolerance_s` | Dung sai khi tra frame video theo thời gian | Ngưỡng phát hiện lỗi của bạn |
-| 🟡 | GOP / keyframe | Nhóm frame nén phụ thuộc nhau; seek phải bắt đầu từ keyframe | Chi tiết codec không liên quan dữ liệu |
-| 🔴 | `StreamingLeRobotDataset`, backend Lance | Cách đọc khác của thư viện | Thứ cần cho audit |
 
 ### 5. Dự đoán
 
-Trước khi tải dữ liệu, chỉ nhìn trang dataset trên HF Hub (tab *Files* và dataset card), điền `predictions/09-format.md`:
+Trước khi chạy bất kỳ lệnh nào ở phần 6, chỉ nhìn `info.json` và trang dataset trên HF Hub (tab *Files*, dataset card), commit `predictions/09-format.md`. Năm dataset: `data/lerobotpusht`, `data/libero`, `lerobot/robomme`, và hai cái bạn chọn (khác robot, khác số camera; ít nhất một dataset **robot thật do cộng đồng thu**, không thuộc org `lerobot`; ít nhất một còn ở v2.x nếu còn tìm được).
 
-1. Với 5 dataset bạn chọn: `codebase_version` mỗi cái là gì? Số file parquet trong `data/` so với `total_episodes` thế nào?
-2. Bản gốc đưa sáu kiểm tra "dataset lành lặn" (tổng dòng = `total_frames`; số file parquet = `total_episodes`; số frame mp4 = số dòng; `timestamp` tăng nghiêm ngặt từ 0; trung vị `diff(timestamp)` ≈ `1/fps` sai lệch <1%; `frame_index` liên tục). Kiểm tra nào **không còn đúng nghĩa** ở v3.0? Viết lại nó cho v3.
-3. Bao nhiêu trong 5 dataset pass hết các kiểm tra đã viết lại?
-4. Câu khó: theo bạn, cột `timestamp` trong một dataset thu bằng `lerobot-record` được **đo** (đọc đồng hồ lúc lấy mẫu) hay được **tính** từ thứ khác? Ghi lý do. Tra ở đâu: source LeRobot, tìm hàm thêm frame vào episode buffer (`add_frame`) trong `src/lerobot/datasets/`. Đọc **sau** khi đã ghi dự đoán.
+1. Bản gốc đưa sáu kiểm tra "dataset lành lặn" (tổng dòng = `total_frames`; số file parquet = `total_episodes`; số frame mp4 = số dòng; `timestamp` tăng nghiêm ngặt từ 0; trung vị `diff(timestamp)` ≈ `1/fps` sai lệch <1%; `frame_index` liên tục). Kiểm tra nào **không còn đúng nghĩa** ở v3.0? Viết lại nó; bảng K1–K8 dưới là một cách viết lại, hãy tự kiểm nó có thiếu gì không.
+2. Dự đoán ĐẠT/TRƯỢT từng ô. Không đoán được thì ghi "không biết" kèm lý do; đó là dự đoán hợp lệ.
+3. Số file parquet của libero, suy từ `total_frames` và `data_files_size_in_mb`. Nói rõ bạn dựa vào giả định nào.
+4. Câu khó: cột `timestamp` trong dataset thu bằng `lerobot-record` được **đo** (đọc đồng hồ lúc lấy mẫu) hay được **tính** từ thứ khác? Tra ở đâu: hàm `add_frame` trong `src/lerobot/datasets/` — đọc **sau** khi đã ghi dự đoán.
 
 ```markdown
-# predictions/09-format.md  (commit trước khi tải)
-| dataset (repo_id @ revision) | codebase_version dự đoán | số file parquet dự đoán | pass hết? | lý do |
-|---|---|---|---|---|
-Kiểm tra không còn đúng ở v3 + bản viết lại: ...
-timestamp được đo hay được tính? ... vì ...
+# predictions/09-format.md  (commit trước khi chạy) · ngày … · commit …
+| # | Kiểm tra (v3.0) | pusht | libero | robomme | ds4 | ds5 |
+|---|---|---|---|---|---|---|
+| K1 | tổng dòng parquet == total_frames | | | | | |
+| K2 | số dòng meta/episodes == total_episodes | | | | | |
+| K3 | sum(length) == total_frames; from/to_index liên tục, không chồng | | | | | |
+| K4 | số packet mỗi mp4 == sum(length) các episode trỏ vào file đó | | | | | |
+| K5 | số packet trong [from_ts, to_ts) == length (biên nửa frame) | | | | | |
+| K6 | timestamp mỗi episode bắt đầu ở 0, tăng nghiêm ngặt | | | | | |
+| K7 | trung vị diff(timestamp) lệch 1/fps < 1% | | | | | |
+| K8 | frame_index = 0,1,2,… liên tục | | | | | |
+codebase_version dự đoán: … · số file parquet libero: … vì …
+Kiểm tra của bản gốc không còn đúng ở v3: … · Bao nhiêu dataset ĐẠT cả 8: …
+timestamp được đo hay được tính? … vì …
 ```
 
 ### 6. Làm
 
-**Bước 0 — cài đặt.** `pip install huggingface_hub pyarrow pandas numpy av` và có `ffprobe` (gói `ffmpeg`). Phiên bản `lerobot` không cần cho bài này.
+**Bước 0 — môi trường.** Venv riêng cho repo tool, pin phiên bản trong lockfile (→ F2.2): `huggingface_hub pyarrow pandas numpy`, và `ffprobe` từ bản ffmpeg có decoder AV1 (`libdav1d` hoặc `libaom`; kiểm bằng `ffmpeg -decoders`) `[tự đo]`. Ví dụ đã chạy: `pyarrow` 18.1, `numpy` 2.2, ffprobe 9.0. Chưa cần gói `lerobot`.
 
-**Bước 1 — chọn 5 dataset.** Duyệt org `lerobot` trên HF Hub. Khác nhau về robot, fps, số camera, kích thước. Thêm hai tiêu chí: ít nhất một dataset còn ở v2.1 (nếu còn tìm được) và ít nhất một dataset **cộng đồng đóng góp**, không phải dataset chính thức đã được làm sạch. Script của bạn đang tải `lerobot/robomme` (`src/download_hf_dataset.py`): đọc dataset card để biết nó là dữ liệu robot thật hay mô phỏng `[tự đo]`; dữ liệu mô phỏng có đồng hồ lý tưởng, sẽ hành xử khác ở Bài 10–11.
-
-**Bước 2 — tải metadata trước, ghim phiên bản.** Script hiện tại tải toàn bộ snapshot (có thể nhiều GB) và không ghi lại commit. Sửa thành:
+**Bước 1 — tải metadata trước, ghim phiên bản.** Script hiện tại (`src/download_hf_dataset.py`) tải toàn bộ snapshot (có thể nhiều GB) và không ghi commit. Sửa thành:
 
 ```python
 # [chưa chạy] — cần mạng tới HF Hub; tham số kiểm theo phiên bản huggingface_hub bạn cài
@@ -138,23 +168,25 @@ meta = snapshot_download(repo_id=repo, repo_type="dataset", revision=sha, allow_
 print(sha, meta)                                     # ghi sha vào notes: dataset trên Hub có thể bị sửa sau này
 ```
 
-Dataset trên HF Hub là một git repo; maintainer có thể sửa nó. Mọi kết quả audit phải gắn `repo_id@sha` (provenance → F3.8), nếu không ba tháng sau bạn không reproduce được chính phát hiện của mình.
+Dataset trên HF Hub là một git repo; maintainer có thể sửa nó. Mọi kết quả audit phải gắn `repo_id@sha` (provenance → F3.8). Đọc dataset card: robot thật hay sim (sim có đồng hồ lý tưởng, hành xử khác ở Bài 10–11).
 
-**Bước 3 — đọc `info.json`.** Ghi vào bảng: `codebase_version`, `fps`, `robot_type`, `total_episodes`, `total_frames`, `data_path`, `video_path`, danh sách `features` với `dtype` và `shape` (camera có `dtype: "video"`, kèm `info` chứa fps và codec của video `[tự đo]`). Đối chiếu `fps` của dataset với fps ghi trong `info` của từng camera.
+**Bước 2 — đọc `info.json` của cả năm.** Điền bảng như phần 2: `codebase_version`, `fps` (int hay float?), `robot_type`, `total_*`, `data_path`, `video_path`, `features` với `dtype`, `shape`, `names` (camera có `dtype: "video"` kèm `info` chứa fps và codec). Đối chiếu `fps` của dataset với fps của từng camera. Dataset v2.x: tool phải hỗ trợ, hoặc từ chối bằng thông báo rõ. Không được im lặng đọc sai.
 
-**Bước 4 — mở parquet.** Tải `data/` cho 1–2 file, `pd.read_parquet`, in 20 dòng đầu, nhìn bằng mắt. Ở v3, một file chứa nhiều episode: lọc theo `episode_index`. Ghi lại dtype của `timestamp` (bạn sẽ cần ở Bài 11).
+**Bước 3 — mở parquet thô** (`pyarrow.parquet.read_table`, nối các file bằng `pa.concat_tables`). In schema Arrow và 20 dòng đầu, nhìn bằng mắt. `observation.state` là `fixed_size_list` hay `list`? `timestamp` là float32 hay float64? Footer có metadata nhúng (`huggingface`, `pandas`) không? Ở v3, một file chứa nhiều episode: lọc theo `episode_index`.
 
-**Bước 5 — đếm frame video.** Có ba mức, mỗi mức tin một thứ khác nhau:
+Sai số của "dụng cụ": `timestamp` là float32. Ở $t \approx 50$ s, khoảng cách giữa hai float32 liền kề là $2^{-18}$ s ≈ 3,8 µs `[chuẩn: IEEE 754, 24 bit mantissa; kiểm bằng np.spacing(np.float32(50))]`. Mọi so sánh timestamp phải có dung sai cỡ đó, không dùng `==`.
 
-| Lệnh | Đọc gì | Tốc độ | Tin vào |
+**Bước 4 — đếm frame video.** Ba mức, mỗi mức tin một thứ khác:
+
+| Lệnh `ffprobe -v error -select_streams v:0 … -of csv=p=0 f.mp4` | Đọc gì | Tốc độ | Tin vào |
 |---|---|---|---|
-| `ffprobe -v error -select_streams v:0 -show_entries stream=nb_frames -of csv=p=0 f.mp4` | header container | tức thì | lời khai của muxer (một loại metadata) |
-| `… -count_packets -show_entries stream=nb_read_packets …` | demux mọi packet, không giải mã | nhanh | số packet nén (thường = số frame) |
-| `… -count_frames -show_entries stream=nb_read_frames …` | giải mã toàn bộ | chậm | số frame thật sự giải mã được |
+| `-show_entries stream=nb_frames` | header container | tức thì | lời khai của muxer (một loại metadata) |
+| `-count_packets -show_entries stream=nb_read_packets` | demux mọi packet, không giải mã | nhanh | số packet nén (= số frame với video thường `[chuẩn]`) |
+| `-count_frames -show_entries stream=nb_read_frames` | giải mã toàn bộ | chậm (AV1 trên CPU rất chậm) | số frame giải mã được |
 
-Ở v2.x, so con số này với số dòng parquet của episode. Ở v3, **một mp4 chứa nhiều episode**: phải lấy thời điểm (pts) của từng packet rồi đếm các packet rơi vào `[from_timestamp, to_timestamp)` của từng episode, và so tổng số packet của file với tổng `length` các episode trỏ vào file đó. Sai số dụng cụ: pts lưu theo timebase số nguyên của container, đổi ra giây có làm tròn; dùng biên nửa frame (`0.5/fps`) khi so khoảng.
+Ở v2.x, so con số với số dòng parquet của episode. Ở v3, **một mp4 chứa nhiều episode**: lấy pts của từng packet, đếm packet rơi vào `[from_timestamp, to_timestamp)` của từng episode, **và** so tổng packet của file với tổng `length` các episode trỏ vào file. pts lưu theo timebase nguyên của container, đổi ra giây có làm tròn; dùng biên nửa frame (`0.5/fps`).
 
-Script kiểm v3 dưới đây đọc file thô, không dùng `LeRobotDataset`. Chạy thử nó trên dataset giả 3 episode do bạn tự sinh trước (một bản lành, một bản mp4 thừa một frame), rồi mới chạy trên dữ liệu thật:
+**Bước 5 — checker K1–K8, chạy trên dữ liệu giả trước.** Script dưới đọc file thô, không dùng `LeRobotDataset`. Trước khi chạy trên dữ liệu thật, tự sinh một dataset giả 3 episode (90, 60, 75 frame, 30 fps): một `data/chunk-000/file-000.parquet`, một `meta/episodes/chunk-000/file-000.parquet` với `from/to_timestamp` cộng dồn, một mp4 bằng `ffmpeg -f lavfi -i testsrc=size=160x120:rate=30 -frames:v <N> -c:v libx264 -pix_fmt yuv420p`. Bản "hỏng" chỉ khác ở `<N>` lớn hơn tổng `length` một đơn vị. **Trước khi chạy**, ghi vào `prediction.md`: với bản hỏng, dòng nào FAIL? Nếu frame thừa nằm ở **giữa** episode 0 chứ không ở cuối file, dòng nào đổi?
 
 ```python
 # [đã chạy] Kiểm meta <-> data <-> video cho LeRobotDataset v3.0, đọc file thô (pyarrow + ffprobe)
@@ -186,7 +218,7 @@ for _, ep in eps.iterrows():
 def packet_pts(mp4):                        # demux, không giải mã: nhanh
     r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
                         "packet=pts_time", "-of", "csv=p=0", str(mp4)], capture_output=True, text=True, check=True)
-    return np.sort(np.array([float(x) for x in r.stdout.split()]))
+    return np.sort(np.array([float(x) for x in r.stdout.split() if x != "N/A"]))
 
 vkeys = [k for k, f in info["features"].items() if f["dtype"] == "video"]
 for k in vkeys:
@@ -209,484 +241,489 @@ for name, ok, detail in out:
 sys.exit(0 if all(ok for _, ok, _ in out) else 1)
 ```
 
-Để sinh dataset giả: viết một script nhỏ tạo 3 episode (90, 60, 75 frame, 30 fps), ghi một `data/chunk-000/file-000.parquet`, một `meta/episodes/chunk-000/file-000.parquet` với `from/to_timestamp` cộng dồn, và một mp4 bằng `ffmpeg -f lavfi -i testsrc=size=160x120:rate=30 -frames:v <N> -c:v libx264 -pix_fmt yuv420p`. Bản "hỏng" chỉ khác ở `<N>` lớn hơn tổng `length` một đơn vị. **Trước khi chạy**, ghi vào `prediction.md`: checker sẽ báo FAIL ở những dòng nào với bản hỏng? Và nếu frame thừa nằm ở **giữa** episode 0 chứ không ở cuối file, những dòng nào đổi?
+Dataset v2.x: duyệt theo `data_path`, đọc `meta/episodes.jsonl`, so packet từng `episode_….mp4` với số dòng parquet tương ứng.
 
-Với dataset v2.x: thay hai dòng `rglob` bằng cách duyệt theo `data_path` trong `info.json`, đọc `meta/episodes.jsonl`, và so số packet của từng `episode_….mp4` với số dòng của parquet tương ứng.
+**Bước 6 — chạy K1–K8 trên năm dataset, so với dự đoán,** ghi `notes/09-format.md`: kiểm tra nào trượt, vì sao, bạn đã giả định gì sai về format.
 
 ### 7. Số phải ra
 
 <details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
 
-**Bảng kiểm "dataset lành" viết lại cho cả hai bản:**
+**Kiểm tra bản gốc → v3.0:** "số file parquet = `total_episodes`" không áp dụng, thay bằng K2 + K3; "số frame mp4 = số dòng episode" thay bằng K5 theo cửa sổ **và** K4 tổng theo file; ba kiểm tra timestamp/`frame_index` giữ nguyên (tương đối trong episode).
 
-| Kiểm tra | v2.x | v3.0 |
+**Checker trên dataset giả** `[đã chạy]`: bản lành 18/18 PASS, exit 0. Bản mp4 thừa một frame ở cuối: mọi dòng theo episode PASS, chỉ một dòng FAIL: `file 0/0 total frames == sum(length)  [226 vs 225]`, exit 1. **Nếu frame thừa nằm giữa episode 0:** mọi frame sau nó dịch muộn 1/fps, nhưng đếm theo cửa sổ vẫn ra đúng 90/60/75 (frame rải đều nên mỗi cửa sổ vẫn đủ số frame); chỉ dòng tổng FAIL. **Đếm theo cửa sổ không định vị được chỗ lệch**; nó chỉ cho biết file có lệch. Định vị phải nhìn nội dung (cảnh chuyển ở ranh giới episode lệch khỏi `from_timestamp`). Đây là giới hạn đáng ghi vào README.
+
+**Trên `data/`** `[tự đo, bản local 10/2026, chưa ghim revision]`:
+
+| Kiểm tra | pusht | libero |
 |---|---|---|
-| Tổng dòng parquet = `total_frames` | bằng chính xác | bằng chính xác |
-| Số file parquet = `total_episodes` | bằng | **không áp dụng** (nhiều episode/file). Thay bằng: số dòng `meta/episodes` = `total_episodes`, và `dataset_from_index`/`dataset_to_index` liên tục, không chồng, không hở |
-| Số frame video = số dòng của episode | so file-mp4 với file-parquet | số packet trong `[from_ts, to_ts)` = `length`, **và** tổng packet của mp4 = tổng `length` các episode trong file |
-| `timestamp` tăng nghiêm ngặt từ 0 | có | có (timestamp tương đối trong episode) |
-| Trung vị `diff(timestamp)` ≈ `1/fps` (<1%) | có | có |
-| `frame_index` 0, 1, 2… liên tục | có | có |
+| Số file parquet / số mp4 mỗi camera | 1 / 1 (cả 206 episode) | 377 (mỗi file 2–3 episode, ~54 KB) / 37 |
+| K1–K8 | ĐẠT cả 8 | ĐẠT cả 8 (K4: 37/37 file mỗi camera) |
+| Trung vị dt | 0,0999999 s | 0,1000000 s |
+| max \|timestamp − frame_index/fps\| | ~0,8 µs | ~1,5 µs |
 
-**Checker trên dataset giả (đã chạy):** bản lành ra 18/18 PASS, exit 0. Bản mp4 thừa một frame ở cuối: mọi dòng theo episode đều PASS, chỉ một dòng FAIL: `file 0/0 total frames == sum(length)  [226 vs 225]`, exit 1.
+Ba điều thường làm bất ngờ:
 
-**Nếu frame thừa nằm giữa episode 0:** mọi frame sau nó dịch muộn 1/fps. Đếm theo cửa sổ thời gian vẫn ra đúng 90/60/75 cho từng episode (frame rải đều 1/30 s nên mỗi cửa sổ vẫn chứa đủ số frame), chỉ dòng tổng của file FAIL. Tức là **đếm theo cửa sổ không định vị được chỗ lệch**; nó chỉ cho biết file có lệch. Muốn định vị phải nhìn nội dung (ví dụ phát hiện cảnh chuyển ở ranh giới episode lệch khỏi `from_timestamp`). Đây là một giới hạn đáng ghi vào README.
+1. **Kiểm tra "số file parquet = `total_episodes`" của bản gốc TRƯỢT trên cả hai** dù dữ liệu lành: 1 ≠ 206, 377 ≠ 1 693. Kiểm tra sai, không phải dữ liệu sai: cảnh báo giả do áp format v2.x lên v3.0.
+2. **Libero có file nhỏ hơn nhiều so với `data_files_size_in_mb: 100`.** Đó là ngưỡng trên; bộ chuyển đổi đã cắt file theo cách khác. Ai đoán "1 file vì 20 MB < 100 MB" thì sai, và hợp lý khi sai.
+3. **`timestamp` gần như đúng bằng `frame_index / fps`** (chỉ lệch do làm tròn float32): nó được **tính**, không **đo**. Source xác nhận: ở `lerobot` hiện hành, `add_frame` gán `timestamp = frame_index / fps` và docstring yêu cầu người gọi **không** truyền `timestamp` `[spec: src/lerobot/datasets/dataset_writer.py, main 10/2026]`; phiên bản cũ hơn cho phép truyền `[tự đo]`. Hệ quả: với dataset thu bằng `lerobot-record`, K6–K8 gần như **luôn pass theo cấu trúc**: chúng kiểm code ghi, không kiểm đồng hồ. Đây là phát hiện quan trọng nhất của bài; Bài 11 xử lý nó.
 
-**Câu "timestamp đo hay tính":** ở `lerobot` hiện hành, `add_frame` **tính** `timestamp = frame_index / fps` và cấm người gọi tự truyền `timestamp` `[spec: src/lerobot/datasets/dataset_writer.py, hàm add_frame]`. Hệ quả: với dataset thu bằng `lerobot-record`, ba kiểm tra về timestamp (tăng nghiêm ngặt, trung vị dt, frame_index liên tục) gần như **luôn pass theo cấu trúc**: chúng kiểm code ghi, không kiểm đồng hồ. Dataset chuyển đổi từ format khác hoặc ghi bằng công cụ khác có thể mang timestamp đo thật. Hãy coi đây là phát hiện quan trọng nhất của bài: một số kiểm tra trông nghiêm túc nhưng có độ nhạy bằng không trên phần lớn dữ liệu. Bài 11 xử lý chuyện này.
+**Ba dataset còn lại:** không có số chung. Tỉ lệ "ĐẠT cả 8" dưới 5/5 là bình thường với dataset cộng đồng hoặc còn ở v2.x `[ước lượng]`. 5/5 ĐẠT cũng không nói "sạch", chỉ nói tám kiểm tra cấu trúc không thấy gì. Nếu bạn đoán "5/5 vì dataset của Hugging Face thì sạch", đó là dự đoán dựa trên uy tín, không dựa trên cơ chế.
 
-**Bao nhiêu trong 5 dataset pass hết:** không có con số đúng chung. Dataset chính thức gần đây, thu bằng `lerobot-record`, thường pass các kiểm tra cấu trúc `[ước lượng]`; dataset cũ đã chuyển đổi v2.1→v3.0 hoặc dataset cộng đồng là nơi hay lệch `[ước lượng, tự đo]`. Nếu bạn dự đoán "5/5 pass" và lý do là "dataset của Hugging Face thì sạch", đó là dự đoán dựa trên uy tín, không dựa trên cơ chế.
+**Tỉ lệ dung lượng:** 640×480×3 B ≈ 0,92 MB mỗi ảnh raw; 50 episode × 400 frame ≈ 18 GB (bản gốc đúng) `[ước lượng]`.
 
-**Tỉ lệ dung lượng:** 640×480×3 byte ≈ 0.92 MB mỗi ảnh raw; 50 episode × 400 frame × 0.9 MB ≈ 18 GB (bản gốc đúng) `[ước lượng]`.
 </details>
 
 ### 8. Nếu ra khác
 
 | Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
 |---|---|---|---|
-| Tổng dòng ≠ `total_frames` | Metadata không khớp dữ liệu | Đếm lại theo từng file, so `dataset_to_index` cuối | Lỗi thật, đáng báo cáo (sau khi xác minh ở Bài 13) |
-| Số frame video ≠ số dòng | Video và state lệch nhau | So từng episode (v2) hoặc tổng theo file (v3) | **Nghiêm trọng**: mọi cặp ảnh–hành động sau điểm lệch đều sai |
-| Số file parquet ≠ `total_episodes` | Dataset là v3.0, nhiều episode/file | Đọc `codebase_version` | Không phải lỗi; dùng kiểm tra v3 |
-| `KeyError: 'videos/<cam>/from_timestamp'` | Dataset v2.x, hoặc camera lưu dạng ảnh (`dtype: "image"`) | `info.json` → `codebase_version`, `features[cam].dtype` | Rẽ nhánh theo phiên bản/dtype |
-| Mọi episode sau episode 0 báo lệch video | Bạn quên phép dịch `from_timestamp` | In `pts` đầu/cuối và `from/to_timestamp` | Đếm trong cửa sổ, không đếm cả file |
-| `nb_frames` khác `count_packets` | Header container khai sai hoặc thiếu, edit list | So ba mức đếm | Tin mức demux/giải mã; ghi lại header sai như một phát hiện L7 |
-| `ffprobe` đếm chậm kinh khủng | Đang dùng `-count_frames` (giải mã toàn bộ, AV1 rất chậm trên CPU) | Thử `-count_packets` | Chỉ giải mã khi cần định vị chính xác |
-| `snapshot_download` tải hàng GB | Thiếu `allow_patterns` | Xem dung lượng thư mục cache | Tải `meta/*` trước, rồi từng file cần thiết |
+| Số file parquet ≪ `total_episodes` | Dataset v3.0, nhiều episode/file | `codebase_version`, đếm `episode_index` duy nhất | Không phải lỗi; dùng K2/K3 |
+| Không có `meta/episodes/`, có `episodes.jsonl`; hoặc `KeyError: 'videos/<cam>/from_timestamp'` | Dataset v2.x, hoặc camera lưu dạng ảnh (`dtype: "image"`) | `codebase_version`, `features[cam].dtype` | Rẽ nhánh theo phiên bản/dtype, hoặc từ chối có thông báo |
+| Mọi episode sau episode 0 báo lệch video | Quên phép dịch `from_timestamp` | In pts đầu/cuối và `from/to_timestamp` | Đếm trong cửa sổ, không đếm cả file |
+| K5 lệch 1 frame ở rất nhiều episode | So `==` trên float cộng dồn | In `(to−from)*fps − length` | Dung sai nửa frame |
+| ffprobe báo codec không hỗ trợ, hoặc `-count_frames` chạy hàng chục phút | ffmpeg không có decoder AV1; đang giải mã toàn bộ | `ffmpeg -decoders`; thử `-count_packets` | Cài ffmpeg có `libdav1d`; chỉ giải mã khi cần định vị |
 
 ### 9. Câu hỏi ngược
 
-1. **[Quy mô]** Một dataset 100 robot × 1000 giờ, 3 camera, 30 fps. Ở v2.x có bao nhiêu file? Ở v3.0 với video 200 MB/file thì sao? Thứ gì gãy trước: hệ thống file, thời gian `snapshot_download`, hay thời gian tool của bạn đếm packet?
-   <details><summary>Hướng nghĩ</summary>Tính số episode từ độ dài episode trung bình bạn đo ở Bài 10. Với v3, số file phụ thuộc bitrate. Tool của bạn: đếm packet là O(dung lượng video), không O(số file); hãy ước lượng MB/s mà ffprobe demux được trên N100 và tính ra giờ. Có cách nào kiểm mà không đọc hết video không (lấy mẫu episode, kiểm tổng theo file trước)?</details>
-2. **[Failure mode]** Ở v3, `from_timestamp` của episode k được tính bằng cách cộng dồn thời lượng các episode trước trong cùng file. Nếu một episode được mã hóa ra thời lượng thật khác `length/fps` (ví dụ encoder thêm hoặc bớt một frame), lỗi lan thế nào sang các episode sau? Tool nào trong bảng ở phần 7 bắt được, tool nào không?
-   <details><summary>Hướng nghĩ</summary>Nghĩ như offset trong một log append-only bị lệch một bản ghi: mọi offset sau đó sai cùng một lượng. Kiểm tổng theo file bắt được sự tồn tại; kiểm theo cửa sổ thì không. Thêm một kiểm tra: `to_timestamp` của episode cuối so với thời lượng thật của file.</details>
+1. **[Quy mô]** Một dataset 100 robot × 1000 giờ, 3 camera, 30 fps. Ở v2.x có bao nhiêu file? Ở v3.0 với video 200 MB/file thì sao? Thứ gì gãy trước: hệ thống file, thời gian tải, hay thời gian tool đếm packet?
+   <details><summary>Hướng nghĩ</summary>
+
+   Tính số episode từ độ dài trung bình bạn đo ở Bài 10. Với v3, số file phụ thuộc bitrate. Đếm packet là O(dung lượng video), không O(số file): tự đo MB/s mà ffprobe demux được trên N100 (thử trên một file 37 MB của libero) rồi tính ra giờ. Có cách kiểm mà không đọc hết video không (kiểm tổng theo file trước, lấy mẫu episode, chỉ đọc bảng mẫu `stts` của container)?
+
+   </details>
+2. **[Failure mode]** Ở v3, `from_timestamp` của episode k được tính bằng cách cộng dồn thời lượng các episode trước trong cùng file. Nếu một episode được mã hóa ra thời lượng thật khác `length/fps`, lỗi lan thế nào sang các episode sau? Và nếu bộ chuyển đổi v2.1 → v3.0 bị kill giữa chừng, trạng thái nào của `data/`, `videos/`, `meta/episodes` có thể xảy ra, K nào bắt được?
+   <details><summary>Hướng nghĩ</summary>
+
+   Như offset trong log append-only lệch một bản ghi: mọi offset sau đó sai cùng một lượng; K4 bắt được, K5 thì không. Chuyển đổi dở dang: liệt kê thứ tự ghi có thể (data trước hay meta trước?); so với MCAP bị cắt ở K2 Bài 7, nơi index nằm cuối chính file đó.
+
+   </details>
 3. **[Vì sao không]** Vì sao LeRobot không lưu ảnh dưới dạng JPEG bytes trong một cột parquet, để mọi thứ nằm chung một bảng và khóa nối là `index`?
-   <details><summary>Hướng nghĩ</summary>So dung lượng nén trong khung (JPEG) và nén liên khung (H.264/AV1) cho chuỗi ảnh gần giống nhau. Rồi nghĩ cái giá ngược lại: một khóa nối theo thời gian, dung sai, chi phí giải mã khi random access. Format v3 thực ra vẫn hỗ trợ `dtype: "image"`; khi nào bạn chọn nó?</details>
+   <details><summary>Hướng nghĩ</summary>
+
+   So nén nội khung (JPEG) với nén liên khung (H.264/AV1) cho chuỗi ảnh gần giống nhau. Rồi nghĩ cái giá ngược lại: khóa nối theo thời gian, dung sai, chi phí giải mã khi random access — ai trả, lúc ghi hay lúc train? v3 vẫn hỗ trợ `dtype: "image"`; khi nào bạn chọn nó?
+
+   </details>
 4. **[Phản biện]** "Tool audit nên dùng chính `LeRobotDataset` để đọc, vì thứ cần kiểm là thứ model thật sự nhìn thấy." Phản biện câu này, rồi phản biện lại chính phản biện của bạn.
-   <details><summary>Hướng nghĩ</summary>Hai đường đọc trả lời hai câu hỏi khác nhau: "file có nhất quán không" và "model có nhận đúng cặp dữ liệu không". Differential testing dùng cả hai. Chi phí: phụ thuộc phiên bản `lerobot`, torch, decoder.</details>
-5. **[Liên ngành]** Một playlist HLS (`.m3u8`) khai thời lượng từng segment video; trình phát tin con số đó để seek. Lỗi nào của HLS giống L3/L7 ở đây?
-   <details><summary>Hướng nghĩ</summary>Khai `#EXTINF` khác thời lượng thật của segment làm seek lệch và audio/video lệch. Chỗ khác: HLS có thể sửa ở phía phát; dataset đã nằm trong model đã train thì không sửa được.</details>
+   <details><summary>Hướng nghĩ</summary>
+
+   Hai đường đọc trả lời hai câu hỏi khác nhau: "file có nhất quán không" và "model có nhận đúng cặp dữ liệu không". Differential testing dùng cả hai. Chi phí: phụ thuộc phiên bản `lerobot`, torch, decoder.
+
+   </details>
+5. **[Nếu…thì]** Nếu `fps` trong `info.json` là `10` (int) ở dataset này và `10.0` (float) ở dataset kia, reader của bạn gãy ở đâu, nếu có?
+   <details><summary>Hướng nghĩ</summary>
+
+   Tìm các chỗ dùng `fps` làm kích thước cửa sổ/chỉ số mảng (`win = fps`), làm khóa dict, hoặc so `==` với fps của video. JSON không chặn kiểu khác biệt này.
+
+   </details>
 
 ### 10. Liên kết ra ngoài
 
-- **Table format của data lake (Iceberg, Delta Lake).** Giống: metadata (manifest) khai file nào chứa dòng nào và min/max mỗi cột; dữ liệu nằm ở file khác; lỗi kinh điển là manifest trỏ tới file không còn hoặc stats cũ. Khác: ở data lake, stats sai làm sai kết quả prune của query; ở LeRobot, stats đi vào phép chuẩn hóa đầu vào model.
-- **Ảnh y khoa DICOM.** Giống: header (khoảng cách pixel, thời điểm chụp, tư thế bệnh nhân) đi kèm dữ liệu ảnh, và phần mềm downstream tin header. Header sai làm đo kích thước khối u sai mà ảnh trông hoàn toàn bình thường. Khác: DICOM có cơ quan chuẩn hóa và quy trình kiểm định thiết bị; dataset robot thì chưa.
+- **Table format của data lake (Iceberg, Delta Lake).** Giống: metadata (manifest) khai file nào chứa dòng nào và min/max mỗi cột; lỗi kinh điển là manifest trỏ tới file không còn hoặc stats cũ. Khác: Iceberg có snapshot và commit nguyên tử, nên "meta khớp data" được bảo đảm; ở LeRobot nó là thứ phải kiểm. Và stats ở đây đi vào chuẩn hóa đầu vào model, không chỉ vào prune query.
+- **Genomics (BAM + BAI).** File dữ liệu lớn + file index riêng theo tọa độ. Một BAI cũ không khớp BAM mới cho kết quả sai mà không lỗi, đúng kiểu L7. Khác: công cụ genomics thường kiểm thời điểm sửa đổi của index so với dữ liệu; `meta/episodes` không có dấu nào như vậy.
 
 ### 11. Độ tin cậy và sửa lỗi
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| v3.0 nhiều episode/file, metadata episode dạng parquet, tasks ở `meta/tasks.parquet` | `[spec]` | Source `lerobot` nhánh main (10/2026), `utils.py`. Trang docs v3 vẫn ghi `meta/tasks.jsonl` trong phần layout: tài liệu và code bất đồng, tin code và `[tự đo]` trên dataset thật |
-| v3.0 không tương thích ngược v2.1 | `[spec]` | `utils.py`: `BackwardCompatibilityError`; có script `convert_dataset_v21_to_v30` |
-| Đường dẫn v2.x | `[tự đo]` | Đọc `data_path`/`video_path` trong `info.json` của dataset v2 bạn tải |
-| `timestamp = frame_index / fps` khi ghi; dtype `float32` | `[spec]` | `dataset_writer.py` (`add_frame`), `utils/constants.py` (`DEFAULT_FEATURES`). Có thể khác ở phiên bản cũ: `[tự đo]` |
-| `tolerance_s` mặc định 1e-4 s | `[spec, tự đo]` | Tham số của `LeRobotDataset`; kiểm theo phiên bản |
-| Kích thước file mặc định 100/200 MB, 1000 file/chunk | `[spec, tự đo]` | Hằng số trong `utils.py`, có thể đổi |
-| `lerobot/robomme` là dữ liệu gì | `[tự đo]` | Không kiểm được trong lúc soạn; đọc dataset card |
+| v3.0 nhiều episode/file, episode meta dạng parquet, tasks ở `meta/tasks.parquet`, đường dẫn như bảng phần 2 | `[spec]` | `utils.py` (`DEFAULT_TASKS_PATH`, `DEFAULT_DATA_PATH`, `DEFAULT_VIDEO_PATH`), main 10/2026. Trang docs v3 vẫn ghi `meta/tasks.jsonl` trong phần layout: docs và code bất đồng, tin code và `[tự đo]` trên dataset thật |
+| v3.0 công bố 09/2025, ra cùng `lerobot` 0.4.0 (10/2025); không tương thích ngược v2.1 | `[spec]` | HF blog release v0.4.0; `BackwardCompatibilityError` trong `utils.py`; có script chuyển đổi v2.1→v3.0 |
+| `add_frame` tính `timestamp = frame_index/fps`, cấm người gọi truyền; dtype float32 | `[spec]` | `dataset_writer.py`, `utils/constants.py` (`DEFAULT_FEATURES`). Bản cũ cho phép truyền: `[tự đo]` theo phiên bản |
+| Bảng số trên `data/` | `[tự đo]` | Bản local, chưa ghim revision; chạy lại sau khi tải theo `sha` |
 
 **Đã sửa so với bản gốc:**
-- Bản gốc mô tả layout v2.x như layout hiện hành. Sửa: trình bày cả hai, v3.0 là mặc định; kiểm tra "số file parquet = `total_episodes`" chỉ đúng cho v2.x; kiểm tra số frame video ở v3 phải đếm theo cửa sổ `from/to_timestamp` và theo tổng mỗi file.
-- Bản gốc: "API đổi theo phiên bản, còn format file thì ổn định hơn nhiều." Sửa: ổn định trong một `codebase_version`; tool phải rẽ nhánh theo phiên bản.
-- Bản gốc: "nếu `LeRobotDataset` tự sửa lỗi timestamp khi load". Wrapper không sửa timestamp; nó tra video theo thời gian với dung sai và có thể ném lỗi khi lệch quá dung sai. Lý do đọc thô vẫn đúng (wrapper che chi tiết và phụ thuộc phiên bản), nhưng lý do cụ thể đã được chỉnh.
-- Script `src/download_hf_dataset.py` của bạn tải toàn bộ snapshot và không ghim commit. Sửa: `allow_patterns`, `revision=sha`.
+- Bản gốc mô tả layout v2.x như layout hiện hành. Sửa: trình bày cả hai, v3.0 mặc định; "số file parquet = `total_episodes`" chỉ đúng cho v2.x; kiểm số frame video ở v3 phải đếm theo cửa sổ `from/to_timestamp` **và** theo tổng mỗi file.
+- "API đổi theo phiên bản, còn format file thì ổn định hơn nhiều" → ổn định trong một `codebase_version`; tool rẽ nhánh theo phiên bản.
+- "nếu `LeRobotDataset` tự sửa lỗi timestamp khi load": wrapper không sửa timestamp; nó tra video theo thời gian với dung sai và ném lỗi khi lệch quá. Lý do đọc thô vẫn đúng, lý do cụ thể đã chỉnh.
+- `pip install` không pin; `snapshot_download` không ghim revision, tải cả snapshot → lockfile, `revision=sha`, `allow_patterns`.
+
+**Hợp nhất (Claude × Kiro):** nền bản Claude (kiểm chứng source: `add_frame`, `tolerance_s`, ba mức đếm ffprobe, checker có kiểm tổng theo file). Ghép từ bản Kiro: bảng tham số thật của hai dataset trong `data/`, bảng dự đoán K1–K8, kết quả đo trên `data/` (ba điều bất ngờ), bước float32, hai câu hỏi ngược và liên kết BAM/BAI. Mâu thuẫn: Kiro ghi `add_frame` chỉ tính timestamp "khi không truyền" — đúng cho bản cũ; source main 10/2026 luôn tính và cấm truyền (Claude đúng). Video "200 MB" (mặc định code) vs "500" (`info.json` thật): cả hai đúng ở tầng của mình; `info.json` thắng.
 
 ### 12. Đọc thêm và tự kiểm tra
 
-- **Nguồn gốc:** LeRobot docs, trang "LeRobotDataset v3.0" (huggingface.co/docs/lerobot); source `src/lerobot/datasets/` trong repo `huggingface/lerobot` (đọc `utils.py`, `dataset_writer.py`, `dataset_reader.py`).
-- **Giải thích:** Apache Parquet, trang "File Format" (parquet.apache.org) — để hiểu row group, footer, vì sao file không có footer là file hỏng (lý do docs v3 bắt gọi `finalize()`).
-- **Đào sâu (tùy chọn):** RLDS (Ramos và cộng sự, Google, 2021), để thấy một lựa chọn thiết kế khác cho cùng bài toán.
+- **Nguồn gốc:** LeRobot docs, trang "LeRobotDataset v3.0" (huggingface.co/docs/lerobot); source `src/lerobot/datasets/` trong repo `huggingface/lerobot` (`utils.py`, `dataset_writer.py`, `dataset_reader.py`, `video_utils.py`).
+- **Giải thích:** Apache Parquet, trang "File Format" (parquet.apache.org) — row group, footer, vì sao file thiếu footer là file hỏng (lý do docs v3 bắt gọi `finalize()`); docs LeRobot "Porting datasets to v3.0".
+- **Đào sâu (tùy chọn):** RLDS (Ramos và cộng sự, Google, 2021), một lựa chọn thiết kế khác cho cùng bài toán.
 - **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao ảnh được tra bằng thời gian chứ không bằng chỉ số; (2) vẽ lại sơ đồ ba kho và các khóa nối từ trí nhớ; (3) câu hỏi:
-  - Bạn có một dataset v3 với `total_episodes = 50` nhưng `data/` chỉ có 1 file parquet. Đây có phải lỗi không?
-  - Vì sao kiểm tra "trung vị `diff(timestamp)` ≈ `1/fps`" gần như không bao giờ fail trên dataset thu bằng `lerobot-record`?
+  - Dataset v3 có `total_episodes = 50` nhưng `data/` chỉ có 1 file parquet. Có phải lỗi không?
+  - Episode 3 của libero có `dataset_from_index = 843`. Viết biểu thức lấy đúng các dòng của nó, và đúng các frame video của nó.
+  - Vì sao "trung vị `diff(timestamp)` ≈ `1/fps`" gần như không bao giờ fail trên dataset thu bằng `lerobot-record`?
 
-  <details><summary>Đáp án</summary>(a) Không. Ở v3 nhiều episode chung một file, ranh giới nằm trong `meta/episodes`. Kiểm số dòng `meta/episodes` và tính liên tục của `dataset_from_index`/`dataset_to_index`. (b) Vì timestamp được tính bằng `frame_index / fps` lúc ghi, không phải đọc từ đồng hồ; kiểm tra đó kiểm code ghi, không kiểm thời gian thật.</details>
+  <details><summary>Đáp án</summary>
+
+  (a) Không. Ở v3 nhiều episode chung một file; kiểm số dòng `meta/episodes` và tính liên tục của `dataset_from_index`/`dataset_to_index`. (b) Dòng: `index ∈ [dataset_from_index, dataset_to_index)`, hoặc lọc `episode_index == 3`; hai cách phải cho cùng kết quả, và đó là một kiểm tra. Video: mở file theo `videos/<key>/chunk_index`, `file_index`; lấy frame có pts ∈ [`from_timestamp`, `to_timestamp`), biên nửa frame vì là float cộng dồn. (c) Vì timestamp được tính bằng `frame_index / fps` lúc ghi; kiểm tra đó kiểm code ghi, không kiểm thời gian thật.
+
+  </details>
 
 ---
 
+
 ## Bài 10 — Kiểm tra bằng tay trước khi tự động hóa (6h)
 
-> **Vị trí:** Bài 9 → **Bài 10** → Bài 11 · **Cần trước:** F1.2 (phân bố, histogram, đuôi), F1.7 (preregistration = `prediction.md`), F2.1 (test là phép đo có FP/FN), Bài 9 · **Sau bài này bạn quyết định được:** danh sách lớp lỗi nào đáng tự động hóa trong tool, lớp nào chỉ con người thấy được (và sẽ ghi vào mục "giới hạn" của README), dựa trên thứ bạn đã thật sự nhìn thấy chứ không phải thứ bạn tưởng tượng.
+> **Vị trí:** Bài 9 (đọc được file) → **Bài 10** → Bài 11 (định nghĩa lỗi bằng toán) · **Cần trước:** F1.2 (histogram, đuôi phân bố), F1.7 (preregistration = `prediction.md`), F2.1 (test là phép đo có FP/FN), Bài 9 · **Sau bài này bạn quyết định được:** lớp lỗi nào đáng viết detector, lớp nào chỉ con người thấy (sẽ vào mục "Giới hạn" của README), và mỗi kênh dữ liệu **thật sự là đại lượng gì** trước khi so nó với kênh khác.
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
-Năm 2021, Curtis Northcutt, Anish Athalye và Jonas Mueller công bố "Pervasive Label Errors in Test Sets Destabilize Machine Learning Benchmarks": trong tập **test** của 10 bộ dữ liệu nổi tiếng (ImageNet, CIFAR, QuickDraw, Amazon Reviews…) có nhãn sai ở mức vài phần trăm, đủ để đảo thứ hạng giữa các mô hình `[chuẩn — số liệu cụ thể xem bài báo]`. Những bộ đó đã được hàng nghìn người dùng trong nhiều năm. Lỗi không được tìm ra bằng một kiểm tra schema; nó được tìm ra bằng một thuật toán đề xuất ứng viên **cộng với con người nhìn từng ứng viên**.
+Năm 1973, nhà thống kê Francis Anscombe công bố bốn bộ dữ liệu có cùng trung bình, phương sai, hệ số tương quan và đường hồi quy, nhưng vẽ ra thì khác hẳn: một đường thẳng có nhiễu, một đường cong, một đường thẳng bị một điểm ngoại lai kéo lệch, một cột dọc với một điểm xa. Năm 2017, Matejka và Fitzmaurice (Autodesk Research, CHI 2017) làm lại ý đó với "Datasaurus Dozen": mười ba bộ cùng thống kê tóm tắt, một bộ vẽ ra hình con khủng long. Bài học: **thống kê tóm tắt là phép nén có mất mát; mắt người thấy cái phép nén bỏ đi.**
 
-Cùng năm, nhóm của Nithya Sambasivan (Google) công bố "Everyone wants to do the model work, not the data work: Data Cascades in High-Stakes AI" (CHI 2021), mô tả cách lỗi dữ liệu nhỏ ở đầu nguồn lan thành hỏng hóc lớn ở cuối, phần lớn vì không ai nhìn dữ liệu đủ kỹ trước khi xây trên nó. Nguyên tắc của bài này là bản rút gọn của cả hai: **nhìn trước khi tự động hóa**. Ở Khóa 1 là "dự đoán trước khi đo"; ở đây, một detector viết trước khi bạn từng thấy dữ liệu hỏng sẽ bắt đúng những lỗi bạn tưởng tượng, không phải những lỗi tồn tại.
+Detector cũng là thống kê tóm tắt. Viết detector trước khi nhìn dữ liệu là mã hóa lỗi **bạn tưởng tượng**, không phải lỗi tồn tại. Ở Khóa 1 là "dự đoán trước khi đo"; ở đây là **nhìn trước khi tự động hóa**. Ở Bài 11 bạn sẽ chạy nguyên văn các detector của bản gốc — viết từ tưởng tượng hợp lý — trên dữ liệu thật, và thấy cái nào đứng vững khi người viết chưa nhìn `action` của dataset đó là đại lượng gì.
 
 ### 2. Mô hình tư duy
 
-```mermaid
-flowchart LR
-  L["Nhìn<br/>(plot, video)"] --> H["Giả thuyết lỗi<br/>'khớp 5 phẳng 4 s'"]
-  H --> D["Định nghĩa toán<br/>+ oracle (Bài 11)"]
-  D --> T["Detector + lỗi cài cố ý<br/>(Bài 12)"]
-  T --> R["Chạy trên dữ liệu thật<br/>(Bài 13)"]
-  R -- "phát hiện lạ / báo nhầm" --> L
-  L -- "thứ không định nghĩa được bằng số" --> X["Mục 'giới hạn'<br/>trong README"]
+```
+            ┌────────────── những gì sai trong dataset ──────────────┐
+            │   ┌── máy thấy được ──┐        ┌── chỉ người thấy ──┐   │
+            │   │ L1 ts chạy lùi     │        │ episode thất bại    │   │
+            │   │ L3 video ≠ dòng    │        │ camera bị che       │   │
+            │   │ L6 NaN             │        │ nhiệm vụ sai mô tả  │   │
+            │   │ L7 meta ≠ data     │        │ người teleop do dự  │   │
+            │   └────────────────────┘        └─────────────────────┘   │
+            │        ┌── máy thấy được NẾU biết ngữ nghĩa kênh ──┐      │
+            │        │ L4 kênh đơ, L5 lệch pha, L6 nhảy bậc       │      │
+            │        └────────────────────────────────────────────┘      │
+            └──────────────────────────────────────────────────────────┘
 ```
 
-Một detector là **một câu hỏi đã đóng băng**: nó chỉ hỏi đúng câu bạn đã nghĩ ra lúc viết nó. Khảo sát bằng tay là cách duy nhất để tìm những câu hỏi bạn chưa biết phải hỏi. Ba loại thứ bạn sẽ gặp khi nhìn:
+Ba vùng, ba cách xử lý. Vùng trái: tự động hóa thẳng. Vùng phải: tool không bắt được, ghi vào **Giới hạn** của README (Bài 15); có thể là ứng viên cho VLM-judge sau này (→ F2.8). Vùng giữa là chỗ giá trị thật của tool nằm và dễ sai nhất: detector so `action[j]` với `state[j]` chỉ có nghĩa khi hai kênh **cùng đại lượng, cùng đơn vị**. Một detector là **một câu hỏi đã đóng băng**: nó chỉ hỏi câu bạn nghĩ ra lúc viết. Khảo sát bằng tay là cách tìm câu bạn chưa biết phải hỏi, và cũng là cách tìm **hành vi bình thường trông giống lỗi** (gripper đứng yên cả episode, robot dừng chờ): mỗi thứ như vậy thành một test chống báo nhầm ở Bài 12.
 
-| Loại | Ví dụ | Đi về đâu |
-|---|---|---|
-| Lỗi định nghĩa được bằng số | dt lệch, kênh phẳng khi lệnh vẫn đổi, video thừa frame | detector (Bài 11–12) |
-| Hành vi bình thường trông giống lỗi | gripper đứng yên cả episode, robot dừng chờ | test "không báo nhầm ở ca biên" (Bài 12) |
-| Lỗi chỉ con người thấy | gắp trượt, camera bị che, nhiệm vụ làm dở | mục "giới hạn" của README; có thể là ứng viên cho VLM-judge sau này (→ F2.8) |
+Hình phải tạo ra (script phần 6 sinh đúng ba panel cho một episode):
 
-Cột giữa quan trọng ngang cột đầu: mỗi thứ bạn thấy ở đó sẽ thành một test chống báo nhầm. Không nhìn thì không có cột giữa, và tool của bạn sẽ báo nhầm trên dữ liệu thật ngay lần chạy đầu.
+```
+ panel 1: histogram diff(timestamp), trục y log   → hình dạng jitter? hay vạch rời rạc?
+ panel 2: mọi chiều observation.state theo frame   → chiều nào phẳng? nhảy bậc? bão hòa?
+ panel 3: state[0] và action[0] chồng lên nhau      → cùng đại lượng? lệch pha bao nhiêu?
+```
 
 ### 3. Cầu nối từ backend
 
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
-| Đọc log/trace thật trước khi viết rule alert | Plot `dt`, state, action, xem video | Log backend có nghĩa ở từng dòng; ở đây ý nghĩa nằm trong **hình dạng theo thời gian** và trong **quan hệ giữa hai kênh** | Đọc 20 dòng parquet đầu rồi kết luận "trông ổn" |
-| Ghi traffic thật để dựng mock server (bạn đã làm) | Đặc tính dữ liệu thật đưa vào bộ sinh dữ liệu giả (Bài 12) | Traffic HTTP lặp lại được; dữ liệu cảm biến có nhiễu, lượng tử, trễ động học — phải mô phỏng cơ chế chứ không chỉ phát lại | Bộ sinh quá sạch → detector đúng trên giả, sai trên thật (bản gốc Bài 12 đã cảnh báo) |
-| EDA trước khi viết dbt test / Great Expectations | Khảo sát bằng tay | Expectation kiểu "cột không null, nằm trong khoảng" không diễn đạt được "kênh A trễ kênh B 3 frame" | Tưởng có bộ expectation là đã kiểm chất lượng |
+| Đọc log thô trước khi viết alert rule | Vẽ state/action/dt trước khi viết detector | Log có ngữ nghĩa bằng chữ; một cột `action` float32[7] không nói nó là vị trí tuyệt đối, vận tốc hay delta; ý nghĩa nằm trong **hình dạng theo thời gian** | Viết rule so hai cột khác đại lượng, cảnh báo giả hàng loạt |
+| Profiling dữ liệu (pandas-profiling, Great Expectations sinh expectation tự động) | Thống kê mỗi cột | Profile mỗi cột độc lập; lỗi robot nằm ở **quan hệ** giữa cột (state theo action) và theo thời gian | Profile sạch, dữ liệu vẫn lệch pha |
+| Ghi traffic thật để dựng mock server (bạn đã làm) | Đặc tính dữ liệu thật đưa vào bộ sinh ở Bài 12 | Traffic HTTP phát lại được; dữ liệu cảm biến có lượng tử, trễ động học, action delta, gripper hai chế độ — phải mô phỏng **cơ chế** | Detector pass golden, sai trên thật (triệu chứng cuối của "Nếu ra khác" Bài 12) |
+| Xem session replay | Xem video episode | Video v3.0 gộp nhiều episode, phải cắt theo `from_timestamp` | Xem nhầm episode, ghi chú sai |
 
 **Chấm mô hình:**
 
-- *Mô hình của bạn ở K3 lượt 21:* "nếu lúc đo chưa cover đủ flag/khóa thì lúc runtime thực tế không thể đảm bảo mọi tình huống" → **ĐÚNG MỘT PHẦN.** Đúng ở chỗ thứ không được đo thì không được đảm bảo. Gãy ở chỗ ngầm định rằng có một tập flag "đủ": không gian lỗi của dữ liệu thật là mở, bạn không liệt kê hết được. Phản ví dụ: một episode gắp trượt có timestamp hoàn hảo, schema hợp lệ, mọi detector số học đều xanh, và vô dụng cho training. Thứ thay cho "cover đủ" là: (a) khảo sát định kỳ bằng mắt để tìm lớp lỗi mới, (b) công bố rõ phạm vi đã kiểm và chưa kiểm.
-- *"Dataset chính thức của một tổ chức lớn thì đã sạch, khảo sát bằng tay chỉ tốn thời gian."* → **SAI.** Phản ví dụ: bài báo của Northcutt và cộng sự ở phần 1 tìm lỗi trong tập test của ImageNet.
-- *"Có thể giao việc xem video cho một VLM thay mắt mình."* → **ĐÚNG MỘT PHẦN.** Làm được như một bộ lọc ứng viên, nhưng VLM là một detector khác có FP/FN riêng; muốn tin nó phải hiệu chuẩn với nhãn người trên một mẫu (Cohen's kappa → F2.8). Ở bài này bạn chưa có nhãn người nào, nên chính việc xem bằng mắt là bước tạo ra nhãn đó.
+- *Mô hình của bạn ở K3 lượt 21:* "nếu lúc đo chưa cover đủ flag/khóa thì lúc runtime thực tế không thể đảm bảo mọi tình huống" → **ĐÚNG MỘT PHẦN.** Đúng ở chỗ thứ không được đo thì không được đảm bảo. Gãy ở chỗ ngầm định có một tập flag "đủ": không gian lỗi của dữ liệu thật là mở. Phản ví dụ: một episode gắp trượt có timestamp hoàn hảo, schema hợp lệ, không NaN, mọi detector số học đều xanh, và vô dụng cho training. Thứ thay cho "cover đủ": khảo sát bằng mắt mỗi khi gặp robot/action space mới, và công bố rõ phạm vi đã kiểm và chưa kiểm.
+- *"Nhìn bằng mắt là thủ công, không scale, chỉ làm một lần."* → **ĐÚNG MỘT PHẦN.** Không scale tới 1 693 episode, đúng. Nhưng nó là bước **hiệu chuẩn** của detector, phải lặp lại với mỗi dataset có action space mới — như bạn không đọc mọi dòng log nhưng đọc mẫu log mỗi khi thêm service mới.
+- *"Có thể giao việc xem video cho một VLM thay mắt mình."* → **ĐÚNG MỘT PHẦN.** Được, như bộ lọc ứng viên; nhưng VLM là một detector khác có FP/FN riêng, phải hiệu chuẩn với nhãn người trên một mẫu (Cohen's kappa → F2.8). Ở bài này bạn chưa có nhãn người nào: chính việc xem bằng mắt tạo ra nhãn đó.
 
 ### 4. Thuật ngữ
 
 | Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
 |---|---|---|---|
 | 🟢 | EDA (exploratory data analysis) | Nhìn dữ liệu bằng biểu đồ trước khi đặt giả thuyết | Bước tùy chọn |
-| 🟢 | histogram của `dt` | Phân bố khoảng cách giữa hai frame liên tiếp | Một con số trung bình |
-| 🟢 | nhảy bậc (step) | Giá trị đổi đột ngột lớn hơn nhiều so với biến thiên thường | Chuyển động nhanh thật |
+| 🟢 | action space | Đại lượng mà `action` biểu diễn: vị trí khớp tuyệt đối, vị trí đích, vận tốc, delta pose đầu công cụ… | "Lệnh gửi tới robot", như thể chỉ có một loại |
+| 🟢 | end-effector (EEF) | Đầu công cụ của tay máy (kẹp); state kiểu EEF là vị trí + hướng của nó | Khớp |
+| 🟢 | lượng tử, LSB | Giá trị chỉ nhận tập rời rạc (tick encoder, pixel nguyên, bước float32); LSB là bước nhỏ nhất | Nhiễu |
 | 🟢 | lệch pha action/state | State đi theo action sau vài frame | Lỗi (một phần lệch là động học bình thường) |
-| 🟢 | episode thất bại về ngữ nghĩa | Dữ liệu hợp lệ nhưng nhiệm vụ không hoàn thành | Thứ detector số học bắt được |
-| 🟢 | phân bố độ dài episode | Histogram số frame mỗi episode | Chỉ để biết cỡ dataset (nó lộ episode bị cắt, episode quên dừng ghi) |
-| 🟡 | che khuất (occlusion) | Camera bị tay/vật chắn | — |
+| 🟢 | episode thất bại | Nhiệm vụ không hoàn thành; dữ liệu hợp lệ nhưng có thể hại cho imitation learning | Lỗi dữ liệu mà detector số học bắt được |
+| 🟢 | phân bố độ dài episode | Histogram số frame mỗi episode | Chỉ để biết cỡ dataset (nó lộ episode bị cắt, quên dừng ghi) |
+| 🟡 | teleoperation, leader–follower | Người điều khiển từ xa; tay follower bám tay leader | Tự động |
 | 🟡 | trình xem dataset | `lerobot-dataset-viz` (Rerun), Space "visualize_dataset" trên HF `[tự đo]` | Thay được việc plot của bạn |
+| 🔴 | Bộ điều khiển OSC của robosuite | Cách sim biến delta EEF thành mô-men | Cần cho bài này |
 
 ### 5. Dự đoán
 
-Trước khi plot bất cứ thứ gì, với mỗi dataset điền `notes/10-predictions.md`:
-
-1. Hình dạng histogram `dt` bạn kỳ vọng: một vạch, một đỉnh có độ rộng, hay nhiều đỉnh? Dựa trên câu trả lời của bạn ở Bài 9 câu 4.
-2. Bao nhiêu phần trăm `dt` lệch khỏi `1/fps` quá 10%?
-3. Có chiều state nào đứng yên **chính xác** (diff = 0) ≥1 giây không? Nếu có, bạn đoán đó là khớp nào và vì sao?
-4. Độ lệch pha action→state bạn kỳ vọng, tính bằng frame. Phương pháp ước lượng: với teleop leader–follower, follower bám theo leader qua một vòng điều khiển; độ trễ ≈ trễ đọc/ghi một vòng + thời gian servo tiến gần vị trí đích. Tra tốc độ servo trong datasheet servo của robot (ví dụ SO-100/SO-101 dùng Feetech STS3215 `[tự đo]`) và fps của dataset.
-5. Trung vị, min, max độ dài episode.
-6. Một điều bạn đoán sẽ bất ngờ.
+Commit `predictions/10-manual-survey.md` trước khi chạy script. Tham số cần tra **trước**: dataset card, paper gốc (pusht: Diffusion Policy, Chi và cộng sự; libero: LIBERO, Liu và cộng sự 2023), mã thu dữ liệu nếu có; với robot thật, datasheet servo (ví dụ SO-100/SO-101 dùng Feetech STS3215 `[tự đo]`). Câu hỏi chính: `action` là đại lượng gì so với `observation.state`? Ước lượng lệch pha: với teleop leader–follower, follower bám leader qua một vòng điều khiển, nên trễ ≈ một vòng đọc/ghi + thời gian servo tiến gần vị trí đích; tính bằng frame theo fps của dataset.
 
 ```markdown
-# notes/10-predictions.md
-| dataset@sha | hình dt | %dt lệch >10% | kênh đứng yên ≥1s (khớp, lý do) | lag (frame) | độ dài trung vị/min/max |
+# 10-manual-survey — dự đoán
+| Câu hỏi | pusht | libero | robomme | ds4 | ds5 |
 |---|---|---|---|---|---|
-Điều tôi đoán sẽ bất ngờ: ...
+| Hình histogram dt (một vạch / một đỉnh có độ rộng / nhiều đỉnh) — dựa trên Bài 9 câu 4 | | | | | |
+| % dt lệch >10% khỏi 1/fps | | | | | |
+| Có chiều state đứng yên chính xác (diff = 0) ≥1 s khi chiều khác động? khớp nào, vì sao? | | | | | |
+| action là: vị trí tuyệt đối / vị trí đích / delta / vận tốc / không rõ | | | | | |
+| Lệch pha action→state (frame, ±1) | | | | | |
+| Độ dài episode: trung vị / min / max | | | | | |
+| Robot thật hay sim? Hệ quả cho nhiễu? | | | | | |
+Điều tôi nghĩ sẽ bất ngờ: …
 ```
 
 ### 6. Làm
 
-Với **cả 5 dataset**, làm bằng tay, ghi vào `notes/10-manual-survey.md`. Script dưới đây gom năm biểu đồ cho một episode và in các con số cần trả lời; chạy cho ít nhất 3 episode mỗi dataset (bước 1 cần 3 episode):
+1. **Script khảo sát.** Chạy cho mỗi dataset và ba episode mỗi dataset (đầu, giữa, dài nhất):
 
 ```python
-# [đã chạy] Khảo sát bằng mắt một dataset LeRobot (v2.x hoặc v3.0): đọc mọi parquet trong data/, gom theo episode
-import sys, json
+# [đã chạy] pyarrow 18.1, numpy 2.2, matplotlib — khảo sát tay một dataset LeRobot v3.0
+# dùng: python survey10.py <thư mục dataset> <episode_index>
+import json, sys
 from pathlib import Path
-import numpy as np, pandas as pd
+import numpy as np
+import pyarrow as pa, pyarrow.parquet as pq
 import matplotlib.pyplot as plt
 
-root, ep_id, joint = Path(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
-fps = json.loads((root / "meta/info.json").read_text())["fps"]
-data = pd.concat(pd.read_parquet(p) for p in sorted((root / "data").rglob("*.parquet")))
-d = data[data["episode_index"] == ep_id].sort_values("frame_index")
-ts = d["timestamp"].to_numpy(np.float64)
-S = np.stack(d["observation.state"].to_numpy()); A = np.stack(d["action"].to_numpy())
+root = Path(sys.argv[1]); EP = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+info = json.loads((root / "meta/info.json").read_text()); fps = float(info["fps"])
+t = pa.concat_tables([pq.read_table(f, columns=["episode_index", "timestamp", "observation.state", "action"])
+                      for f in sorted((root / "data").glob("*/*.parquet"))])
+ep = np.asarray(t["episode_index"]); ts = np.asarray(t["timestamp"], dtype=np.float64)
+S = np.array(t["observation.state"].to_pylist()); A = np.array(t["action"].to_pylist())
 
-dt = np.diff(ts)
-print(f"ep{ep_id}: {len(d)} frame, |dt*fps-1|>10%: {np.mean(np.abs(dt * fps - 1) > 0.1):.2%}")
-for j in range(S.shape[1]):                   # chạy dài nhất của diff == 0 chính xác, tính bằng giây
-    z = np.r_[0, (np.diff(S[:, j]) == 0).astype(int), 0]; e = np.diff(z)
-    longest = (np.where(e == -1)[0] - np.where(e == 1)[0]).max(initial=0)
-    print(f"  state[{j}] đứng yên chính xác dài nhất: {longest / fps:.2f} s")
-lengths = data.groupby("episode_index").size()
-print(f"độ dài episode: trung vị {lengths.median():.0f}, min {lengths.min()}, max {lengths.max()}")
+same = ep[1:] == ep[:-1]                       # chỉ lấy dt bên trong một episode
+dt = np.diff(ts)[same]
+lens = np.bincount(ep)
+print(f"dt lệch >10% khỏi 1/fps: {np.mean(np.abs(dt - 1/fps) > 0.1/fps):.4%}")
+print(f"độ dài episode: trung vị {np.median(lens):.0f}, min {lens.min()}, max {lens.max()}")
 
-fig, ax = plt.subplots(2, 2, figsize=(11, 6))
-ax[0, 0].hist(dt * 1e3, bins=50); ax[0, 0].set_xlabel("dt [ms]"); ax[0, 0].set_title("histogram dt")
-ax[0, 1].plot(ts, S, lw=0.7); ax[0, 1].set_title("observation.state theo thời gian")
-ax[1, 0].plot(d["frame_index"], A[:, joint], label="action"); ax[1, 0].plot(d["frame_index"], S[:, joint], label="state")
-ax[1, 0].set_xlabel("frame_index"); ax[1, 0].legend(); ax[1, 0].set_title(f"khớp {joint}: action vs state")
-ax[1, 1].hist(lengths, bins=20); ax[1, 1].set_title("phân bố độ dài episode [frame]")
-plt.tight_layout(); plt.show()
+m = ep == EP; s, a = S[m], A[m]
+for j in range(s.shape[1]):                    # LSB thực tế + chạy dài nhất của diff == 0 chính xác
+    d = np.abs(np.diff(s[:, j])); nz = d[d > 0]
+    z = np.r_[0, (d == 0).astype(int), 0]; e = np.diff(z)
+    run = (np.where(e == -1)[0] - np.where(e == 1)[0]).max(initial=0)
+    print(f"  state[{j}]: bước nhỏ nhất khác 0 = {nz.min() if len(nz) else float('nan'):.3g}, "
+          f"đứng yên chính xác dài nhất {run / fps:.2f} s")
+fig, ax = plt.subplots(3, 1, figsize=(9, 8))
+ax[0].hist(dt * 1000, bins=100); ax[0].set_xlabel("dt (ms)"); ax[0].set_yscale("log")
+ax[0].set_title(f"{root.name}: diff(timestamp), mọi episode")
+for j in range(s.shape[1]):
+    ax[1].plot(s[:, j], lw=0.8, label=f"state[{j}]")
+ax[1].set_title(f"observation.state, episode {EP}"); ax[1].legend(fontsize=6, ncol=4)
+ax[2].plot(s[:, 0], label="state[0]"); ax[2].plot(a[:, 0], "--", label="action[0]")
+ax[2].set_xlabel("frame"); ax[2].legend(); ax[2].set_title("cùng chỉ số 0: có cùng đại lượng không?")
+fig.tight_layout(); plt.show()
 ```
 
-Script này đọc toàn bộ `data/` vào RAM: với dataset lớn, chỉ tải 1–2 file parquet. Nó giả định `action` và `observation.state` cùng số chiều và cùng thứ tự khớp; kiểm `features[...]["names"]` trong `info.json` trước, vì có dataset dùng action là vị trí đầu công cụ hoặc vận tốc `[tự đo]`.
+   Script đọc cả `data/` vào RAM; với dataset lớn chỉ tải 1–2 file parquet.
+2. **Panel 1 — dt.** Mô tả hình bằng lời trước khi đọc trục. Rồi đọc trục x: đơn vị và độ rộng thật. Độ rộng này có lớn hơn bước float32 (Bài 9 bước 3) không? Đừng đọc nhiễu làm tròn thành jitter.
+3. **Panel 2 — state.** Mỗi chiều: phẳng, trơn, nhảy bậc, bão hòa ở biên? Ghi **độ phân giải** từng chiều (bước nhỏ nhất khác 0 mà script in ra = LSB thực tế sau mọi phép đổi đơn vị); Bài 11 cần nó cho L4, L6. Tra `names` trong `info.json`; nếu `names` không đủ để biết chiều nào là gì, ghi lại (một phát hiện L7 tiềm năng).
+4. **Panel 3 — action vs state.** Đọc tài liệu về action space **trước** khi nhìn. Nếu action là vị trí đích: kỳ vọng action dẫn trước state vài frame. Nếu action là delta/vận tốc: chồng `action[0]` với `diff(state[0])` thay vì `state[0]`. Ghi cả hai. Kiểm `action` và `state` có cùng số chiều, cùng thứ tự khớp không.
+5. **Vẽ `|diff(state)|` theo thời gian** cho một khớp đang chuyển động đều. Có gai cao gấp 2–3 lân cận không? Chưa cần giải thích; ghi vị trí.
+6. **Xem video ba episode** mỗi dataset. Video gộp nhiều episode, cắt theo `meta/episodes`:
+   ```bash
+   # [chưa chạy] cần ffplay có decoder AV1; FROM = videos/<key>/from_timestamp, DUR = length / fps
+   ffplay -ss FROM -t DUR -vf scale=384:-1 videos/observation.image/chunk-000/file-000.mp4
+   ```
+   Nhiệm vụ có hoàn thành? Camera bị che? Episode bị cắt giữa động tác? Ảnh có khớp chuyển động state không (nhìn một chỗ đổi hướng rõ)? Có những lỗi chỉ người thấy: một episode thất bại vẫn có timestamp hoàn hảo; tool sẽ không bắt được, và biết giới hạn đó là một phần của việc làm tool.
+7. **Phân bố độ dài episode.** Histogram. Đuôi dài có thể là người teleop do dự, cũng có thể là episode thất bại kéo tới timeout.
+8. **Cột lạ.** In mọi cột không thuộc nhóm chuẩn (ví dụ `next.reward`, `next.done`, `next.success` ở pusht): phân bố giá trị, vị trí trong episode. Cột hằng số trên toàn dataset là một câu hỏi, chưa phải lỗi.
+9. Ghi `notes/10-manual-survey.md`: trả lời **bằng số cho từng dataset** mọi dòng của bảng dự đoán, ít nhất **một điều bất ngờ**, và danh sách "đặc tính thật cần đưa vào bộ sinh dữ liệu tổng hợp ở Bài 12".
 
-1. **Vẽ `diff(timestamp)` cho 3 episode mỗi dataset.** Histogram + đường theo thời gian. Ghi lại hình dạng bằng lời. Sai số dụng cụ: `timestamp` lưu `float32` (Bài 9), nên `dt` có nhiễu làm tròn cỡ một ULP của `float32` ở giá trị timestamp đó; đừng đọc nhiễu đó thành jitter.
-2. **Vẽ `observation.state` từng chiều theo thời gian** cho 1 episode. Có chiều nào phẳng lì không? Có chiều nào nhảy bậc không? Ghi luôn **độ phân giải** của từng chiều: bước nhỏ nhất khác 0 của `|diff|` (đó là LSB thực tế sau mọi phép đổi đơn vị). Bạn cần con số này ở Bài 11.
-3. **Vẽ `action` và `observation.state` cùng một khớp, chồng lên nhau.** Lệch pha bao nhiêu frame? Nhìn bằng mắt trước, đo sau. Sai số của mắt: ±1 frame ở 30 fps là thực tế; ghi sai số đó cạnh con số.
-4. **Mở video, xem 3 episode.** Có episode nào tay robot không chạm vật? Camera bị che? Bị cắt giữa chừng? Ở v3, video một episode là đoạn `[from_timestamp, to_timestamp)` trong file chung: `ffplay -ss <from> -t <to-from> file-000.mp4`, hoặc dùng trình xem của LeRobot.
-5. **Vẽ phân bố độ dài episode** cho mỗi dataset.
-6. *(Thêm so với bản gốc)* **Vẽ `|diff(state)|` theo thời gian** cho một khớp đang chuyển động đều. Có những gai cao gấp 2–3 lần lân cận không? Chưa cần giải thích; ghi lại vị trí.
-
-Bước 4 quan trọng: có những lỗi chỉ con người thấy được. Một episode "thất bại" vẫn có timestamp hoàn hảo, schema hợp lệ, và hoàn toàn vô dụng cho training. Tool của bạn sẽ không bắt được nó, và biết giới hạn của tool cũng là một phần của việc làm tool.
-
-**Phải có ít nhất một điều bất ngờ** ghi lại. Nếu 5 dataset đều hoàn hảo, hoặc bạn chọn nhầm dataset quá sạch, hoặc bạn chưa nhìn đủ kỹ.
+Sai số của dụng cụ: mắt bạn trên plot 200 frame không phân biệt lệch pha 1 frame một cách tin cậy. "Nhìn thấy lệch 2 frame" là ước lượng ±1 frame; ghi sai số đó cạnh con số, số chính xác để Bài 11–12 đo.
 
 ### 7. Số phải ra
 
 <details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
 
-Không có bộ số đúng chung cho mọi dataset. Bạn phải trả lời được, **bằng số, cho từng dataset**: % `dt` lệch >10%; có chiều state đứng yên chính xác ≥1 s không (khớp nào); lệch pha nhìn thấy (frame, ±1); trung vị/min/max độ dài episode; ít nhất một điều bất ngờ. Những gì thường gặp, để bạn đối chiếu (đều là `[ước lượng]`, kiểm trên dữ liệu của bạn):
+**Trên `data/`** `[tự đo, bản local 10/2026]`:
+
+| Câu hỏi | pusht | libero |
+|---|---|---|
+| % dt lệch >10% | 0 % | 0 % |
+| Histogram dt | Vài vạch rời rạc cách nhau cỡ µs quanh 100 ms | Như bên trái, các vạch trong ±0,0015 ms quanh 100 ms. Đó là **bước float32**, không phải jitter |
+| Chiều state đứng yên chính xác ≥1 s khi chiều khác động | Không | Không |
+| action là | Vị trí đích của agent, **số nguyên** (toạ độ pixel, 100 % giá trị nguyên); state là vị trí thật (float) | **Delta/vận tốc** đầu công cụ (7 chiều: 3 tịnh tiến, 3 quay, 1 kẹp); state là vị trí + hướng EEF + 2 ngón kẹp (8 chiều). `action[0]` trông như đạo hàm của `state[0]` |
+| Lệch pha nhìn thấy | action dẫn trước state ~2 frame | so với `diff(state[0])`: ~1–2 frame |
+| Độ dài episode (trung vị / min / max) | 122 / 49 / 246 | 140 / 75 / 505 |
+| Robot thật hay sim | Sim (gym-pusht) | Sim (robosuite/MuJoCo) |
+
+Nghĩa các chiều state của libero (EEF pos, axis-angle, 2 ngón kẹp) là suy từ hình dạng và tài liệu LIBERO; `names: ["state"]` không nói điều đó `[tự đo]`.
+
+Điều bất ngờ thường gặp:
+- Cả hai là **sim**, timestamp được tính, không có nhiễu cảm biến. Giả định "cảm biến thật luôn có nhiễu ở bit thấp nhất" (L4 bản gốc) không áp được.
+- Ở pusht, `next.success` là **False ở mọi frame của mọi episode**; `next.done` là True ở **hai** frame cuối mỗi episode, không phải một; reward lớn nhất mỗi episode trong khoảng 0,81–0,95. Chưa biết là lỗi hay quy ước. Mang sang Bài 13.
+- Với libero, ai vẽ `state[0]` với `action[0]` rồi kết luận "không liên quan, ghép sai kênh" là đã gặp đúng cái bẫy bài này tồn tại để tránh.
+
+**Với dataset robot thật** (thường gặp, `[ước lượng]`, kiểm trên dữ liệu của bạn):
 
 | Quan sát | Thường gặp | Giải thích |
 |---|---|---|
-| Histogram `dt` | Một vạch gần như tuyệt đối tại `1/fps`, chỉ rung ở mức làm tròn `float32` | Dataset thu bằng `lerobot-record` có `timestamp = frame_index/fps` (Bài 9). Hình "hoàn hảo" ở đây **không chứng minh** không rớt frame |
-| % `dt` lệch >10% | 0% với dữ liệu ghi bằng LeRobot; có thể khác 0 với dữ liệu chuyển đổi từ nguồn có timestamp đo thật | như trên |
-| Kênh đứng yên chính xác ≥1 s | Rất hay gặp: gripper giữ đóng/mở khi tay đang di chuyển; khớp cổ tay ít dùng; robot dừng chờ đầu/cuối episode | Encoder lượng tử (ví dụ 4096 bước/vòng `[tự đo]`) + servo giữ vị trí → giá trị đọc lặp lại y hệt là **bình thường** khi khớp đứng yên |
-| Lệch pha action→state | Vài frame (1–3 ở 30 fps) với teleop leader–follower | Một vòng điều khiển + động học servo. Đây là pha **bình thường**, không phải lỗi |
-| Gai `|diff(state)|` gấp 2–3 lân cận (bước 6) | Có thể thấy rải rác | Một ứng viên giải thích: vòng lặp thu bị trễ, thời gian thật giữa hai frame dài hơn `1/fps` nhưng timestamp vẫn ghi `1/fps`. Bài 11 (L2) làm rõ |
-| Độ dài episode | Phân bố lệch phải, có vài episode ngắn bất thường hoặc dài gấp nhiều lần trung vị | Episode bị cắt, quên dừng ghi, reset kéo dài |
+| Histogram `dt` | Một vạch gần như tuyệt đối tại `1/fps` nếu ghi bằng `lerobot-record` | `timestamp = frame_index/fps`: hình "hoàn hảo" **không chứng minh** không rớt frame |
+| Kênh đứng yên chính xác ≥1 s | Rất hay gặp: gripper giữ đóng/mở khi tay di chuyển; khớp cổ tay ít dùng; robot dừng đầu/cuối episode | Encoder lượng tử (ví dụ 4096 bước/vòng `[tự đo]`) + servo giữ vị trí → giá trị lặp y hệt là **bình thường** khi khớp đứng yên |
+| Lệch pha action→state | 1–3 frame ở 30 fps với teleop leader–follower | Một vòng điều khiển + động học servo: pha **bình thường** |
+| Gai `|diff(state)|` gấp 2–3 lân cận | Rải rác | Một ứng viên: vòng thu bị trễ, thời gian thật dài hơn `1/fps` nhưng timestamp vẫn ghi `1/fps` (Bài 11, L2) |
 
-Nếu điều bất ngờ của bạn là "timestamp đẹp quá", "gripper phẳng lì mà vẫn là dữ liệu tốt", hoặc "có gai vận tốc dù dt hoàn hảo", bạn đang đi đúng hướng: cả ba sẽ đổi định nghĩa lỗi ở Bài 11.
+Nếu điều bất ngờ của bạn là "timestamp đẹp quá", "gripper phẳng lì mà vẫn là dữ liệu tốt", "action không cùng đại lượng với state", hoặc "có gai vận tốc dù dt hoàn hảo", bạn đang đi đúng hướng: cả bốn đổi định nghĩa lỗi ở Bài 11.
+
 </details>
 
 ### 8. Nếu ra khác
 
 | Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
 |---|---|---|---|
-| `np.stack` lỗi shape | Một số frame có vector độ dài khác | In `d["observation.state"].map(len).value_counts()` | Đây có thể là một phát hiện (L7): shape thật ≠ `features.shape` |
-| Không có cột `action` hoặc `observation.state` | Dataset dùng tên khác (ví dụ `observation.environment_state`, nhiều nhóm state) | Đọc `info.json → features` | Tham số hóa tên cột trong tool |
-| Action và state khác số chiều | Action ở không gian khác (đầu công cụ, vận tốc, delta) | `features["action"]["names"]` | Không so pha từng khớp; ghi "không áp dụng L5" |
-| Mọi thứ hoàn hảo ở cả 5 dataset | Chọn dataset quá sạch hoặc nhìn chưa đủ (chỉ xem histogram `dt`) | Làm bước 6, xem video | Thêm dataset cộng đồng |
-| Video không mở được | Codec AV1 không có decoder trên máy | `ffprobe` xem `codec_name` | Cài ffmpeg có `libdav1d` |
+| Histogram dt chỉ có một cột | `bins` quá thô so với độ rộng thật | In `np.unique(dt)` | Tăng bins hoặc vẽ `dt − 1/fps` |
+| Histogram dt có hai đỉnh (1/fps và 2/fps) | Rớt frame thật, hoặc dataset ghép từ hai nguồn fps khác nhau | Lọc theo episode: đỉnh 2/fps nằm ở episode nào? | Ghi lại; ứng viên L2 thật |
+| `action` và `state` khác số chiều, hoặc cùng chiều mà không giống nhau | Action space khác state space (libero 7 vs 8; delta EEF) | `features[...]["names"]`, tài liệu dataset | Không ghép theo chỉ số; viết ánh xạ tường minh, hoặc ghi "L5 không áp dụng" |
+| `np.array(...to_pylist())` lỗi shape | Một số frame có vector độ dài khác | Đếm độ dài từng ô | Có thể là phát hiện L7: shape thật ≠ `features.shape` |
+| Không có cột `action` hoặc `observation.state` | Dataset dùng tên khác (`observation.environment_state`, nhiều nhóm state) | `info.json → features` | Tham số hóa tên cột trong tool |
+| ffplay không mở được | Thiếu decoder AV1 | `ffmpeg -decoders \| grep av1` | Cài ffmpeg có `libdav1d` |
+| Mọi thứ hoàn hảo ở cả 5 dataset | Chọn dataset quá sạch (toàn sim), hoặc chỉ xem histogram dt | Có dataset robot thật nào chưa? Đã làm bước 5, 6 chưa? | Thêm một dataset robot thật do cộng đồng thu |
 
 ### 9. Câu hỏi ngược
 
-1. **[Failure mode]** Bạn thấy gripper đứng yên chính xác 12 giây trong một episode "nhặt và đặt". Liệt kê ít nhất ba giả thuyết (một lành, hai hỏng) và nói bằng chứng nào phân biệt được chúng **mà không cần mở video**.
-   <details><summary>Hướng nghĩ</summary>So với `action` cùng khớp: lệnh có đổi trong 12 giây đó không? So với các khớp khác và với phần còn lại của episode. Một khớp phẳng trong khi lệnh của chính nó đang đổi là bằng chứng mạnh hơn nhiều so với "phẳng trong khi khớp khác động".</details>
-2. **[Quy mô]** Ở 1000 giờ dữ liệu, bạn không thể xem video từng episode. Thiết kế một quy trình lấy mẫu để vẫn ước lượng được tỉ lệ "episode thất bại về ngữ nghĩa", kèm khoảng tin cậy. Cần xem bao nhiêu episode để khẳng định tỉ lệ đó dưới 5%?
-   <details><summary>Hướng nghĩ</summary>Lấy mẫu ngẫu nhiên đơn giản hoặc phân tầng theo dataset/người thu. Khoảng tin cậy cho tỉ lệ: Wilson (→ F1.4). Nếu xem n episode và không thấy cái nào hỏng, cận trên 95% xấp xỉ 3/n (quy tắc ba).</details>
-3. **[Vì sao không]** Vì sao không viết detector trước, chạy trên 5 dataset, rồi chỉ nhìn những chỗ detector báo?
-   <details><summary>Hướng nghĩ</summary>Cách đó chỉ đo được precision (trong số báo, bao nhiêu đúng), không đo được recall (trong số lỗi thật, bao nhiêu bị bắt). Lỗi mà detector không hỏi tới sẽ không bao giờ xuất hiện trong danh sách để bạn nhìn.</details>
-4. **[Phản biện]** "Khảo sát bằng tay không lặp lại được, nên không khoa học." Đồng ý được tới đâu?
-   <details><summary>Hướng nghĩ</summary>Nó lặp lại được nếu bạn ghi giao thức (episode nào, plot gì, tiêu chí gì) và kết quả trước khi tự động hóa. Phân biệt khám phá (sinh giả thuyết) với kiểm định (xác nhận giả thuyết): EDA thuộc loại đầu.</details>
-5. **[Liên ngành]** Năm 2007, một tình nguyện viên Galaxy Zoo (Hanny van Arkel) phát hiện một vật thể lạ mà các pipeline tự động không được thiết kế để tìm ("Hanny's Voorwerp"). Điều đó nói gì về vai trò của con người trong một pipeline đã tự động hóa?
-   <details><summary>Hướng nghĩ</summary>Pipeline tìm cái đã định nghĩa; con người tìm cái chưa định nghĩa. Thiết kế tool của bạn sao cho người dùng dễ nhìn dữ liệu thô quanh mỗi phát hiện (plot, đoạn video), không chỉ đọc nhãn lỗi.</details>
+1. **[Failure mode]** Bạn thấy gripper đứng yên chính xác 12 giây trong một episode "nhặt và đặt". Liệt kê ít nhất ba giả thuyết (một lành, hai hỏng) và bằng chứng phân biệt chúng **không cần mở video**.
+<details><summary>Hướng nghĩ</summary>
+
+So với `action` cùng khớp: lệnh có đổi trong 12 giây đó không? Một khớp phẳng trong khi **lệnh của chính nó** đang đổi là bằng chứng mạnh hơn nhiều so với "phẳng trong khi khớp khác động".
+
+</details>
+
+2. **[Quy mô]** Bạn xem 3 episode/dataset và không thấy episode thất bại nào. Nếu thật ra 10 % episode thất bại, xác suất bỏ sót là bao nhiêu? Ở 1000 giờ dữ liệu, cần xem bao nhiêu episode để khẳng định tỉ lệ thất bại dưới 5 %?
+<details><summary>Hướng nghĩ</summary>
+
+$(1-p)^n$. Lấy mẫu ngẫu nhiên đơn giản hoặc phân tầng theo người thu; khoảng tin cậy cho tỉ lệ: Wilson (→ F1.4); xem n episode không thấy cái nào hỏng thì cận trên 95 % ≈ 3/n ("rule of three"). Kết luận là về cỡ mẫu khảo sát, không về dataset.
+
+</details>
+
+3. **[Vì sao không]** Vì sao không viết detector trước, chạy trên 5 dataset, rồi chỉ nhìn những chỗ detector báo? Và vì sao không dùng luôn `stats.json` (mean/std từng chiều) để phát hiện kênh đơ?
+<details><summary>Hướng nghĩ</summary>
+
+Cách đầu chỉ đo được precision (trong số báo, bao nhiêu đúng), không đo được recall: lỗi detector không hỏi tới không bao giờ vào danh sách. Stats là trên **toàn dataset**: một chiều đơ 2 s ở 1 episode trong 1 693 gần như không đổi std toàn cục; lỗi cục bộ cần thống kê cục bộ.
+
+</details>
+
+4. **[Quy mô]** Có 100 dataset, mỗi dataset một action space khác. "Đọc tài liệu để biết action là gì" không scale. Tool nên làm gì?
+<details><summary>Hướng nghĩ</summary>
+
+Hai hướng: yêu cầu metadata khai báo action space (data contract → F3.7), hoặc tool tự suy (thử cả `state` lẫn `diff(state)`, chọn cái tương quan hơn) **và ghi rõ đã suy**. Cái nào cho kết quả tái lập được?
+
+</details>
+
+5. **[Phản biện]** "Dataset sim thì timestamp luôn đúng, không cần audit L1/L2." Và: "Khảo sát bằng tay không lặp lại được, nên không khoa học." Đồng ý được tới đâu?
+<details><summary>Hướng nghĩ</summary>
+
+Timestamp sim đúng **theo định nghĩa**, nhưng sim có thể rớt bước render, bộ chuyển đổi có thể ghép sai: kiểm L1/L2 trên sim là kiểm **pipeline ghi**. Khảo sát lặp lại được nếu ghi giao thức (episode nào, plot gì, tiêu chí gì) trước khi làm; nó là khám phá (sinh giả thuyết), không phải kiểm định.
+
+</details>
+
+6. **[Liên ngành]** Năm 2007, tình nguyện viên Galaxy Zoo Hanny van Arkel phát hiện một vật thể lạ mà pipeline tự động không được thiết kế để tìm ("Hanny's Voorwerp"). Điều đó nói gì về vai trò con người trong một pipeline đã tự động hóa, và về thiết kế report của bạn?
+<details><summary>Hướng nghĩ</summary>
+
+Pipeline tìm cái đã định nghĩa; con người tìm cái chưa định nghĩa. Thiết kế tool sao cho người dùng dễ nhìn dữ liệu thô quanh mỗi phát hiện (plot, đoạn video), không chỉ đọc nhãn lỗi.
+
+</details>
 
 ### 10. Liên kết ra ngoài
 
-- **Galaxy Zoo và khoa học công dân trong thiên văn.** Giống: con người phát hiện hình thái và dị thường mà thuật toán chưa được dạy. Khác: Galaxy Zoo có hàng trăm nghìn người nhìn cùng một ảnh và lấy đồng thuận; bạn là một người, nên phải ghi giao thức và tự chống thiên kiến xác nhận bằng `prediction.md`.
-- **Kiểm soát chất lượng phòng xét nghiệm (biểu đồ Levey–Jennings).** Giống: kết quả mẫu chuẩn được vẽ theo thời gian trước khi áp quy tắc tự động (quy tắc Westgard); người ta thấy trôi và nhảy bậc bằng mắt trước khi viết luật. Khác: phòng xét nghiệm có mẫu chuẩn biết trước giá trị; dataset robot không có "mẫu chuẩn" nào được xen vào, nên bạn phải tự tạo (Bài 12).
+- **Exploratory Data Analysis (John Tukey, 1977).** Tukey tách khám phá (nhìn, đặt giả thuyết) khỏi khẳng định (kiểm định). Bài 10 là khám phá, Bài 12–13 là khẳng định. Trộn hai việc trên cùng dữ liệu là gốc của "garden of forking paths" mà Bài 13 phải phòng.
+- **Flight data monitoring (FOQA) trong hàng không.** Hãng bay chạy hàng trăm rule tự động trên dữ liệu chuyến bay, nhưng mọi sự kiện vượt ngưỡng được chuyên viên xem lại cùng ngữ cảnh trước khi kết luận. Giống: tự động để lọc, người để phán. Khác: ở đó ngữ nghĩa mỗi kênh được chuẩn hóa trước; dataset robot thì chưa.
+- **Kiểm soát chất lượng phòng xét nghiệm (biểu đồ Levey–Jennings).** Kết quả mẫu chuẩn được vẽ theo thời gian, người ta thấy trôi và nhảy bậc bằng mắt trước khi áp quy tắc tự động (Westgard). Khác: phòng lab có mẫu chuẩn biết trước giá trị; dataset robot không có, nên bạn phải tự tạo (Bài 12).
 
 ### 11. Độ tin cậy và sửa lỗi
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| Bài báo của Northcutt, Athalye, Mueller (2021) về nhãn sai trong tập test | `[chuẩn]` | Con số cụ thể theo từng bộ: đọc bài báo, không trích từ trí nhớ |
-| Sambasivan và cộng sự, CHI 2021, "Data Cascades" | `[chuẩn]` | — |
-| SO-100/SO-101 dùng servo Feetech STS3215, encoder 12 bit | `[tự đo]` | Tra trang phần cứng của LeRobot và datasheet servo |
-| Lệch pha leader–follower 1–3 frame ở 30 fps | `[ước lượng]` | Đo ở bước 3; con số trong khối 🔒 chỉ để đối chiếu |
+| Anscombe 1973; Datasaurus Dozen 2017 | `[chuẩn]` | Matejka & Fitzmaurice, CHI 2017 |
+| pusht action là vị trí đích nguyên; libero action là delta EEF | `[tự đo]` | Suy từ dữ liệu + paper; xác nhận bằng mã thu dữ liệu nếu có |
+| Vạch trong histogram dt là bước float32 | `[tự đo]` | So độ rộng vạch với `np.spacing(np.float32(t))` |
+| SO-100/SO-101 dùng Feetech STS3215, encoder 12 bit; lệch pha leader–follower 1–3 frame ở 30 fps | `[tự đo]`, `[ước lượng]` | Trang phần cứng LeRobot, datasheet servo; đo ở bước 4 |
 | Hanny's Voorwerp phát hiện năm 2007 qua Galaxy Zoo | `[chuẩn]` | — |
+| Các số ở phần 7 | `[tự đo]` | Bản local, chưa ghim revision |
 
-**Đã sửa/bổ sung so với bản gốc:**
-- Thêm bước 2b (ghi độ phân giải thực tế của từng kênh) và bước 6 (vẽ `|diff(state)|`), vì hai quan sát này cần cho định nghĩa L4 và L2 ở Bài 11; thiếu chúng thì định nghĩa của bản gốc sinh báo nhầm.
-- Bản gốc ngầm định "có chiều state đứng yên hoàn toàn ≥1 giây" là triệu chứng hỏng. Sửa: với encoder lượng tử và servo giữ vị trí, đứng yên chính xác là hành vi bình thường; triệu chứng hỏng là đứng yên **trong khi lệnh của chính khớp đó đổi** (Bài 11, L4).
-- Lưu ý script: ở v3 mỗi file parquet chứa nhiều episode; phải lọc theo `episode_index`, không coi một file là một episode.
+**Đã sửa so với bản gốc:**
+- Bước 3 gốc "vẽ action và state cùng một khớp, chồng lên nhau" mặc định hai kênh cùng đại lượng. Thêm bước đọc action space trước, nhánh `diff(state)` cho action delta, kiểm số chiều.
+- Bản gốc ngầm định "có chiều state đứng yên hoàn toàn ≥1 giây" là triệu chứng hỏng. Sửa: với encoder lượng tử và servo giữ vị trí, đứng yên chính xác là bình thường; triệu chứng hỏng là đứng yên **trong khi lệnh của chính khớp đó đổi** (Bài 11, L4).
+- Bước 4 gốc "mở video, xem 3 episode" không nói cách cắt episode trong video gộp v3.0; thêm lệnh cắt theo `from_timestamp`.
+- Thêm: ghi LSB thực tế (bước 3), vẽ `|diff(state)|` (bước 5), cột lạ (bước 8), danh sách "đặc tính thật cần đưa vào bộ sinh" — nối thẳng với triệu chứng "đúng trên tổng hợp, sai trên thật" của Bài 12.
+- "Nếu 5 dataset đều hoàn hảo… bạn chưa nhìn đủ kỹ" giữ ý, đổi thành hành động cụ thể (thêm dataset robot thật).
+
+**Hợp nhất (Claude × Kiro):** nền bản Kiro (đúng hơn về kỹ thuật ở điểm then chốt: script của bản Claude chồng `action[j]` lên `state[j]` mặc định cùng đại lượng, sai với libero). Ghép từ bản Claude: chấm mô hình K3 lượt 21 và VLM, bước LSB và `|diff(state)|`, bảng "thường gặp với robot thật", câu hỏi gripper 12 s, rule of three, Hanny's Voorwerp, Levey–Jennings. Script khảo sát: dùng của Kiro (tách dt theo episode), thêm phần in LSB và chạy đứng yên dài nhất của Claude.
 
 ### 12. Đọc thêm và tự kiểm tra
 
-- **Nguồn gốc:** Northcutt, Athalye, Mueller, "Pervasive Label Errors in Test Sets Destabilize Machine Learning Benchmarks" (NeurIPS 2021, Datasets and Benchmarks track).
-- **Giải thích:** John W. Tukey, *Exploratory Data Analysis* (1977) — chương đầu đủ để hiểu tinh thần "nhìn trước, kiểm định sau".
-- **Đào sâu (tùy chọn):** Sambasivan và cộng sự, "Everyone wants to do the model work, not the data work: Data Cascades in High-Stakes AI" (CHI 2021).
-- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao detector viết trước khi nhìn dữ liệu có recall không đo được; (2) vẽ lại vòng lặp nhìn → giả thuyết → định nghĩa → detector → chạy thật → nhìn; (3) câu hỏi:
+- **Nguồn gốc:** paper Diffusion Policy (Chi và cộng sự, RSS 2023) mục môi trường Push-T; paper LIBERO (Liu và cộng sự, NeurIPS 2023 Datasets and Benchmarks).
+- **Giải thích:** Anscombe, "Graphs in Statistical Analysis", *The American Statistician*, 1973.
+- **Đào sâu (tùy chọn):** Tukey, *Exploratory Data Analysis* (1977), chương đầu.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao phải biết action space trước khi viết detector lệch pha; (2) vẽ lại hình ba vùng ở phần 2; (3) câu hỏi:
   - Histogram `dt` của một dataset là một vạch hoàn hảo. Kết luận được gì về rớt frame?
-  - Gripper đứng yên chính xác 5 giây trong lúc tay di chuyển. Đây là lỗi không?
+  - Histogram `dt` của một dataset robot thật có một đỉnh ở 33,3 ms rộng ±3 ms và một đỉnh nhỏ ở 66,7 ms. Ba giả thuyết nào, phân biệt bằng gì?
 
-  <details><summary>Đáp án</summary>(a) Không kết luận được gì nếu timestamp được tính từ `frame_index/fps`; phải tìm bằng chứng khác (vận tốc biểu kiến, Bài 11 L2). (b) Chưa đủ để nói. Kiểm `action` của gripper trong 5 giây đó: lệnh không đổi → bình thường; lệnh đổi mà state phẳng → ứng viên lỗi (encoder chết, dây lỏng, giá trị bị giữ).</details>
+<details><summary>Đáp án</summary>
+
+(a) Không kết luận được gì nếu timestamp được tính từ `frame_index/fps`; phải tìm bằng chứng khác (vận tốc biểu kiến, Bài 11 L2). (b) Rớt frame thật → xem state có "nhảy" gấp đôi bước bình thường ở đó không; timestamp là lúc host nhận, hai frame dồn rồi một khoảng trống → đỉnh 66,7 ms đi kèm dt rất nhỏ ngay cạnh; dataset ghép từ episode 15 fps và 30 fps → đỉnh 66,7 ms tập trung ở một nhóm episode, không rải rác.
+
+</details>
 
 ---
+
 
 ## Bài 11 — Bảy lớp lỗi: định nghĩa và toán (8h)
 
-> **Vị trí:** Bài 10 → **Bài 11** → Bài 12 · **Cần trước:** F2.1 (oracle, FP/FN), F3.7 (validate theo schema vs theo vật lý), F3.4 (ghép luồng, nội suy), F4.6 + F5.6 (ước lượng độ trễ bằng cross-correlation), F1.4 (khoảng Wilson cho tỉ lệ), F1.5 (bội so sánh), F5.5 (lượng tử) · **Sau bài này bạn quyết định được:** với mỗi lớp lỗi, detector đối chiếu dữ liệu với **cái gì** (oracle), ngưỡng mặc định là bao nhiêu và vì sao nó chỉ là tạm thời cho tới khi có đường cong ở Bài 12, và khi nào detector phải trả lời "không kết luận được" thay vì PASS/FAIL.
+> **Vị trí:** Bài 10 → **Bài 11** → Bài 12 · **Cần trước:** F2.1 (oracle, FP/FN), F3.7 (schema vs vật lý), F3.4 (ghép luồng), F4.6 + F5.6 (ước lượng trễ bằng cross-correlation), F5.5 (lượng tử), F1.4, F1.5 · **Sau bài này bạn quyết định được:** mỗi lớp lỗi đối chiếu dữ liệu với **cái gì** (oracle), ngưỡng ban đầu và vì sao nó chỉ tạm cho tới Bài 12, dữ liệu lành nào trông giống lỗi này, và khi nào detector phải trả lời "không kết luận được".
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
-Ngày 1/1/2017, giây nhuận làm đồng hồ wall clock trên máy chủ của Cloudflare "lùi" một giây. Một đoạn code Go trong RRDNS lấy hiệu hai lần đọc `time.Now()`, nhận được một khoảng thời gian **âm**, rồi dùng nó trong một phép tính mà tác giả chưa từng tưởng tượng có thể âm; một phần dịch vụ DNS bị lỗi cho tới khi được vá (Cloudflare blog, "How and why the leap second affected Cloudflare DNS") `[chuẩn]`. Ngôn ngữ Go sau đó thêm đọc monotonic clock vào `time.Now`. Đó là L1 của bài này, trong đời thật: một giả định "thời gian chỉ tăng" không ai viết ra, và không ai kiểm.
+Đêm 31/12/2016, một giây nhuận làm wall clock trên máy chủ DNS của Cloudflare (RRDNS, viết bằng Go) lùi một giây. Một đoạn code lấy hiệu hai lần đọc đồng hồ, nhận khoảng thời gian **âm**, và panic; một phần lưu lượng DNS lỗi cho tới khi được vá. Go sau đó thêm monotonic clock vào `time.Now()` (Go 1.9) `[chuẩn: Cloudflare blog "How and why the leap second affected Cloudflare DNS", 01/2017]`. Đó là L1. Nửa sau của câu chuyện mới quan trọng: đoạn code đó **có kiểm tra**; nó chỉ giả định sai về thứ nó kiểm. Năm 1999, Mars Climate Orbiter mất vì một bên xuất xung lực theo lbf·s, bên kia hiểu là N·s `[chuẩn: Mishap Investigation Board]`: hợp lệ về kiểu, sai về vật lý và hợp đồng — L6, L7.
 
-Năm 1999, Mars Climate Orbiter mất vì phần mềm mặt đất của một bên xuất xung lực theo pound-force·giây trong khi bên dùng hiểu là newton·giây (báo cáo của Mishap Investigation Board) `[chuẩn]`. Dữ liệu hợp lệ về kiểu, sai về vật lý, sai so với hợp đồng. Đó là L6 và L7. Bài này biến "dữ liệu hỏng" từ một cảm giác thành bảy định nghĩa có công thức, mỗi định nghĩa nói rõ nó so dữ liệu với cái gì.
+Bài này biến "dữ liệu hỏng" thành bảy định nghĩa, mỗi cái nói rõ so dữ liệu với cái gì, kèm một ca **trông như lỗi mà không phải** (FP) và một ca **là lỗi mà detector mù** (FN).
 
 ### 2. Mô hình tư duy
 
-Mỗi detector trả lời một câu: **"dữ liệu này mâu thuẫn với cái gì?"**. Cái được đối chiếu gọi là *oracle* (→ F2.1). Chất lượng của detector bị chặn trên bởi chất lượng của oracle: nếu oracle được suy ra từ chính dữ liệu đang kiểm, phép kiểm thành lặp lại (tautology) và độ nhạy bằng không.
+Mỗi detector trả lời: **"dữ liệu này mâu thuẫn với cái gì?"** Cái được đối chiếu là *oracle* (→ F2.1). Detector không tốt hơn oracle của nó; nếu oracle suy ra từ chính dữ liệu đang kiểm, phép kiểm thành lặp lại (tautology), độ nhạy bằng không.
 
 ```mermaid
 flowchart LR
-  subgraph O["Oracle (đối chiếu với)"]
-    O1["Đồng hồ đơn điệu"]
-    O2["Chu kỳ danh định 1/fps<br/>+ vật lý: vận tốc liên tục"]
-    O3["Container video"]
-    O4["Lệnh của chính khớp đó"]
-    O5["Động học: state đi sau action<br/>một độ trễ ổn định"]
-    O6["Giới hạn cơ khí, đơn vị SI"]
-    O7["meta/ (hợp đồng)"]
-  end
-  L1["L1 ts không đơn điệu"] --> O1
-  L2["L2 rớt frame / jitter"] --> O2
-  L3["L3 video ≠ parquet"] --> O3
-  L4["L4 kênh đơ"] --> O4
-  L5["L5 lệch pha action/state"] --> O5
-  L6["L6 bất thường vật lý"] --> O6
-  L7["L7 metadata lệch"] --> O7
+  L1["L1 ts không đơn điệu"] --> O1["Đồng hồ đơn điệu"]
+  L2["L2 rớt frame / jitter"] --> O2["Chu kỳ 1/fps + vận tốc liên tục"]
+  L3["L3 video ≠ parquet"] --> O3["Container video (demux)"]
+  L4["L4 kênh đơ"] --> O4["Lệnh của chính khớp đó"]
+  L5["L5 lệch pha"] --> O5["Nhân quả: state sau action, trễ ổn định"]
+  L6["L6 bất thường vật lý"] --> O6["Spec robot, đơn vị SI (từ NGOÀI dataset)"]
+  L7["L7 metadata lệch"] --> O7["meta/ (hợp đồng)"]
 ```
 
-Ba trạng thái phán quyết, không phải hai: **FAIL** (có bằng chứng mâu thuẫn), **PASS** (đã kiểm, không mâu thuẫn), **INCONCLUSIVE** (dữ liệu không đủ để kiểm: khớp không chuyển động thì không đo được lệch pha; action khác không gian với state thì không áp dụng L4/L5). Bạn đã dùng phán quyết ba trạng thái trong script chấm của mình ở nghề backend (→ F2.3); ở đây nó bắt buộc, vì "không đo được" mà báo PASS là nói dối về phạm vi kiểm.
+Ba trạng thái phán quyết: **FAIL** (có mâu thuẫn), **PASS** (đã kiểm, không mâu thuẫn), **INCONCLUSIVE / không áp dụng** (dữ liệu không mang thông tin để kiểm: khớp không động thì không đo được lệch pha; timestamp được tính thì L2 không áp dụng). Bạn đã dùng ba trạng thái ở nghề backend (→ F2.3); ở đây nó bắt buộc: "không đo được" mà báo PASS là nói dối về phạm vi kiểm. L1, L2, L3, L7 là kiểm tra **cấu trúc**; L4, L5, L6 là kiểm tra **theo vật lý**, cần biết kênh là đại lượng gì (Bài 10) — và là nơi sinh phần lớn báo giả.
 
-Ký hiệu chung: episode có $n$ frame, $t_i$ là `timestamp`, $s_{i,j}$ là `observation.state` khớp $j$, $a_{i,j}$ là `action`, $f$ là `fps`, $\Delta x_i = x_{i+1} - x_i$, $q_j$ là bước lượng tử (LSB) thực tế của kênh $j$ đo ở Bài 10.
-
----
+Ký hiệu: episode $n$ frame, `timestamp` $t_i$, `fps` $f$, state $s_{i,j}$, action $a_{i,j}$, $\Delta x_i = x_{i+1} - x_i$, LSB thực tế $q_j$ (Bài 10). Ghi rõ quy ước $\Delta$: `np.diff(x, prepend=…)` cho $x_i - x_{i-1}$, lệch đúng một frame; lag báo cáo không kèm quy ước thì vô nghĩa ở mức ±1. Mọi định nghĩa áp trên **một episode**.
 
 #### L1 — Timestamp không đơn điệu
 
-- **Định nghĩa:** trong một episode, $\exists i: t_{i+1} \le t_i$. Dấu bằng tính là lỗi (frame trùng).
-- **Phát hiện:** `np.diff(ts) <= 0`. Bổ sung: $t_0 = 0$; ở v3, với các episode cùng file video, $\text{from}_{k+1} = \text{to}_k$ và dãy `from_timestamp` tăng.
-- **Ngưỡng:** không có ngưỡng; một lần là lỗi.
-- **Oracle:** tính đơn điệu của đồng hồ đã dùng để đóng dấu.
-- **Vì sao hại:** mọi phép nội suy, as-of join, cửa sổ trượt (→ F3.4) giả định trục thời gian tăng; thời gian lùi làm chúng ra kết quả vô nghĩa mà không báo lỗi. Nguyên nhân kinh điển: wall clock bị NTP kéo lùi giữa lúc thu (→ F4.3).
-- **Mô hình tư duy:** L1 kiểm **đồng hồ** chỉ khi cột timestamp đến từ đồng hồ. Với dataset ghi bằng `lerobot-record`, $t_i = i/f$ (Bài 9) nên L1 chỉ kiểm code ghi. L1 vẫn có giá trị cho dataset chuyển đổi từ rosbag/HDF5 mang timestamp đo thật, và cho dãy `from/to_timestamp` ở v3.
-- **Chi tiết số:** `timestamp` là `float32`. Bước biểu diễn (ULP) của `float32` gần $t$ xấp xỉ $t \cdot 2^{-23}$; ở $t$ cỡ phút thì vẫn nhỏ hơn rất nhiều so với $1/f$, nên L1 không báo nhầm vì làm tròn; nhưng phép so "$\Delta t = 1/f$" chính xác tuyệt đối thì sẽ sai (xem L2).
-
-<details><summary>Câu hỏi ngược L1 — [Nếu…thì] Nếu một dataset được ghép từ hai phiên thu, phiên sau dùng đồng hồ khác, timestamp nhảy lùi đúng một lần ở giữa episode. Bạn sửa dữ liệu hay báo lỗi?</summary>Phân biệt "phát hiện" với "sửa". Tool audit chỉ báo, kèm vị trí và độ lớn bước nhảy; sửa là quyết định của chủ dataset, vì cách sửa (cắt episode, dịch offset) thay đổi ngữ nghĩa. Nếu sửa, phải ghi lineage (→ F3.8).</details>
-
----
+$\exists i: t_{i+1} \le t_i$; v3 thêm $t_0 = 0$ và dãy `from_timestamp` tăng trong file. Một lần là lỗi. Hại: nội suy, as-of join, cửa sổ trượt (→ F3.4) ra kết quả vô nghĩa mà không báo lỗi; nguyên nhân kinh điển là wall clock bị NTP kéo lùi (→ F4.3). **FP:** `np.diff` trên cả bảng v3.0, đi qua biên episode. **FN:** bước lùi nhỏ hơn $1/f$; timestamp tính từ `frame_index` (L1 khi đó chỉ kiểm code ghi, vẫn đáng giữ cho dataset chuyển đổi từ rosbag/HDF5).
 
 #### L2 — Rớt frame và jitter
 
-- **Định nghĩa:** $r_i = \Delta t_i \cdot f$. Rớt frame: $d_i = \operatorname{round}(r_i) - 1 > 0$. Jitter: độ lệch chuẩn của $\Delta t_i$ trên các bước có $\operatorname{round}(r_i) = 1$.
-- **Phát hiện (bản gốc, giữ nguyên):**
+- **Bản gốc:** $r_i = \Delta t_i f$, rớt $d_i = \operatorname{round}(r_i) - 1$, jitter = std $\Delta t$ khi $\operatorname{round}(r_i) = 1$; ngưỡng 1 %/5 %, jitter 10 % của $1/f$: heuristic `[ước lượng]`.
+- **Ngưỡng có khoảng tin cậy:** "3 rớt / 300" là $\hat p = 1\%$ nhưng khoảng Wilson rộng (→ F1.4, công thức Bài 12). Gắn "nặng" khi **cận dưới** vượt 5 %, "sạch" khi **cận trên** dưới 1 %, giữa là cảnh báo kèm khoảng.
+- **Oracle — vấn đề lớn nhất:** nếu $t_i = i/f$ được tính lúc ghi, $r_i \equiv 1$, detector **không thể** fail. Vòng thu bị trễ (GC, USB, encoder video) thì thời gian thật dài hơn mà timestamp vẫn ghi $1/f$; bằng chứng còn lại ở vật lý: khớp đang động "nhảy" xa gấp 2–3 lần ở bước đó. Oracle mới: $\rho_i = |\Delta s_{i,j}| / \operatorname{median}_{|k-i|\le w}|\Delta s_{k,j}|$, ứng viên khi $\rho_i > c$ trên nhiều khớp cùng bước. Đồng hồ giả không làm giả được quán tính. Khi timestamp được tính, L2 theo timestamp là **không áp dụng**, không phải "0 drop".
+- **Hại:** policy giả định bước đều $1/f$; với action chunking (ACT), một bước thật dài gấp đôi làm cả chunk lệch thang thời gian.
 
 ```python
-dt = np.diff(ts)
-expected = 1.0 / fps
-ratio = dt / expected
-drops = np.round(ratio) - 1        # 0 = bình thường, 1 = rớt 1 frame
-jitter = np.std(dt[np.round(ratio) == 1])
-```
-
-- **Ngưỡng (bản gốc, tạm thời):** tỉ lệ rớt >1% cảnh báo, >5% nghiêm trọng; jitter >10% của $1/f$ cảnh báo. Đây là ngưỡng heuristic `[ước lượng]`, không phải chuẩn ngành; Bài 12 thay bằng ngưỡng có đường cong.
-- **Ngưỡng có khoảng tin cậy:** tỉ lệ rớt là một tỉ lệ ước lượng từ $n-1$ khoảng. Với episode 300 frame, "3 frame rớt" là $\hat p = 1\%$ nhưng khoảng Wilson 95% rất rộng (→ F1.4). Quy tắc đề xuất: chỉ gắn "nghiêm trọng" khi **cận dưới** Wilson vượt 5%; chỉ gắn "sạch" khi **cận trên** dưới 1%; giữa hai bên là cảnh báo kèm khoảng. Hàm Wilson ở Bài 13.
-- **Oracle — vấn đề lớn nhất:** detector trên so $\Delta t$ với $1/f$. Nếu $t_i = i/f$ được tính lúc ghi, $r_i \equiv 1$ và detector **không thể** fail. Khi vòng lặp thu bị trễ (GC, USB, ghi đĩa, encoder video chiếm CPU), thời gian thật giữa hai frame dài hơn $1/f$ nhưng timestamp vẫn ghi $1/f$. Bằng chứng còn lại nằm ở **vật lý**: khớp đang chuyển động mượt sẽ "nhảy" xa gấp 2–3 lần ở bước đó. Oracle mới: vận tốc biểu kiến so với trung vị cục bộ,
-  $$\rho_i = \frac{|\Delta s_{i,j}|}{\operatorname{median}_{|k-i|\le w}|\Delta s_{k,j}|}, \quad \text{ứng viên rớt nếu } \rho_i > c \text{ trên nhiều khớp cùng lúc.}$$
-  Đây là "validate theo vật lý" (→ F3.7) áp vào thời gian: một đồng hồ giả không làm giả được quán tính.
-- **Vì sao hại:** policy học quan hệ thời gian giữa quan sát và hành động với giả định bước đều $1/f$. Với action chunking (policy dự đoán một chuỗi $k$ action tương lai ở nhịp cố định, như ACT), một bước thật dài gấp đôi làm cả chunk lệch thang thời gian.
-
-Mô phỏng đồ chơi: vòng lặp 30 Hz, 3% vòng bị trễ 2–3 chu kỳ, timestamp ghi theo `frame_index/fps`, encoder 12 bit. **Trước khi chạy**, ghi dự đoán (phần 5, câu c).
-
-```python
-# [đã chạy] Rớt frame "vô hình": timestamp ghi = frame_index/fps, còn thời gian thật bị kéo dãn
+# [đã chạy] Rớt frame "vô hình": timestamp ghi = frame_index/fps, thời gian thật bị kéo dãn
 import numpy as np
-import matplotlib.pyplot as plt
-
 rng = np.random.default_rng(0)
-fps, n = 30, 900                               # 30 s
-stall = rng.random(n) < 0.03                   # 3% vòng lặp bị trễ (GC, USB, ghi đĩa...)
-period = np.where(stall, rng.integers(2, 4, n), 1) / fps   # vòng trễ kéo dài 2-3 chu kỳ
-t_true = np.concatenate([[0], np.cumsum(period[:-1])])     # lúc đọc state thật
-ts_logged = np.arange(n) / fps                 # thứ được ghi vào cột timestamp
-
+fps, n = 30, 900                                            # 30 s
+stall = rng.random(n) < 0.03                                # 3% vòng lặp bị trễ
+period = np.where(stall, rng.integers(2, 4, n), 1) / fps    # vòng trễ kéo dài 2-3 chu kỳ
+t_true = np.concatenate([[0], np.cumsum(period[:-1])])      # lúc đọc state thật
+ts_logged = np.arange(n) / fps                              # thứ được ghi vào cột timestamp
 q = 0.6 * np.sin(2 * np.pi * 0.25 * t_true) + 0.3 * np.sin(2 * np.pi * 0.7 * t_true)  # rad
-q = np.round(q / (2 * np.pi / 4096)) * (2 * np.pi / 4096)  # lượng tử encoder 12 bit
+q = np.round(q / (2 * np.pi / 4096)) * (2 * np.pi / 4096)   # lượng tử encoder 12 bit
 
-# Detector L2 theo timestamp (như bản gốc)
-dt = np.diff(ts_logged)
-drops_ts = int((np.round(dt * fps) - 1).sum())
-
-# Detector theo vật lý: tốc độ biểu kiến so với trung vị cục bộ (cửa sổ 15 frame)
-v = np.abs(np.diff(q))
-pad = np.pad(v, 7, mode="edge")
-local_med = np.array([np.median(pad[i:i + 15]) for i in range(len(v))])
-ratio = v / (local_med + 1e-6)
-flag = ratio > 1.7
-truth = stall[:-1]                              # frame i -> i+1 trải qua vòng trễ
+drops_ts = int((np.round(np.diff(ts_logged) * fps) - 1).sum())   # L2 theo timestamp (bản gốc)
+v = np.abs(np.diff(q)); pad = np.pad(v, 7, mode="edge")          # L2 theo vật lý: tốc độ / trung vị 15 frame
+ratio = v / (np.array([np.median(pad[i:i + 15]) for i in range(len(v))]) + 1e-6)
+flag, truth = ratio > 1.7, stall[:-1]
 tp = int((flag & truth).sum()); fp = int((flag & ~truth).sum()); fn = int((~flag & truth).sum())
-print(f"stall thật: {truth.sum()}  | L2 theo timestamp: {drops_ts} drop")
-print(f"detector vận tốc: TP={tp} FP={fp} FN={fn}  recall={tp/(tp+fn):.2f} precision={tp/max(tp+fp,1):.2f}")
-
-fig, ax = plt.subplots(2, 1, figsize=(9, 5), sharex=True)
-ax[0].plot(ts_logged, q, lw=0.8); ax[0].set_ylabel("q [rad]")
-ax[1].plot(ts_logged[1:], ratio, lw=0.6); ax[1].axhline(1.7, color="r", ls="--")
-ax[1].plot(ts_logged[1:][truth], ratio[truth], "kx", ms=4, label="stall thật")
-ax[1].set_ylabel("|dq| / trung vị cục bộ"); ax[1].set_xlabel("timestamp ghi trong parquet [s]"); ax[1].legend()
-plt.tight_layout(); plt.show()
+print(f"stall thật: {truth.sum()} | L2 theo timestamp: {drops_ts} drop")
+print(f"detector vận tốc: TP={tp} FP={fp} FN={fn} recall={tp/(tp+fn):.2f} precision={tp/max(tp+fp,1):.2f}")
 ```
-
-Mô phỏng này có giả định của nó: một khớp, chuyển động sin trơn, trễ 2–3 chu kỳ. Trên dữ liệu thật, gộp bằng chứng từ nhiều khớp cùng lúc (rớt frame ảnh hưởng mọi khớp ở cùng bước) và dùng cả action (leader cũng bị "nhảy").
-
-<details><summary>Câu hỏi ngược L2 — [Failure mode] Detector vận tốc sẽ bỏ sót những vòng trễ nào, và báo nhầm ở đâu?</summary>Bỏ sót khi khớp gần như đứng yên hoặc đổi chiều (vận tốc gần 0, nhảy gấp đôi của gần 0 vẫn là gần 0). Báo nhầm khi chuyển động thật tăng tốc đột ngột (va chạm, nhả vật). Gộp nhiều khớp giảm cả hai. Đây là lý do detector này trả về "ứng viên" kèm điểm số, không phải FAIL nhị phân.</details>
-
----
 
 #### L3 — Số frame video ≠ số dòng parquet
 
-- **Định nghĩa:** v2.x: với mỗi episode $e$ và camera $c$, $N_\text{video}(e,c) = N_\text{rows}(e)$. v3.0: $\#\{\text{pts} \in [\text{from}_e - \tfrac{1}{2f}, \text{to}_e - \tfrac{1}{2f})\} = \text{length}_e$, **và** với mỗi file mp4, tổng packet $= \sum_{e \in \text{file}} \text{length}_e$.
-- **Phát hiện:** `ffprobe ... -count_packets` (v2.x) hoặc danh sách `packet=pts_time` (v3, script Bài 9).
+v3.0: số pts trong $[\text{from}_e - \tfrac{1}{2f}, \text{to}_e - \tfrac{1}{2f})$ bằng $\text{length}_e$, **và** tổng packet mỗi mp4 bằng $\sum_{e \in \text{file}}\text{length}_e$ (checker Bài 9). Lệch ≥1 frame là lỗi; oracle là container ở mức demux. **Hại, phát biểu chính xác:** frame thừa/thiếu ở vị trí $p$ làm mọi cặp (ảnh, hành động) **từ $p$ trở đi** lệch một nhịp. Decoder LeRobot tra frame theo thời gian với `tolerance_s`: nếu pts sau chỗ lệch vẫn đều trên lưới $1/f$, nó trả frame sai nội dung đúng thời điểm, **im lặng**; nếu pts có khoảng trống hoặc thiếu ở cuối, nó **ném lỗi** `[spec: video_utils.py; tự đo theo encoder]`. **FP:** quên dịch `from_timestamp`; so float bằng `==`. **FN:** đủ số frame, sai nội dung; định vị chỗ lệch giữa file.
 
-```bash
-ffprobe -v error -select_streams v:0 -count_packets \
-  -show_entries stream=nb_read_packets -of csv=p=0 ep.mp4
-```
+#### L4 — Kênh đơ
 
-- **Ngưỡng:** lệch ≥1 frame là lỗi.
-- **Oracle:** container video, đếm ở mức demux (không tin header `nb_frames`, xem Bài 9).
-- **Vì sao hại, phát biểu chính xác:** frame thừa hoặc thiếu ở vị trí $p$ làm mọi cặp (ảnh, hành động) **từ $p$ trở đi** lệch một nhịp; trước $p$ thì đúng. Ở v3, decoder tra frame theo thời gian với dung sai `tolerance_s`: lệch ở giữa cho ra frame sai nội dung nhưng đúng thời điểm, **im lặng**; thiếu frame ở cuối thì truy vấn cuối không tìm được frame trong dung sai và **ném lỗi** `[spec: video_utils.py; tự đo theo phiên bản]`. Lỗi giữa im lặng, lỗi cuối ồn ào: phần im lặng mới là phần nguy hiểm.
-- **Mô hình tư duy:** giống offset bị lệch một bản ghi trong một log append-only: mọi offset sau điểm lệch đều sai cùng một lượng.
-
-<details><summary>Câu hỏi ngược L3 — [Vì sao không] Vì sao không so thời lượng video (giây) với length/fps thay vì đếm packet?</summary>Thời lượng container có thể bị làm tròn, có edit list, và frame cuối có duration riêng; sai số cỡ một frame — đúng bằng cỡ lỗi bạn đang tìm. Đếm packet có độ phân giải đúng một frame. Dùng thời lượng như kiểm tra phụ cho `to_timestamp` của episode cuối.</details>
-
----
-
-#### L4 — Kênh đơ (frozen channel)
-
-- **Định nghĩa bản gốc:** một chiều của `observation.state` giữ nguyên giá trị **chính xác** trong ≥1 s **trong khi các khớp khác chuyển động**.
-- **Vì sao định nghĩa đó báo nhầm:** bản gốc lập luận "cảm biến thật luôn có nhiễu ở bit thấp nhất". Điều đó chỉ đúng khi độ lệch chuẩn nhiễu $\sigma$ không nhỏ hơn nhiều so với bước lượng tử $q$. Với encoder 12 bit của servo giữ vị trí, $\sigma$ có thể nhỏ hơn nửa LSB, và một khớp đứng yên đọc ra **cùng một số nguyên** suốt nhiều giây. Thêm vào đó, các khớp độc lập: gripper giữ đóng trong khi tay di chuyển là hành vi chuẩn của nhiệm vụ gắp-đặt. Điều kiện "khớp khác đang động" không loại được ca này.
-- **Toán:** với giá trị thật $x$ (đơn vị LSB) và nhiễu Gauss $\sigma$, xác suất $N$ lần đọc liên tiếp ra cùng một số là
+- **Bản gốc:** một chiều state giữ nguyên **chính xác** ≥1 s **trong khi khớp khác động**, vì "cảm biến thật luôn có nhiễu ở bit thấp nhất".
+- **Vì sao báo nhầm:** chỉ đúng khi nhiễu $\sigma$ không nhỏ hơn nhiều so với LSB $q$; servo giữ vị trí, encoder ít nhiễu, sim cho **cùng một số** suốt nhiều giây; và gripper giữ đóng khi tay di chuyển là hành vi chuẩn. Xác suất $N$ lần đọc liên tiếp cùng một số (giá trị thật $x$, đơn vị LSB):
   $$P_\text{same}(N) = \mathbb{E}_x\Big[\sum_k p_k(x)^N\Big], \quad p_k(x) = \Phi\!\Big(\tfrac{k+\frac12-x}{\sigma}\Big) - \Phi\!\Big(\tfrac{k-\frac12-x}{\sigma}\Big).$$
-  Phần 5 yêu cầu bạn tính nó cho vài $\sigma/q$; kết quả quyết định L4 có dùng được "giá trị bằng nhau chính xác" làm bằng chứng hay không.
-- **Định nghĩa sửa (oracle = lệnh của chính khớp):** tồn tại đoạn liên tiếp $R$ với $\Delta s_{i,j} = 0\ \forall i \in R$, $|R| \ge W f$, **và** $\max_R a_j - \min_R a_j > m\, q_j$ (lệnh của khớp $j$ đã đổi nhiều LSB mà state không nhúc nhích). Khi action không cùng không gian với state: dùng định nghĩa bản gốc nhưng hạ mức xuống "cảnh báo" và ghi rõ oracle yếu hơn.
-- **Ngưỡng tạm:** $W = 1$ s, $m = 5$; Bài 12 quét $W$.
-- **Vì sao hại:** encoder chết, dây lỏng, hoặc driver trả lại giá trị đọc thành công cuối cùng: dữ liệu hợp lệ về schema và sai hoàn toàn. Policy học "lệnh này không làm khớp chuyển động".
-- **Liên hệ Bài 5:** tỉ lệ nén cao bất thường của một kênh là chỉ báo rẻ cho "lặp lại nhiều"; dùng được để sàng lọc nhanh, không dùng làm phán quyết.
-
-<details><summary>Câu hỏi ngược L4 — [Phản biện] Khớp bị kẹt cơ khí (vật cản) cũng cho state phẳng trong khi lệnh đổi. Đó là lỗi dữ liệu hay dữ liệu đúng về một sự kiện thật?</summary>Đó là dữ liệu đúng về một episode có thể không mong muốn. Detector không phân biệt được cảm biến chết với khớp bị chặn chỉ từ state; dòng điện motor (nếu có trong state) hoặc video thì phân biệt được. Báo cáo nên nói "state không theo lệnh", không nói "cảm biến hỏng".</details>
-
----
+- **Định nghĩa sửa (oracle = lệnh của chính khớp):** đoạn $R$ với $\Delta s_{i,j} = 0\ \forall i \in R$, $|R| \ge W f$, **và** $\max_R a_j - \min_R a_j > m\, q_j$. Tạm $W = 1$ s, $m = 5$; Bài 12 quét $W$, và $W$ phải tính theo độ phân giải encoder và tốc độ chậm nhất hợp lệ. Action khác không gian với state: dùng bản gốc, hạ xuống "cảnh báo", ghi oracle yếu.
+- **Hại:** encoder chết, dây lỏng, driver trả lại giá trị đọc cuối: hợp lệ schema, sai hoàn toàn; policy học "lệnh này không làm khớp chuyển động". **FN:** đơ có nhiễu (giá trị cũ + nhiễu ADC); đơ ngắn hơn $W$.
 
 #### L5 — Lệch pha action/state
 
-- **Định nghĩa:** `action` tại frame $t$ là nguyên nhân của `state` ở $t+k$ với $k$ nhỏ và **nhất quán** giữa các episode của cùng dataset.
-- **Phát hiện bản gốc** (tương quan chéo trên vị trí, chỉ quét $k \ge 0$):
+Action tại $t$ là nguyên nhân của state ở $t+k$, $k$ nhỏ và **nhất quán** giữa các episode. Bản gốc: `best_lag` chuẩn hóa `action_j`, `state_j`, lấy argmax `np.corrcoef` ở lag 0..5; cảnh báo nếu lag >3, lag khác nhau giữa episode, hoặc tương quan đỉnh <0,5. Bốn chỗ gãy:
 
-```python
-def best_lag(action_j, state_j, max_lag=5):
-    a = (action_j - action_j.mean()) / (action_j.std() + 1e-9)
-    s = (state_j  - state_j.mean())  / (state_j.std()  + 1e-9)
-    best, best_c = 0, -np.inf
-    for lag in range(0, max_lag + 1):
-        if lag == 0:
-            c = np.corrcoef(a, s)[0, 1]
-        else:
-            c = np.corrcoef(a[:-lag], s[lag:])[0, 1]
-        if c > best_c:
-            best, best_c = lag, c
-    return best, best_c
-```
+1. **Mặc định cùng đại lượng.** Action delta/vận tốc (libero) phải so với $\Delta s$, không với $s$.
+2. **Chỉ quét $k \ge 0$.** Action ghi **trễ** (hàng $t$ chứa lệnh của $t-3$) cho lag thật âm; hàm trả 0 và gọi lỗi là "không lệch".
+3. **Tương quan vị trí cho đỉnh rộng** (tự tương quan cao): argmax nhảy giữa lag kề nhau theo nhiễu — chính triệu chứng "lag khác nhau mỗi lần chạy" của bản gốc. Chuẩn: tương quan trên **sai phân** (prewhitening → F5.6).
+4. **"Lag" phụ thuộc phép ước lượng:** tương quan vị trí đo gần trễ thuần + trễ nhóm của follower; sai phân đo gần trễ thuần. Ngưỡng tuyệt đối "lag > 3", "ρ < 0,5", "lag khác nhau" vô nghĩa nếu không kèm phép ước lượng và sai số của nó.
 
-- **Ba chỗ gãy của bản gốc:**
-  1. **Chỉ quét $k \ge 0$.** Nếu action bị ghi **trễ** (hàng $t$ chứa lệnh của $t-3$), lag thật âm; hàm trả về 0 với tương quan thấp hơn, và lỗi bị gọi nhầm thành "lag bằng 0, rất tốt". Phải quét $k \in [-K, K]$.
-  2. **Tương quan trên vị trí cho đỉnh rộng.** Tín hiệu vị trí trơn có tự tương quan cao: tương quan tại $k$, $k\pm1$ gần như bằng nhau, nên argmax nhảy giữa các lag lân cận theo nhiễu (đây chính là triệu chứng "L5 báo lag khác nhau mỗi lần chạy" mà bản gốc ghi ở Bài 12). Cách chuẩn trong xử lý tín hiệu: tương quan trên **sai phân** $\Delta a$, $\Delta s$ (một dạng làm trắng, prewhitening → F5.6), đỉnh hẹp hơn nhiều.
-  3. **"Lag" là gì phụ thuộc phép ước lượng.** Follower bám leader qua một vòng điều khiển (trễ thuần) và động học bậc nhất (trễ nhóm cỡ hằng số thời gian). Tương quan vị trí đo gần với tổng hai thứ; tương quan sai phân đo gần với trễ thuần. Ngưỡng tuyệt đối "lag > 3 frame" vì vậy không có nghĩa nếu không nói ước lượng bằng gì. Ngưỡng tương quan "< 0.5" cũng vậy: tương quan sai phân thường thấp hơn tương quan vị trí trên cùng dữ liệu.
-- **Định nghĩa sửa:**
-  $$\rho_j(k) = \operatorname{corr}(\Delta a_{t,j},\ \Delta s_{t+k,j}),\quad k \in [-K, K], \qquad k^*_e = \arg\max_k \rho_j(k)\ \text{(gộp các khớp có chuyển động)}.$$
-  Gọi $\tilde k$ là trung vị của $k^*_e$ trên mọi episode của dataset. Cờ: (i) $|k^*_e - \tilde k| \ge 2$ → episode lệch pha so với chính dataset (pipeline không tất định); (ii) $\tilde k < 0$ → action đi **sau** state, gần như chắc chắn là lỗi ghép; (iii) $\tilde k$ lớn hơn trễ hợp lý từ datasheet servo và fps → cảnh báo hệ thống. **INCONCLUSIVE** khi khớp không chuyển động đủ (độ lệch chuẩn của $\Delta a_j$ chỉ vài LSB) hoặc đỉnh không nổi (khoảng cách đỉnh tới lag lân cận nhỏ).
-- **Oracle:** động học nhân quả — state không thể phản ứng **trước** lệnh, và một hệ cơ khí không đổi độ trễ giữa các lần thu nếu pipeline tất định.
-- **Vì sao hại:** imitation learning học ánh xạ quan sát → hành động. Lệch pha nghĩa là mô hình học "khi thấy X thì làm hành động vốn thuộc về thời điểm khác". Policy chạy được nhưng kém, và không ai biết vì sao. Đây là detector khó nhất và là thứ khiến tool khác với một script kiểm schema.
+**Định nghĩa sửa:** $g$ = sai phân với action tuyệt đối, đồng nhất với action delta; $\rho_j(k) = \operatorname{corr}(g(a)_{t,j}, \Delta s_{t+k,j})$, $k \in [-K, K]$; $k^*_e$ = argmax gộp các khớp có chuyển động; $\tilde k$ = trung vị $k^*_e$ trên dataset. Cờ: (i) $|k^*_e - \tilde k| \ge 2$ (pipeline không tất định); (ii) $\tilde k < 0$ (action đi sau state, gần như chắc lỗi ghép); (iii) $\tilde k$ lớn hơn trễ hợp lý từ datasheet servo. INCONCLUSIVE khi khớp ít động hoặc đỉnh không nổi. **Hại:** policy học "thấy X thì làm hành động của thời điểm khác"; chạy được nhưng kém, không ai biết vì sao. **FN:** lệch đều mọi episode (chỉ cờ iii thấy).
 
-Mô phỏng: leader chuyển động trơn, follower bậc nhất với hằng số thời gian 100 ms cộng trễ một frame, 20 episode, ba trường hợp: sạch, action ghi trễ 3 frame, action ghi sớm 3 frame. **Trước khi chạy**, ghi dự đoán (phần 5, câu d).
+Mô phỏng (action tuyệt đối): follower bậc nhất τ = 100 ms + trễ một frame, 20 episode; sạch, action ghi trễ 3 frame, ghi sớm 3 frame.
 
 ```python
 # [đã chạy] L5: ước lượng lag action->state bằng tương quan chéo; vị trí vs sai phân
@@ -695,398 +732,341 @@ from scipy.signal import lfilter
 
 def episode(seed, n=300, fps=30, tau=0.10, shift=0):
     rng = np.random.default_rng(seed)
-    a = lfilter([0.05], [1, -0.95], rng.normal(0, 1, n + 50))[50:]   # leader arm: chuyển động trơn
-    alpha = 1 - np.exp(-1 / (fps * tau))                              # follower: bám bậc nhất, tau=100 ms
-    s = lfilter([alpha], [1, -(1 - alpha)], np.r_[0, a[:-1]])         # + trễ 1 frame của vòng điều khiển
-    s = s + rng.normal(0, 0.002, n)
-    return np.roll(a, shift), s       # shift>0: hàng t chứa lệnh của t-shift (action ghi trễ) = lỗi cài
+    a = lfilter([0.05], [1, -0.95], rng.normal(0, 1, n + 50))[50:]   # leader: chuyển động trơn
+    alpha = 1 - np.exp(-1 / (fps * tau))                              # follower bậc nhất, tau=100 ms
+    s = lfilter([alpha], [1, -(1 - alpha)], np.r_[0, a[:-1]])         # + trễ 1 frame vòng điều khiển
+    return np.roll(a, shift), s + rng.normal(0, 0.002, n)  # shift>0: hàng t chứa lệnh của t-shift (lỗi cài)
 
 def xcorr_lag(a, s, max_lag=8, use_diff=False):
     if use_diff:
         a, s = np.diff(a), np.diff(s)
     a = (a - a.mean()) / (a.std() + 1e-12); s = (s - s.mean()) / (s.std() + 1e-12)
     lags = np.arange(-max_lag, max_lag + 1)
-    c = [np.corrcoef(a[max(0, -k):len(a) - max(0, k)], s[max(0, k):len(s) - max(0, -k)])[0, 1] for k in lags]
-    c = np.array(c); i = int(np.argmax(c))
+    c = np.array([np.corrcoef(a[max(0, -k):len(a) - max(0, k)], s[max(0, k):len(s) - max(0, -k)])[0, 1] for k in lags])
+    i = int(np.argmax(c))
     return lags[i], c[i], c
 
 for name, shift in [("sạch", 0), ("action trễ 3 frame", 3), ("action sớm 3 frame", -3)]:
     for use_diff in (False, True):
-        lags = []; peaks = []; widths = []
-        for seed in range(20):
-            a, s = episode(seed, shift=shift)
-            L, pk, c = xcorr_lag(a, s, use_diff=use_diff)
-            lags.append(int(L)); peaks.append(pk); widths.append(int((c > pk - 0.02).sum()))
-        tag = "diff" if use_diff else "pos "
-        print(f"{name:19s} {tag}: lag={sorted(set(lags))} đỉnh~{np.median(peaks):.3f} "
-              f"số lag trong 0.02 của đỉnh~{np.median(widths):.0f}")
+        res = [xcorr_lag(*episode(seed, shift=shift), use_diff=use_diff) for seed in range(20)]
+        lags = sorted({int(L) for L, _, _ in res}); pk = np.median([p for _, p, _ in res])
+        width = np.median([(c > p - 0.02).sum() for _, p, c in res])
+        print(f"{name:19s} {'diff' if use_diff else 'pos '}: lag={lags} đỉnh~{pk:.3f} số lag trong 0.02 của đỉnh~{width:.0f}")
 ```
 
-`np.roll` quấn vòng đầu–cuối; với 300 frame, ảnh hưởng của 3 mẫu quấn vòng lên tương quan là nhỏ, nhưng trên detector thật hãy cắt thay vì quấn.
+`np.roll` quấn vòng đầu–cuối; detector thật phải cắt thay vì quấn.
 
-<details><summary>Câu hỏi ngược L5 — [Liên ngành] Một dataset là bản ghi khi policy tự chạy (rollout đánh giá), không phải teleop. Lag "bình thường" có còn như cũ không?</summary>Action giờ là đầu ra của policy, có thể là một chunk tính trước; follower vẫn bám như cũ nên trễ cơ khí giữ nguyên, nhưng quan hệ giữa action và state có thể kém tương quan hơn (policy ra lệnh vượt trước, bị kẹp giới hạn). Baseline $\tilde k$ phải tính riêng theo loại dữ liệu; đừng trộn rollout với teleop khi lấy trung vị.</details>
+#### L6 — Bất thường vật lý
 
----
-
-#### L6 — Giá trị bất thường về vật lý
-
-- **Định nghĩa:** giá trị hợp lệ về kiểu dữ liệu nhưng không thể xảy ra về vật lý.
-- **Phát hiện:**
-  - `NaN`/`Inf` ở bất kỳ cột số nào: `~np.isfinite(x)`.
-  - **Giới hạn cơ khí lấy từ ngoài dữ liệu:** giới hạn khớp và vận tốc tối đa từ URDF/tài liệu robot và datasheet servo `[tự đo]`. Vận tốc ngầm định $|\Delta s_{i,j}| \cdot f$ vượt giới hạn là bất thường (lưu ý L2: nếu có rớt frame ẩn, vận tốc tính bằng $f$ danh định bị thổi phồng; hai detector phải được đọc cùng nhau).
-  - **Nhảy bậc, bản bền vững:** $z_i = \dfrac{|\Delta s_{i,j} - \operatorname{med}(\Delta s_j)|}{\max(1.4826\,\operatorname{MAD}(\Delta s_j),\ q_j)} > k$. Bản gốc dùng $|\Delta s| > k \cdot \operatorname{median}(|\Delta s|)$; khi khớp đứng yên phần lớn thời gian, trung vị bằng 0 và mọi chuyển động đều thành "nhảy bậc". Mẫu số có sàn $q_j$ để tránh chia cho 0.
-  - **Wrap-around:** bước nhảy có độ lớn xấp xỉ **cả dải** biểu diễn ($2\pi$ rad, 360°, hoặc 4096 tick), dấu ngược với chuyển động. Bản gốc ghi "bước nhảy 180°"; nhảy 180° gợi ý một lỗi khác (đổi dấu, nhầm quy ước góc), không phải wrap.
-  - **Đơn vị:** `CONVENTIONS.md` quy định góc là rad (REP-103). Khớp quay có giá trị vượt $2\pi$ nhiều lần gần như chắc chắn là độ hoặc tick; nhiều dataset LeRobot không dùng rad (ví dụ thang chuẩn hóa hoặc độ) `[tự đo theo dataset]`. Đây là phát hiện về hợp đồng, báo ở mức thông tin, không phải lỗi.
-- **Ngưỡng:** NaN/Inf: không dung thứ. Nhảy bậc: báo cáo kèm điểm $z$, để người đọc quyết.
-- **Đã chuyển sang L7:** "giá trị nằm ngoài `stats.json` min/max". `stats.json` được tính **từ chính dữ liệu**; giá trị ngoài min/max chỉ xảy ra khi stats cũ (dữ liệu bị sửa sau khi tính stats). Đó là lỗi hợp đồng metadata, không phải bằng chứng vật lý. Oracle vật lý phải đến từ **ngoài** dataset.
-- **Vì sao hại:** một NaN đủ làm loss thành NaN và hỏng cả lần train; một bước wrap-around làm độ lệch chuẩn trong `stats.json` phình ra, kéo theo chuẩn hóa sai cho **mọi** frame.
-
-Đây là **"validation theo vật lý, không chỉ theo schema"** (→ F3.7), nguyên tắc trung tâm của cả lộ trình, xuất hiện lần đầu ở đây. Ở Khóa 5 bạn áp dụng nó lên dữ liệu thời gian thực.
-
-<details><summary>Câu hỏi ngược L6 — [Nếu…thì] Nếu bạn không có URDF hay datasheet của robot trong dataset, oracle vật lý của L6 còn lại gì?</summary>Những bất biến không phụ thuộc robot cụ thể: hữu hạn, liên tục (không nhảy bậc so với phân bố của chính khớp đó), không vượt dải biểu diễn, nhất quán giữa action và state cùng khớp. Ghi rõ trong báo cáo rằng giới hạn vận tốc "không kiểm vì không có spec" — đó là INCONCLUSIVE, không phải PASS.</details>
-
----
+- `NaN`/`Inf`: không dung thứ (một NaN làm loss thành NaN, hỏng cả lần train).
+- **Giới hạn cơ khí từ ngoài dữ liệu:** URDF, datasheet servo `[tự đo]`; vận tốc $|\Delta s_{i,j}| f$ vượt giới hạn là bất thường (rớt frame ẩn thổi phồng vận tốc: đọc L2 và L6 cùng nhau).
+- **Nhảy bậc bền vững:** $z_i = |\Delta s_{i,j} - \operatorname{med}(\Delta s_j)| / \max(1{,}4826\,\operatorname{MAD}(\Delta s_j), q_j)$. Bản gốc $|\Delta s| > 20 \cdot \operatorname{median}|\Delta s|$ vỡ khi khớp đứng yên phần lớn thời gian (median = 0). Thang robust **vẫn gãy với kênh hai chế độ** (kẹp gần đứng yên rồi đóng nhanh): cần biên vật lý hoặc thang riêng theo chế độ. Báo kèm $z$.
+- **Wrap-around:** bước nhảy ≈ **cả dải** ($2\pi$, 360°, 4096 tick), dấu ngược chuyển động. Bản gốc ghi "nhảy 180°": đó gợi ý đổi dấu/nhầm quy ước. Một bước wrap làm std trong `stats.json` phình ra, chuẩn hóa sai **mọi** frame.
+- **Đơn vị:** góc là rad (REP-103, `CONVENTIONS.md`); vượt $2\pi$ nhiều lần gần như chắc là độ/tick: báo mức thông tin.
+- "Ngoài `stats.json` min/max" chuyển sang L7: stats tính **từ chính dữ liệu**. Oracle vật lý phải từ **ngoài** dataset. Đây là **"validation theo vật lý, không chỉ theo schema"** (→ F3.7), nguyên tắc trung tâm của lộ trình; Khóa 5 áp nó lên dữ liệu thời gian thực.
 
 #### L7 — Metadata không khớp dữ liệu
 
-- **Định nghĩa:** những gì `meta/` tuyên bố khác những gì `data/` và `videos/` chứa.
-- **Phát hiện (bản gốc + bổ sung cho v3):**
-
-| Tuyên bố | So với | Ghi chú |
-|---|---|---|
-| `total_frames` | tổng dòng parquet | số nguyên, chính xác |
-| `total_episodes` | số dòng `meta/episodes` (v3) / số file (v2) | — |
-| `length` mỗi episode | số dòng thật | — |
-| `dataset_from_index`/`dataset_to_index` | liên tục, không chồng | v3 |
-| `from/to_timestamp` | liên tục trong file; `to` cuối ≤ thời lượng video | v3 |
-| `fps` | fps của stream video (`avg_frame_rate` từ ffprobe) | Bản gốc so với trung vị $1/\Delta t$; với timestamp tính từ `frame_index/fps` phép so đó là lặp lại |
-| `stats.json` min/max/mean | thống kê tính lại từ dữ liệu | dung sai cho float32 và quantile xấp xỉ; lệch lớn = stats cũ |
-| `features[*].shape` | shape thật của mỗi ô | — |
-| `task_index` | tồn tại trong bảng task | — |
-
-- **Ngưỡng:** trường số nguyên: lệch bất kỳ là lỗi. Trường số thực: dung sai tương đối (ví dụ $10^{-5}$ cho mean/std float32 `[ước lượng]`), vì tính lại bằng float64 sẽ khác bản gốc ở chữ số cuối. Bản gốc ghi "lệch bất kỳ là lỗi" cho mọi trường; áp nguyên văn cho float sẽ báo nhầm trên mọi dataset.
-- **Vì sao hại:** metadata là hợp đồng; code downstream tin nó. Sai metadata làm sai mọi thứ dựa trên nó, một cách âm thầm.
-- **Mô hình tư duy:** ở backend, contract test (Pact chẳng hạn) đặt giữa **hai bên**. Ở đây bên sinh dữ liệu cũng là bên tự khai metadata, nên L7 là kiểm tra **tự nhất quán** của một bên; nó bắt lỗi ghi/chuyển đổi/sửa tay, không bắt được lỗi mà cả dữ liệu lẫn metadata cùng sai.
-
-<details><summary>Câu hỏi ngược L7 — [Failure mode] Một người sửa tay dataset (xóa 3 episode hỏng) rồi push lại mà không tính lại metadata. Những dòng nào trong bảng trên sẽ đỏ, dòng nào vẫn xanh dù đã sai?</summary>`total_episodes`, `total_frames`, chỉ số liên tục sẽ đỏ nếu không cập nhật. `stats.json` có thể vẫn "gần đúng" và lọt qua dung sai, dù chuẩn hóa giờ dựa trên dữ liệu đã không còn. Video: nếu không cắt lại mp4, `from/to_timestamp` trỏ vào đoạn của episode đã xóa — L3 theo tổng file sẽ đỏ.</details>
-
----
+So `meta/` với `data/` + `videos/`: các `total_*`, `length`, khoảng index và `from/to_timestamp` liên tục, `shape` và `len(names)`, `task_index`, `codebase_version` vs bố cục thư mục, `stats.json` tính lại. `fps` so với fps stream video, **không** với trung vị $1/\Delta t$ (lặp lại khi timestamp được tính). Trường nguyên: chính xác; trường float: dung sai tương đối ~1e-6–1e-5 (float32 vs float64) `[ước lượng]`. Contract test ở backend đặt giữa **hai bên**; ở đây một bên vừa ghi dữ liệu vừa khai metadata, nên L7 chỉ kiểm **tự nhất quán**.
 
 #### Bảng tóm tắt (đã sửa)
 
-| ID | Lỗi | Oracle | Phát hiện | Ngưỡng tạm (Bài 12 thay) | FP chính | FN chính | Mức |
-|---|---|---|---|---|---|---|---|
-| L1 | Timestamp không đơn điệu | đồng hồ đơn điệu | `diff(ts) <= 0`; `from/to` liên tục | 1 lần | gần như không | timestamp tính từ `frame_index` | Nghiêm trọng |
-| L2 | Rớt frame / jitter | $1/f$ + vận tốc liên tục | $r_i$; vận tốc biểu kiến | Wilson: cận dưới >5% nặng | tăng tốc thật | khớp đứng yên; timestamp tính | Trung bình |
-| L3 | Video ≠ parquet | container | packet theo cửa sổ + tổng file | ≥1 frame | quên dịch `from_timestamp` | lệch giữa file (định vị) | **Nghiêm trọng** |
-| L4 | Kênh đơ | lệnh của chính khớp | chạy diff=0 ∧ lệnh đổi | $W$=1 s, $m$=5 LSB | khớp bị kẹt thật; lệnh nhỏ | đơ ngắn hơn $W$ | Nghiêm trọng |
-| L5 | Lệch pha action/state | nhân quả + nhất quán | xcorr trên sai phân, $k\in[-K,K]$ | $|k^*-\tilde k|\ge2$; $\tilde k<0$ | khớp ít động | lệch đều mọi episode (chỉ cờ iii) | **Nghiêm trọng** |
-| L6 | Bất thường vật lý | spec robot, dải biểu diễn | NaN; vận tốc; $z$ bền vững; wrap | NaN: 0 dung thứ | chuyển động nhanh thật | không có spec | Tùy |
-| L7 | Metadata lệch | `meta/` | bảng so sánh | số nguyên chính xác; float có dung sai | dung sai float quá chặt | dữ liệu và meta cùng sai | Trung bình |
+| ID | Lỗi | Oracle | Ngưỡng tạm | Trông như lỗi mà không phải | Mù khi |
+|---|---|---|---|---|---|
+| L1 | ts không đơn điệu | đồng hồ đơn điệu | 1 lần | quên tách episode | lùi < $1/f$; ts tính ra |
+| L2 | rớt frame / jitter | $1/f$ + vận tốc | Wilson cận dưới >5 % | bước float32; tăng tốc thật | ts tính ra; khớp đứng yên |
+| L3 | video ≠ parquet | container | ≥1 frame | quên dịch `from_ts`; `==` float | sai nội dung; định vị |
+| L4 | kênh đơ | lệnh của chính khớp | $W$ 1 s, $m$ 5 LSB | kẹp giữ vật; sim; lượng tử | đơ có nhiễu; < $W$ |
+| L5 | lệch pha | nhân quả + nhất quán | $\lvert k^*-\tilde k\rvert\ge2$; $\tilde k<0$ | action delta; trễ động học | lệch đều mọi episode |
+| L6 | bất thường vật lý | spec robot | NaN: 0 | kênh hai chế độ; wrap | sai nhưng trơn, trong biên |
+| L7 | meta lệch | `meta/` | nguyên chính xác, float dung sai | dung sai float quá chặt | meta và data cùng sai |
 
-Bốn lớp là đủ để PASS M3. Bảy lớp với oracle rõ ràng và ngưỡng có đường cong là thứ khó tìm thấy trong các script công khai.
-
-**Về đánh số:** `robotics-data-infra-roadmap.md` (mục L2) đánh số khác (L6 = độ dài episode bất thường, L7 = lệch pha hai luồng). Giáo trình theo đánh số của file Khóa 2. Độ dài episode bất thường (z bền vững trên $\log(\text{length})$) là phần mở rộng tùy chọn "L8".
+Mức (giữ của bản gốc): L1, L4 nghiêm trọng; **L3, L5 nghiêm trọng nhất** (im lặng); L2, L7 trung bình; L6 tùy (NaN: nghiêm trọng). Bốn lớp đủ để PASS M3. `robotics-data-infra-roadmap.md` đánh số khác (L6 = độ dài episode bất thường, L7 = lệch pha); giáo trình theo file Khóa 2, độ dài bất thường là "L8" tùy chọn.
 
 ### 3. Cầu nối từ backend
 
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
-| Great Expectations / dbt tests / Deequ: expectation trên cột (not null, range, unique) | L1, phần NaN của L6, L7 | Expectation sống trên **một cột, từng dòng**. L3, L4 sửa, L5 cần quan hệ **giữa hai luồng theo thời gian** | Viết 50 expectation, tưởng đã audit; bỏ sót đúng ba lớp nghiêm trọng nhất |
-| Kafka consumer lag (offset producer − offset consumer) | L5 lệch pha | Kafka có khóa chung (offset) để trừ; action và state không có khóa chung cho "cùng sự kiện", lag phải **suy ra thống kê** từ tương quan, có sai số và có thể không xác định | Coi lag ước lượng như con số chính xác, đặt ngưỡng cứng, báo nhầm khi khớp ít chuyển động |
-| Monitor freshness (dữ liệu mới nhất cách đây bao lâu) | L2 | Freshness đọc timestamp mà hệ thống tự ghi; nếu timestamp được tính chứ không đo, monitor luôn xanh | Dashboard xanh trong khi pipeline thu đang trễ |
-| Contract test giữa hai service | L7 | Ở đây một bên vừa ghi dữ liệu vừa ghi metadata: kiểm tự nhất quán, không phải hợp đồng hai bên | Tin L7 xanh nghĩa là dữ liệu đúng |
+| Great Expectations / dbt tests | L1, NaN, L7 | Expectation sống trên một cột, đúng/sai tuyệt đối; L4, L5 là quan hệ **giữa hai luồng theo thời gian**, có ngưỡng và tỉ lệ báo giả | Viết 50 expectation, bỏ sót đúng ba lớp nghiêm trọng nhất |
+| Kafka consumer lag, TCP sequence number | L5, L2 | Kafka có offset chung để trừ; action và state không có, lag phải **suy thống kê**. `frame_index` do bộ ghi đánh, không phải sequence của cảm biến | Coi lag ước lượng là số chính xác; tin `frame_index` liên tục là không rớt frame |
 
 **Chấm mô hình:**
 
-- *Mô hình của bạn ở K3 lượt 12:* "trong một system vật lý có số tác nhân biết trước, thu thập đủ lâu, mọi công thức vật lý gần như là hằng số, nên mọi biến số có thể được tầng AI model biểu diễn và dự đoán được." Áp vào dữ liệu training → **SAI** ở chỗ quan trọng nhất. Model học từ dữ liệu không phân biệt được sai số **hệ thống** với tín hiệu: nhiễu ngẫu nhiên thì trung bình hóa được, lệch pha 3 frame nhất quán thì model học nó như một phần của "vật lý". Phản ví dụ: một policy học từ dữ liệu có action ghi trễ 3 frame sẽ học phản ứng muộn 3 frame; thu thêm dữ liệu cùng pipeline chỉ làm nó học điều sai đó chắc chắn hơn.
-- *"Càng nhiều detector càng an toàn."* → **ĐÚNG MỘT PHẦN.** Mỗi detector thêm recall và thêm FP. Với 7 lớp × 50 episode × 6 khớp ≈ 2100 phép kiểm, FP 0.1% mỗi phép kiểm cho kỳ vọng khoảng 2 cảnh báo giả mỗi dataset sạch (bội so sánh → F1.5). Phải kiểm soát FP theo **dataset**, không theo phép kiểm.
-- *"Ngưỡng của bản gốc (1%, 5%, 3 frame, 1 s) là chuẩn ngành."* → **SAI.** Chúng là heuristic hợp lý để bắt đầu, không có tài liệu chuẩn nào đứng sau; Bài 12 biến chúng thành lựa chọn có đường cong.
+- *Mô hình của bạn ở K3 lượt 12:* "system vật lý có số tác nhân biết trước, thu đủ lâu thì mọi biến số có thể được tầng AI model biểu diễn và dự đoán." Áp vào dữ liệu training → **SAI**: model không tách sai số **hệ thống** khỏi tín hiệu; nhiễu ngẫu nhiên trung bình hóa được, lệch pha nhất quán thì được học như "vật lý". Phản ví dụ: học từ dữ liệu action ghi trễ 3 frame, policy phản ứng muộn 3 frame; thêm dữ liệu cùng pipeline chỉ làm nó sai chắc hơn.
+- *"Detector không báo gì, vậy dataset sạch."* → **SAI.** Chỉ biết: không thấy lỗi thuộc các lớp đã định nghĩa, ở mức nhạy của detector. Phản ví dụ: với `timestamp = frame_index/fps`, L2 không bao giờ báo, kể cả khi camera rớt nửa số frame.
+- *"Càng nhiều detector càng an toàn."* → **ĐÚNG MỘT PHẦN.** Thêm recall và thêm FP; phản ví dụ là câu (e): hàng nghìn phép kiểm cộng FP nhỏ thành cảnh báo giả gần như chắc chắn (→ F1.5). Kiểm soát FP theo **dataset**.
 
 ### 4. Thuật ngữ
 
 | Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
 |---|---|---|---|
 | 🟢 | oracle | Thứ đáng tin mà detector đối chiếu dữ liệu với | Ngưỡng |
-| 🟢 | tautology check | Phép kiểm mà oracle suy ra từ chính dữ liệu đang kiểm | Phép kiểm "luôn xanh nên tốt" |
-| 🟢 | INCONCLUSIVE | Dữ liệu không đủ để kiểm | PASS |
-| 🟢 | cross-correlation, lag | Dịch một chuỗi so với chuỗi kia, tìm độ dịch có tương quan cao nhất | Độ trễ chính xác tuyệt đối |
-| 🟢 | prewhitening (làm trắng) | Lấy sai phân/lọc để bỏ tự tương quan trước khi tương quan chéo | Lọc nhiễu |
-| 🟢 | lượng tử, LSB | Bước nhỏ nhất của giá trị đọc được | Nhiễu |
-| 🟢 | MAD, z bền vững | Độ phân tán dựa trên trung vị, ít bị outlier kéo | Độ lệch chuẩn |
-| 🟢 | wrap-around | Giá trị góc quấn qua biên dải biểu diễn | Robot quay thật |
-| 🟢 | khoảng Wilson | Khoảng tin cậy cho một tỉ lệ, đúng cả khi $n$ nhỏ, $p$ gần 0 | $\hat p \pm 1.96\sqrt{\hat p(1-\hat p)/n}$ (Wald, sai khi $p$ gần 0) |
-| 🟡 | trễ nhóm (group delay) | Độ trễ mà một bộ lọc/hệ động học gây ra cho tín hiệu trơn | Trễ thuần |
-| 🟡 | action chunking | Policy dự đoán một chuỗi action tương lai | — |
-| 🟡 | URDF | File mô tả robot: khớp, giới hạn, khối lượng | — |
-| 🔴 | GCC-PHAT, nội suy đỉnh sub-frame | Ước lượng trễ chính xác hơn một mẫu | Cần cho M3 |
+| 🟢 | TP/FP/FN, recall, FPR | Bốn ô của detector so với sự thật; tỉ lệ bắt được, tỉ lệ báo giả | "Độ chính xác" một con số |
+| 🟢 | tautology check | Phép kiểm có oracle suy từ chính dữ liệu | "Luôn xanh nên tốt" |
+| 🟢 | INCONCLUSIVE / không áp dụng | Dữ liệu không đủ hoặc không mang thông tin để kiểm | PASS |
+| 🟢 | cross-correlation, prewhitening | Dịch chuỗi tìm tương quan cao nhất; lấy sai phân trước để bỏ tự tương quan | Đo trễ của **pipeline** (thật ra đo cả động học) |
 
 ### 5. Dự đoán
 
-Ghi vào `predictions/11-math.md`, commit, rồi mới chạy/tính:
+Commit `predictions/11-math.md` rồi mới chạy/tính:
 
-- **(a) float32.** Episode dài 1 giờ, 30 fps, `timestamp` lưu float32. Ở cuối episode, $\Delta t$ lệch tối đa bao nhiêu phần trăm so với $1/f$ chỉ do làm tròn? Phương pháp: `np.spacing(np.float32(t))`, hoặc tạo mảng `(np.arange(n)/30).astype(np.float32)` và đo. Từ độ dài episode nào trở đi, dung sai 1% của L2 bị làm tròn float32 phá?
-- **(b) L4.** Với công thức $P_\text{same}(N)$ ở L4, $N = 30$, $\sigma/q \in \{0.1, 0.3, 0.5\}$: xác suất một khớp **đứng yên thật** đọc ra 30 giá trị y hệt? Phương pháp: `scipy.stats.norm.cdf`, lấy trung bình theo $x$ đều trên $[-\tfrac12, \tfrac12]$.
-- **(c) L2.** Mô phỏng rớt frame vô hình: detector vận tốc có recall và precision cỡ nào? Những vòng trễ nào nó bỏ sót (nhìn vào pha của chuyển động)?
-- **(d) L5.** Mô phỏng lag: với dữ liệu sạch, tương quan vị trí và tương quan sai phân lần lượt cho lag bao nhiêu, ổn định không qua 20 seed? Với action trễ 3 frame và sớm 3 frame thì sao? Đỉnh tương quan sai phân trên dữ liệu sạch cao hơn hay thấp hơn ngưỡng 0.5 của bản gốc?
-- **(e) Bội so sánh.** Dataset 50 episode, 6 khớp, 7 lớp, mỗi phép kiểm FP 0.1% độc lập: kỳ vọng số cảnh báo giả, và xác suất có ít nhất một cảnh báo giả trên một dataset hoàn toàn sạch?
-
-```markdown
-# predictions/11-math.md
-(a) dt lệch tối đa ở t=1h: ...%  ; dung sai 1% bị phá từ độ dài ...
-(b) P_same(30): σ/q=0.1: ...  0.3: ...  0.5: ...  → L4 bản gốc dùng được khi ...
-(c) detector vận tốc recall ~..., precision ~... ; bỏ sót khi ...
-(d) sạch pos: ..., diff: ... ; trễ 3: ... ; sớm 3: ... ; đỉnh diff sạch ~... (so với 0.5)
-(e) kỳ vọng FP: ... ; P(≥1 FP): ...
-```
+- **(a)** Episode 1 giờ, 30 fps, `timestamp` float32: $\Delta t$ lệch tối đa bao nhiêu % so với $1/f$ chỉ do làm tròn? Từ độ dài nào dung sai 1 % của L2 bị phá? (`(np.arange(n)/30).astype(np.float32)`, `np.spacing`.)
+- **(b)** $P_\text{same}(30)$ với $\sigma/q \in \{0{,}1;\ 0{,}3;\ 0{,}5\}$, $x$ đều trên $[-\tfrac12, \tfrac12]$ (`scipy.stats.norm.cdf`).
+- **(c)** Mô phỏng L2: recall, precision của detector vận tốc; nó bỏ sót những vòng trễ nào?
+- **(d)** Mô phỏng L5: lag theo vị trí và theo sai phân, ổn định qua seed không; trường hợp trễ/sớm 3 frame; đỉnh sai phân trên dữ liệu sạch so với ngưỡng 0,5.
+- **(e)** 7 lớp × 50 episode × 6 khớp, mỗi phép kiểm FP 0,1 % độc lập: kỳ vọng số cảnh báo giả và $P(\ge 1)$ trên dataset sạch?
+- **(f)** Cài **nguyên văn** bảy định nghĩa bản gốc, chạy trên `data/lerobotpusht`, `data/libero`: mỗi lớp báo bao nhiêu, thật hay giả? Viết **cơ chế sinh báo giả** trước khi viết số (thêm hai dòng: L1 `diff` trên cả file; L4 áp nhầm lên action).
 
 ### 6. Làm
 
-1. Viết `docs/defect-spec.md` trong repo tool: với mỗi L1–L7, sáu dòng — định nghĩa toán, oracle, dữ liệu cần (cột, video, spec ngoài), điều kiện INCONCLUSIVE, ngưỡng tạm, nguồn FP/FN đã biết. Đây là hợp đồng của tool với người dùng; Bài 14 dẫn link tới nó.
-2. Tính (a), (b), (e) bằng Python ngắn. Chạy hai mô phỏng (c), (d) ở trên.
-3. Đối chiếu với bảng khảo sát Bài 10: với mỗi dataset, lớp nào **áp dụng được** (action cùng không gian với state? timestamp đo hay tính? có video?). Ghi ma trận dataset × lớp với ô "áp dụng / không áp dụng / oracle yếu".
-4. Tra datasheet servo của ít nhất một robot trong 5 dataset: tốc độ tối đa (ví dụ đơn vị vòng/phút hoặc độ/giây) → giới hạn $|\Delta s| \cdot f$ cho L6, và trễ hợp lý cho cờ (iii) của L5. Ghi sai số của con số datasheet (thường là điều kiện không tải, điện áp danh định).
-5. Cập nhật bảng tóm tắt trong `docs/defect-spec.md` nếu ma trận ở bước 3 cho thấy một lớp không áp dụng cho phần lớn dữ liệu bạn có (ví dụ L1/L2 theo timestamp).
+1. Viết `docs/defect-spec.md`: mỗi lớp sáu dòng (định nghĩa, oracle, dữ liệu cần, điều kiện INCONCLUSIVE, ngưỡng tạm, FP/FN đã biết) — hợp đồng của tool, Bài 14 dẫn link.
+2. Tính (a), (b), (e); chạy hai mô phỏng.
+3. **Chạy bản nguyên văn trên `data/`** (câu f). Mở mọi phát hiện bằng script Bài 10, phân loại: lỗi thật / báo giả / chưa rõ.
+4. **Viết bản sửa** từng lớp theo phần 2 (L3 dùng checker Bài 9). Bảng tổng của bạn thêm hai cột: "phản ví dụ báo giả đã thấy" và "điều kiện tắt" (ví dụ: tắt L2 theo timestamp khi $\max|t - \text{frame\_index}/f| < 10^{-5}$ s, report ghi "không áp dụng").
+5. Ma trận năm dataset × bảy lớp: áp dụng / không áp dụng / oracle yếu (action cùng không gian state? timestamp đo hay tính? có video?).
+6. Tra datasheet servo một robot: tốc độ tối đa → giới hạn L6, trễ hợp lý cho cờ (iii); ghi điều kiện đo của datasheet (không tải, điện áp danh định).
+
+Sai số dụng cụ: ngưỡng trên timestamp phải lớn hơn bước float32 (~4 µs ở 50 s, ~60 µs ở 1 000 s); lag ±1 frame phụ thuộc quy ước $\Delta$.
 
 ### 7. Số phải ra
 
 <details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
 
-**(a) float32.** Ở $t \in [2048, 4096)$ s, ULP float32 là $2^{-12} \approx 2.44\times10^{-4}$ s. Đo trên episode 1 giờ ở 30 fps: $\Delta t$ dao động trong $[0.033203, 0.033447]$ s, lệch tối đa ≈ 0.34% so với $1/30$. Dung sai 1% ($3.3\times10^{-4}$ s) bắt đầu bị phá khi ULP vượt nó, tức từ $t \ge 4096$ s (≈ 68 phút), ULP $= 4.88\times10^{-4}$ s. Episode thao tác thường ngắn hơn nhiều, nên đây là giới hạn cho dữ liệu dài (lái xe, mobile robot), không phải cho gắp-đặt. Bài học: so $\Delta t$ với $1/f$ phải có dung sai, và dung sai đó phụ thuộc $t$.
+**(a)** `[đã chạy]` Ở $t \in [2048, 4096)$ s, ULP float32 là $2^{-12} \approx 2{,}44\times10^{-4}$ s; episode 1 giờ cho $\Delta t \in [0{,}033203;\ 0{,}033447]$ s, lệch tối đa ≈ 0,39 %. Dung sai 1 % ($3{,}3\times10^{-4}$ s) bị phá từ $t \ge 4096$ s (≈ 68 phút, ULP $4{,}88\times10^{-4}$ s).
 
-**(b) L4** (đã tính, trung bình theo vị trí giá trị thật trong một LSB):
+**(b)** `[đã chạy]`
 
-| $\sigma/q$ | $P_\text{same}(30)$ | Nếu giá trị thật nằm giữa hai mức |
+| $\sigma/q$ | $P_\text{same}(30)$ trung bình theo $x$ | Nếu giá trị thật ở đúng tâm một mức ($x = 0$) |
 |---|---|---|
-| 0.1 | ≈ 0.59 | ≈ 1.00 |
-| 0.2 | ≈ 0.19 | ≈ 0.69 |
-| 0.3 | ≈ 0.01 | ≈ 0.05 |
-| 0.5 | ≈ 0 | ≈ 0 |
+| 0,1 | ≈ 0,59 | ≈ 1,00 |
+| 0,2 | ≈ 0,19 | ≈ 0,69 |
+| 0,3 | ≈ 0,01 | ≈ 0,05 |
+| 0,5 | ≈ 0 | ≈ 0 |
 
-Kết luận: "30 giá trị bằng nhau chính xác ⇒ cảm biến chết" chỉ đáng tin khi nhiễu ≳ 0.5 LSB. Với encoder ít nhiễu hoặc servo giữ vị trí, khớp đứng yên **thường** cho giá trị y hệt. $\sigma/q$ của robot thật bạn phải đo từ đoạn đứng yên ở Bài 10 `[tự đo]`. Đó là lý do định nghĩa sửa dùng lệnh của chính khớp làm oracle.
+"30 giá trị bằng nhau ⇒ cảm biến chết" chỉ đáng tin khi nhiễu ≳ 0,5 LSB. $\sigma/q$ thật đo từ đoạn đứng yên ở Bài 10 `[tự đo]`.
 
-**(c) L2** (seed 0): 29 vòng trễ thật; detector theo timestamp báo **0 drop**. Detector vận tốc (ngưỡng 1.7, cửa sổ 15): TP 18, FP 2, FN 11 → recall ≈ 0.62, precision ≈ 0.90. Phần lớn FN rơi vào lúc khớp đổi chiều (vận tốc gần 0). Gộp nhiều khớp và cả action sẽ nâng recall; con số cụ thể chỉ là của mô phỏng này.
+**(c)** `[đã chạy]` 29 vòng trễ thật; L2 theo timestamp báo **0 drop**. Detector vận tốc: TP 18, FP 2, FN 11 → recall ≈ 0,62, precision ≈ 0,90; phần lớn FN lúc khớp đổi chiều (vận tốc gần 0).
 
-**(d) L5** (20 seed):
+**(d)** `[đã chạy]`
 
 | Trường hợp | Vị trí: lag | Sai phân: lag | Đỉnh vị trí / sai phân |
 |---|---|---|---|
-| Sạch | 2 hoặc 3 (đổi theo seed) | 1 (mọi seed) | ≈ 0.965 / ≈ 0.69 |
-| Action trễ 3 frame | −1 hoặc 0 | −2 | ≈ 0.963 / ≈ 0.69 |
-| Action sớm 3 frame | 5 hoặc 6 | 4 | ≈ 0.965 / ≈ 0.69 |
+| Sạch | 2 hoặc 3 (đổi theo seed) | 1 (mọi seed) | ≈ 0,965 / ≈ 0,69 |
+| Action trễ 3 | −1 hoặc 0 | −2 | ≈ 0,963 / ≈ 0,69 |
+| Action sớm 3 | 5 hoặc 6 | 4 | ≈ 0,965 / ≈ 0,69 |
 
-Đọc bảng: (1) tương quan vị trí có khoảng 3 lag nằm trong 0.02 quanh đỉnh — đỉnh rộng, argmax đổi theo seed; sai phân cho đúng một lag. (2) Sai phân đo trễ thuần (1 frame của vòng điều khiển); vị trí cộng thêm trễ nhóm của follower (τ = 100 ms ≈ 3 frame). (3) Ca action trễ 3 frame: `best_lag` bản gốc chỉ quét 0..5 nên trả về **0** — tức báo "không lệch", trong khi đó chính là lỗi. (4) Đỉnh tương quan sai phân ≈ 0.69 trên dữ liệu **sạch**; ngưỡng "< 0.5" của bản gốc mà áp cho sai phân với nhiễu lớn hơn sẽ báo nhầm.
+Vị trí: ~3 lag trong 0,02 quanh đỉnh, argmax đổi theo seed; sai phân: một lag, đo trễ thuần (vị trí cộng trễ nhóm τ ≈ 3 frame). `best_lag` gốc (0..5) trả **0** cho action trễ 3 frame: "không lệch" đúng lúc có lỗi. Đỉnh sai phân ≈ 0,69 trên dữ liệu **sạch**: ngưỡng "< 0,5" sẽ báo nhầm khi nhiễu lớn hơn.
 
-**(e)** $2100 \times 0.001 = 2.1$ cảnh báo giả kỳ vọng; $P(\ge 1) = 1 - 0.999^{2100} \approx 0.88$. Một tool như vậy sẽ "tìm thấy lỗi" trong gần 9/10 dataset sạch.
+**(e)** $2100 \times 0{,}001 = 2{,}1$ cảnh báo giả kỳ vọng; $P(\ge 1) = 1 - 0{,}999^{2100} \approx 0{,}88$.
+
+**(f)** `[tự đo, bản local 10/2026]`
+
+| Lớp nguyên văn | pusht | libero | Phân loại |
+|---|---|---|---|
+| L1 trên cả bảng | 205 | 1 692 | **Báo giả** 100 %: đúng bằng số biên episode (N − 1) |
+| L1 theo episode, L3 (v3), L7 đếm/khoảng/stats, NaN, ngoài min/max stats | 0 | 0 | Không thấy (min/max: hiển nhiên) |
+| L2 | 0, σ ≈ 3·10⁻⁶ chu kỳ | 0, σ ≈ 5·10⁻⁶ | **Không áp dụng**: ts = frame_index/fps |
+| L4 trên state / áp nhầm lên action | 0 / 1 episode | 0 / — | Action pusht là pixel nguyên, di chuột theo một trục là đủ: **báo giả** |
+| L5 | lag 2 ở 204 ep, 3 ở 2 ep | lag chạm biên 5 ở **cả 1 693** ep; ρ* < 0,5 ở 1 645 | pusht: rule "lag khác nhau" kích hoạt trong sai số lag rời rạc → báo giả. libero: **báo giả hàng loạt**, action delta so với vị trí |
+| L6 nhảy bậc 20×median | 0 (gốc), 3 bước chiều 0 (sửa) | chiều 6, 7 (ngón kẹp) ~41 000 và ~40 500 frame (≈ 15 %); chiều 3: 179 | libero: **báo giả**, kênh hai chế độ (bản "median bước đang động" vẫn ~39 500). pusht: chưa rõ |
+| L7 `len(names)` vs `shape` | khớp | 1 tên cho 8 chiều / 7 chiều | **Chưa rõ**, mức thấp |
+
+L5 sửa trên libero ($a$ vs $\Delta s$): ρ* < 0,5 chỉ còn vài episode; k* tập trung 1–2 (2–3 với `prepend`) — lag đổi ±1 theo quy ước $\Delta$. Bản nguyên văn cho **hàng chục nghìn cảnh báo**, gần như toàn bộ báo giả, không cái nào là lỗi thật đã xác nhận: tool như vậy bị tắt sau lần chạy đầu.
+
 </details>
 
 ### 8. Nếu ra khác
 
 | Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
 |---|---|---|---|
-| L4 báo đơ ở gripper trên hầu hết episode | Dùng định nghĩa bản gốc; gripper đứng yên là bình thường | Có xét lệnh của chính khớp không? | Định nghĩa sửa; ca biên thành test (Bài 12) |
-| L5 cho lag khác nhau mỗi seed / mỗi episode | Tương quan trên vị trí, đỉnh rộng; episode ngắn | Đếm số lag trong 0.02 quanh đỉnh | Sai phân; gộp khớp; độ dài tối thiểu; INCONCLUSIVE khi đỉnh không nổi |
-| L5 luôn ra lag 0 | Chỉ quét $k \ge 0$ trong khi lag thật âm | In cả $\rho(k)$ cho $k<0$ | Quét đối xứng |
-| L6 báo nhảy bậc khắp nơi | Trung vị $|\Delta s|$ = 0 vì khớp đứng yên nhiều | In median | MAD có sàn $q_j$ |
-| L7 stats lệch ở chữ số thứ 7 | float32 vs float64 | So tương đối | Dung sai |
-| Mô phỏng (b) ra số khác bảng | Không lấy trung bình theo vị trí giá trị thật | Tính lại ở $x=0$ để so cột phải | — |
+| L1 báo đúng N − 1 | Quên tách episode | So với số episode | Group theo `episode_index` trước mọi `diff` |
+| L4 báo đơ ở kênh kẹp hầu hết episode | Định nghĩa gốc | Có xét lệnh của chính khớp không? | Định nghĩa sửa; ca biên thành test Bài 12 |
+| L5 lag luôn bằng `max_lag`, hoặc luôn 0 | So sai đại lượng; chỉ quét $k \ge 0$ | Vẽ $\rho(k)$, $k = -10..10$ | $g$ theo action space; quét đối xứng |
+| L5 lag nhảy giữa hai giá trị kề | Đỉnh rộng; episode ngắn; lag thật giữa hai frame | Số lag trong 0,02 quanh đỉnh | Sai phân, gộp khớp, nội suy parabol quanh đỉnh, INCONCLUSIVE |
+| L6 báo 10–20 % frame ở một chiều | Kênh hai chế độ hoặc median = 0 | Histogram log $\lvert\Delta s\rvert$: hai cụm? | MAD có sàn $q_j$; biên vật lý |
 
 ### 9. Câu hỏi ngược
 
-1. **[Quy mô]** Ở 100 robot × 1000 giờ, L5 tính tương quan chéo cho mỗi episode × khớp × $(2K+1)$ lag. Thứ gì gãy trước: CPU, I/O đọc parquet, hay chính ý nghĩa thống kê của $\tilde k$ khi dữ liệu trộn nhiều robot khác nhau?
-   <details><summary>Hướng nghĩ</summary>Tính toán rẻ (FFT, hoặc $K$ nhỏ); đọc cột từ parquet columnar rẻ. Thứ gãy là giả định "một baseline cho cả dataset": robot khác firmware, khác servo, khác tải có trễ khác nhau. Baseline phải phân tầng theo `robot_type`/thiết bị — tức bạn cần provenance (→ F3.8) để audit đúng.</details>
-2. **[Failure mode]** Một pipeline thu ghi action và state từ hai luồng khác nhau, mỗi luồng tự đóng dấu bằng `frame_index`, nhưng một luồng bỏ frame đầu tiên. Lớp nào trong bảy lớp bắt được, với chữ ký gì?
-   <details><summary>Hướng nghĩ</summary>L5: lag lệch đúng 1 frame so với baseline, nhất quán trên mọi episode từ pipeline đó — chỉ cờ (iii) hoặc so giữa các nguồn mới thấy. L1–L3, L7 đều xanh. Đây là lý do baseline nên so giữa các nhóm (theo ngày thu, theo người thu), không chỉ trong một dataset.</details>
-3. **[Vì sao không]** Vì sao không train một autoencoder phát hiện bất thường trên toàn bộ dữ liệu, thay cho bảy định nghĩa viết tay?
-   <details><summary>Hướng nghĩ</summary>Autoencoder học "bình thường" từ chính dữ liệu: lỗi hệ thống có mặt khắp dataset (lệch pha đều) sẽ được học thành bình thường — lại một oracle suy ra từ dữ liệu. Nó cũng khó giải thích cho maintainer khi bạn báo lỗi. Có chỗ dùng: sàng lọc ứng viên cho người nhìn.</details>
-4. **[Liên ngành]** Trong địa chấn học, người ta dùng tương quan chéo nhiễu nền giữa hai trạm để phát hiện đồng hồ của một trạm bị lệch. Giống và khác L5 ở đâu?
-   <details><summary>Hướng nghĩ</summary>Giống: suy ra lệch thời gian từ thống kê tín hiệu, so với baseline theo thời gian. Khác: ở địa chấn, trễ truyền sóng giữa hai trạm là hằng số vật lý, nên mọi thay đổi theo ngày là lỗi đồng hồ; ở robot, trễ động học có thể thay đổi theo tải/tư thế, nên ngưỡng phải rộng hơn.</details>
-5. **[Phản biện]** "L1 và L2 theo timestamp vô dụng với dataset LeRobot, nên bỏ đi." Phản biện.
-   <details><summary>Hướng nghĩ</summary>Vô dụng với dữ liệu ghi bằng `lerobot-record` hiện hành; vẫn bắt được lỗi ở dataset chuyển đổi, dataset do công cụ khác ghi, và lỗi khi ai đó sửa tay parquet. Chi phí chạy gần 0. Giữ, nhưng báo cáo phải nói rõ "oracle yếu" khi timestamp được tính.</details>
+1. **[Quy mô]** Ở 100 robot × 1000 giờ, L5 tính tương quan cho mỗi episode × khớp × $(2K+1)$ lag. Thứ gì gãy trước: CPU, I/O, hay ý nghĩa của một $\tilde k$ khi dữ liệu trộn nhiều robot?
+<details><summary>Hướng nghĩ</summary>
+
+Tính và đọc cột đều rẻ. Thứ gãy là "một baseline cho cả dataset": khác firmware, servo, tải thì trễ khác. Phân tầng baseline cần provenance (→ F3.8).
+
+</details>
+
+2. **[Failure mode]** Bộ chuyển đổi ghép ảnh với state theo "frame gần nhất", camera trễ cố định 66 ms so với joint state. Lớp nào trong L1–L7 bắt được?
+<details><summary>Hướng nghĩ</summary>
+
+Lệch hằng định không vi phạm đơn điệu, số frame hay meta. Chỉ detector so **nội dung** ảnh với state (chuyển động trong ảnh vs vận tốc khớp, → F4.6) mới thấy: một lớp thứ tám, khó và có giá trị.
+
+</details>
+
+3. **[Vì sao không]** Vì sao không train một autoencoder phát hiện bất thường thay cho bảy định nghĩa viết tay?
+<details><summary>Hướng nghĩ</summary>
+
+Nó học "bình thường" từ chính dữ liệu: lỗi hệ thống có mặt khắp dataset được học thành bình thường — lại một oracle suy từ dữ liệu. Nó cũng không cho **lý do** để maintainer sửa. Chỗ dùng: sàng lọc ứng viên.
+
+</details>
+
+4. **[Liên ngành]** Địa chấn học tương quan chéo nhiễu nền giữa hai trạm để phát hiện đồng hồ một trạm bị lệch. Giống và khác L5 ở đâu?
+<details><summary>Hướng nghĩ</summary>
+
+Giống: suy lệch thời gian từ thống kê tín hiệu, so với baseline. Khác: trễ truyền sóng giữa hai trạm là hằng số vật lý; trễ động học robot đổi theo tải/tư thế, ngưỡng phải rộng hơn.
+
+</details>
 
 ### 10. Liên kết ra ngoài
 
-- **Địa chấn học: phát hiện lệch đồng hồ trạm bằng tương quan nhiễu nền.** Giống: ước lượng trễ bằng tương quan chéo, theo dõi theo thời gian, cờ khi lệch khỏi baseline. Khác: trễ "đúng" giữa hai trạm là cố định vật lý; trễ action→state của robot có thể đổi theo tải, nên baseline phải phân tầng.
-- **Tài chính: phân loại lệnh mua/bán (thuật toán Lee–Ready).** Dữ liệu giao dịch và dữ liệu báo giá đến từ hai luồng có độ trễ đóng dấu khác nhau; bài báo gốc (Lee và Ready, 1991) đề xuất so giao dịch với báo giá **trước đó vài giây** để bù trễ. Giống: hai luồng cùng sự kiện, lệch pha có hệ thống, phải căn chỉnh trước khi ghép. Khác: thị trường không có "động học vật lý" làm oracle; độ trễ được chọn theo thực nghiệm và thay đổi theo thời đại công nghệ sàn.
+- **Tài chính: Lee–Ready (1991).** Giao dịch và báo giá đến từ hai luồng có trễ đóng dấu khác nhau; Lee và Ready so giao dịch với báo giá vài giây trước để bù. Giống L5: hai luồng cùng sự kiện, lệch pha hệ thống, phải căn trước khi ghép. Khác: thị trường không có động học làm oracle; trễ chọn theo thực nghiệm.
 
 ### 11. Độ tin cậy và sửa lỗi
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| Sự cố giây nhuận 2017 của Cloudflare RRDNS | `[chuẩn]` | Bài blog của Cloudflare |
-| Mars Climate Orbiter, nhầm pound-force·s / newton·s | `[chuẩn]` | Báo cáo Mishap Investigation Board 1999 |
-| ULP float32 ở [2048, 4096) s là $2^{-12}$ s | `[chuẩn]` | `np.spacing` |
-| $P_\text{same}$ trong bảng 🔒 | `[đã chạy]` | Giả định nhiễu Gauss độc lập; servo thật có deadband, nhiễu tương quan `[tự đo]` |
-| Kết quả mô phỏng L2, L5 | `[đã chạy]` | Chỉ là của mô hình đồ chơi; định tính chuyển được, định lượng thì không |
-| Decoder LeRobot ném lỗi khi frame ngoài dung sai | `[spec, tự đo]` | `video_utils.py`; hành vi có thể đổi theo backend giải mã |
+| Cloudflare 2017, Go 1.9 monotonic; Mars Climate Orbiter | `[chuẩn]` | Postmortem Cloudflare; báo cáo MIB 1999 |
+| ULP float32, $P_\text{same}$, mô phỏng L2, L5 | `[đã chạy]` | Mô hình đồ chơi: định tính chuyển được, định lượng thì không |
+| Kết quả (f); kênh 6–7 libero là ngón kẹp | `[tự đo]` | Bản local; tài liệu LIBERO |
+| Decoder ném `FrameTimestampError` ngoài dung sai | `[spec, tự đo]` | `video_utils.py`, đổi theo backend |
 
-**Đã sửa so với bản gốc:**
-- L1, L2: bổ sung rằng `timestamp` được tính từ `frame_index/fps` khi ghi bằng LeRobot hiện hành, nên hai lớp này kiểm code ghi chứ không kiểm đồng hồ; thêm oracle vật lý cho rớt frame; thêm ngưỡng theo khoảng Wilson.
-- L3: "lệch một frame nghĩa là mọi cặp trên toàn bộ episode sai một nhịp" → chỉ từ điểm lệch trở đi; bổ sung cách kiểm cho v3 (cửa sổ + tổng file).
-- L4: "cảm biến thật luôn có nhiễu ở bit thấp nhất" chỉ đúng khi $\sigma \gtrsim 0.5$ LSB; điều kiện "khớp khác đang động" không loại được gripper/khớp nghỉ. Sửa oracle thành lệnh của chính khớp.
-- L5: `best_lag` chỉ quét lag ≥ 0 (bỏ sót action ghi trễ); tương quan vị trí cho đỉnh rộng; ngưỡng tuyệt đối "lag > 3", "tương quan < 0.5" phụ thuộc phép ước lượng. Sửa: sai phân, quét đối xứng, so với baseline của dataset, thêm INCONCLUSIVE.
-- L6: "ngoài `stats.json` min/max" là kiểm tra lặp lại (stats tính từ chính dữ liệu) → chuyển sang L7; "bước nhảy 180° thường là wrap-around" → wrap-around có độ lớn cả dải ($2\pi$/360°/4096 tick); "$k \times$ median" vỡ khi median = 0 → MAD có sàn.
-- L7: "lệch bất kỳ là lỗi" → đúng cho trường số nguyên; trường float cần dung sai. "fps vs trung vị 1/dt" là lặp lại khi timestamp được tính → so với fps của stream video.
-- Ghi chú đánh số L6/L7 khác giữa `robotics-data-infra-roadmap.md` và file Khóa 2.
+**Đã sửa so với bản gốc** (chi tiết ở từng lớp, phần 2): L1 thiếu tách theo episode; L2 giả định timestamp được đo; L3 phóng đại hậu quả ("mọi cặp trên toàn episode") và chỉ có kiểm v2; L4 "luôn có nhiễu bit thấp"; L5 mặc định cùng đại lượng, chỉ quét lag ≥ 0, ngưỡng tuyệt đối không có mô hình sai số; L6 "ngoài stats.json" là kiểm lặp lại, "nhảy 180° là wrap", "k × median" vỡ khi median = 0; L7 "lệch bất kỳ là lỗi" cho cả float, "fps vs 1/dt" lặp lại. Bỏ câu "làm được bảy thì tool tốt hơn mọi thứ hiện có công khai": không kiểm chứng được.
+
+**Hợp nhất (Claude × Kiro):** nền Claude; ghép từ Kiro câu (f) chạy bản nguyên văn trên `data/`, lỗi quên tách episode, $g$ theo action space, kênh hai chế độ, cột FP/FN, câu hỏi camera 66 ms, tick encoder. Sửa bản Claude: nhãn cột phải bảng $P_\text{same}$ ("giữa hai mức" → tâm một mức, $x = 0$); lệch dt tối đa 0,34 % → 0,39 %.
 
 ### 12. Đọc thêm và tự kiểm tra
 
-- **Nguồn gốc:** source `huggingface/lerobot`, `src/lerobot/datasets/dataset_writer.py` (cách timestamp được tạo) và `video_utils.py` (cách frame được tra theo thời gian).
-- **Giải thích:** Julius S. Bendat, Allan G. Piersol, *Random Data: Analysis and Measurement Procedures* — chương về tương quan chéo và ước lượng trễ, giải thích vì sao tự tương quan làm rộng đỉnh.
-- **Đào sâu (tùy chọn):** Lee, C. M. C. và Ready, M. J., "Inferring Trade Direction from Intraday Data", *Journal of Finance* (1991).
-- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao "oracle suy ra từ chính dữ liệu" làm detector vô dụng, lấy ví dụ L2 và L6; (2) vẽ lại sơ đồ bảy lớp → bảy oracle; (3) câu hỏi:
-  - Một khớp có $\sigma/q = 0.15$. Định nghĩa L4 bản gốc sẽ cho FP nhiều hay ít trên đoạn khớp đứng yên? Vì sao?
-  - Tương quan chéo trên vị trí cho lag 2 ở episode này, 3 ở episode kia. Có kết luận được pipeline không tất định không?
+- **Nguồn gốc:** source `huggingface/lerobot`: `src/lerobot/datasets/dataset_writer.py` (timestamp được tạo thế nào), `video_utils.py` (frame được tra thế nào).
+- **Giải thích:** Bendat, Piersol, *Random Data: Analysis and Measurement Procedures* — chương tương quan chéo và ước lượng trễ.
+- **Đào sâu (tùy chọn):** Lee và Ready, "Inferring Trade Direction from Intraday Data", *Journal of Finance*, 1991.
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao "oracle suy từ chính dữ liệu" làm detector vô dụng, ví dụ L2 và L6; (2) vẽ lại sơ đồ bảy lớp → bảy oracle; (3) câu hỏi:
+  - Tương quan vị trí cho lag 2 ở episode này, 3 ở episode kia: kết luận được pipeline không tất định không?
+  - Khớp vai, encoder 4 096 tick/vòng, đi 0,05 rad/s, ghi 30 fps: L4 ($W$ = 1 s, chỉ xét state) có báo giả không? Ở 0,002 rad/s?
 
-  <details><summary>Đáp án</summary>(a) Nhiều: với $\sigma/q$ nhỏ hơn 0.2, khớp đứng yên đọc ra cùng một số trong 30 frame với xác suất đáng kể (bảng 🔒 phần 7: cỡ 0.2–0.6 tùy vị trí giá trị thật), nên định nghĩa bản gốc báo đơ trên khớp nghỉ. (b) Không: tương quan vị trí có đỉnh rộng, chênh 1 lag nằm trong nhiễu của phép ước lượng. Dùng sai phân rồi mới so; cờ khi chênh ≥ 2 so với baseline.</details>
+<details><summary>Đáp án</summary>
+
+(a) Không: đỉnh rộng, chênh 1 lag nằm trong nhiễu ước lượng; dùng sai phân, cờ khi chênh ≥ 2 so với baseline. (b) Một tick ≈ 1,53 mrad. Ở 0,05 rad/s mỗi frame đi ≈ 1,7 mrad, gần một tick: đôi khi hai frame liền cùng giá trị, không tới 30. Ở 0,002 rad/s một tick mất ~0,8 s ≈ 23 frame: sát ngưỡng, sẽ có lúc báo giả. $W$ phải tính theo độ phân giải và tốc độ chậm nhất hợp lệ.
+
+</details>
 
 ---
 
-## Bài 12 — Viết detector và test tổng hợp (20h)
 
-> **Vị trí:** Bài 11 → **Bài 12** → Bài 13 · **Cần trước:** F2.1 (oracle, FP/FN), F2.5 (mutation testing, fault injection, canary lỗi cố ý), F2.4 (property-based, metamorphic, golden file), F2.2 (seed, hermetic), F2.3 (phán quyết ba trạng thái), F1.4 (Wilson), Bài 11 · **Sau bài này bạn quyết định được:** ngưỡng của từng detector, chọn trên đường cong FP/FN với mô hình lỗi đã công bố; và detector nào đủ tin cậy để được làm **fail CI** của người khác (`--fail-on`), detector nào chỉ được cảnh báo.
+## Bài 12 — Viết detector và đo chính detector bằng lỗi tiêm vào (20h)
+
+> **Vị trí:** Bài 11 (định nghĩa) → **Bài 12** → Bài 13 (dataset thật) · **Cần trước:** F2.1 (oracle, FP/FN), F2.5 (mutation testing, fault injection, canary lỗi cố ý), F1.4 (Wilson), F2.4 (property-based, metamorphic, golden file), F2.2 (seed, hermetic), F2.3 (phán quyết ba trạng thái), Bài 11 · **Sau bài này bạn quyết định được:** ngưỡng ship cho từng detector, chọn trên đường cong FP/FN theo tiêu chí viết trước, kèm TPR theo độ lớn lỗi và FPR có khoảng tin cậy; detector nào đủ tin cậy để làm **fail CI** của người khác (`--fail-on`), detector nào chỉ cảnh báo hoặc chưa bật mặc định.
+
+Phân bổ giờ gợi ý: bộ sinh sạch 4h · bộ tiêm lỗi 3h · test đơn vị 3h · đo TPR/FPR + quét ngưỡng 5h · mutation testing + canary 2h · CLI 3h.
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
-Năm 1978, DeMillo, Lipton và Sayward viết "Hints on Test Data Selection: Help for the Practicing Programmer" (IEEE Computer), đặt nền cho **mutation testing**: muốn biết bộ test có tốt không, hãy cố ý làm hỏng chương trình theo những cách nhỏ (đổi `<` thành `<=`, đổi hằng số) và đếm bao nhiêu bản hỏng bị test bắt. Trước đó, Harlan Mills đã đề xuất "error seeding": cài một số lỗi biết trước vào code, tỉ lệ lỗi cài bị tìm thấy cho phép ước lượng còn bao nhiêu lỗi thật chưa thấy `[chuẩn]`. Ý tưởng chung: **dụng cụ kiểm tra chỉ đáng tin bằng tỉ lệ nó bắt được những lỗi mà bạn biết chắc là có**.
+Đầu thập niên 1970, Harlan Mills (IBM) đề xuất **error seeding**: cài lỗi biết trước vào chương trình; tỉ lệ lỗi cài bị tìm thấy cho phép ước lượng số lỗi thật còn lại (logic capture–recapture của sinh thái học). Năm 1978, DeMillo, Lipton và Sayward ("Hints on Test Data Selection", *IEEE Computer*) đặt nền **mutation testing**: tự sinh các bản code hỏng nhỏ (`<` thành `<=`), bộ test tốt phải "giết" được chúng `[chuẩn]`. Ý chung: **dụng cụ kiểm tra chỉ đáng tin bằng tỉ lệ nó bắt được những lỗi bạn biết chắc là có.**
 
-Thiên văn học làm đúng điều đó ở quy mô lớn. Pipeline tìm hành tinh ngoài hệ Mặt Trời của Kepler được hiệu chuẩn bằng **injection–recovery**: nhóm của Jessie Christiansen tiêm hàng nghìn tín hiệu transit nhân tạo vào dữ liệu thật của chính kính thiên văn, chạy pipeline, và đo tỉ lệ thu hồi theo kích thước và chu kỳ hành tinh (loạt bài "Measuring Transit Signal Recovery in the Kepler Pipeline") `[chuẩn]`. Không có đường cong đó, câu "Kepler không thấy hành tinh nhỏ quanh sao X" không có nghĩa gì: không thấy vì không có, hay vì pipeline mù ở kích thước đó? Tool của bạn gặp đúng câu hỏi ấy, và bài này trả lời nó theo cùng cách.
+Thiên văn làm đúng điều đó ở quy mô lớn. Pipeline tìm hành tinh của Kepler được hiệu chuẩn bằng **injection–recovery**: nhóm của Jessie Christiansen tiêm hàng nghìn tín hiệu transit nhân tạo vào dữ liệu thật của kính, chạy pipeline, đo tỉ lệ thu hồi theo kích thước và chu kỳ hành tinh (loạt bài "Measuring Transit Signal Recovery in the Kepler Pipeline") `[chuẩn]`. Không có đường cong đó, câu "Kepler không thấy hành tinh nhỏ quanh sao X" vô nghĩa: không thấy vì không có, hay vì pipeline mù ở cỡ đó? Bạn đã làm một nửa việc này (server mock, script chấm pass/fail/inconclusive); nửa còn thiếu là coi chính script chấm là **một phép đo** có TPR, FPR và khoảng tin cậy.
 
 ### 2. Mô hình tư duy
 
 ```mermaid
 flowchart LR
-  C["make_clean()<br/>mô hình dữ liệu LÀNH<br/>(lượng tử, khớp nghỉ, trễ follower)"] --> I["inject_*()<br/>mô hình LỖI<br/>(loại, độ lớn, vị trí)"]
-  C --> A0["audit()"]
-  I --> A1["audit()"]
-  A0 --> M["Ma trận nhầm lẫn<br/>theo detector × tham số"]
-  A1 --> M
-  M --> K["Đường cong FP/FN<br/>theo ngưỡng"]
-  K --> T["Ngưỡng + tuyên bố công khai<br/>'với mô hình lỗi X, FN ≤ …, FP ≤ …'"]
+  C["make_clean()<br/>mô hình dữ liệu LÀNH<br/>đặc tính thật từ Bài 10, seed"] --> I["inject_*()<br/>mô hình LỖI<br/>lớp · độ lớn · vị trí · nhãn"]
+  C --> D{"Detector<br/>ngưỡng θ"}
+  I --> D
+  D --> M["Ma trận TP FP FN TN"]
+  M --> R["TPR theo độ lớn lỗi<br/>FPR + Wilson 95%"]
+  R --> S["Quét θ → đường cong<br/>chọn θ theo tiêu chí viết trước"]
+  S --> P["Ship θ + số đo + phiên bản bộ sinh"]
+  P -. "dữ liệu thật lộ đặc tính mới (Bài 13)" .-> C
 ```
 
 ```
                        detector báo LỖI     detector báo SẠCH
   dữ liệu có lỗi cài        TP                  FN   ← đo bằng inject_*
   dữ liệu sạch              FP                  TN   ← đo bằng make_clean()
-                    recall = TP/(TP+FN)      FP rate = FP/(FP+TN)
+                    TPR = TP/(TP+FN)          FPR = FP/(FP+TN)
 ```
+
+Ba tầng kiểm, đừng trộn:
+
+| Tầng | Câu hỏi | Kết quả | Tên chuẩn |
+|---|---|---|---|
+| Test đơn vị (≥4 mỗi detector) | Code làm đúng định nghĩa trên ví dụ cố định? | pass/fail, tất định | example-based, golden file (→ F2.4) |
+| Đo detector | Trên phân bố dữ liệu giống thật, bắt bao nhiêu, báo giả bao nhiêu? | TPR(độ lớn), FPR, kèm CI | fault injection (→ F2.5, F1.4) |
+| Kiểm chính bộ test | Test có phát hiện khi code detector bị sửa sai? | mutation score | mutation testing (→ F2.5) |
+
+Cộng một tầng ở runtime: **canary lỗi cố ý**. Mỗi lần audit dataset thật, tool tiêm một lỗi biết trước vào **bản sao** một episode thật; lớp nào không bắt được canary thì kết quả lớp đó là `inconclusive` — dụng cụ có thể đang hỏng trên loại dữ liệu này.
 
 Ba câu về bản chất:
 
-- **Đường cong FP/FN là tích của hai mô hình bạn tự viết:** mô hình dữ liệu lành (quyết định FP) và mô hình lỗi (quyết định FN). Nó chỉ đúng tới đâu hai mô hình đó giống thật. Vì vậy tuyên bố đúng không phải "FN = 3%", mà "FN = 3% **với lỗi đơ kéo dài 0.7–3 s cài vào khớp đang được ra lệnh**".
-- **Test thứ ba (ca biên) mã hóa hiểu biết miền.** Nó là phần duy nhất của bộ test nói "thứ này trông như lỗi nhưng không phải". Mỗi điều bạn thấy ở cột giữa bảng Bài 10 phải thành một test như vậy.
-- **Có những lỗi cài không phân biệt được với dữ liệu lành** — trong mutation testing gọi là *equivalent mutant*. Cài "đơ" vào một khớp vốn đang nghỉ tạo ra dữ liệu giống hệt dữ liệu lành; detector bỏ qua nó là **đúng**. Bộ sinh lỗi phải tránh, hoặc gắn nhãn, những ca này, nếu không FN của bạn bị thổi phồng giả.
+- **Đường cong FP/FN là tích của hai mô hình bạn tự viết:** mô hình lành (quyết định FP) và mô hình lỗi (quyết định FN). Tuyên bố đúng có dạng "FN = x % **với lỗi đơ 0,7–3 s cài vào khớp đang được ra lệnh**".
+- **Test ca biên mã hóa hiểu biết miền** ("trông như lỗi mà không phải"): mỗi hành vi bình thường trông giống lỗi ở Bài 10 thành một test như vậy.
+- **Có lỗi cài không phân biệt được với dữ liệu lành** (*equivalent mutant*): cài "đơ" vào khớp vốn đang nghỉ cho dữ liệu giống hệt dữ liệu lành; detector bỏ qua là **đúng**. Bộ sinh phải tránh hoặc gắn nhãn ca này, nếu không FN bị thổi phồng giả.
+
+Khoảng tin cậy Wilson 95 % cho tỉ lệ $x/n$ ($z = 1{,}96$), dùng cho cả TPR và FPR (→ F1.4):
+
+```
+p̂ = x/n ;  tâm = (p̂ + z²/(2n)) / (1 + z²/n) ;  nửa = z/(1 + z²/n) · sqrt( p̂(1−p̂)/n + z²/(4n²) )
+CI = [tâm − nửa, tâm + nửa] ;  x = 0 ⇒ cận trên ≈ 3/n ("rule of three")
+```
+
+Không dùng Wald ($\hat p \pm 1{,}96\sqrt{\hat p(1-\hat p)/n}$): khi $x = 0$ hoặc $x = n$, rất hay gặp với detector, nó cho khoảng rộng bằng 0.
 
 ### 3. Cầu nối từ backend
 
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
-| Mock server bạn tự dựng để sinh bộ test chuẩn | `make_clean()` | Mock HTTP chỉ cần đúng giao thức; dữ liệu cảm biến giả phải đúng **cơ chế vật lý** (lượng tử, trễ, nghỉ) thì FP mới có nghĩa | Bộ sinh quá sạch → 0 FP trên giả, FP khắp nơi trên thật |
-| Mutation testing (mutmut, PIT): đột biến **code**, đo test | `inject_*`: đột biến **dữ liệu**, đo detector | Mutation code có toán tử chuẩn; đột biến dữ liệu phải chọn độ lớn và vị trí — FN phụ thuộc phân bố bạn chọn | Báo "mutation score 100%" với lỗi cài quá to, không ai tin |
-| Error seeding / canary token | Lỗi cài cố ý vào **dữ liệu thật** (Bài 13) | Không có ground truth cho phần dữ liệu thật còn lại; seeding chỉ cho recall trên loại lỗi đã cài | Suy ra "tool bắt 95% mọi lỗi" |
-| Điều chỉnh alert để tránh pager fatigue, error budget | Ngân sách FP mỗi dataset | Base rate lỗi thật trên dataset công khai chưa biết; FP rate thấp vẫn có thể cho phần lớn cảnh báo là giả (Bài 13) | Chọn ngưỡng theo cảm giác "đủ yên" |
-| Hiệu chuẩn LLM-judge bằng nhãn người (kappa) | Hiệu chuẩn detector bằng episode thật đã xác minh tay (Bài 13) | Nhãn người trên dữ liệu robot tốn thời gian (xem video); cỡ mẫu nhỏ → khoảng tin cậy rộng | Tuyên bố precision từ 3 ca xác minh |
+| Mock server bạn tự dựng để sinh bộ test chuẩn | `make_clean()` | Mock HTTP chỉ cần đúng giao thức; dữ liệu giả phải đúng **cơ chế vật lý** (lượng tử, trễ, khớp nghỉ, action delta, kẹp hai chế độ) thì FPR mới có nghĩa | 0 FP trên giả, FP khắp nơi trên thật |
+| Mutation testing (mutmut, PIT): đột biến code, đo test | `inject_*`: đột biến **dữ liệu**, đo detector; và mutation testing thật trên code detector | Mutant code chết hay sống là nhị phân; lỗi dữ liệu có **độ lớn** liên tục, detector bắt lỗi lớn, mù lỗi nhỏ | Báo "bắt được lỗi timestamp" mà không nói lỗi cỡ nào |
+| Pass / fail / inconclusive | Báo / không báo / **không áp dụng** / inconclusive | Ở backend inconclusive thường do môi trường; ở đây do **dữ liệu không mang thông tin** (L2 trên timestamp tính ra) hoặc canary không qua | Báo "0 lỗi" thay vì "không kiểm được", người đọc tin dataset sạch |
 
 **Chấm mô hình:**
 
-- *"Toàn bộ test xanh nghĩa là detector đúng."* → **SAI.** Test xanh nghĩa là detector đúng **trên các ca bạn đã nghĩ ra**. Phản ví dụ: `best_lag` bản gốc pass mọi test với lag cài dương, và trả lời sai cho mọi lag âm (Bài 11).
-- *"0 FP trên `make_clean()` là đủ chứng minh không báo nhầm."* → **ĐÚNG MỘT PHẦN.** Cần thiết, chưa đủ. Một lần chạy sạch là một mẫu; 0/200 episode sạch cho cận trên Wilson 95% khoảng 2%, không phải 0. Và nó chỉ nói về dữ liệu giống mô hình lành của bạn.
-- *"Chọn ngưỡng ở điểm FP = FN (equal error rate) là khách quan nhất."* → **ĐÚNG MỘT PHẦN.** EER khách quan về hình học, nhưng chi phí hai loại sai không bằng nhau: FN ở L3/L5 làm hỏng một lần train tốn GPU; FP làm maintainer mất thời gian và mất lòng tin vào tool của bạn. Chọn điểm vận hành theo chi phí, nói rõ chi phí bạn giả định.
+- *"Server mock + golden dataset là đủ để biết script chấm của tôi đúng."* (mô hình từ chính nghề backend của bạn) → **ĐÚNG MỘT PHẦN.** Đủ để biết code làm đúng **định nghĩa** trên các ví dụ bạn nghĩ ra; không đủ để biết định nghĩa bắt được lỗi **thật** và báo giả bao nhiêu trên dữ liệu thật. Phản ví dụ: `best_lag` bản gốc pass mọi test với lag cài dương và action tuyệt đối, rồi trả lời sai cho mọi lag âm và báo giả ở gần như mọi episode libero (Bài 11).
+- *"0 báo giả trên 50 episode sạch tổng hợp, vậy FPR = 0."* → **SAI.** 0/50 cho cận trên Wilson 95 % ≈ 7 %. Muốn tuyên bố FPR ≤ 1 % với 0 báo giả cần ~300 episode theo rule of three (~380 theo Wilson). Và FPR đo trên tổng hợp chỉ đúng cho dữ liệu giống tổng hợp.
+- *"Chọn ngưỡng ở điểm FP = FN (equal error rate) là khách quan nhất."* → **ĐÚNG MỘT PHẦN.** Khách quan về hình học, nhưng FN ở L3/L5 làm hỏng một lần train tốn GPU, còn FP làm maintainer mất lòng tin. Phản ví dụ: tool trong CI người khác với `--fail-on` mà ở điểm EER cứ mười episode sạch chặn một merge — không ai giữ tool đó.
 
 ### 4. Thuật ngữ
 
 | Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
 |---|---|---|---|
-| 🟢 | fault injection (dữ liệu) | Cố ý tạo lỗi biết trước để đo detector | Tạo dữ liệu ngẫu nhiên |
-| 🟢 | mutation score | Tỉ lệ đột biến bị bộ test/detector bắt | Code coverage |
-| 🟢 | ma trận nhầm lẫn, recall, FP rate | Bốn ô TP/FP/FN/TN và các tỉ lệ từ đó | Accuracy (vô nghĩa khi lỗi hiếm) |
-| 🟢 | điểm vận hành (operating point) | Ngưỡng cụ thể được chọn trên đường cong | "Ngưỡng đúng" |
-| 🟢 | phán quyết ba trạng thái | FAIL / PASS / INCONCLUSIVE | Boolean |
-| 🟢 | exit code cho CI | Mã thoát quy ước để pipeline người khác quyết định | Chi tiết phụ |
-| 🟡 | equivalent mutant | Đột biến không phân biệt được với bản gốc | FN của detector |
-| 🟡 | ROC / DET curve | Hai cách vẽ đường đánh đổi FP–FN | — |
-| 🟡 | property-based / metamorphic test | Test một tính chất phải đúng cho mọi đầu vào / một quan hệ giữa hai đầu vào (→ F2.4) | Test ngẫu nhiên |
-| 🟡 | Hypothesis | Thư viện property-based testing cho Python | — |
+| 🟢 | fault injection (dữ liệu) | Cố ý tạo lỗi biết trước, có nhãn, để đo detector | Tạo dữ liệu ngẫu nhiên; chaos engineering trên production |
+| 🟢 | TPR theo độ lớn lỗi | Tỉ lệ bắt được như hàm của độ lớn lỗi | Một con số TPR duy nhất |
+| 🟢 | Wilson interval, rule of three | CI cho tỉ lệ, đúng cả khi $x = 0$ | $\hat p \pm 2\sigma$ |
+| 🟢 | canary lỗi cố ý | Mẫu lỗi biết trước chạy cùng mỗi lần audit; không bắt ⇒ inconclusive | Canary deployment |
+| 🟡 | ROC / DET curve; metamorphic test | Cách vẽ đánh đổi FP–FN; test quan hệ giữa hai đầu vào (→ F2.4) | Property-based test (họ hàng, không trùng) |
 
 ### 5. Dự đoán
 
-Ghi vào `predictions/12-detectors.md`, commit trước khi chạy:
+Commit `predictions/12-detectors.md` trước khi chạy:
 
-1. Mô phỏng quét ngưỡng L4 ở phần 6 (bước 3): episode 20 s, 6 khớp mỗi khớp xen kẽ đứng–đi độc lập (thời gian đứng trung bình 1.5 s), encoder 12 bit, nhiễu 0.3 LSB; lỗi cài: đơ 0.7–3 s vào một khớp đang được ra lệnh. Ở $W = 1$ s, FP rate (theo episode sạch) và FN rate của **định nghĩa bản gốc** ("đơ trong khi khớp khác động") và của **định nghĩa sửa** ("đơ trong khi lệnh của chính khớp đổi")?
-2. Với định nghĩa sửa, $W$ nào cho FP và FN gần nhau nhất?
-3. Khi bạn thêm lượng tử, khớp nghỉ và trễ follower vào `make_clean()`, detector nào trong bộ của bạn sẽ báo nhầm đầu tiên?
-4. Mutation score bạn kỳ vọng cho bộ detector của mình trên bộ lỗi cài mặc định.
+1. **Quét L4** (phần 6 bước 4): episode 20 s, 6 khớp mỗi khớp xen kẽ đứng–đi độc lập (đứng trung bình 1,5 s), encoder 12 bit, nhiễu 0,3 LSB; lỗi cài: đơ 0,7–3 s vào một khớp đang được ra lệnh. Ở $W = 1$ s, FP rate (theo episode sạch) và FN rate của **định nghĩa gốc** và **định nghĩa sửa**? $W$ nào cho FP ≈ FN với định nghĩa sửa?
+2. **Đo L1/L2 có CI** (bước 4): timestamp "lúc host nhận" = lưới 1/30 s + trễ log-normal (trung vị $m$, $\sigma_{\log} = 0{,}6$), 300 frame. Detector báo nếu $\Delta t \le 0$ hoặc $|\Delta t - T| > (k-1)T$. Lỗi tiêm: rớt 1 frame; đồng hồ lùi 10 ms; lùi 50 ms. Dự đoán FPR và TPR mỗi loại cho $m \in \{2, 3\}$ ms, $k \in \{1{,}5;\ 1{,}8;\ 2{,}5\}$. Tra: $T$ = 33,3 ms; $P(\text{trễ} > x) = 1 - \Phi(\ln(x/m)/0{,}6)$; FPR ≈ $1 - (1-p)^n$, một spike là **một** sự kiện. Rớt 1 frame cho $\Delta t \approx 2T$; lùi 10 ms cho $\Delta t \approx T - 10$ ms: âm không? vượt $(k-1)T$ không?
+3. Khi `make_clean()` có lượng tử, khớp nghỉ, trễ follower, action delta, detector nào báo nhầm đầu tiên?
+4. Mutation score kỳ vọng cho bộ detector trên bộ lỗi mặc định. **Tiêu chí chọn ngưỡng** bạn sẽ dùng (viết TRƯỚC khi thấy số).
 
 ```markdown
 # predictions/12-detectors.md
-1. W=1s: gốc FP=..., FN=... ; sửa FP=..., FN=...
-2. W cân bằng (sửa): ...
+1. W=1s: gốc FP=..., FN=... ; sửa FP=..., FN=... ; W cân bằng (sửa): ...
+2. | m | k | FPR | TPR rớt | TPR lùi 10 ms | TPR lùi 50 ms |   (6 dòng)
 3. Detector báo nhầm đầu tiên: ... vì ...
-4. Mutation score kỳ vọng: ...%
+4. Mutation score: ...% ; tiêu chí chọn ngưỡng: ...
 ```
 
 ### 6. Làm
 
-**Ghi chú về dữ liệu lành.** Bản gốc viết "bạn đã có sẵn dữ liệu lành từ Bài 5". Bài 5 sinh file MCAP của IMU, không phải dataset dạng LeRobot. Thứ mang sang từ Bài 5 là **nguyên tắc** (sinh dữ liệu giả có tính vật lý, không dùng `random()` thô), không phải dữ liệu. `make_clean()` viết mới ở bài này.
+**Ghi chú về dữ liệu lành.** Bản gốc viết "bạn đã có sẵn dữ liệu lành từ Bài 5". Bài 5 sinh MCAP của IMU một luồng, không có episode, action, video hay meta. Thứ mang sang là **nguyên tắc** (dữ liệu giả có tính vật lý), không phải dữ liệu.
 
-**Bước 1 — bộ sinh dữ liệu hỏng.** Module `tests/synth.py` (giữ chữ ký bản gốc):
+**Bước 1 — bộ sinh sạch** `tests/synth.py`: `make_clean(n_episodes, length, fps, n_joints, seed, action_space, ts_mode, sensor_noise, quantize, follower_tau, gripper_dims, still_segments)`. Ghi **đúng layout v3.0** (parquet + `meta/info.json` + `meta/episodes` + `stats.json`; mp4 tổng hợp nhỏ cho L3, như dataset giả của Bài 9). Mỗi đặc tính bật/tắt được, tham số từ ghi chú Bài 10: lượng tử theo LSB và $\sigma/q$ đo được (L4, L6); khớp nghỉ độc lập, kẹp hai chế độ (ca biên L4, L6); follower bám leader với trễ + động học (baseline L5); action tuyệt đối hoặc delta; `timestamp = frame_index/fps` float32, hoặc "đo" = lưới + trễ (L1, L2).
 
-```python
-def make_clean(n_episodes=3, length=300, fps=30, n_joints=6): ...
+**Bước 2 — bộ tiêm lỗi.** Giữ chữ ký bản gốc (`inject_nonmonotonic`, `inject_frame_drops`, `inject_video_mismatch`, `inject_frozen_channel`, `inject_action_lag`, `inject_nan`, `corrupt_metadata`), thêm `inject_step` (L6) và hai đối chứng âm `freeze_all_joints`, `hold_joint_and_command` (kẹp giữ, lệnh cũng giữ). Mỗi hàm nhận `seed` (→ F2.2) và trả **nhãn sự thật**: mọi lớp bị vi phạm, episode, khoảng frame, khớp, độ lớn. Độ lớn và vị trí là tham số (lệch video ở đầu/giữa/cuối, lag âm và dương, đơ chỉ cài vào đoạn khớp đang được ra lệnh). `inject_frame_drops` có hai chế độ: xóa dòng, và "rớt ẩn" (giữ `timestamp = i/fps`, kéo dãn chuyển động như mô phỏng Bài 11) — chế độ sau mới giống dữ liệu LeRobot. Xóa dòng mà giữ `meta` cũ là tiêm **hai** lỗi (L2 + L7): nhãn phải ghi cả hai, hoặc cập nhật `length`, `total_frames`, khoảng index để đo riêng L2.
 
-def inject_nonmonotonic(ds, episode, at_frame, jump_back_s): ...
-def inject_frame_drops(ds, episode, n_drops, seed): ...
-def inject_video_mismatch(ds, episode, delta_frames): ...
-def inject_frozen_channel(ds, episode, joint, start, duration_s): ...
-def inject_action_lag(ds, episode, lag_frames): ...
-def inject_nan(ds, episode, frame, joint): ...
-def corrupt_metadata(ds, field, delta): ...
-```
+**Bước 3 — test đơn vị: tối thiểu bốn test mỗi detector** (ba của bản gốc + "không áp dụng"), sửa test L4 theo định nghĩa Bài 11:
 
-`make_clean()` phải có những đặc tính bạn đã thấy ở Bài 10, nếu không FP rate của bạn vô nghĩa:
+- **Bắt đúng:** `inject_frozen_channel(ds, episode=1, joint=2, start=100, duration_s=1.5)` vào đoạn khớp 2 đang được ra lệnh ⇒ `audit(ds).has("L4", episode=1, joint=2)`.
+- **Sạch không báo:** `not audit(make_clean(seed=2)).has("L4")`.
+- **Ca biên / đối chứng âm:** `freeze_all_joints` (robot nghỉ thật) và `hold_joint_and_command` (kẹp giữ 8 s, lệnh cũng giữ) ⇒ không báo L4.
+- **Không áp dụng:** `audit(make_clean(ts_mode="synthesized")).status("L2") == "not_applicable"`, **không phải** "0 drop".
 
-| Đặc tính | Vì sao | Lấy tham số ở đâu |
-|---|---|---|
-| Lượng tử theo LSB thực tế, nhiễu $\sigma/q$ đo được | L4, L6 | Bài 10 bước 2 |
-| Khớp nghỉ độc lập, gripper giữ lâu | L4 ca biên | Bài 10 |
-| Follower bám leader với trễ + động học | L5 baseline | Bài 10 bước 3, Bài 11 |
-| `timestamp = frame_index/fps` kiểu `float32` | L1, L2 đúng như dữ liệu thật | Bài 9 |
-| Ghi ra **đúng layout v3** (và v2 nếu hỗ trợ), kèm mp4 thật | L3, L7 đi qua đúng đường đọc của tool | script sinh dataset giả ở Bài 9 |
+Thêm cho mỗi detector: **INCONCLUSIVE** (L5 trên episode khớp không động); **metamorphic** (→ F2.4): cài lag $k$ thì $k^*$ dịch đúng $k$ (±1) với mọi $k \in [-5, 5]$ — dùng Hypothesis sinh $k$, seed, độ dài; test này bắt lỗi "chỉ quét lag ≥ 0" mà bạn không cần nghĩ tới trước; đảo thứ tự episode trong file thì số phát hiện không đổi (bắt lỗi "quên tách episode"); **"chỉ lỗi đó"**: cài lỗi lớp X thì lớp khác không báo, trừ cặp tương tác ghi rõ (rớt ẩn L2 có thể hợp lệ kích hoạt L6 vận tốc).
 
-Hai yêu cầu kỹ thuật: mọi hàm nhận `seed` và tất định (→ F2.2); `inject_*` trả về **nhãn ground truth** (lớp, episode, frame, khớp) để test so được, không chỉ sửa dữ liệu. `inject_frame_drops` phải có hai chế độ: xóa dòng (timestamp lộ khoảng trống) và "rớt ẩn" (giữ `timestamp = i/fps`, kéo dãn thời gian thật của chuyển động như mô phỏng Bài 11) — chế độ sau mới giống dữ liệu LeRobot.
-
-**Bước 2 — mỗi detector có 3 test** (giữ ví dụ bản gốc, sửa test L4 theo định nghĩa mới):
-
-```python
-def test_L4_detects_frozen():
-    ds = make_clean()
-    inject_frozen_channel(ds, episode=1, joint=2, start=100, duration_s=1.5)  # khớp 2 đang được ra lệnh ở đoạn này
-    r = audit(ds)
-    assert r.has(L4, episode=1, joint=2)
-
-def test_L4_no_false_positive_on_clean():
-    assert not audit(make_clean()).has(L4)
-
-def test_L4_no_false_positive_when_robot_still():
-    # cả 6 khớp đứng yên cùng lúc — robot nghỉ thật, không phải cảm biến chết
-    ds = make_clean()
-    freeze_all_joints(ds, episode=0, start=50, duration_s=2.0)
-    assert not audit(ds).has(L4)
-
-def test_L4_no_false_positive_when_gripper_idle():   # thêm: ca biên từ Bài 10
-    ds = make_clean()
-    hold_joint_and_command(ds, episode=0, joint=5, start=0, duration_s=8.0)  # gripper giữ, lệnh cũng giữ
-    assert not audit(ds).has(L4)
-```
-
-Test thứ ba và thứ tư là loại test phân biệt tool nghiêm túc với script: chúng mã hóa hiểu biết miền, *đơ thật* khác *đơ do hỏng*. Thêm cho mỗi detector:
-
-- **Test INCONCLUSIVE:** ví dụ L5 trên episode mà khớp không chuyển động phải trả INCONCLUSIVE, không PASS.
-- **Test metamorphic** (→ F2.4): cài lag $k$ vào action thì $k^*$ ước lượng phải dịch đúng $k$ (±1) so với khi chưa cài, với mọi $k \in [-5, 5]$. Dùng Hypothesis để sinh $k$, seed, độ dài. Test này bắt được lỗi "chỉ quét lag ≥ 0" mà không cần bạn nghĩ tới nó trước.
-- **Test "chỉ lỗi đó":** cài một lỗi lớp $X$ thì không detector nào khác báo. Lỗi cài L2 (rớt ẩn) có thể hợp lệ kích hoạt L6 (vận tốc vượt giới hạn); ghi rõ cặp tương tác này thay vì nới test.
-
-**Bước 3 — quét ngưỡng.** Với mỗi ngưỡng (ví dụ $W$ của L4, ngưỡng lag của L5), chạy detector ở nhiều giá trị trên N episode sạch và N episode cài lỗi, vẽ đường FP / FN. Chọn ngưỡng theo đường cong, không theo cảm giác. **Ghi đường cong vào repo**, kèm mô hình lỗi đã dùng. Mô phỏng đồ chơi cho L4 (dùng làm khung, thay bằng `make_clean()` + `audit()` thật của bạn):
+**Bước 4 — đo detector, quét ngưỡng.** Hai mô phỏng khung, thay bằng `make_clean()` + `audit()` thật của bạn. Thứ nhất, quét $W$ của L4, so định nghĩa gốc và sửa:
 
 ```python
 # [đã chạy] Quét ngưỡng cửa sổ W cho L4 (kênh đơ): FP trên episode sạch vs FN trên episode cài lỗi
@@ -1095,7 +1075,7 @@ import matplotlib.pyplot as plt
 fps, n, J, LSB = 30, 600, 6, 2 * np.pi / 4096          # 20 s, 6 khớp, encoder 12 bit
 
 def episode(rng, inject):
-    act = np.zeros((n, J)); i = 0
+    act = np.zeros((n, J))
     for j in range(J):                                   # mỗi khớp: xen kẽ đoạn đứng / đoạn đi
         t, x = 0, rng.uniform(-1, 1)
         while t < n:
@@ -1139,116 +1119,685 @@ for mode in ("goc", "lenh"):
 plt.xlabel("FP / episode sạch"); plt.ylabel("FN / episode cài lỗi"); plt.legend(); plt.show()
 ```
 
-Mô phỏng này đơn giản hóa: "khớp khác động" ở chế độ `goc` chỉ đòi một khớp khác nhúc nhích ít nhất một lần trong đoạn; detector thật của bạn nên chặt hơn. Kết quả của nó phụ thuộc mạnh vào tham số hành vi (thời gian nghỉ trung bình, phân bố độ dài lỗi cài) — đó chính là bài học.
+Chế độ `goc` đơn giản hóa "khớp khác động" thành "một khớp khác nhúc nhích ít nhất một lần trong đoạn". Thứ hai, đo L1/L2 trên timestamp **đo thật** (`ts_mode="measured"`), mỗi ô kèm Wilson:
 
-**Bước 4 — CLI một lệnh.**
+```python
+# [đã chạy] numpy 2.x — tiêm lỗi cho L1/L2, đo TPR/FPR kèm khoảng Wilson 95%
+import numpy as np
+FPS, N_FRAMES, N_EP = 30, 300, 400      # mỗi ô: 400 episode
+rng = np.random.default_rng(7)
 
-```bash
-lerobot-audit lerobot/<dataset> --out report.html
-lerobot-audit ./local/path --json --fail-on severe
+def clean_ts(jitter_ms):                # lúc host nhận = lưới 1/fps + trễ đuôi dài (log-normal)
+    return np.arange(N_FRAMES) / FPS + rng.lognormal(np.log(jitter_ms / 1000), 0.6, N_FRAMES)
+
+def inject(ts, kind):
+    ts, k = ts.copy(), rng.integers(10, N_FRAMES - 10)
+    if kind == "drop":                   # rớt 1 frame: mất một dòng giữa episode
+        return np.delete(ts, k)
+    ts[k:] -= {"lui_10ms": 0.010, "lui_50ms": 0.050}[kind]   # đồng hồ bị kéo lùi từ frame k
+    return ts
+
+def detect(ts, k):                       # L1: dt <= 0 ; L2 hai phía: |dt - 1/fps| > (k-1)/fps
+    dt = np.diff(ts)
+    return bool(np.any(dt <= 0) or np.any(np.abs(dt - 1 / FPS) > (k - 1) / FPS))
+
+def wilson(x, n, z=1.96):
+    p = x / n; c = (p + z * z / (2 * n)) / (1 + z * z / n)
+    h = z / (1 + z * z / n) * np.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+    return max(0.0, c - h), min(1.0, c + h)
+
+kinds = ["drop", "lui_10ms", "lui_50ms"]
+for jit in (2.0, 3.0):
+    data = {"clean": [clean_ts(jit) for _ in range(N_EP)]}
+    data.update({kd: [inject(clean_ts(jit), kd) for _ in range(N_EP)] for kd in kinds})
+    print(f"jitter trung vị {jit} ms | FPR (sạch) | TPR " + " | TPR ".join(kinds))
+    for k in (1.5, 1.8, 2.5):
+        cells = []
+        for name in ["clean"] + kinds:
+            x = sum(detect(t, k) for t in data[name]); lo, hi = wilson(x, N_EP)
+            cells.append(f"{x / N_EP:4.2f} [{lo:4.2f},{hi:4.2f}]")
+        print(f"  k={k}: " + " | ".join(cells))
 ```
 
-`--fail-on severe` để dùng được trong CI của người khác; đó là thứ khiến tool được dùng thật thay vì chỉ được star. Quyết định thiết kế cần ghi vào README:
+Mở rộng cho tool thật: mọi lớp, với **độ lớn lỗi** là một trục (L1 độ lùi; L3 vị trí đầu/giữa/cuối; L4 thời lượng đơ; L5 lag; L6 độ lớn bước). Ghi `calibration/<detector>.csv` cùng seed, phiên bản bộ sinh, commit; **ghi đường cong vào repo** cho ít nhất hai detector, kèm mô hình lỗi đã dùng.
+
+**Bước 5 — chọn ngưỡng theo tiêu chí viết trước**, theo chi phí, không theo EER. Ví dụ: "cận trên Wilson của FPR mỗi episode ≤ 1 %; trong các ngưỡng thỏa, chọn ngưỡng cho TPR cao nhất ở độ lớn lỗi nhỏ nhất còn gây hại (lag 1 frame)". Chọn sau khi nhìn đường cong mà không có tiêu chí là cùng họ p-hacking (→ F1.5).
+
+**Bước 6 — mutation testing trên code detector.** Chạy một công cụ mutation cho Python (ví dụ `mutmut`, pin phiên bản, cú pháp `[tự đo]`). Mutant sống ở `np.diff(ts) <= 0` (đổi thành `< 0`) nghĩa là chưa có test cho timestamp **bằng nhau**. Thêm test tới khi mutant đáng kể bị giết; ghi mutation score vào README.
+
+**Bước 7 — canary trong CLI.** Trước khi audit dataset thật, tool lấy bản sao một episode thật, tiêm một lỗi lớn mỗi lớp đang bật, chạy detector; lớp không bắt được canary ⇒ `inconclusive` kèm lý do.
+
+**Bước 8 — CLI một lệnh.**
+
+```bash
+lerobot-audit lerobot/<dataset> --revision <sha> --out report.html
+lerobot-audit ./local/path --json --fail-on severe     # dùng trong CI của người khác
+```
 
 | Exit code | Nghĩa |
 |---|---|
 | 0 | Không có phát hiện ở mức ≥ `--fail-on` |
 | 1 | Có phát hiện ở mức ≥ `--fail-on` |
-| 2 | Tool không chạy hết (format không hỗ trợ, file thiếu); phân biệt với "dữ liệu xấu" |
+| 2 | Tool không chạy hết (format không hỗ trợ, file thiếu): phân biệt với "dữ liệu xấu" |
 
-Mỗi phát hiện trong JSON có tối thiểu: `layer`, `episode`, `frame_range`, `joint`/`camera`, `verdict` (FAIL/INCONCLUSIVE), `severity`, `evidence` (số đo, ngưỡng), `oracle`, kèm ở đầu báo cáo: phiên bản tool, `repo_id@sha`, ngưỡng đã dùng. Thiếu `repo_id@sha` thì không ai reproduce được báo cáo của bạn.
+JSON có, cho mỗi detector: `status` (`findings` / `clean` / `not_applicable` / `inconclusive`), ngưỡng, **TPR/FPR đã đo kèm CI + phiên bản hiệu chuẩn**; mỗi phát hiện: `layer`, `episode`, `frame_range`, `joint`/`camera`, `verdict`, `severity`, `evidence`, `oracle`; đầu báo cáo: phiên bản tool, `repo_id@sha`.
 
-**Tiêu chí hoàn thành (từ bản gốc, giữ nguyên):**
-
-| Kiểm tra | Kết quả đúng |
-|---|---|
-| Mỗi detector có ≥3 test (bắt đúng, không báo nhầm trên sạch, không báo nhầm ở ca biên) | Toàn bộ pass |
-| Trên dataset tổng hợp sạch | 0 phát hiện. Một FP ở đây là lỗi nghiêm trọng của tool. Bổ sung: báo FP rate trên ≥200 episode sạch với cận trên Wilson |
-| Trên dataset tổng hợp có tiêm 1 lỗi | Bắt đúng lỗi đó, và chỉ lỗi đó (trừ cặp tương tác đã ghi) |
-| Chạy toàn bộ | Bằng một lệnh, không cần sửa code |
-| Đường cong ngưỡng | Có trong repo, cho ít nhất 2 detector, kèm mô hình lỗi |
+Sai số dụng cụ: mỗi TPR/FPR là ước lượng từ $n$ mẫu; hai ngưỡng có CI chồng nhau thì chưa nói được cái nào tốt hơn.
 
 ### 7. Số phải ra
 
 <details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
 
-**Quét L4 (200 episode sạch, 200 episode cài lỗi, seed 1):**
+**Quét L4** (200 sạch, 200 cài lỗi, seed 1) `[đã chạy]`:
 
 | $W$ (s) | Gốc: FP | Gốc: FN | Sửa: FP | Sửa: FN |
 |---|---|---|---|---|
-| 0.25 | 1.00 | 0.00 | 0.62 | 0.02 |
-| 0.5 | 1.00 | 0.00 | 0.26 | 0.04 |
-| 0.75 | 0.96 | 0.01 | 0.10 | 0.09 |
-| 1.0 | 0.69 | 0.03 | 0.06 | 0.18 |
-| 1.5 | 0.16 | 0.35 | 0.01 | 0.41 |
-| 2.0 | 0.02 | 0.62 | 0.01 | 0.64 |
+| 0,25 | 1,00 | 0,00 | 0,62 | 0,02 |
+| 0,5 | 1,00 | 0,00 | 0,26 | 0,04 |
+| 0,75 | 0,96 | 0,01 | 0,10 | 0,09 |
+| 1,0 | 0,69 | 0,03 | 0,06 | 0,18 |
+| 1,5 | 0,16 | 0,35 | 0,01 | 0,41 |
+| 2,0 | 0,02 | 0,62 | 0,01 | 0,64 |
 
-Đọc bảng:
-- Định nghĩa gốc ở $W = 1$ s báo nhầm trên khoảng 7/10 episode sạch: trong mô hình này các khớp nghỉ độc lập, nên "một khớp phẳng trong khi khớp khác động" xảy ra liên tục. Muốn hết FP phải đẩy $W$ lên 2 s, khi đó bỏ sót gần 2/3 lỗi.
-- Định nghĩa sửa cân bằng quanh $W \approx 0.75$ s (FP ≈ FN ≈ 0.1). FP còn lại đến từ lúc follower chưa kịp nhúc nhích khi lệnh bắt đầu đổi và lượng tử che chuyển động rất chậm; tăng $m$ hoặc yêu cầu lệnh đổi **trước** đoạn phẳng một khoảng bằng trễ L5 sẽ giảm nó.
-- FN ở $W$ lớn chủ yếu là lỗi cài ngắn hơn $W$: theo định nghĩa thì không bắt được. FN vì vậy phụ thuộc trực tiếp vào phân bố độ dài lỗi bạn chọn (0.7–3 s ở đây). Đổi phân bố đó, đường cong đổi theo.
-- Các con số là của mô hình đồ chơi. Thứ chuyển được sang tool thật là hình dạng: định nghĩa có oracle tốt hơn dịch cả đường cong về phía gốc tọa độ, không chỉ trượt dọc theo nó.
+- Định nghĩa gốc ở $W = 1$ s báo nhầm trên ~7/10 episode sạch (khớp nghỉ độc lập); hết FP phải đẩy $W$ lên 2 s, khi đó bỏ sót gần 2/3 lỗi.
+- Định nghĩa sửa cân bằng quanh $W \approx 0{,}75$ s (FP ≈ FN ≈ 0,1). FP còn lại đến từ lúc follower chưa kịp nhúc nhích khi lệnh bắt đầu đổi; yêu cầu lệnh đổi **trước** đoạn phẳng một khoảng bằng trễ L5, hoặc tăng $m$, sẽ giảm nó.
+- FN ở $W$ lớn chủ yếu là lỗi cài ngắn hơn $W$, nên FN phụ thuộc trực tiếp phân bố độ dài lỗi bạn chọn. Thứ chuyển được sang tool thật là **hình dạng**: oracle tốt hơn dịch cả đường cong về gốc tọa độ, không chỉ trượt dọc theo nó.
 
-**FP rate có khoảng tin cậy:** 0 FP trên 200 episode sạch → cận trên Wilson 95% ≈ 1.9%; trên 30 episode → ≈ 11%. Báo con số kèm $n$.
+**Đo L1/L2** (seed 7) `[đã chạy]`, mỗi ô: tỉ lệ [Wilson 95 %], n = 400:
 
-**Detector báo nhầm đầu tiên** khi `make_clean()` thực tế hơn: thường là L4 bản gốc (khớp nghỉ), rồi L6 nhảy bậc kiểu "$k \times$ median" (median = 0), rồi L5 nếu dùng tương quan vị trí với ngưỡng tuyệt đối `[ước lượng]`.
+| m | k | FPR (sạch) | TPR rớt 1 frame | TPR lùi 10 ms | TPR lùi 50 ms |
+|---|---|---|---|---|---|
+| 2 ms | 1,5 | 0,03 [0,02; 0,05] | 1,00 [0,99; 1,00] | 0,04 [0,03; 0,07] | 1,00 [0,99; 1,00] |
+| 2 ms | 1,8 | 0,00 [0,00; 0,01] | 0,99 [0,98; 1,00] | 0,00 [0,00; 0,01] | 1,00 [0,99; 1,00] |
+| 2 ms | 2,5 | 0,00 [0,00; 0,01] | **0,00** [0,00; 0,01] | 0,00 [0,00; 0,01] | 1,00 [0,99; 1,00] |
+| 3 ms | 1,5 | **0,27** [0,23; 0,32] | 1,00 [0,99; 1,00] | 0,30 [0,26; 0,35] | 1,00 [0,99; 1,00] |
+| 3 ms | 1,8 | 0,03 [0,01; 0,05] | 0,98 [0,96; 0,99] | 0,02 [0,01; 0,04] | 1,00 [0,99; 1,00] |
+| 3 ms | 2,5 | 0,01 [0,00; 0,02] | 0,00 [0,00; 0,01] | 0,00 [0,00; 0,01] | 1,00 [0,99; 1,00] |
 
-**Mutation score:** với bộ lỗi mặc định có độ lớn rõ ràng, 100% là bình thường và **không nói lên nhiều**. Thông tin nằm ở đường cong theo độ lớn lỗi (lag 1, 2, 3 frame; đơ 0.3–3 s; lệch video 1 frame ở đầu, giữa, cuối). Nếu mutation score của bạn 100% ở mọi độ lớn, kiểm lại xem bộ sinh có đang tạo lỗi quá to.
+1. **TPR lùi 10 ms ≈ FPR** ở mọi ô: detector **không phân biệt** lỗi này với dữ liệu sạch ($\Delta t$ vẫn dương ≈ 23 ms, trong dải jitter). Bảng chỉ ghi "TPR L1 = 100 %" (đo bằng lùi 50 ms) sẽ giấu điều này.
+2. **TPR rớt frame sụp từ ~1 về 0** khi $k$ vượt 2: rớt một frame cho $\Delta t \approx 2T < 2{,}5T$. Ngưỡng là quyết định về **độ lớn lỗi nhỏ nhất muốn bắt**.
+3. **Trễ trung vị 2 → 3 ms làm FPR ở $k = 1{,}5$ tăng gần mười lần.** $p \approx 1 - \Phi(\ln(19{,}7/3)/0{,}6) \approx 8{,}5\cdot10^{-4}$ mỗi frame ⇒ FPR ≈ $1 - e^{-0{,}26} \approx 0{,}22$, gần 0,27 đo được. Nhân đôi $p$ (mỗi spike làm hai $\Delta t$ lạ) cho ~0,4: đếm trùng một sự kiện.
+4. **0/400 không có nghĩa là 0**: cận trên ≈ 0,0095 (rule of three: 0,0075).
+5. Không ngưỡng nào vừa bắt lùi 10 ms vừa giữ FPR thấp: **L1/L2 theo timestamp không thấy lỗi đồng hồ nhỏ hơn biên độ jitter**; cần nguồn khác (pts video, đồng hồ thứ hai) — một mục cho phần Giới hạn.
+
+**FP rate có CI:** 0 FP trên 200 episode sạch → cận trên Wilson ≈ 1,9 %; trên 30 → ≈ 11 %. Báo kèm $n$.
+
+**Báo nhầm đầu tiên** khi `make_clean()` thực tế hơn: L4 bản gốc, rồi L6 "$k \times$ median", rồi L5 vị trí/so nhầm action delta `[ước lượng]`. **Mutation score** 100 % với lỗi cài to là bình thường và không nói lên nhiều; thông tin nằm ở đường cong theo độ lớn.
+
+**Tiêu chí hoàn thành (thay bảng gốc):**
+
+| Kiểm tra | Đạt khi |
+|---|---|
+| Mỗi detector bật mặc định: ≥4 test đơn vị (bắt đúng, sạch không báo, ca biên/đối chứng âm, không áp dụng) + test metamorphic | CI xanh |
+| FPR mỗi episode trên bộ sinh sạch có đặc tính thật | **Cận trên Wilson ≤ mục tiêu viết trước** (ví dụ 1 %), không phải "0 phát hiện" trong một lần chạy |
+| TPR | Đường TPR theo độ lớn kèm CI cho ≥2 detector; ghi độ lớn nhỏ nhất bắt được với TPR ≥ 0,9 |
+| Tiêm 1 lỗi | Bắt đúng lớp đó; lớp khác chỉ khi lỗi tiêm thật sự vi phạm lớp đó (xóa dòng không cập nhật meta ⇒ L2 + L7) |
+| Mutation score; canary | Ghi trong README, mutant sống được giải thích; canary chạy mỗi lần audit |
+| Chạy toàn bộ | Một lệnh, không sửa code |
+
 </details>
 
 ### 8. Nếu ra khác
 
 | Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
 |---|---|---|---|
-| FP trên dữ liệu sạch | Ngưỡng quá chặt, hoặc dữ liệu tổng hợp chưa đủ nhiễu/đặc tính như thật | Chạy detector trên episode sạch, in đoạn bị báo | Thêm đặc tính thật vào `make_clean()` hoặc đổi oracle; không nới ngưỡng mù |
-| L5 báo lag khác nhau mỗi lần chạy | Tương quan trên chuỗi quá ngắn hoặc trên vị trí | Đếm số lag gần đỉnh | Sai phân, gộp khớp, độ dài tối thiểu, INCONCLUSIVE |
-| Detector đúng trên tổng hợp, sai trên thật | Dữ liệu tổng hợp quá lý tưởng | So histogram đặc tính (σ/q, thời gian nghỉ, lag) giả vs thật | Quay lại Bài 10, thêm đặc tính vào bộ sinh; cài lỗi lên episode thật (Bài 13) |
-| Test "chỉ lỗi đó" fail vì L6 báo cùng L2 | Rớt ẩn làm vận tốc biểu kiến vượt giới hạn | Xem bằng chứng của L6 | Ghi là cặp tương tác hợp lệ, hoặc để L6 bỏ qua frame đã bị L2 gắn cờ |
-| Test lúc pass lúc fail | Bộ sinh không tất định (thiếu seed), hoặc ngưỡng nằm sát biên của phân bố | Chạy lại 50 lần với seed cố định khác nhau | Seed hóa; test trên tỉ lệ qua nhiều seed thay vì một episode (→ F2.3) |
-| CLI chạy 5 dataset quá lâu | Giải mã video thay vì demux | Đo thời gian từng detector | L3 chỉ demux; giải mã chỉ khi cần định vị |
+| FP trên dữ liệu sạch tổng hợp | Ngưỡng chặt hơn nhiễu bộ sinh; đếm trên cả bảng thay vì theo episode | In đoạn bị báo; FPR theo từng tham số bộ sinh | Đổi oracle hoặc thêm đặc tính thật; sửa group-by; không nới ngưỡng mù |
+| L5 báo lag khác nhau mỗi lần chạy | Tương quan vị trí; chuỗi ngắn; seed không cố định | Số lag gần đỉnh; bootstrap lag trên một episode | Sai phân, gộp khớp, độ dài tối thiểu, lag kèm CI, INCONCLUSIVE |
+| Đúng trên tổng hợp, sai trên thật | Bộ sinh thiếu đặc tính thật | So histogram đặc tính (σ/q, thời gian nghỉ, lag) giả vs thật | Quay lại Bài 10; thêm đặc tính; cài lỗi lên episode thật (Bài 13) |
+| Test lúc pass lúc fail; số đo không tái lập | Thiếu seed; ngưỡng sát biên phân bố; bộ sinh đổi không ghi phiên bản | Chạy lại 50 seed | Seed hóa; test trên tỉ lệ qua nhiều seed (→ F2.3); ghi seed + phiên bản vào `calibration/*.csv` |
+| CLI chạy 5 dataset quá lâu | Giải mã video thay vì demux | Đo thời gian từng detector | L3 chỉ demux; giải mã khi cần định vị |
 
 ### 9. Câu hỏi ngược
 
-1. **[Quy mô]** Ở 1000 giờ dữ liệu, FP rate 1% mỗi episode nghe nhỏ. Nó thành bao nhiêu cảnh báo cần người xem, và ai xem? Thiết kế đầu ra của tool thay đổi thế nào?
-   <details><summary>Hướng nghĩ</summary>Tính số episode, nhân FP rate, cộng phát hiện thật; so với số episode một người xác minh được trong một giờ (Bài 13). Đầu ra phải xếp hạng theo điểm số và gộp theo nguyên nhân (cùng một pipeline lỗi sinh ra hàng trăm phát hiện giống nhau), không liệt kê phẳng.</details>
-2. **[Failure mode]** Bạn chỉnh ngưỡng cho tới khi FP = 0 trên đúng 5 dataset thật của Bài 13. Chuyện gì xảy ra khi người khác chạy tool trên dataset thứ 6?
-   <details><summary>Hướng nghĩ</summary>Overfitting ngưỡng vào tập đánh giá — Goodhart (→ F2.8). Giữ một tập dataset không dùng để chỉnh ngưỡng; báo kết quả trên tập đó.</details>
-3. **[Vì sao không]** Vì sao không dùng dataset thật làm "sạch" cho test FP, thay vì `make_clean()`?
-   <details><summary>Hướng nghĩ</summary>Dataset thật không có ground truth: bạn không biết nó sạch. Cách kết hợp: dùng episode thật **đã xác minh bằng tay** làm nền, cài lỗi lên đó để đo recall trên nhiễu thật (injection–recovery); FP trên dữ liệu thật chỉ ước lượng được qua xác minh tay.</details>
-4. **[Phản biện]** "Đường cong FP/FN trên dữ liệu tổng hợp là tự mình chấm bài mình." Đồng ý tới đâu, và bạn bổ sung gì để nó bớt là tự chấm?
-   <details><summary>Hướng nghĩ</summary>Đúng là mô hình lành và mô hình lỗi đều do bạn viết. Bổ sung: tham số mô hình lành đo từ dữ liệu thật (Bài 10) và công bố; cài lỗi lên dữ liệu thật; công bố bộ sinh để người khác thêm loại lỗi; so với nhãn tay ở Bài 13.</details>
-5. **[Liên ngành]** Injection–recovery của Kepler cho "độ hoàn chỉnh" theo kích thước hành tinh. Đường cong tương đương cho tool của bạn có trục gì?
-   <details><summary>Hướng nghĩ</summary>Recall theo độ lớn lỗi (lag bao nhiêu frame, đơ bao lâu, lệch video ở vị trí nào) và theo điều kiện dữ liệu (khớp động nhiều hay ít, episode dài hay ngắn). Đó là thứ đáng đặt trong README hơn một con số duy nhất.</details>
+1. **[Quy mô]** Muốn chứng minh FPR mỗi episode ≤ 0,1 % với độ tin cậy 95 %, cần bao nhiêu episode sạch nếu không quan sát báo giả nào, và mất bao lâu nếu mỗi episode 50 ms?
+<details><summary>Hướng nghĩ</summary>
+
+Rule of three: $n \approx 3/0{,}001$. Rồi hỏi: L3 cần ffprobe (chậm hơn nhiều) — đo FPR của nó mà không giải mã video thật được không?
+
+</details>
+
+2. **[Failure mode]** Canary tiêm lỗi vào bản sao một episode thật. Kịch bản nào canary được bắt nhưng detector vẫn mù trên lỗi thật cùng lớp? Và nếu bạn chỉnh ngưỡng tới khi FP = 0 trên đúng 5 dataset của Bài 13, chuyện gì xảy ra ở dataset thứ 6?
+<details><summary>Hướng nghĩ</summary>
+
+Canary dùng lỗi **lớn**: chứng minh detector **còn sống**, không chứng minh **đủ nhạy**. Chỉnh ngưỡng trên tập đánh giá là overfitting, Goodhart (→ F2.8): giữ một tập không dùng để chỉnh.
+
+</details>
+
+3. **[Phản biện]** "Đường cong FP/FN trên dữ liệu tổng hợp là tự mình chấm bài mình." Đồng ý tới đâu, bổ sung gì để bớt tự chấm?
+<details><summary>Hướng nghĩ</summary>
+
+Đúng: cả hai mô hình do bạn viết. Giảm bằng: tham số đo từ dữ liệu thật và công bố; cài lỗi lên episode thật đã xác minh; nhờ người khác viết injector bạn không đọc (→ F2.8); ghi rõ TPR chỉ đúng cho lỗi đã mô hình hóa.
+
+</details>
+
+4. **[Liên ngành]** Capture–recapture của Mills: tool bắt 9/10 lỗi cài và 3 lỗi thật trên một dataset. Ước lượng số lỗi thật. Giả định nào làm ước lượng sai trên dataset robot? Và đường injection–recovery của Kepler tương đương cho tool bạn có trục gì?
+<details><summary>Hướng nghĩ</summary>
+
+≈ 3/0,9. Giả định then chốt: lỗi cài "dễ bắt như nhau" với lỗi thật; lỗi thật có thể thuộc lớp thứ tám. Trục Kepler: recall theo độ lớn lỗi và theo điều kiện dữ liệu (khớp động nhiều hay ít, episode dài hay ngắn).
+
+</details>
 
 ### 10. Liên kết ra ngoài
 
-- **Thiên văn: injection–recovery của Kepler.** Giống: tiêm tín hiệu biết trước vào dữ liệu thật để đo xác suất pipeline thu hồi theo kích thước tín hiệu; kết quả là đường cong, không phải một con số. Khác: thiên văn tiêm vào dữ liệu thật ngay từ đầu vì có hàng trăm nghìn ngôi sao làm nền; bạn bắt đầu bằng dữ liệu tổng hợp vì chưa có nền đã xác minh.
-- **Lý thuyết phát hiện tín hiệu và ROC.** Đường ROC ra đời từ bài toán người vận hành radar phân biệt máy bay với nhiễu trong Thế chiến II, rồi sang tâm lý học và chẩn đoán y khoa `[chuẩn]`. Giống: một ngưỡng trên một điểm số, đánh đổi bỏ sót và báo nhầm. Khác: ở y khoa, tỉ lệ bệnh trong quần thể (base rate) thường biết từ dịch tễ; tỉ lệ lỗi trong dataset robot công khai thì chưa ai đo — bài 13 là một phần của việc đo nó.
+- **Thiên văn: injection–recovery của Kepler.** Giống: tiêm tín hiệu biết trước vào dữ liệu thật để đo xác suất thu hồi theo kích thước tín hiệu; kết quả là đường cong, không phải một con số. Khác: Kepler tiêm vào dữ liệu thật ngay từ đầu vì có hàng trăm nghìn ngôi sao làm nền; bạn bắt đầu bằng dữ liệu tổng hợp vì chưa có nền đã xác minh.
+- **Kiểm định phòng xét nghiệm: mẫu QC.** Mỗi mẻ chạy kèm mẫu đã biết nồng độ (quy tắc Westgard); mẫu chuẩn lệch thì loại cả mẻ. Giống canary + `inconclusive`. Khác: mẫu QC có nhiều mức nồng độ, tức kiểm cả độ nhạy, không chỉ "còn sống" — canary của bạn nên có nhiều độ lớn nếu chi phí cho phép.
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Mills error seeding (~1970–72, IBM); DeMillo, Lipton, Sayward 1978 | `[chuẩn]` | — |
+| Loạt bài injection–recovery Kepler (Christiansen và cộng sự); nguồn gốc ROC từ radar | `[chuẩn]` | Tra ADS theo tiêu đề |
+| Wilson, rule of three; mọi bảng số phần 7 | `[chuẩn]`, `[đã chạy]` | Mô hình đồ chơi, seed 1 / seed 7; FPR ≈ 0,22 là `[ước lượng]` bỏ qua hai spike kề nhau |
+| Cú pháp `mutmut` | `[tự đo]` | Đổi theo phiên bản |
+
+**Đã sửa so với bản gốc:** "đã có sẵn dữ liệu lành từ Bài 5" (Bài 5 là MCAP IMU một luồng) → `make_clean()` viết mới theo v3.0; "0 phát hiện trên dữ liệu sạch, một FP là lỗi nghiêm trọng của tool" → FPR có cận trên Wilson so với mục tiêu viết trước; "bắt đúng lỗi đó, và chỉ lỗi đó" → nhãn ghi mọi lớp bị vi phạm (xóa dòng ⇒ L2 + L7); test L4 theo định nghĩa sửa của Bài 11. Thêm TPR theo độ lớn, rớt ẩn, test không áp dụng/metamorphic, mutation testing trên code, canary, exit code 2, `repo_id@sha`.
+
+**Hợp nhất (Claude × Kiro):** nền Claude (quét L4, equivalent mutant, Kepler, EER, exit code); ghép từ Kiro ba tầng kiểm, công thức Wilson (bản Claude hẹn "hàm Wilson ở Bài 13" mà chưa có Bài 13), mô phỏng L1/L2 có CI, canary, mutation testing, test "không áp dụng", tiêu chí viết trước, phân bổ giờ.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** R. A. DeMillo, R. J. Lipton, F. G. Sayward, "Hints on Test Data Selection: Help for the Practicing Programmer", *IEEE Computer*, 1978.
+- **Giải thích:** Brown, Cai, DasGupta, "Interval Estimation for a Binomial Proportion", *Statistical Science*, 2001 — vì sao Wald tệ, Wilson tốt.
+- **Đào sâu (tùy chọn):** tài liệu Hypothesis (hypothesis.readthedocs.io), phần strategies tùy biến.
+- **Tự kiểm tra:** (1) giải thích trong 5 câu khác biệt giữa "detector qua test" và "detector đã được đo"; (2) vẽ lại ma trận nhầm lẫn, chỉ ô nào đo bằng `make_clean()`, ô nào bằng `inject_*`; (3) câu hỏi:
+  - Cài "đơ 2 s" vào gripper khi nó đang giữ yên và lệnh cũng giữ yên; detector không báo. Đây là FN?
+  - L4 bắt 47/50 lỗi đơ 1,5 s và 0/50 lỗi đơ 0,8 s; báo giả 2/300 episode sạch. Viết dòng report cho L4.
+
+<details><summary>Đáp án</summary>
+
+(a) Không: equivalent mutant, dữ liệu sau khi cài giống hệt dữ liệu lành; tính là FN làm sai recall. (b) Wilson 95 %: TPR(1,5 s) = 0,94 [0,84; 0,98]; TPR(0,8 s) = 0 [0; 0,07]; FPR = 0,67 % [0,2 %; 2,4 %]. Dòng report: "L4 ($W$ = 1 s): bắt đơ ≥ 1,5 s với TPR 0,94 [0,84; 0,98]; **không** bắt đơ ngắn hơn $W$; FPR mỗi episode 0,7 % [0,2 %; 2,4 %] trên bộ sinh vX, seed Y." Câu "không bắt đơ ngắn hơn $W$" là phần nhiều người bỏ.
+
+</details>
+
+---
+
+
+## Bài 13 — Chạy trên dataset thật: phân loại, xác minh, bội so sánh (8h)
+
+> **Vị trí:** Bài 12 (detector đã được đo) → **Bài 13** → Bài 14 (report và báo ra ngoài) · **Cần trước:** F1.5 (bội so sánh, garden of forking paths), F1.7 (preregistration), F2.8 (người xác minh cũng là một oracle có sai số), Bài 12 · **Sau bài này bạn quyết định được:** phát hiện nào đủ chắc để báo cho maintainer, phát hiện nào chỉ là "chưa rõ", và bao nhiêu cảnh báo là **kỳ vọng sẽ có** dù dữ liệu lành.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 2009, Craig Bennett và cộng sự đặt một con cá hồi Đại Tây Dương **đã chết** vào máy fMRI, cho nó "xem" ảnh người trong các tình huống xã hội, và phân tích bằng quy trình chuẩn của ngành. Khi không hiệu chỉnh bội so sánh, họ thấy một cụm voxel "kích hoạt" trong não cá. Lý do: hàng chục nghìn voxel, mỗi voxel một kiểm định ở ngưỡng p < 0,001, đủ để vài cái vượt ngưỡng do ngẫu nhiên. Poster và bài báo sau đó (giải Ig Nobel 2012) đẩy cả ngành chuẩn hóa việc hiệu chỉnh bội so sánh `[chuẩn]`.
+
+Audit dataset có đúng cấu trúc đó: bảy detector × hàng nghìn episode × vài chục chiều. Một detector có FPR mỗi episode trông nhỏ vẫn sinh ra **hàng chục cảnh báo giả** trên một dataset lành. Nếu không tính trước con số đó, bạn sẽ đem báo cảnh báo giả cho maintainer, hoặc tệ hơn, chọn ra vài cảnh báo "đẹp nhất" và gọi là lỗi.
+
+### 2. Mô hình tư duy
+
+```mermaid
+flowchart TD
+  A["Cảnh báo thô<br/>mọi detector × mọi episode"] --> B["Gom nhóm<br/>theo detector · dataset · cơ chế"]
+  B --> C{"Số cảnh báo<br/>so với KỲ VỌNG báo giả<br/>E = Σ FPR_d × N"}
+  C -->|"xấp xỉ E"| D["Có thể toàn bộ là báo giả<br/>xem mẫu, không báo ra ngoài"]
+  C -->|"vượt xa E, hoặc dồn vào một cơ chế"| E["Xác minh bằng tay<br/>plot · video · tài liệu nguồn"]
+  E --> F["Lỗi thật đã xác nhận"]
+  E --> G["Báo giả → sửa detector,<br/>quay lại Bài 12"]
+  E --> H["Chưa rõ → hỏi maintainer<br/>dạng câu hỏi, không dạng kết luận"]
+  F --> I["Script reproduce dưới 40 dòng"]
+```
+
+Hai công thức cho bội so sánh (→ F1.5), với D detector độc lập, FPR_d mỗi episode, N episode:
+
+```
+Số cảnh báo giả kỳ vọng:         E[FP] = N · Σ_d FPR_d
+Xác suất có ít nhất một báo giả:  P(≥1) = 1 − Π_d (1 − FPR_d)^N
+Bonferroni (kiểm soát P(≥1) ≤ α): dùng ngưỡng mỗi phép thử α / (D·N)
+```
+
+Bonferroni quá khắt khe khi phép thử nhiều; trong audit, cách hữu dụng hơn thường là **báo E[FP] cạnh số cảnh báo quan sát** và chỉ xác minh nhóm vượt xa kỳ vọng. Kiểm soát tỉ lệ phát hiện sai (FDR, Benjamini–Hochberg) là bước tiếp theo nếu detector của bạn cho p-value 🟡.
+
+Điều thứ hai phải phòng: **garden of forking paths** (Gelman & Loken). "Không thấy lỗi ở 5 dataset → mở rộng lên 10 → nới ngưỡng → thử thêm chiều khác" là một chuỗi lựa chọn sau khi thấy dữ liệu. Đi đủ lâu, lỗi "thật" nào cũng tìm được. Cách phòng: viết kế hoạch phân tích và **quy tắc dừng** vào `prediction.md` trước khi chạy (→ F1.7).
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Alert fatigue khi quá nhiều rule | Hàng nghìn cảnh báo trên một dataset | Ở backend bạn chỉnh rule dựa trên sự cố thật đã biết; ở đây phần lớn dataset **không có** sự thật để chỉnh, nên phải dựa vào E[FP] đã đo | Chỉnh ngưỡng tới khi "số cảnh báo trông hợp lý" ⇒ tối ưu theo mắt |
+| On-call triage: xác minh trước khi page | Xác minh bằng tay mỗi phát hiện | Ở backend bạn có quyền vào hệ thống để kiểm; ở đây "sự thật" nằm ở máy thu dữ liệu của người khác, có thể không ai còn giữ | Gọi "đã xác nhận" chỉ vì plot trông xấu |
+| A/B test nhiều metric | 7 detector × N episode | Bạn có thể đã quen hiệu chỉnh khi xem 20 metric; ở đây số phép thử lớn hơn hàng nghìn lần | Không hiệu chỉnh ⇒ "dead salmon" |
+| Bug bounty: report phải reproduce được | Script < 40 dòng | Reproduce ở đây phụ thuộc **revision** dataset; dataset sửa xong thì script phải in ra khác | Script không ghim revision, maintainer chạy ra "không thấy gì" |
+
+**Chấm mô hình:**
+
+- *"Dataset của org chính thức, nhiều người dùng, thì không còn gì để tìm."* — **SAI.** Phản ví dụ: Northcutt, Athalye và Mueller (NeurIPS 2021 Datasets and Benchmarks) ước lượng trung bình ~3,3 % nhãn sai trong test set của 10 dataset phổ biến, kể cả ImageNet, đủ đảo thứ hạng một số mô hình `[chuẩn]`: "nổi tiếng" nghĩa là nhiều người **dùng**, không nghĩa là nhiều người **kiểm**. Trong `data/` của bạn cũng có ít nhất một chỗ chưa giải thích được ở một dataset rất phổ biến (xem phần 7). Nhưng mô hình ngược ("chắc chắn có lỗi, cứ tìm sẽ thấy") cũng sai, vì nó là đúng công thức của garden of forking paths.
+- *"Detector báo 0 trên cả 5 dataset ⇒ 5 dataset sạch."* — **SAI.** Kết luận đúng có dạng: "không thấy lỗi thuộc L1–L7 ở mức nhạy [TPR theo độ lớn của Bài 12]; L2 không áp dụng ở dataset có timestamp tính ra; các lớp ngoài bảy (episode thất bại, lệch hằng định ảnh–state) không được kiểm."
+- *"Nhiều cảnh báo ở một dataset ⇒ dataset đó bẩn."* — **ĐÚNG MỘT PHẦN.** Có thể đúng. Nhưng trước tiên so với E[FP], và kiểm cảnh báo có dồn vào **một cơ chế** không (ví dụ toàn bộ ở chiều kẹp). Dồn vào một cơ chế thường là dấu hiệu detector gãy với một đặc tính của dataset đó.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | bội so sánh (multiple comparisons) | Nhiều phép thử ⇒ nhiều báo giả kỳ vọng dù mỗi phép thử chặt | Chỉ quan trọng trong nghiên cứu y khoa |
+| 🟢 | E[FP] | Số báo giả kỳ vọng = N·ΣFPR | Ngưỡng tối đa |
+| 🟢 | preregistration, quy tắc dừng | Viết trước phân tích và khi nào dừng mở rộng | Thủ tục hành chính |
+| 🟢 | xác minh độc lập | Kiểm phát hiện bằng nguồn khác detector (plot, video, mã nguồn bộ chuyển đổi) | Chạy lại cùng detector |
+| 🟡 | Bonferroni, FDR (Benjamini–Hochberg) | Hai cách hiệu chỉnh; một kiểm soát P(≥1 sai), một kiểm soát tỉ lệ sai trong số phát hiện | Cùng một thứ |
+| 🟡 | garden of forking paths | Lựa chọn phân tích phụ thuộc dữ liệu làm "phát hiện" thành tạo tác | p-hacking cố ý (không cần cố ý) |
+| 🔴 | Hiệu chỉnh theo trường ngẫu nhiên (fMRI cluster correction) | Kỹ thuật chuyên của neuroimaging | Cần ở đây |
+
+### 5. Dự đoán
+
+Commit `predictions/13-real-datasets.md` **trước khi** chạy tool lên dữ liệu thật. Mẫu:
+
+```markdown
+# 13-real-datasets — dự đoán và kế hoạch phân tích (commit trước khi chạy)
+Tool: commit … · cấu hình: calibration/v… · Dataset + revision: …
+
+## Kế hoạch
+- Detector bật: … ; ngưỡng: … (từ Bài 12, không đổi trong bài này)
+- "Đã xác nhận" nghĩa là: thấy được bằng ≥1 nguồn độc lập với detector (plot đúng đoạn, video, mã nguồn bộ chuyển đổi)
+- Quy tắc dừng: nếu 0 lỗi xác nhận ở 5 dataset thì thêm tối đa … dataset, chọn theo tiêu chí … (viết trước), rồi dừng và báo kết quả âm
+
+## Kỳ vọng báo giả
+| Dataset | N episode | FPR mỗi detector (từ Bài 12) | E[FP] = N·ΣFPR | P(≥1 báo giả) |
+|---|---|---|---|---|
+
+## Dự đoán phát hiện
+| Dataset | Lớp | Dự đoán (số / có-không) | Dựa trên ghi chú Bài 10 nào |
+|---|---|---|---|
+```
+
+Tham số cần tra: N từ `meta/info.json`; FPR từ `calibration/*.csv` của Bài 12. Nếu chưa đo FPR cho một detector, ghi giả định (ví dụ 0,5 %) và nói rõ là giả định. Phương pháp: hai công thức ở phần 2.
+
+### 6. Làm
+
+1. **Đóng băng mọi thứ.** Commit tool, ghi phiên bản hiệu chuẩn, ghi revision Hub của mọi dataset. Không đổi ngưỡng trong suốt bài này. Muốn đổi ngưỡng ⇒ quay lại Bài 12, đo lại, rồi chạy lại Bài 13 từ đầu với prediction mới.
+2. **Chạy** tool trên năm dataset (hai cái trong `data/` + ba cái đã chọn ở Bài 9), bằng một lệnh. Ghi thời gian chạy và lỗi crash (crash trên biến thể định dạng là một phát hiện).
+3. **Bảng tổng theo nhóm**: với mỗi (dataset, detector), số cảnh báo, E[FP] tương ứng, tỉ số quan sát/kỳ vọng, và cảnh báo có dồn vào một chiều/một nhóm episode không.
+4. **Xác minh bằng tay** mọi nhóm vượt xa kỳ vọng, và một mẫu ngẫu nhiên (ví dụ 5) của các nhóm xấp xỉ kỳ vọng. Mỗi trường hợp: plot đúng đoạn (script Bài 10), xem video đúng đoạn, đọc tài liệu/mã nguồn của dataset hoặc bộ chuyển đổi. Phân loại: **lỗi thật / báo giả / chưa rõ**. Ghi lý do bằng một câu.
+5. **Kiểm cả cột không thuộc bảy lớp** mà Bài 10 đánh dấu (ví dụ `next.*`): đây là chỗ nhiều phát hiện thật nằm, vì không ai viết detector cho nó.
+6. **Script reproduce** cho ít nhất một phát hiện (lỗi thật hoặc "chưa rõ" đáng hỏi): một file Python < 40 dòng, tải dataset **theo revision**, in bằng chứng, không phụ thuộc tool của bạn. Kiểm trên máy sạch (venv mới, chỉ `pip install` các gói pin sẵn).
+7. **Vòng phản hồi**: mỗi báo giả đã xác nhận ⇒ một đặc tính mới cho bộ sinh Bài 12, hoặc một điều kiện tắt detector. Ghi vào `notes/13-feedback.md`.
+8. **Chấm dự đoán**: tỉ lệ dự đoán đúng, và với mỗi dự đoán sai, bạn hiểu sai điều gì về miền.
+
+**Tiêu chí hoàn thành (giữ bản gốc, viết lại cho rõ):** chạy hết 5 dataset bằng một lệnh, không crash (crash trên biến thể format thì xử lý có kiểm soát và ghi lại); **≥1 lỗi thật được xác nhận bằng nguồn độc lập với detector** — hoặc, nếu đã đi hết quy tắc dừng mà không có, một kết quả âm có ghi độ nhạy và danh sách mục "chưa rõ" (xem FAIL action ở Gate); script reproduce < 40 dòng chạy được trên máy sạch, chỉ cần `pip install` gói đã pin và `repo_id@revision`; tỉ lệ dự đoán đúng được ghi lại — đó là chỉ số về mức bạn đã hiểu miền.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Bội so sánh.** Ví dụ với hai dataset trong `data/` (N = 206 + 1 693 = 1 899), 7 detector, giả định FPR = 0,5 % mỗi detector mỗi episode: E[FP] = 1 899 × 7 × 0,005 ≈ **66** cảnh báo giả kỳ vọng; P(≥1) ≈ 1 − (0,995)^(7·1 899) ≈ 1. Chỉ riêng pusht: 206 × 7 × 0,005 ≈ 7. Ngưỡng Bonferroni cho α = 0,05 trên 7 × 1 899 ≈ 13 300 phép thử: ~3,8·10⁻⁶ mỗi phép thử, tức là gần như phải có FPR bằng 0, điều Bài 12 cho thấy không chứng minh được với cỡ mẫu khả thi. Đó là lý do dùng E[FP] làm mốc so, không dùng Bonferroni làm cổng.
+
+**Kết quả trên `data/`** (detector bản sửa của Bài 11) `[đã đo, 10/2026, bản local, chưa gắn revision]`:
+
+| Phát hiện | Dataset | Phân loại | Ghi chú |
+|---|---|---|---|
+| L1, L3, L7 đếm/khoảng/stats | cả hai | sạch | |
+| L2 | cả hai | **không áp dụng** | timestamp = frame_index/fps |
+| L5 phân tán lag | libero | báo giả (dồn vào quy ước Δ và nhiễu ước lượng) | Sửa detector: báo lag kèm CI |
+| L6 nhảy bậc ở chiều 6–7 | libero | báo giả (kênh hai chế độ) | Thêm biên vật lý; nhóm này vượt xa E[FP] nhưng dồn vào **một cơ chế**, đúng mẫu "detector gãy" |
+| `next.done` = True ở **hai** frame cuối mọi episode | pusht | **chưa rõ** | Quy ước thường gặp là một frame cuối. Có thể là tạo tác của bộ chuyển đổi, có thể là quy ước có chủ đích. Kiểm mã chuyển đổi và dữ liệu gốc |
+| `next.success` = False ở mọi frame, reward lớn nhất mỗi episode 0,81–0,95 | pusht | **chưa rõ** | Có thể đúng nếu ngưỡng success của môi trường cao hơn mọi demo; có thể là cột không được điền. Hỏi, không khẳng định |
+| Dataset card (README.md) ghi `codebase_version: v2.0` và đường dẫn v2.x, `info.json` là v3.0 | pusht | lệch tài liệu, mức thấp | Card không được sinh lại sau khi chuyển đổi; không ảnh hưởng thư viện, ảnh hưởng người đọc |
+| `names` 1 phần tử cho `shape` 8 (state) và 7 (action) | libero | chưa rõ, mức thấp | Không ai biết chiều nào là gì nếu không đọc paper |
+| Chuẩn của 3 chiều quay (axis-angle?) nằm trong ~1,9–4,4 rad, vượt π | libero | **chưa rõ**, có thể không phải lỗi | Axis-angle không chuẩn hóa vẫn hợp lệ; quan trọng nếu ai đó so góc hoặc học trên biểu diễn này. Kiểm biểu diễn trong tài liệu LIBERO |
+
+Không có phát hiện nào ở trên là "lỗi thật đã xác nhận" chỉ bằng dữ liệu trong `data/`. Ba mục "chưa rõ" của pusht là ứng viên tốt để hỏi maintainer ở Bài 14, **dưới dạng câu hỏi**.
+
+Script reproduce mẫu cho mục `next.*` của pusht:
+
+```python
+# [đã chạy] pyarrow 18.1, numpy 2.2 — reproduce: cột next.* của pusht
+# dùng: python repro_pusht_next.py <thư mục dataset>  (tải bằng snapshot_download(..., revision=<hash>))
+import sys, json
+from collections import Counter
+from pathlib import Path
+import numpy as np, pyarrow as pa, pyarrow.parquet as pq
+
+root = Path(sys.argv[1])
+print("codebase_version:", json.loads((root / "meta/info.json").read_text())["codebase_version"])
+t = pa.concat_tables([pq.read_table(f, columns=["episode_index", "next.done", "next.success", "next.reward"])
+                      for f in sorted((root / "data").glob("*/*.parquet"))])
+ep = np.asarray(t["episode_index"]); done = np.asarray(t["next.done"])
+succ = np.asarray(t["next.success"]); rew = np.asarray(t["next.reward"])
+eps = np.unique(ep)
+# vị trí (tính từ cuối episode) của các frame có next.done == True
+pos = Counter(tuple((np.where(done[ep == e])[0] - (ep == e).sum()).tolist()) for e in eps)
+print("vị trí done (từ cuối):", pos.most_common(3))
+print("episode có next.success True:", sum(succ[ep == e].any() for e in eps), "/", len(eps))
+mx = np.array([rew[ep == e].max() for e in eps])
+print("reward lớn nhất mỗi episode: min %.3f, trung vị %.3f, max %.3f" % (mx.min(), np.median(mx), mx.max()))
+```
+
+Trên bản local nó in: done ở vị trí (−2, −1) cho 206/206 episode; 0/206 episode có success; reward lớn nhất 0,813 / 0,896 / 0,949.
+
+Với ba dataset bạn tự chọn: không có số chung. Kết quả "0 lỗi thật xác nhận" sau khi đã theo quy tắc dừng là một **kết quả âm hợp lệ**, đi thẳng vào bài viết (Bài 15). Tỉ lệ dự đoán đúng không có mốc chuẩn; một tham chiếu thô là 50–70 % ở lần đầu, dưới 30 % gợi ý khảo sát Bài 10 chưa đủ sâu `[ước lượng]`.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| 0 phát hiện ở cả 5 dataset | Dataset sạch ở các lớp đã định nghĩa, **hoặc** detector mù trên các dataset này (L2 không áp dụng, canary không qua) | Đọc trạng thái `not_applicable`/`inconclusive`; chạy canary | Theo quy tắc dừng đã viết: thêm dataset robot thật/cộng đồng **theo tiêu chí viết trước**, rồi dừng và báo kết quả âm |
+| Rất nhiều phát hiện ở mọi nơi | Detector, không phải dữ liệu | So với E[FP]; xem có dồn vào một cơ chế không; xác minh tay 3 trường hợp | Quay lại Bài 12 |
+| Tool crash trên một dataset | Biến thể định dạng (v2.x, cột thiếu, kiểu list khác nhau) | Đọc traceback, in `info.json` | Xử lý có kiểm soát, ghi biến thể vào report; bản thân biến thể là phát hiện L7 |
+| Script reproduce chạy ra khác trên máy sạch | Không ghim revision; phiên bản thư viện khác | So hash file đã tải | Ghim `revision` và phiên bản gói |
+| Một phát hiện "đẹp" nhưng chỉ thấy khi nới ngưỡng | Garden of forking paths | Nó có trong kế hoạch phân tích không? | Ghi là khám phá (exploratory), không báo như phát hiện đã xác nhận |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** Dataset 1 triệu episode, 7 detector, FPR mỗi detector 0,1 %. E[FP] bằng bao nhiêu, và người xác minh tay cần bao nhiêu giờ nếu mỗi trường hợp mất 5 phút?
+<details><summary>Hướng nghĩ</summary>
+
+N·ΣFPR rồi nhân 5 phút. Con số đó cho thấy vì sao report phải **gom nhóm theo cơ chế** và xác minh theo mẫu, không xác minh từng cái.
+
+</details>
+
+2. **[Failure mode]** Bạn xác minh bằng tay và "thấy" lỗi trong plot. Cơ chế nào khiến người xác minh xác nhận sai?
+<details><summary>Hướng nghĩ</summary>
+
+Thiên kiến xác nhận: bạn mở plot **vì** detector đã báo. Cách giảm: trộn một số episode sạch vào danh sách xác minh mà không biết cái nào là cái nào (xác minh mù), rồi đo tỉ lệ bạn "thấy lỗi" ở episode sạch. Đó là FPR của chính bạn (→ F2.8).
+
+</details>
+
+3. **[Vì sao không]** Vì sao không báo cho maintainer mọi cảnh báo và để họ tự lọc?
+<details><summary>Hướng nghĩ</summary>
+
+Chi phí chuyển sang người có ít thời gian nhất. Một issue có 2 000 cảnh báo, 95 % là báo giả, dạy maintainer bỏ qua tool của bạn vĩnh viễn. Hỏi ngược: tỉ lệ phát hiện đúng (precision) của report bạn gửi là bao nhiêu?
+
+</details>
+
+4. **[Liên ngành]** Trong di truyền học, nghiên cứu GWAS kiểm hàng triệu SNP và dùng ngưỡng p < 5·10⁻⁸. Con số đó đến từ đâu, và tương ứng gì với audit của bạn?
+<details><summary>Hướng nghĩ</summary>
+
+Gần đúng Bonferroni cho ~1 triệu phép thử độc lập hiệu dụng ở α = 0,05. Tương ứng: số phép thử hiệu dụng của bạn không phải D·N·d nếu các chiều/episode tương quan. Ngành đó còn đòi **lặp lại trên cohort độc lập**: tương ứng của bạn là kiểm phát hiện trên revision/dataset khác.
+
+</details>
+
+5. **[Phản biện]** "Kết quả âm (không tìm thấy lỗi) thì không có gì để đăng." Bạn phản biện thế nào?
+<details><summary>Hướng nghĩ</summary>
+
+Kết quả âm có kèm độ nhạy ("bắt được lỗi cỡ X với TPR Y, không thấy") là thông tin cho người dùng dataset: họ biết đã được kiểm những gì. Không đăng kết quả âm làm toàn ngành chỉ thấy dataset "có lỗi" (thiên lệch xuất bản, → F1.7).
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Neuroimaging sau "dead salmon".** Ngành chuyển sang báo cáo kết quả đã hiệu chỉnh và chia sẻ bản đồ thô. Giống: bạn báo E[FP] cạnh số quan sát và công bố cảnh báo thô. Khác: ở đó có lý thuyết trường ngẫu nhiên cho tương quan không gian; ở đây tương quan giữa episode phải tự ước lượng.
+- **Kiểm toán tài chính: lấy mẫu kiểm toán.** Kiểm toán viên không kiểm mọi giao dịch; họ lấy mẫu theo rủi ro và ngoại suy với độ tin cậy nêu rõ. Giống bước xác minh theo mẫu. Khác: kiểm toán có chuẩn mực về cỡ mẫu và mức trọng yếu; audit dataset chưa có, nên bạn phải tự viết ra trong kế hoạch.
 
 ### 11. Độ tin cậy và sửa lỗi
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| DeMillo, Lipton, Sayward 1978; error seeding của Mills | `[chuẩn]` | — |
-| Loạt bài injection–recovery của Kepler (Christiansen và cộng sự) | `[chuẩn]` | Tra ADS theo tiêu đề "Measuring Transit Signal Recovery in the Kepler Pipeline" |
-| Nguồn gốc ROC từ radar | `[chuẩn]` | — |
-| Bảng quét L4 | `[đã chạy]` | Mô hình đồ chơi; tham số hành vi là giả định |
-| Cận trên Wilson 0/200 ≈ 1.9%, 0/30 ≈ 11% | `[đã chạy]` | Hàm Wilson ở Bài 13 |
+| Dead salmon: Bennett và cộng sự, 2009–2010, Ig Nobel 2012 | `[chuẩn]` | |
+| Ngưỡng GWAS 5·10⁻⁸ | `[chuẩn]` | |
+| Các phát hiện trên `data/` | `[tự đo]` | Bản local; trước khi báo ra ngoài phải chạy lại trên revision Hub hiện tại |
+| E[FP] với FPR 0,5 % | `[ước lượng]` | FPR giả định; thay bằng số đo Bài 12 |
 
 **Đã sửa so với bản gốc:**
-- "Bạn đã có sẵn dữ liệu lành từ Bài 5": Bài 5 sinh MCAP IMU, không phải dataset LeRobot. Sửa: `make_clean()` viết mới, mang nguyên tắc từ Bài 5.
-- Test L4 bản gốc dựa trên định nghĩa "đơ khi khớp khác động"; sửa theo định nghĩa Bài 11 và thêm test ca biên gripper nghỉ.
-- Bổ sung: `inject_frame_drops` cần chế độ "rớt ẩn"; test INCONCLUSIVE; test metamorphic cho L5; FP rate có cận trên Wilson; exit code 2 cho lỗi của chính tool; `repo_id@sha` trong báo cáo.
+- Bản gốc không nhắc bội so sánh. Thêm E[FP], P(≥1), Bonferroni, và quy tắc "so với kỳ vọng trước khi xác minh".
+- Bản gốc: "Không tìm thấy lỗi nào trong 5 dataset → mở rộng lên 10 dataset, ưu tiên dataset cộng đồng". Giữ ý, nhưng đặt dưới **quy tắc dừng viết trước**, vì mở rộng không giới hạn sau khi thấy kết quả là garden of forking paths. Thêm kết quả âm là kết quả hợp lệ.
+- Thêm trạng thái "chưa rõ" bên cạnh "lỗi thật / báo giả", và xác minh mù để đo tỉ lệ sai của chính người xác minh.
+- Thêm yêu cầu ghim revision trong script reproduce.
+
+**Hợp nhất (Claude × Kiro):** chỉ bản Kiro có bài này. Người hợp nhất kiểm: chạy lại script reproduce trên dataset giả v3.0 có cột `next.*` (in đúng vị trí `done` (−2, −1)); kiểm lại số học E[FP] = 1 899 × 7 × 0,005 ≈ 66, Bonferroni 0,05/13 293 ≈ 3,8·10⁻⁶, đáp án tự kiểm tra E[FP] ≈ 20 [10; 40]. Đã sửa: thêm khối tiêu chí hoàn thành của bản gốc (bản Kiro chỉ để ngầm trong phần 7); hạ nhãn mốc "50–70 % dự đoán đúng là bình thường" xuống `[ước lượng]`.
 
 ### 12. Đọc thêm và tự kiểm tra
 
-- **Nguồn gốc:** R. A. DeMillo, R. J. Lipton, F. G. Sayward, "Hints on Test Data Selection: Help for the Practicing Programmer", *IEEE Computer*, 1978.
-- **Giải thích:** Tom Fawcett, "An introduction to ROC analysis", *Pattern Recognition Letters*, 2006.
-- **Đào sâu (tùy chọn):** tài liệu thư viện Hypothesis (hypothesis.readthedocs.io), phần stateful và strategies tùy biến — để viết bộ sinh episode như một strategy.
-- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao đường cong FP/FN là tích của hai mô hình bạn tự viết; (2) vẽ lại ma trận nhầm lẫn và chỉ ô nào đo bằng `make_clean()`, ô nào bằng `inject_*`; (3) câu hỏi:
-  - Bạn cài "đơ 2 s" vào gripper trong lúc nó đang giữ yên và lệnh cũng giữ yên. Detector không báo. Đây là FN?
-  - Vì sao exit code "tool lỗi" phải khác exit code "dữ liệu lỗi"?
+- **Nguồn gốc:** Bennett, Baird, Miller, Wolford, "Neural correlates of interspecies perspective taking in the post-mortem Atlantic Salmon", *Journal of Serendipitous and Unexpected Results*, 2010.
+- **Giải thích:** Alex Reinhart, *Statistics Done Wrong* (đọc miễn phí online), chương về bội so sánh.
+- **Đào sâu (tùy chọn):** Gelman & Loken, "The garden of forking paths" (2013).
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao "nhiều cảnh báo" chưa nói gì nếu không có E[FP]; (2) vẽ lại phễu phân loại ở phần 2; (3) câu hỏi dưới.
 
-  <details><summary>Đáp án</summary>(a) Không: đó là equivalent mutant, dữ liệu sau khi cài giống hệt dữ liệu lành; tính nó là FN làm sai recall. Bộ sinh phải chỉ cài đơ vào đoạn khớp đang được ra lệnh, hoặc gắn nhãn "không phân biệt được". (b) CI của người khác cần phân biệt "dataset có vấn đề, chặn merge" với "tool không đọc được format mới, cần nâng cấp tool"; gộp hai thứ làm người dùng tắt tool khi nó gặp format lạ.</details>
+Detector L6 báo 120 cảnh báo trên dataset 2 000 episode; FPR đo ở Bài 12 là 1 % [0,5 %; 2 %]. 110 trong 120 cảnh báo nằm ở một chiều. Bạn kết luận gì và làm gì tiếp?
+<details><summary>Đáp án</summary>
+
+E[FP] ≈ 20 [10; 40]. 120 vượt xa kỳ vọng, nhưng 110 dồn vào một chiều: mẫu điển hình của detector gãy với đặc tính của chiều đó (kênh hai chế độ, lượng tử hóa, wrap góc), hoặc một lỗi hệ thống thật ở chiều đó. Bước tiếp: vẽ histogram |Δx| của chiều đó, xem 3 trường hợp + video; 10 cảnh báo còn lại xấp xỉ E[FP], xem một mẫu nhỏ.
+
+</details>
 
 ---
+
+
+## Bài 14 — Report, publish, và báo lỗi cho maintainer (8h) (khung rút gọn)
+
+> **Vị trí:** Bài 13 (phát hiện đã phân loại) → **Bài 14** → Bài 15 (bài viết) · **Cần trước:** F1.7 (báo cáo trung thực, kết quả âm), Bài 12–13 · **Sau bài này bạn quyết định được:** báo phát hiện nào, ở kênh nào, dưới dạng khẳng định hay câu hỏi; và report của bạn hứa hẹn những gì về phạm vi kiểm.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 2010, hai nhà kinh tế Reinhart và Rogoff công bố một ngưỡng nợ công/GDP mà trên đó tăng trưởng sụt mạnh; con số được dẫn trong tranh luận chính sách nhiều nước. Năm 2013, Thomas Herndon, nghiên cứu sinh ở UMass Amherst, cố tái lập kết quả cho một bài tập, xin được file Excel gốc, và tìm ra một lỗi công thức bỏ sót vài quốc gia cùng các lựa chọn trọng số gây tranh cãi; kết quả sửa yếu hơn nhiều `[chuẩn]`. Hai bài học cho bạn: lỗi được tìm thấy vì **người ngoài chạy lại được**; và cách báo lỗi (công bố có số liệu, có file, không công kích) quyết định nó được tiếp nhận hay bị gạt đi.
+
+Gate M3 có một tiêu chí do người ngoài chấm. Bài này là về việc làm cho công việc của bạn **kiểm được** và **dễ tiếp nhận** bởi người ngoài.
+
+### 2. Mô hình tư duy
+
+```mermaid
+flowchart LR
+  R["report.html<br/>tự chứa"] --> RM["README<br/>3 câu đầu + ảnh + đường cong"]
+  F["Phát hiện đã phân loại<br/>Bài 13"] --> Q{"Đã xác nhận?"}
+  Q -->|"lỗi thật"| I1["Issue/Discussion:<br/>hiện tượng + reproduce + đề xuất"]
+  Q -->|"chưa rõ"| I2["Discussion dạng CÂU HỎI<br/>'tôi có hiểu đúng quy ước không?'"]
+  Q -->|"báo giả"| X["Không gửi; ghi vào<br/>calibration + Giới hạn"]
+  I1 --> S["Tín hiệu ngoài<br/>phản hồi / star"]
+  I2 --> S
+  RM --> S
+```
+
+Report tốt có ba phần cùng quan trọng: **đã thấy gì** (kèm bằng chứng), **đã kiểm gì và sạch** (kèm độ nhạy), và **không kiểm được gì** (lớp ngoài bảy, detector `not_applicable`/`inconclusive`). Bỏ phần thứ ba là phóng đại phạm vi kiểm, đúng kiểu lỗi mà tool của bạn đi tìm ở người khác (metadata tuyên bố nhiều hơn dữ liệu chứa).
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Bug report nội bộ (Jira, có quyền ép ưu tiên) | Issue/Discussion gửi maintainer dataset công khai | Maintainer không nợ bạn gì; dataset là đóng góp miễn phí; bạn là người lạ mới vào miền | Giọng ra lệnh/kết luận ⇒ bị đóng hoặc lờ đi |
+| Postmortem không đổ lỗi | Báo lỗi dataset | Postmortem viết sau khi sự cố đã được xác nhận; ở đây phần lớn phát hiện mới là "chưa rõ" | Viết "dataset bị lỗi X" cho một thứ có thể là quy ước có chủ đích |
+| Status page / SLA nói rõ phạm vi | Phần "đã kiểm và sạch" + "không kiểm được" | Status page do chính chủ hệ thống viết; report của bạn nói về hệ thống người khác | Người đọc hiểu "tool không báo" thành "dataset đã được chứng nhận sạch" |
+| Open source: README + CI badge | README + đường cong ngưỡng + mutation score | Badge CI xanh nói code chạy; không nói detector đo đúng | Người dùng tin badge như bằng chứng chất lượng phát hiện |
+
+**Chấm mô hình:**
+
+- *"Nêu giới hạn và kết quả âm làm tool trông yếu."* — **SAI.** Với người trong nghề, phần giới hạn là bằng chứng bạn đã đo đủ để biết mình chưa đo gì. Phản ví dụ ngược: một README hứa "phát hiện mọi lỗi dữ liệu robot" bị bác bỏ bởi một phản ví dụ duy nhất (episode thất bại có dữ liệu hoàn hảo), và người đọc mất tin cả những gì tool làm tốt.
+- *"Tool tốt thì tự có người dùng."* — **SAI.** Không phân phối thì không phân biệt được với tool không tồn tại. Và trước khi phân phối, kiểm **prior art**: chính `lerobot` đã có kiểm tra lúc ghi (`validate_frame`, `validate_episode_buffer`, `validate_feature_dtype_and_shape` trong `src/lerobot/datasets/feature_utils.py`, main 10/2026 `[spec, tự đo theo phiên bản]`) — đó là kiểm schema khi ghi; và có thể đã có tool audit cộng đồng (tìm trên GitHub/HF Hub với "lerobot dataset audit/validate" `[tự đo]`). Phản ví dụ cho "đầu tiên": một README tự xưng "tool đầu tiên kiểm dataset LeRobot" bị bác bằng đúng các hàm `validate_*` kia. README phải nói tool của bạn khác ở đâu (kiểm sau khi ghi, theo vật lý, TPR/FPR đo được, trạng thái `not_applicable`), không nói "đầu tiên" hay "tốt nhất" khi chưa so.
+
+### 6. Làm
+
+1. **report.html tự chứa** (một file, ảnh nhúng base64, mở offline): tóm tắt (dataset + revision, số episode, số phát hiện theo mức, E[FP] cạnh mỗi nhóm); mỗi phát hiện (episode, frame, chiều, bằng chứng, plot, phân loại lỗi/chưa rõ); **đã kiểm và sạch** (lớp + độ nhạy đo ở Bài 12); **không kiểm được** (lớp `not_applicable`/`inconclusive` + lý do; các lớp ngoài bảy).
+2. **README**: ba câu đầu trả lời tool làm gì, chạy thế nào (một lệnh), vì sao nên quan tâm. Kèm ảnh report, đường cong ngưỡng cho ≥2 detector, bảng TPR/FPR có CI, mutation score, mục **Giới hạn**, mục **Prior art** (tool tương tự và khác ở đâu), mục **Đã sửa nhờ phản hồi** (để trống, chờ điền).
+3. **Kiểm lại trên revision hiện tại** của dataset trước khi gửi bất cứ gì. Dataset trên Hub có thể đã được sửa từ bản bạn tải.
+4. **Viết issue/discussion.** Kênh: tab **Discussions** của dataset trên HF Hub (chỗ đúng nhất cho vấn đề nội dung dataset); **issue** trên `huggingface/lerobot` nếu là vấn đề định dạng/công cụ chuyển đổi (đọc template của repo trước); **Discord LeRobot** để hỏi trước khi mở issue nếu chưa chắc. Một issue tốt trông như thế này:
+
+```markdown
+**Title:** pusht: `next.done` is True on the last two frames of every episode — intended?
+
+**Dataset:** lerobot/pusht @ revision <hash> (codebase_version v3.0)
+
+**What I observe** (script below, ~20 lines, only pyarrow + numpy):
+- `next.done` is True at positions (-2, -1) from the end in 206/206 episodes.
+- `next.success` is False in all frames of all episodes; max `next.reward` per episode is 0.81–0.95.
+
+**What I expected:** `next.done` True only on the final frame. I may be misunderstanding
+the convention (e.g. how the original data was converted), so I'd appreciate a pointer.
+
+**Why it might matter:** code that uses `next.done` to find episode ends, or `next.success`
+to filter demonstrations, would behave differently from what a user might assume.
+
+**Reproduce:** <script, pinned revision, pinned package versions>
+
+**Scope:** found with an open-source audit tool (<link>); other checks (timestamps, video
+frame counts, metadata consistency) passed on this dataset.
+```
+
+   Năm đặc điểm: tiêu đề là một câu hỏi cụ thể; ghim revision; hiện tượng bằng số, không tính từ; nói kỳ vọng của bạn **và** khả năng bạn hiểu sai; reproduce độc lập với tool. Không dán 2 000 cảnh báo; không link tool ở câu đầu (đó là quảng cáo, không phải báo lỗi).
+5. **Phân phối** sau khi bài viết (Bài 15) xong: Discord LeRobot, r/robotics, LinkedIn, Hacker News nếu bài đủ chất. Một kênh một tuần, ghi ngày đăng và phản hồi vào `notes/14-distribution.md` (đây là dữ liệu cho M5 đo thị trường).
+
+**Tiêu chí hoàn thành (giữ bản gốc):**
+
+| Kiểm tra | Đạt khi |
+|---|---|
+| report.html mở được trong trình duyệt, tự chứa, có ba phần (đã thấy / đã kiểm và sạch / không kiểm được) | Có |
+| README có ảnh report + lệnh chạy một dòng + đường cong ngưỡng | Có |
+| Đã đăng báo cáo (issue/discussion) ở ≥1 kênh, theo revision hiện tại | Có link công khai |
+| Trong 60 ngày: ≥1 phản hồi có nội dung HOẶC ≥10 star | **Đây là gate** (tiêu chí 5), không do bạn chấm |
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Đăng rồi im lặng 3 tuần | Kênh phân phối, hoặc phát hiện không đủ rõ ràng để ai muốn trả lời | Có ai xem không (lượt xem discussion, traffic repo)? | Viết bài (Bài 15), cross-post; cấp thêm 8h |
+| Vẫn im lặng sau 90 ngày | Tín hiệu thị trường xấu đầu tiên | — | Chạy **M5 (đo thị trường)** ngay, sớm hơn kế hoạch, trước khi đầu tư thêm vào K3 |
+| Maintainer trả lời "đó là quy ước có chủ đích" | Phát hiện là "chưa rõ" thật sự, giờ đã rõ | — | Cảm ơn; chuyển thành điều kiện tắt detector hoặc ghi chú trong report; ghi vào README "đã sửa nhờ phản hồi" |
+| Phản hồi chỉ ra tool sai | Kết quả tốt nhất có thể: một trao đổi kỹ thuật thật | Reproduce lỗi của tool | Sửa, thêm test, cảm ơn công khai |
+| Issue bị đóng vì sai kênh | Vấn đề dataset gửi vào repo thư viện, hoặc ngược lại | Đọc CONTRIBUTING/issue template | Chuyển kênh, link chéo |
+
+### 9. Câu hỏi ngược
+
+1. **[Phản biện]** Một người nói: "≥10 star là đo độ nổi tiếng, không đo chất lượng." Họ đúng tới đâu, và vì sao gate vẫn dùng nó?
+<details><summary>Hướng nghĩ</summary>
+
+Star là tín hiệu yếu và dễ bị thổi phồng. Gate dùng nó như **một trong hai** lối (lối kia là phản hồi có nội dung), vì mục tiêu của gate là "người trong ngành có thấy công việc này không", không phải "công việc có đúng không" — cái sau đã được kiểm bằng tiêu chí 2–3.
+
+</details>
+
+2. **[Failure mode]** Bạn báo một "lỗi" công khai, sau đó phát hiện tool của bạn sai. Làm gì, và làm sao để lần đầu ít khả năng xảy ra?
+<details><summary>Hướng nghĩ</summary>
+
+Sửa công khai ngay tại chỗ đã báo, không xóa. Phòng: reproduce độc lập với tool, viết dạng câu hỏi khi còn "chưa rõ", kiểm trên revision hiện tại.
+
+</details>
+
+3. **[Quy mô]** Nếu tool chạy tự động trên 500 dataset mỗi tuần, bạn có nên tự động mở discussion cho mỗi phát hiện không?
+<details><summary>Hướng nghĩ</summary>
+
+Tính số discussion/tuần từ E[FP] và precision đã đo. Spam tự động làm hỏng kênh cho mọi người. Một dashboard công khai + tự động hóa chỉ cho lớp có precision rất cao (ví dụ L7 đếm) là hướng khác.
+
+</details>
+
+4. **[Liên ngành]** Responsible disclosure trong bảo mật: báo riêng cho chủ hệ thống trước, công bố sau một khoảng thời gian. Có nên áp cho lỗi dataset không?
+<details><summary>Hướng nghĩ</summary>
+
+Lỗi dataset thường không gây hại khi công bố, nên báo công khai là bình thường. Nhưng tinh thần "cho chủ cơ hội trả lời trước khi viết bài nêu tên" vẫn đáng giữ: gửi discussion trước, viết bài sau.
+
+</details>
+
+**Độ tin cậy và sửa lỗi** (khung rút gọn, ghi gộp): Reinhart–Rogoff và Herndon, Ash, Pollin `[chuẩn]`. Đã sửa so với bản gốc: thêm phần "không kiểm được" vào report, bước kiểm lại trên revision hiện tại, mục Prior art; giữ đủ ba kênh báo lỗi, giọng "có thể tôi hiểu sai", phân phối và ba dòng "Nếu ra khác" của bản gốc. **Hợp nhất:** chỉ bản Kiro có bài này; người hợp nhất bỏ tên một repo prior art cụ thể không xác minh được, thay bằng `validate_*` có thật trong source `lerobot`; thêm bảng tiêu chí hoàn thành của bản gốc.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Herndon, Ash, Pollin, "Does High Public Debt Consistently Stifle Economic Growth? A Critique of Reinhart and Rogoff", *Cambridge Journal of Economics*, 2014.
+- **Giải thích:** tài liệu Hugging Face Hub về Discussions và Pull Requests trên repo dataset.
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao phần "không kiểm được" thuộc về report; (2) vẽ lại sơ đồ quyết định gửi/không gửi ở phần 2; (3) viết lại câu "Your dataset is broken: next.done is wrong" thành một tiêu đề issue tốt.
+<details><summary>Đáp án (3)</summary>
+
+Ví dụ: "pusht: `next.done` is True on the last two frames of every episode — intended?" Cụ thể (dataset, cột, hiện tượng đo được), dạng câu hỏi, không kết luận thay maintainer.
+
+</details>
+
+---
+
+
+## Bài 15 — Bài viết tiếng Anh (4h) (khung rút gọn)
+
+> **Vị trí:** Bài 14 (report, issue) → **Bài 15** → Gate M2 · **Cần trước:** F1.7, Bài 12–14 · **Sau bài này bạn quyết định được:** bài viết khẳng định điều gì, với mức chắc chắn nào, và nói thẳng điều gì nó không khẳng định.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 2018, Timnit Gebru và cộng sự đề xuất *Datasheets for Datasets* (bản chính thức trên *Communications of the ACM*, 2021): mỗi dataset nên đi kèm một tài liệu trả lời có hệ thống "thu thế nào, ai thu, dùng cho gì, **không** nên dùng cho gì, đã biết vấn đề gì". Lý do: nhiều mô hình được train và đánh giá trên dataset mà người dùng không biết giới hạn của nó `[chuẩn]`. Bài viết của bạn là một "datasheet" cho **tool** của bạn: nó đo gì, nhạy tới đâu, và mù ở đâu. Viết nó sai cách (phóng đại, đổ lỗi, giấu kết quả âm) thì tạo đúng vấn đề mà Gebru muốn giải.
+
+### 2. Mô hình tư duy
+
+```
+Auditing LeRobot datasets: what breaks and how to detect it
+(tiêu đề của bản gốc; có thể thêm vế "…and how often the detectors are wrong"; 1 200–1 800 từ, không hơn)
+
+1. Mở đầu (3 câu)      dữ liệu robot đa luồng; kiểm schema ≠ kiểm vật lý; tôi đo cả detector
+2. Định dạng v3.0      một hình: episode = khoảng index + khoảng thời gian video
+3. Các lớp lỗi          mỗi lớp ~100 từ: định nghĩa, vì sao hại training, MỘT phản ví dụ báo giả
+4. Đo detector          tiêm lỗi, TPR theo độ lớn, FPR + Wilson, chọn ngưỡng theo tiêu chí viết trước
+5. Kết quả trên N ds    bảng: dataset@revision · phát hiện · E[FP] · phân loại; gồm kết quả âm
+6. Giới hạn             not_applicable (L2 trên timestamp tính ra), lớp ngoài bảy, episode thất bại,
+                        detector chỉ đúng cho lỗi đã mô hình hóa
+7. Chạy thử             một lệnh
+```
+
+Phần 4 và 6 là phần khiến bài khác một bài "tôi viết một tool". Phần 5 khách quan, không quy kết: dataset công khai là đóng góp miễn phí của người khác.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Blog kỹ thuật kiểu "how we built X" | Bài về audit tool | Người đọc ngành robot không cần biết bạn dùng framework gì; họ cần biết detector **đúng tới đâu** | Bài dài phần kiến trúc, không có bảng TPR/FPR |
+| Benchmark blog "nhanh hơn N lần" | Bảng kết quả trên dataset | Ở đây con số đáng tin nhất thường là kết quả âm có độ nhạy, không phải số phát hiện lớn | Tiêu đề kiểu "tôi tìm thấy 2 000 lỗi trong dataset X" (phần lớn là báo giả) |
+| Release notes | Mục "Đã sửa nhờ phản hồi" | Release notes nói về code của bạn; ở đây phản hồi có thể chỉ ra **phát hiện** của bạn sai | Giấu những phát hiện đã rút lại |
+
+**Chấm mô hình:** *"Bài viết nên nêu phát hiện ấn tượng nhất ở đầu để thu hút."* — **ĐÚNG MỘT PHẦN.** Mở bằng một ví dụ cụ thể là tốt. Gãy khi ví dụ đó là "chưa rõ" mà được viết như "lỗi": maintainer đọc bài trước khi trả lời discussion. Phản ví dụ: mở bằng `next.done` của pusht như một bug, rồi maintainer giải thích đó là quy ước; cả bài mất tin.
+
+### 6. Làm
+
+1. Viết dàn ý theo phần 2, điền số từ Bài 12–13 (mọi số có CI hoặc có n).
+2. Mỗi lớp lỗi: một hình (plot thật từ dataset công khai hoặc từ bộ sinh, ghi rõ nguồn).
+3. Câu nào khẳng định, câu nào phỏng đoán: đánh dấu khi viết nháp, rồi kiểm từng câu khẳng định có số đo đứng sau không.
+4. Cho một người đọc tiếng Anh tốt (hoặc LLM với prompt "chấm, không khen: tìm câu khẳng định không có bằng chứng, câu đổ lỗi, câu phóng đại") đọc trước khi đăng. LLM **không** được viết lại phần số liệu.
+5. Đăng ở blog/README; link từ repo; dùng làm "hạt" cho phân phối ở Bài 14 bước 5.
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Bài > 2 500 từ | Kể quá trình thay vì kết quả | Đếm từ phần kiến trúc | Cắt về dàn ý; phần còn lại vào README |
+| Không có câu nào bắt đầu bằng "The tool cannot…" | Thiếu phần Giới hạn | Tìm chữ "cannot", "not applicable" | Viết lại phần 6 |
+| Bảng kết quả chỉ có dataset "có lỗi" | Thiên lệch chọn | So với danh sách dataset trong `prediction.md` Bài 13 | Đưa đủ mọi dataset đã chạy, kể cả kết quả âm |
+
+### 9. Câu hỏi ngược
+
+1. **[Vì sao không]** Vì sao không nêu tên dataset có "chưa rõ" trong bài trước khi maintainer trả lời?
+<details><summary>Hướng nghĩ</summary>
+
+Có thể nêu, nhưng ở dạng câu hỏi đã gửi, kèm link discussion, và cập nhật bài khi có trả lời. Nêu như kết luận là đi trước bằng chứng.
+
+</details>
+
+2. **[Failure mode]** Sáu tháng sau, LeRobot ra định dạng v3.1 và tool của bạn đọc sai mà không crash. Bài viết của bạn thành sai thế nào, và bạn phòng trước bằng gì?
+<details><summary>Hướng nghĩ</summary>
+
+Ghi phiên bản định dạng và revision trong mọi bảng; tool từ chối có thông báo khi gặp `codebase_version` lạ. Đó là chính quyết định của Bài 9.
+
+</details>
+
+3. **[Phản biện]** "Đo TPR/FPR trên dữ liệu tự tiêm lỗi là tự chấm điểm cho mình." Trả lời thế nào trong bài?
+<details><summary>Hướng nghĩ</summary>
+
+Nhận đúng: TPR chỉ đúng cho lỗi đã mô hình hóa. Đưa bộ sinh và injector lên repo để người khác thêm lỗi của họ; mời phản biện. Đó là câu trả lời trung thực duy nhất.
+
+</details>
+
+4. **[Quy mô]** Bảng kết quả của bạn có 5 dataset. Nếu sau một năm tool chạy trên 300 dataset, bảng trong bài viết còn là cách trình bày đúng không? Thay bằng gì?
+<details><summary>Hướng nghĩ</summary>
+
+Bảng 300 dòng không ai đọc; tóm tắt theo lớp lỗi (bao nhiêu dataset có, E[FP] tổng, phân bố theo loại robot) và một bảng dashboard công khai có revision. Câu hỏi thật là: bài viết là ảnh chụp một thời điểm, report là thứ sống; hai thứ phải link với nhau.
+
+</details>
+
+**Độ tin cậy và sửa lỗi** (khung rút gọn, ghi gộp): Gebru và cộng sự, *Datasheets for Datasets* (arXiv 2018, CACM 2021) `[chuẩn]`. Đã sửa so với bản gốc: bố cục thêm mục định dạng v3.0 và mục đo detector (TPR/FPR, Wilson); bảng kết quả bắt buộc gồm cả kết quả âm và E[FP]. Giữ tiêu đề, độ dài 1 200–1 800 từ, mỗi lớp lỗi ~100 từ + một biểu đồ, mục Giới hạn. **Hợp nhất:** chỉ bản Kiro có bài này; người hợp nhất khôi phục tiêu đề gốc (bản Kiro đổi tiêu đề), sửa liên kết Northcutt trỏ sang Bài 13.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Gebru và cộng sự, "Datasheets for Datasets", *Communications of the ACM*, 2021.
+- **Giải thích:** Northcutt, Athalye, Mueller 2021 ("Pervasive Label Errors…", NeurIPS D&B; Bài 13) — một ví dụ bài viết báo lỗi dataset có số liệu, có công cụ, và có website cho người khác kiểm.
+- **Tự kiểm tra:** (1) tóm tắt bài của bạn trong 5 câu cho một backend engineer; (2) vẽ lại dàn ý ở phần 2 từ trí nhớ; (3) với mỗi số trong bài, chỉ ra file trong repo sinh ra nó.
+
+---
+
+
+## GATE MODULE 2 (= M3 PASS)
+
+| # | Tiêu chí | Cách kiểm |
+|---|---|---|
+| 1 | Chạy trên ≥5 dataset công khai (ghim revision, ít nhất một dataset robot thật hoặc cộng đồng) bằng **một lệnh**, đọc đúng LeRobot v3.0 và từ chối có thông báo với phiên bản không hỗ trợ | Chạy thử từ repo sạch, venv mới |
+| 2 | ≥4 lớp lỗi, mỗi lớp có ≥4 test đơn vị (bắt đúng · sạch không báo · đối chứng âm/ca biên · không áp dụng) + test metamorphic; **TPR theo độ lớn lỗi và FPR mỗi episode đo bằng lỗi tiêm vào, kèm khoảng Wilson 95 %**, FPR thỏa mục tiêu viết trước; canary chạy ở runtime | CI xanh; `calibration/*.csv` có seed và phiên bản bộ sinh |
+| 3 | ≥1 lỗi **thật** đã xác nhận bằng nguồn độc lập với detector, trong ≥1 dataset công khai, có script reproduce < 40 dòng ghim revision | Chạy script trên máy sạch |
+| 4 | Đã báo cáo ra ngoài (issue/discussion theo mẫu Bài 14) và report có mục "đã kiểm và sạch" + "không kiểm được" | Link công khai; mở report |
+| 5 | **Tín hiệu ngoài trong 60 ngày:** ≥1 phản hồi có nội dung, HOẶC ≥10 star | Không do bạn chấm |
+
+**Ngân sách:** 60h. **Trần:** 85h.
+
+**FAIL action:**
+- Tiêu chí 2 trượt (FPR không đạt mục tiêu): không nới mục tiêu sau khi thấy số. Tắt detector đó khỏi mặc định, ghi vào Giới hạn; gate tính trên các lớp còn lại (vẫn cần ≥4).
+- Tiêu chí 3 trượt sau khi đã theo quy tắc dừng của Bài 13: **không** mở rộng tiếp không giới hạn. Đăng kết quả âm (Bài 15 vẫn viết), gửi các mục "chưa rõ" dạng câu hỏi; gate M3 ghi "PASS có điều kiện" nếu một mục "chưa rõ" được maintainer xác nhận là lỗi trong 60 ngày, ngược lại FAIL tiêu chí 3 và ghi vào `decisions.md`.
+- Tiêu chí 5 trượt sau 90 ngày: chạy M5 (đo thị trường) ngay.
+
+**Đã sửa so với gate gốc:** tiêu chí 2 gốc "test tổng hợp chứng minh detector đúng và không báo nhầm" đổi thành **đo** TPR/FPR có khoảng tin cậy, vì một bộ test pass không chứng minh tỉ lệ báo giả (Bài 12); thêm yêu cầu đọc đúng v3.0 và ghim revision; thêm "không kiểm được" vào report; thêm FAIL action cho tiêu chí 3 để tránh garden of forking paths.
+
+**Hợp nhất:** gate lấy từ bản Kiro (bản Claude chưa có), đã đối chiếu đủ năm tiêu chí, ngân sách 60h và trần 85h của bản gốc; tiêu chí 2 và 3 khớp với Bài 12–13 sau hợp nhất (≥4 test mỗi detector, TPR/FPR có Wilson, quy tắc dừng).
+
