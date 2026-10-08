@@ -585,3 +585,281 @@ Những tham số có độ nhạy trên dữ liệu đó: hình học (qua odom
 </details>
 
 ---
+
+## Bài C11.2 — HIL và CI cho hành vi robot (24h)
+
+> **Vị trí:** C11.1 (twin + `VALIDITY.yaml`) → **C11.2** → C11.3, C11.4 · **Cần trước:** → F2.7 (trọn, kể cả bài tập tràn bộ đếm 16 bit ở mục 5), F2.6, F2.3, F2.5, F7.1; K6 Bài 3–6, 8, 11–13, 18 (seed, kịch bản, runner, predicate, cổng ba trạng thái + ERROR, tập giữ kín: **dùng nguyên, không dạy lại**); test bàn của C3, C4 · **Sau bài này bạn quyết định được:** cái gì chạy mỗi commit, mỗi đêm, mỗi tuần; N episode mỗi nhánh; một run HIL dài bao nhiêu và khi nào nó là ERROR; một thay đổi Nav2/firmware được merge, bị chặn, hay phải chạy thêm.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Ngày 20/12/2019, tàu Starliner của Boeing bay thử không người lái (OFT). Đồng hồ thời gian nhiệm vụ của tàu lấy giá trị từ tên lửa Atlas V ở sai thời điểm (sai vị trí bộ nhớ, theo các mô tả sau đó) và lệch khoảng 11 giờ; tàu nghĩ mình đang ở pha khác, đốt quá nhiều nhiên liệu giữ tư thế và không lên được trạm vũ trụ. Trong lúc bay, đội mặt đất còn phát hiện một lỗi phần mềm thứ hai có thể làm hai module va nhau khi tách. Boeing giải thích với báo chí rằng họ đã chia nhiệm vụ thành từng đoạn và test kỹ từng đoạn, vì một lần chạy liền từ phóng tới ghép nối mất hơn 25 giờ; ở chỗ nối giữa các đoạn, dữ liệu của tên lửa thật được thay bằng giả lập `[chuẩn — báo chí 2019–2020 dẫn lời Boeing và nhóm đánh giá độc lập NASA–Boeing; kiểm báo cáo chính thức nếu cần chi tiết]`.
+
+F2.7 đã kể Ariane 501 cho cùng bài học "lỗi trốn ở đúng chỗ thứ thật bị thay bằng thứ giả". Starliner thêm một chiều: **độ dài**. Lỗi chỉ hiện sau nhiều giờ chạy liền; test chia đoạn ngắn, mỗi đoạn đều xanh. Robot của bạn có đúng loại lỗi đó: bộ đếm PCNT 16 bit tràn sau vài mét (F2.7 mục 5), rò bộ nhớ trong task giao tiếp, watchdog chỉ nổ khi buffer đầy dần. Bài này dựng nơi những lỗi đó lộ ra, và chỉ ra chỗ nơi đó tự nói dối.
+
+### 2. Mô hình tư duy
+
+**Bảng "thật / giả" cho từng tầng** (F2.7 yêu cầu viết bảng này cho cổng của chính bạn):
+
+| Tầng | Firmware | PCNT, lọc glitch | PWM thật | Timer, ISR, task | Thế giới (bánh, sàn) | Nav2 | Tốc độ | Tên chuẩn |
+|---|---|---|---|---|---|---|---|---|
+| SIL | code C biên dịch cho host | giả (biến `int16_t` nếu bạn nhớ) | giả | giả | MuJoCo | thật | nhanh hơn thời gian thực | SIL |
+| PIL qua UART (bản gốc gọi "HIL") | thật trên ESP32 | **bỏ qua**: số đếm bơm vào biến | giả (DUT "kể" duty) | thật | MuJoCo | thật | thời gian thực | PIL |
+| **HIL điện** (bàn mục 4) | thật | **thật**: #2 phát xung vào chân | **thật**: #2 capture | thật | MuJoCo + #2 | thật | thời gian thực | HIL |
+| Robot thật | thật | thật | thật + motor | thật | thật | thật | vài lần/giờ | field test |
+
+"Motor giả" ở bàn này nghĩa là: mọi thứ **sau** chân PWM (H-bridge, dead-time, dòng phanh, sụt nguồn khi khởi động) nằm ngoài vòng. Bàn HIL mù với các lỗi đó (F2.7 mục 12 đã hỏi đúng câu này); C3 và C10 phủ chúng.
+
+**Kim tự tháp của repo:**
+
+```mermaid
+flowchart BT
+  C["MỖI COMMIT (phút)<br/>unit + SIL: parity PI, golden replay odometry (C6), fuzz giao thức (C4),<br/>determinism (K6 Bài 4), smoke 50 episode: chỉ bắt crash / sim_unstable / ERROR"]
+  N["MỖI ĐÊM (giờ)<br/>N episode SIL theo power → cổng K6 Bài 13 theo nhóm kịch bản<br/>tập giữ kín K6 Bài 18 · cờ VALIDITY (C11.1)"]
+  W["MỖI TUẦN / TRƯỚC KHI CHẠY THẬT<br/>20 run HIL DÀI (≥ 2 lần thời gian tràn PCNT) · test failsafe C4/C10<br/>rồi mới: đề xuất chạy thật (C11.3)"]
+  C --> N --> W
+```
+
+**Ai giữ nhịp.** Trên bàn HIL, timer phần cứng của ESP32 robot chạy theo thạch anh như ngoài đời; không ai tạm dừng được nó. Vậy sim trên host phải **đuổi kịp thời gian thực**: mỗi 10 ms, host đọc duty do #2 đo được, bước sim 10 ms, gửi vận tốc bánh mới cho #2 phát xung. Trễ quá 10 ms thì #2 phát tiếp vận tốc cũ, và thế giới của firmware lệch nhịp với vật lý.
+
+```
+t (ms)    0                       10                      20
+DUT       |tick: PCNT→PI→duty     |tick                   |tick
+#2        |capture duty ──USB──►  host                    |phát xung theo v[k] ──────►
+host            |step sim 10 ms|──USB──► #2 nhận v[k+1]  |
+                <──────── phải xong trước tick kế; trễ = deadline miss ────────>
+```
+
+Có thể làm ngược lại (MCU chờ host rồi mới chạy tick: "lockstep ảo"), nhưng khi đó timer không còn là timer thật, và lỗi timing, thứ đáng giá nhất của tầng này, biến mất. Bài này giữ timer thật, chấp nhận deadline miss, và **đếm** nó.
+
+**Một lần lỡ hạn làm run vô hiệu: run đó là ERROR**, không phải INCONCLUSIVE. Theo cổng của K6 Bài 13, ERROR là "phép so sánh không hợp lệ, dụng cụ hỏng", INCONCLUSIVE là "thiếu bằng chứng". Lỡ hạn là dụng cụ hỏng. Cái bẫy nằm ở thống kê đuôi: p99 trễ thấp không có nghĩa run sạch. Một run 2 phút có 12.000 tick; lỡ 1/5.000 tick là gần như run nào cũng hỏng. Mô phỏng (phân bố giả định, bạn thay bằng số đo):
+
+```python
+# [đã chạy] C11.2 — cổng HIL khóa nhịp vào timer ESP32 (10 ms): một run có ≥1 lần lỡ hạn là ERROR.
+# Mọi phân bố dưới đây là GIẢ ĐỊNH đồ chơi; thay bằng số đo GPIO + logic analyzer của bạn.
+import numpy as np
+rng = np.random.default_rng(11)
+TICK, BYTES, BAUD = 10e-3, 16, 921_600          # chu kỳ, byte/gói mỗi chiều, baud cổng HIL
+uart = 2 * BYTES * 10 / BAUD                    # 10 bit/byte (8N1), hai chiều
+
+def rtt(n, lat_timer, spike_p):
+    sim = rng.lognormal(np.log(0.8e-3), 0.5, n)                 # bước sim 10 ms + bridge Python
+    spike = np.where(rng.random(n) < spike_p, rng.uniform(8e-3, 30e-3, n), 0.0)   # GC, scheduler, swap
+    usb = rng.uniform(0, lat_timer, n)                          # adapter USB–UART gom gói tới latency timer
+    return uart + sim + spike + usb
+
+cfgs = {"A: latency_timer 16 ms": (16e-3, 2e-4), "B: latency_timer 1 ms": (1e-3, 2e-4),
+        "C: B + host yên tĩnh (CPU riêng, tắt GUI)": (1e-3, 2e-6)}
+N = 2_000_000
+print(f"UART thuần hai chiều: {uart*1e3:.2f} ms")
+for name, (lt, sp) in cfgs.items():
+    r = rtt(N, lt, sp); q = np.mean(r > TICK)
+    runs = "  ".join(f"{T:>3d}s: {1-(1-q)**int(T/TICK):6.1%}" for T in (30, 120, 600))
+    print(f"{name:40s} p50 {np.median(r)*1e3:5.2f} p99 {np.percentile(r,99)*1e3:5.2f} ms  "
+          f"P(lỡ/tick) {q:.1e}  P(run ERROR) {runs}")
+```
+
+**Thông lượng tầng đêm là định luật Little** (→ F7.1): L worker, mỗi episode mất W giây thật (khởi động, chạy, reset, ghi MCAP) thì λ = L/W. 1000 episode/giờ cần L/W ≥ 0,28/s: 4 worker thì W ≤ ~14 s. Episode 60 s thời gian mô phỏng nghĩa là sim **kể cả Nav2** phải nhanh hơn thời gian thực ít nhất 4 lần. K6 Bài 8 đã đo phần runner; phần mới ở đây là Nav2 trong vòng, thứ thường là nút cổ chai `[tự đo]`.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Kim tự tháp unit / integration / e2e | SIL / HIL / chạy thật | E2E backend vẫn gần tất định và tăng tốc được. HIL bị khóa vào thời gian thực, chạy thật thì ngẫu nhiên, đắt, có rủi ro vật lý | Dồn kiểm lên tầng trên: CI chậm tới mức không ai đợi. Bỏ tầng giữa: lỗi timing chỉ lộ trên sàn văn phòng |
+| SLO "p99 latency < X" | Ngân sách trễ mỗi tick của cổng HIL | SLO cho phép 1 % vượt; một run HIL **không cho phép lần nào**. Đơn vị cần tính là run, không phải request | Báo "p99 3,5 ms, cổng ổn", trong khi 40 % run dài là ERROR (phần 7) |
+| Mock dependency trong integration test | PIL: số đếm bơm qua UART | Mock không có thời gian; PIL có thời gian thật **và** trễ đường truyền mà robot thật không có | Quy lỗi timing do chính cổng sinh ra cho firmware; hoặc tưởng PIL đã phủ ngoại vi |
+| Canary deploy | Canary regression cố ý chèn để kiểm CI | Canary ở đây kiểm **chính bộ kiểm** (→ F2.5) | Không có canary: không biết CI mù tới đâu |
+| Load test ngắn, nhiều lần | Run HIL ngắn, nhiều lần | Lỗi tích lũy (tràn, rò, buffer đầy dần) cần **một** run dài, không cần nhiều run ngắn | 1000 run × 10 s xanh, robot thật hỏng ở mét thứ 4 |
+
+**Chấm mô hình:**
+
+- *Câu của bạn ở đầu lộ trình:* "phải có nơi để environment show ra lỗi, metric, đúng và sai." → **ĐÚNG MỘT PHẦN.** Đúng: cần môi trường tái lập được để quan sát hành vi. Gãy ở ba chỗ. (1) Môi trường chỉ "show" lỗi ở phần **thật** trong vòng: bàn HIL không có motor thì không bao giờ show dòng phanh làm ESP32 brownout. (2) "Đúng và sai" thiếu hai trạng thái: INCONCLUSIVE (thiếu bằng chứng) và ERROR (môi trường hỏng); K6 Bài 13 đã thêm. (3) Môi trường cũng có tỉ lệ hỏng của chính nó. Phản ví dụ: cấu hình B ở phần 2, p99 trễ 3,5 ms nhưng phần lớn run 2 phút là ERROR; một hệ chỉ có đúng/sai sẽ gán các lần lỡ hạn đó cho firmware.
+- *"Thêm thật nhiều run HIL ngắn là đủ."* → **SAI** cho lớp lỗi tích lũy. Phản ví dụ: PCNT 16 bit với 0,108 mm/count tràn sau một quãng cố định; run ngắn hơn thời gian đi hết quãng đó không bao giờ thấy lỗi xử lý tràn, dù chạy bao nhiêu lần (bạn tính quãng ở phần 5).
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | SIL / PIL / HIL | Phần mềm / bộ xử lý thật / phần cứng thật trong vòng với thế giới mô phỏng (→ F2.7) | Mọi thứ có board thật là "HIL" |
+| 🟢 | Bảng thật/giả | Liệt kê từng tín hiệu là thật hay mô phỏng ở mỗi tầng | Tài liệu thừa |
+| 🟢 | Deadline miss, run ERROR | Host không kịp trong một tick; run đó không dùng làm bằng chứng | Một loại INCONCLUSIVE |
+| 🟢 | Latency timer (adapter USB–UART) | Adapter giữ gói nhỏ tới khi đủ hoặc hết hạn | Trễ của UART |
+| 🟢 | Thông lượng λ = L/W | Little cho runner CI | "Thêm worker là nhanh hơn" |
+| 🟡 | Lockstep ảo | MCU chờ host mới chạy tick | Cách làm "đúng hơn" |
+| 🟡 | Sensor model vs render | Mô phỏng phép đo bằng mô hình nhiễu thay vì dựng ảnh + chạy detector | Tương đương |
+| 🔴 | Rig HIL thương mại (dSPACE, NI) | HIL công nghiệp cho ECU | Thứ cần mua |
+
+### 5. Dự đoán
+
+Trả lời bằng số trước khi viết dòng CI nào:
+
+1. **N.** p baseline: tỉ lệ A→B từ 20 lần ở C8.4 (kèm CI Wilson). Chọn δ (quyết định sản phẩm, `decisions.md`). Tính N mỗi nhánh để phát hiện sụt 5 điểm với **đúng quy tắc của cổng K6 Bài 13** (CI 95 % hai phía, power 0,8), công thức của K6 Bài 12. So với 1000 của bản gốc.
+2. **Thông lượng.** Đo W (khởi động, chạy, reset, ghi) trên máy CI. L cần để 1000 episode < 1 giờ? Máy có bao nhiêu nhân **vật lý** (`lscpu`)?
+3. **Ngân sách tick của cổng HIL.** B byte mỗi gói, baud r, khung 10 bit/byte: mỗi chiều 10·B/r. Cộng bước sim, cộng latency timer adapter (đọc sysfs `latency_timer` nếu adapter FTDI `[tự đo]`). Rồi: với xác suất lỡ mỗi tick q, run dài T giây ERROR với xác suất bao nhiêu? Đoán ba dòng của mô phỏng phần 2 trước khi chạy.
+4. **Độ dài run HIL tối thiểu.** Với cpr và đường kính đo ở C3.3, PCNT 16 bit có dấu tràn sau bao nhiêu mét, bao nhiêu giây ở 0,5 m/s? (Phương pháp: F2.7 mục 5.)
+5. **Lớp lỗi.** Ba lỗi cụ thể của firmware **bạn** đã viết ở C4: sim thuần bắt? PIL qua UART bắt? HIL điện bắt?
+
+```markdown
+# prediction.md — K7 C11.2
+commit: <hash>
+## N: p_base ___ [Wilson ___] ; δ ___ (lý do ___) ; N mỗi nhánh ___ ; đủ với 1000? ___
+## Thông lượng: W ___ s ; L cần ___ ; nhân vật lý ___
+## Tick HIL: UART ___ ms ; sim ___ ms ; latency timer ___ ms
+   P(run ERROR) 30 s / 120 s / 600 s — cấu hình A ___ B ___ C ___
+## Tràn PCNT: ___ m ; ___ s ở 0.5 m/s → run HIL dài ≥ ___ s
+## Lớp lỗi
+| lỗi | SIL | PIL | HIL điện |
+|---|---|---|---|
+```
+
+### 6. Làm
+
+Giữ đủ sáu bước của bản gốc; thêm bước 0 (kim tự tháp) và bước 7 (giữ kín). Phần thống kê dùng nguyên K6.
+
+**Bước 0 — `TESTING.md`.** Mỗi tầng: chạy gì, khi nào, mất bao lâu, chặn merge hay cảnh báo, lớp lỗi bắt được, bảng thật/giả. Đưa các hạt giống ở mục 7 của chặng vào đúng tầng.
+
+**Bước 1 — cổng HIL.** Firmware có tầng HAL cho encoder, PWM, bumper, E-stop sense; ở bàn HIL **không đổi một byte firmware**: tín hiệu giả đi vào chân thật (mục 4). Trình tự:
+- ESP32 #2 nhận vận tốc bánh từ host qua USB, phát quadrature bằng ngoại vi; capture duty và DIR của DUT, gửi về host mỗi 10 ms có `seq`.
+- Đo trễ vòng tròn host↔#2 bằng GPIO marker + logic analyzer ≥ 10⁵ tick: p50, p99, max, **số lần lỡ hạn**. Chỉnh trước khi chạy run nào: latency timer, gói nhị phân, host yên tĩnh (K5, K6 Bài 8: tắt GUI, cố định tần số CPU).
+- Run nào có ≥ 1 lỡ hạn hoặc `seq` sai → ERROR, ghi `failure_class = hil_deadline_miss`.
+- *(Mức thấp hơn, tùy chọn)* PIL qua UART riêng của DUT: rẻ, nhanh dựng, nhưng **mù với PCNT**. Nếu làm, ghi rõ trong `TESTING.md`.
+
+**Bước 2 — kịch bản** theo schema K6 Bài 5: điểm đầu, đích, chướng ngại, ma sát sàn, người di động; thêm `depends_on` (kênh của `VALIDITY.yaml`, C11.1) và `sensor_model` (định vị marker mô phỏng bằng **mô hình nhiễu** đo ở C8.2 `config/marker_noise.yaml`, hay render + detector thật). Sensor model nhanh hơn nhiều nhưng bỏ qua lỗi phát hiện marker: ghi vào cột "chưa kiểm".
+
+**Bước 3 — 1000 biến thể** theo K6 Bài 6 (`parent_scenario_id`, `variation_params`, seed theo danh tính).
+
+**Bước 4 — tiêu chí thành công bằng toán** theo K6 Bài 11: tới đích trong dung sai, trong `t_max`, không va chạm, không vượt `v_max`; khai **một lần** trong file kịch bản. Phân loại: `timeout`, `collision`, `speed_violation`, `stuck_recovery_failed`, `sim_unstable`, `hil_deadline_miss`. Hai loại cuối là ERROR.
+
+**Bước 5 — CI.** Thay đổi → N episode SIL → cổng K6 Bài 13 **theo nhóm kịch bản** và tổng (Bonferroni phía FAIL như K6) → nếu PASS: 20 run HIL **dài** (≥ 2 lần thời gian tràn PCNT ở tốc độ tối đa của kịch bản), kịch bản chọn theo lớp lỗi chứ không ngẫu nhiên (F2.7 khẳng định (b)) → nếu không có ERROR và không có lỗi mới: **đề xuất** chạy thật. Báo cáo tự sinh như K6 Bài 10 + tỉ lệ OUT/UNTESTED + tỉ lệ ERROR theo tầng. Phán quyết HIL viết dạng "không thấy lỗi thuộc lớp X, Y, Z trong 20 run, mỗi run T giây"; 0/20 chỉ cho cận trên ~14 % (F2.3).
+
+Thông lượng: `use_sim_time` + `/clock` từ sim `[tự đo — cách nối MuJoCo ↔ ROS 2 và tốc độ Nav2 chịu được theo bản cài]`. Nếu Nav2 là cổ chai: giữ Nav2 sống và reset thế giới thay vì khởi động lại; hoặc hai tầng: planner/controller gọi thư viện trực tiếp cho verdict nhanh, đủ stack ROS 2 cho verdict tích hợp. Ghi tầng nào cho verdict nào.
+
+**Bước 6 — power analysis** (K6 Bài 12) với p baseline thật; đặt N theo đó; ghi MDE vào README.
+
+**Bước 7 — tập giữ kín:** áp nguyên thiết kế K6 Bài 18 (seed dẫn xuất từ bí mật, tách theo `parent_scenario_id`, giới hạn số lần gọi). Bắt buộc nếu pipeline agent của bạn được phép chỉnh tham số Nav2.
+
+**Canary** (giữ ba của bản gốc, thêm một):
+- C1 — một tham số Nav2 làm xấu rõ (giảm mạnh giới hạn gia tốc → timeout tăng): CI phải FAIL. "Bắt được" là một xác suất ≈ power.
+- C2 — thay đổi nhỏ hơn MDE: ở N nhỏ, INCONCLUSIVE, **không phải PASS**. Kiểm như một tỉ lệ qua nhiều lần chạy, không bằng một run (K6 Bài 13 câu 5).
+- C3 — lỗi firmware chỉ HIL thấy: cố ý đổi odometry sang đọc số đếm tuyệt đối 16 bit (cách A của F2.7), hoặc đặt bộ lọc glitch PCNT dài hơn nửa chu kỳ xung ở tốc độ tối đa. SIL (nếu không dùng đúng kiểu thanh ghi) và PIL qua UART phải PASS; HIL điện phải bắt.
+- C4 — Goodhart: "tối ưu" một tham số trên tập công khai (chọn tốt nhất trong 20 lần), xem khoảng cách công khai − kín (K6 Bài 18).
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Ngưỡng của bản gốc (giữ nguyên):**
+
+| Kiểm tra | Ngưỡng | Chú thích |
+|---|---|---|
+| 1000 episode sim | < 1 giờ | Đo W, L; không đạt thì báo cổ chai (thường là khởi động/reset Nav2) |
+| Canary: chỉnh một tham số Nav2 làm xấu rõ | **CI bắt được** | Một xác suất ≈ power, đo qua nhiều lần |
+| Canary: thay đổi nhỏ hơn ngưỡng phát hiện | **INCONCLUSIVE**, không phải PASS | Ở N nhỏ; ở N lớn một sụt trong biên δ có thể PASS chính đáng |
+| HIL bắt được lớp lỗi sim bỏ sót | ≥ 1 ví dụ thật, có ghi lại | Ghi rõ HIL điện hay PIL |
+
+**N với quy tắc cổng K6 Bài 13** (CI 95 % hai phía, power 0,8, sụt 5 điểm): p = 0,95 → ~430; p = 0,85 → ~900; p = 0,7 → ~1.370; p = 0,5 → ~1.560 mỗi nhánh (công thức K6 Bài 12). Baseline Nav2 dưới khoảng 0,88 thì 1000 episode **không đủ** cho MDE 5 điểm: tăng N hoặc nới MDE, ghi README. 1000 còn lại là mục tiêu thông lượng.
+
+**Mô phỏng cổng HIL** (phân bố giả định):
+
+| Cấu hình | p50 / p99 trễ | P(lỡ / tick) | P(run ERROR) 30 s / 120 s / 600 s |
+|---|---|---|---|
+| A: latency timer 16 ms | 9,3 / 17,3 ms | 0,45 | 100 % / 100 % / 100 % |
+| B: latency timer 1 ms | 1,7 / 3,5 ms | 1,8·10⁻⁴ | 41 % / 88 % / 100 % |
+| C: B + host yên tĩnh | 1,7 / 3,5 ms | 3·10⁻⁶ | 0,9 % / 3,5 % / 16,5 % |
+
+UART thuần hai chiều chỉ 0,35 ms. Cách đọc: (1) adapter giữ gói tới latency timer ăn hết ngân sách trước khi sim chạy dòng nào; (2) B và C có **cùng p99**, khác nhau 10–40 lần về tỉ lệ run hỏng: thứ quyết định là đuôi hiếm (GC, scheduler), thứ p99 không nhìn thấy; (3) run dài để bắt tràn PCNT lại chính là run dễ ERROR nhất. Hai yêu cầu kéo ngược nhau, và cách gỡ là dọn host (C), không phải rút ngắn run.
+
+**Tràn PCNT** với 0,108 mm/count: 32.767 count ≈ 3,5 m ≈ 7 s ở 0,5 m/s. Run HIL ≥ 15 s ở tốc độ tối đa là đủ vượt hai lần.
+
+**Kỳ vọng định tính:** lớp lỗi HIL hay bắt nhất là timing và giao tiếp (buffer serial đầy chặn task, watchdog do task giao tiếp treo, xử lý tràn khi chạy lâu); cấu hình ngoại vi (lọc glitch) chỉ HIL điện bắt. Nếu mỗi episode khởi động lại Nav2, W thường bị thời gian khởi động chi phối `[ước lượng — tự đo W trước/sau]`.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| 1000 episode mất > 3 giờ | Render bật; khởi động Nav2 mỗi episode; L > nhân vật lý | W theo pha | Headless; giữ Nav2 sống; L = nhân vật lý |
+| Kết quả đổi theo số worker | Seed dùng chung, wall time | L = 1 vs L = 4, so hash | K6 Bài 3; `use_sim_time` |
+| Canary C1 vẫn PASS | Không có δ; gộp nhóm làm loãng | Cổng K6 với đúng N, p | Verdict theo nhóm kịch bản |
+| Mọi thay đổi INCONCLUSIVE | N nhỏ so với MDE | MDE ở N hiện tại | Tăng N hoặc nới MDE trong README; không hạ chuẩn cổng |
+| Hầu hết run HIL ERROR | Latency timer; host ồn; gói text | Histogram trễ, đếm lỡ hạn | Latency timer 1 ms, gói nhị phân, host yên tĩnh |
+| PCNT trên bàn đếm thiếu | Phát xung bằng phần mềm; lọc glitch dài | Logic analyzer trên chân DUT | RMT/MCPWM; lọc theo C3.3 |
+| HIL báo lỗi mà robot thật không có | Trễ do chính cổng | So trễ cổng với ngân sách | Ghi ngưỡng cổng; không quy cho firmware |
+| Sim PASS, robot thật giật | Thiếu trễ/lượng tử trong sim; kịch bản OUT | Cờ VALIDITY; parity C11.1 | Thêm trễ, lượng tử; đưa vào "chưa kiểm" |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot, 50 commit/ngày, mỗi commit N episode SIL + 20 run HIL. Cái gì gãy trước: compute, số bàn HIL, lưu MCAP, hay lòng tin vào CI?
+<details><summary>Hướng nghĩ</summary>
+
+HIL không song song hóa được bằng tiền thuê máy: mỗi run chiếm một bàn trong thời gian thật. 50 × 20 × 15 s là bao nhiêu bàn? Gom commit theo đêm, chỉ chạy HIL cho thay đổi chạm firmware, và đếm báo động giả theo ngày như một SLI.
+
+</details>
+
+2. **[Failure mode]** Một thay đổi làm robot chậm hơn nhưng an toàn hơn: ít va chạm, nhiều timeout, tỉ lệ thành công gộp không đổi. CI nói gì?
+<details><summary>Hướng nghĩ</summary>
+
+Metric gộp che hai dịch chuyển ngược chiều. Đặt cổng riêng cho va chạm với δ chặt hơn nhiều; có những loại thất bại không được đem đổi lấy loại khác.
+
+</details>
+
+3. **[Vì sao không]** Vì sao không làm lockstep ảo (MCU chờ host) cho hết ERROR?
+<details><summary>Hướng nghĩ</summary>
+
+Khi đó timer không còn là timer, ISR không cạnh tranh với thời gian thật, và lớp lỗi timing biến mất khỏi tầng sinh ra để bắt nó. Bạn sẽ có một PIL tất định đẹp. Tầng nào trong kim tự tháp đang làm việc đó rồi?
+
+</details>
+
+4. **[Nếu…thì]** Agent CI được phép đọc kết quả từng kịch bản của tập kín "để debug". Sau 3 tháng tập kín còn giá trị gì?
+<details><summary>Hướng nghĩ</summary>
+
+Nhiễm benchmark (→ F2.8, K6 Bài 18). Chỉ trả một con số tổng và CI của Δ, giới hạn số lần gọi.
+
+</details>
+
+5. **[Liên ngành]** Thiết kế chip: mô phỏng RTL → emulation FPGA → silicon. Tầng nào ứng với bàn HIL của bạn?
+<details><summary>Hướng nghĩ</summary>
+
+Xem phần 10; chú ý cái gì là thật, cái gì là ảo ở mỗi tầng, và vì sao chip có formal verification còn điều hướng thì gần như không.
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Ô tô: X-in-the-loop cho ECU.** MIL → SIL → PIL → HIL trước khi lên xe; ISO 26262 đòi bằng chứng ở nhiều mức tích hợp `[chuẩn]`. Giống: đúng thang của bài. Khác: rig thương mại mô phỏng cả tín hiệu điện cảm biến, có quy chuẩn; bạn có hai ESP32 và một logic analyzer.
+- **Chip: RTL → emulation FPGA → silicon.** Mỗi tầng chậm hơn nhiều bậc nhưng thật hơn; emulation chạy logic thật với I/O ảo, rất giống PIL `[chuẩn]`. Khác: chip có formal verification chứng minh tính chất cho mọi đầu vào.
+- **Dược: tiền lâm sàng → pha I/II/III.** Mỗi pha đắt hơn, ít đối tượng hơn, gần thật hơn; pha III có cỡ mẫu từ power analysis và biên non-inferiority khai trước `[chuẩn]`. Cổng K6 lấy thẳng từ đây; C11.3 là "theo dõi sau lưu hành": thuốc đã duyệt có thật sự hiệu quả ngoài bệnh viện thử nghiệm không.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Starliner OFT: đồng hồ lệch ~11 giờ; test chia đoạn, chạy liền > 25 giờ | [chuẩn] | Báo chí 2019–2020 dẫn lời Boeing/NASA; báo cáo chính thức để kiểm chi tiết |
+| Mô phỏng cổng HIL | [đã chạy] | Phân bố trễ là giả định; thay bằng số đo |
+| FTDI latency timer mặc định 16 ms, chỉnh được qua sysfs | [spec] / [tự đo] | FTDI AN232B-04; chip khác (CP2102, CH340) hành vi khác |
+| PCNT ESP32-S3 16 bit có dấu | [spec] | ESP32-S3 TRM, chương PCNT (F2.7) |
+| N theo quy tắc K6 | [chuẩn] | Công thức hai tỉ lệ, K6 Bài 12 |
+| Nav2 nhanh hơn thời gian thực bao nhiêu lần | [tự đo] | Theo bản cài và máy CI |
+
+**Đã sửa so với bản gốc/Gemini và nguyên liệu cũ:**
+- Bản gốc gọi "HIL" cho firmware thật + I/O qua UART. Đó là PIL, mù với PCNT (F2.7). Bài này lấy **HIL điện** (encoder giả vào chân thật, PWM thật được capture) làm cổng chính, PIL là mức tùy chọn.
+- Nguyên liệu cũ cho run có deadline miss là INCONCLUSIVE. Sửa thành **ERROR**, đúng định nghĩa cổng K6 Bài 13 (dụng cụ hỏng ≠ thiếu bằng chứng).
+- Nguyên liệu cũ tính lại đặc tuyến verdict và N bằng quy tắc một phía riêng. Bỏ, dùng nguyên quy tắc và mô phỏng của K6 Bài 13 để repo chỉ có một định nghĩa PASS; N tính lại theo quy tắc đó (lớn hơn số một phía của nguyên liệu cũ).
+- Bản gốc "1000 episode cố định" và "N theo power" có thể mâu thuẫn; N theo power, 1000 là mục tiêu thông lượng.
+- Thêm yêu cầu run HIL **dài** và ngân sách lỡ hạn tính theo run, vì p99 che đuôi.
+- Gemini: "canary sụt ≥ 5 % với n = 1000: bắt 100 %" → bắt với xác suất ≈ power. Gemini: tiêu chí |v| ≤ 0,55 ở một chỗ, 0,5 ở chỗ khác → khai một lần trong kịch bản. Gemini: "HIL bắt tràn 16 bit mà sim hoàn toàn bỏ sót" → đã chấm ở F2.7.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** ESP32-S3 Technical Reference Manual (PCNT, RMT, MCPWM capture). FTDI, AN232B-04 *Data Throughput, Latency and Handshaking*.
+- **Giải thích:** → F2.7 (bảng tầng), K6 Bài 13 và 18 (cổng, giữ kín).
+- **Đào sâu (tùy chọn):** J. Dean, L. A. Barroso, "The Tail at Scale", *Communications of the ACM* 2013: vì sao đuôi hiếm thống trị khi một đơn vị công việc gồm nhiều bước.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác vì sao một run HIL với p99 3,5 ms vẫn có thể là ERROR; (2) vẽ lại bảng thật/giả và timing tick từ trí nhớ; (3) câu dưới.
+
+<details><summary>Câu 3: Run HIL dài 20 s, xanh 20/20. Bạn được phép viết câu nào vào báo cáo?</summary>
+
+"Trong 20 run HIL điện, mỗi run 20 s ở tốc độ tới 0,5 m/s (vượt ngưỡng tràn PCNT ~2 lần), 0 lỗi thuộc các lớp {tràn bộ đếm, lỡ chu kỳ điều khiển, watchdog, giao thức}; 0 run ERROR. Cận trên 95 % cho tỉ lệ run có lỗi thuộc các lớp đó ~14 %." Không được viết "firmware không có lỗi timing", và không nói gì về H-bridge, motor, nguồn.
+
+</details>
+
+---

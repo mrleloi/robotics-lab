@@ -151,7 +151,8 @@ Cỡ dây, chiều dài là đề xuất ban đầu `[ước lượng]`; Bài C1
                                                                        tải giả ở C1      │       │
                                                                             BUCK-BOOST → 12 V ── 18AWG cam ── jack 5,5×2,5 → MINI PC
                                                                                   BUCK → 5 V ── 22AWG tím, JST ── 5V/GND ESP32, INA226 VS
-  INA226: IN+ / IN− nối hai mép shunt bằng 2 dây 24–26 AWG xoắn đôi (Kelvin); VBUS nối phía tải của shunt;
+  INA226: IN+ (phía pin) / IN− (phía tải) nối hai mép shunt bằng 2 dây 24–26 AWG xoắn đôi (Kelvin), mỗi dây có
+          điện trở 10 Ω sát mép shunt; VBUS nối phía tải của shunt (cũng qua 10 Ω);
           SDA/SCL/3V3/GND về ESP32 bằng JST 4 chân; GND INA226 nối GND sao (không qua dây motor).
 ```
 
@@ -463,6 +464,8 @@ Với số điển hình (tính bằng công thức phần 5, đã kiểm bằng
 | Thời gian cắt SC của BMS cỡ trăm µs | [ước lượng] | Đọc thông số BMS; không tự thử bằng chập |
 | Độ phân giải 10 mV ở thang 20 V UT33D+ | [spec] | UT33D+ 2000 count; tra manual |
 
+**Reviewer sửa (mục 1 và 5 đầu chặng):** thêm quy tắc cứng về đồng hồ ở thang dòng chạm pin, về cắt hai dây pin cùng lúc, và Lắp bước 3a (thứ tự gắn F0 + XT60 vào dây pin: cầu chì chưa cắm → dây + → XT60 → dây − sau cùng → đo 0 V → cắm F0); thêm ba giới hạn của mạch E-stop C1 (không reset, diode làm nhả chậm, tiếp điểm có thể hàn dính khi đóng vào tụ).
+
 **Đã sửa so với bản gốc:** K7 gốc ghi "pin 3S/4S + BMS + sạc" không phân biệt hóa học, không nói áp pack trôi; bài này chọn mặc định 4S LFP (thay vì để mở) với lý do bằng số, và tách rõ phạm vi của BMS. Đề xuất đổi mặc định so với `_KE-HOACH-K7.md` mục 5 (ví dụ 4S Li-ion): kế hoạch cho phép chọn, chọn LFP vì áp đầy gần định mức motor 12 V và ổn định nhiệt.
 
 ### 12. Đọc thêm và tự kiểm tra
@@ -483,7 +486,7 @@ Với số điển hình (tính bằng công thức phần 5, đã kiểm bằng
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
-Ngày 12/11/2014, tàu đổ bộ Philae của ESA chạm sao chổi 67P sau mười năm bay. Móc neo không bắn, Philae nảy lên và dừng ở chân một vách đá trong bóng tối. Kế hoạch năng lượng giả định pin mặt trời nhận nắng 6–7 giờ mỗi "ngày" sao chổi; thực tế tấm sáng nhất chỉ nhận khoảng 1 giờ 20 phút `[chuẩn — họp báo ESA, SpacePolicyOnline thuật lại]`. Philae chạy khoa học bằng pin sơ cấp (không sạc được) được 64 giờ rồi ngủ đông vì hết năng lượng `[spec — bài báo của nhóm vận hành, E3S Web of Conferences 2017]`. Đêm cuối, nhóm điều khiển tính còn khoảng 100 Wh, chuỗi lệnh cuối cần khoảng 80 Wh; họ chọn những phép đo nào được chạy dựa trên đúng phép tính đó.
+Ngày 12/11/2014, tàu đổ bộ Philae của ESA chạm sao chổi 67P sau mười năm bay. Móc neo không bắn, Philae nảy lên và dừng ở chân một vách đá trong bóng tối. Kế hoạch năng lượng giả định pin mặt trời nhận nắng 6–7 giờ mỗi "ngày" sao chổi; thực tế tấm sáng nhất chỉ nhận khoảng 1 giờ 20 phút `[chuẩn — họp báo ESA, SpacePolicyOnline thuật lại]`. Philae chạy khoa học bằng pin sơ cấp (không sạc được) được 64 giờ rồi ngủ đông vì hết năng lượng `[spec — bài báo của nhóm vận hành, E3S Web of Conferences 2017]`. Trong những giờ cuối, nhóm điều khiển chọn chạy phép đo nào (khoan, nâng thân lander, xoay tấm pin) dựa trên năng lượng còn lại trong pin `[chuẩn — tường thuật của ESA/DLR; con số Wh cụ thể chưa đối chiếu được, không đưa]`.
 
 Hai bài học cho robot của bạn. Một: power budget là thứ dùng để **ra quyết định lúc chạy**, không phải bảng trang trí trong tài liệu thiết kế. Hai: budget sai ở **giả định về môi trường** (ở đây là nắng), không phải ở phép cộng. Robot của bạn có giả định tương tự: "motor chỉ chạy 30% thời gian", "mini PC phần lớn idle". Đó là những dòng cần đo.
 
@@ -667,7 +670,7 @@ Số đo của bạn, khoảng hợp lý `[ước lượng]`:
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| Philae: 64 h khoa học trên pin, ~1 h 20 phút nắng/ngày thay vì 6–7 h, ~100 Wh còn / ~80 Wh cần | [spec]/[chuẩn] | Bài E3S 2017 của nhóm vận hành; họp báo ESA 14/11/2014 |
+| Philae: ~64 h hoạt động khoa học trên pin sơ cấp; ~1 h 20 phút nắng/ngày ở tấm sáng nhất thay vì 6–7 h | [spec]/[chuẩn] | "Rosetta Lander Batteries Experience During All Operation Phases", E3S Web of Conf. 16, 06006 (2017) — pin sơ cấp 1518 Wh LiSOCl2 + thứ cấp 151 Wh Li-ion; họp báo ESA 14/11/2014 (báo chí thuật lại: tổng ~1,5 h/ngày sao chổi 12,4 h). Reviewer sửa: bỏ cặp số "~100 Wh còn / ~80 Wh cần" vì không đối chiếu được nguồn gốc |
 | Adapter EQ12: 12 V 3 A, jack 5,5×2,5 | [spec] | Đọc nhãn adapter của bạn |
 | N100 idle <7 W, stress ~34 W | [ước lượng] | Một người dùng đo; đo lại |
 | Hiệu suất DC-DC 85–90% | [ước lượng] | Đo ở Bài C1.4 |
@@ -1302,6 +1305,9 @@ Số DMM phụ thuộc pha của cửa sổ so với đỉnh; con số nhỏ hơ
 | UT33D+ có thang 10 A, cập nhật chậm | [spec]/[tự đo] | Manual; review ghi cầu chì 10 A riêng cho thang 10 A |
 | Firmware Arduino-ESP32 | [chưa chạy] | API Wire ổn định; chân SDA/SCL theo bảng chân C4.1 |
 | Thông báo Apple iOS 10.2.1 | [chuẩn] | Thông báo 2/2017; thư xin lỗi 12/2017 |
+| Dây sense cần điện trở 10 Ω sát shunt; IN+ phía pin | [chuẩn]/[spec] | TI INA226 datasheet, input filtering; đo offset khi không tải |
+
+**Reviewer sửa (an toàn và đúng kỹ thuật):** (1) firmware `rd()`: `(Wire.read() << 8) | Wire.read()` có thứ tự tính không xác định trong C++ → có thể đảo byte; đã tách hai lần đọc. (2) Dây sense/VBUS của INA226 nối thẳng VBAT mà ghi "không cần cầu chì": thêm điện trở 10 Ω sát mép shunt làm phần tử hy sinh. (3) Nói rõ đồng hồ ở thang dòng chỉ mắc nối tiếp trên nguồn bàn, không bao giờ trên pin; họ UT33+ dùng lỗ chung cho V và mA.
 
 **Đã sửa so với bản gốc:** K7 gốc "đo dòng đỉnh lúc boot và lúc tải nặng" không nói dụng cụ; ở đây chỉ rõ đồng hồ không đo được, và module INA226 bán sẵn thường có shunt 0,1 Ω chỉ đo tới ~0,8 A.
 
@@ -1362,6 +1368,8 @@ Ngày 6/7/2016, CPSC (Mỹ) thu hồi khoảng 501.000 xe điện cân bằng (h
 4. Không có báo đầy, không có cảm biến nhiệt: sờ/IR vỏ pack mỗi 10 phút.
 
 **Loại pack khi:** phồng, móp, rách vỏ, mùi lạ, rơi mạnh, nóng khi để yên, áp nghỉ tụt >0,1 V/tuần khi cất `[ước lượng]`, hoặc đã xuống dưới UV và không lên lại với sạc đúng trong 5 phút.
+
+Reviewer sửa: bản trước cho dùng nguồn bàn "đặt 14,6 V" làm sạc mà không nói nguồn bàn không tự ngắt, sai số màn hình có thể đẩy cell quá 3,65 V, và pin có thể xả ngược vào nguồn bàn đang tắt; đã thêm bốn điều ở trên. Áp cất "~13,2 V = 50 %" cho LFP sửa thành đếm Ah (đường OCV phẳng).
 
 **Xử lý pack bị loại:** chuyển ngay vào hộp kim loại có cát, để ngoài ban công/chỗ thoáng, xa vật cháy. Dán băng keo cách điện lên đầu nối. KHÔNG đục, cắt, đốt, ngâm nước muối "để xả" (phản ứng điện phân, ăn mòn, có thể sinh khí; không phải quy trình an toàn cho người mới). Mang tới điểm thu gom pin: ở Việt Nam có các chương trình thu gom pin cũ và rác điện tử (ví dụ chương trình "Việt Nam Tái Chế"; một số siêu thị điện máy có hộp thu pin) `[tự đo: hỏi trước họ có nhận pack lithium cỡ này không]`. KHÔNG vứt vào thùng rác sinh hoạt: pin bị ép trong xe rác là nguồn cháy.
 

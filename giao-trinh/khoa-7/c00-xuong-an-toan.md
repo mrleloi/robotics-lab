@@ -64,7 +64,7 @@ Dòng năng lượng duy nhất trong chặng: lưới 220 V → (bên trong v�
 |---|---|---|
 | Mẫu thử/dây bốc khói trên nguồn bàn | OUTPUT OFF (hoặc rút phích nguồn bàn) → đợi 1 phút → mới chạm | Kéo dây bằng tay trần khi đang khói |
 | Pin nóng bất thường, phồng, xì khí, bốc khói (từ C1) | (1) Không cúi mặt vào: khói pin có khí độc (HF và khí cháy) `[chuẩn]`. (2) Ngắt công tắc chính/rút XT60 **chỉ khi** không phải đưa tay qua luồng khói. (3) Chưa có lửa, pack nhỏ: kìm cách điện dài gắp vào hộp kim loại/xô cát, mang ra ngoài trời. (4) Rời phòng, đóng cửa | Cầm tay trần; đậy hộp kín khí; ném vào thùng rác |
-| Pin có lửa | Rời phòng, gọi **114**. Với Li-ion, nước lượng lớn để **làm mát** là hợp lệ; bình bột ABC cho vật cháy xung quanh `[chuẩn — hướng dẫn của FAA cho pin thiết bị cá nhân cháy trong cabin và nhiều cơ quan cứu hỏa]` | Ở lại cứu đồ; tin lửa tắt là xong (cell có thể bùng lại sau nhiều giờ `[ước lượng]`) |
+| Pin có lửa | Rời phòng, gọi **114**. Nếu pin đang cắm sạc và aptomat/ổ nằm phía cửa: ngắt điện lưới trước khi ai dùng nước. Với Li-ion/LiFePO4 (pin sạc được), nước lượng lớn để **làm mát** là hợp lệ; bình bột ABC cho vật cháy xung quanh `[chuẩn — hướng dẫn của FAA cho pin thiết bị cá nhân cháy trong cabin và nhiều cơ quan cứu hỏa]` | Ở lại cứu đồ; tin lửa tắt là xong (cell có thể bùng lại sau nhiều giờ `[ước lượng]`) |
 | Dụng cụ chập qua cực, có tia lửa | Ngắt nguồn phía xa (công tắc chính, phích); gạt dụng cụ bằng kìm cách điện | Giật bằng tay trần (nóng, có thể đã hàn dính) |
 | Bỏng | Nước mát chảy ~20 phút `[chuẩn]`; bỏng rộng/bỏng điện → **115** | Kem đánh răng, dầu, đá lạnh trực tiếp |
 | Hít khói pin, khó thở | Ra chỗ thoáng; ho/khó thở kéo dài → y tế, nói rõ đã hít khói pin lithium | — |
@@ -871,7 +871,13 @@ erDiagram
     INSTRUMENTS ||--o{ MEASUREMENTS : "instrument_id"
     SAMPLES ||--o{ MEASUREMENTS : "sample_id"
     WIRES ||--o{ SAMPLES : "wire_id (từ C1)"
-    MEASUREMENTS { string ts "ISO 8601 có múi giờ" string quantity float value string unit "SI" string result "pass|fail|inconclusive" }
+    MEASUREMENTS {
+        string ts "ISO 8601 có múi giờ"
+        string quantity
+        float value
+        string unit "SI"
+        string result "pass, fail, inconclusive"
+    }
 ```
 
 **Quy ước dây đề xuất** (commit vào `CONVENTIONS.md` mục mới "Dây"; đổi được, nhưng đổi thì ghi `decisions.md`):
