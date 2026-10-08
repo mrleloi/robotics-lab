@@ -63,7 +63,6 @@ Mới trong chặng: khung, 2 motor có encoder (chưa nối điện), 2 bánh, 
 | Mũi khoan kẹt, tấm quay | Nhả cò, buông máy theo hướng an toàn; máy có chế độ đảo chiều thì rút mũi ra bằng đảo chiều tốc độ thấp | Không cố giữ tấm đang quay bằng tay |
 | Đứt tay do ba via | Rửa nước sạch, ép băng; vết sâu → cơ sở y tế | Không làm tiếp với tay chảy máu (máu + điện tử) |
 | Vụn vào mắt | Rửa nước sạch chảy liên tục; không dụi; vụn kim loại → khám mắt | Không dùng nhíp tự gắp |
-| Loctite dính da | Lau, rửa xà phòng; đã khô thì ngâm nước ấm rồi bóc nhẹ | Không dùng dung môi mạnh lên da |
 
 ## 2. BOM chặng
 
@@ -79,14 +78,12 @@ Giá `[ước lượng 10/2026]`, kiểm lại ở cửa hàng (danh sách nơi 
 | Bộ vít, đai ốc, long đen M3 và M4 | Inox, đầu lục giác chìm (socket head), dài 6–30 mm; đai ốc thường + đai ốc khóa nylon (nyloc); long đen phẳng | Bài C2.3: M3 cho điện tử, M4 cho gá motor/tầng | 100–250k/bộ | Vặn thử đai ốc vào vít: trơn tay hết chiều dài | — |
 | Bộ trụ đồng (standoff) M3 | Đồng thau lục giác + nylon, cao 10–40 mm, đực–cái và cái–cái | Tầng trên, gá bo mạch; nylon khi cần cách điện | 100–200k/bộ | Ren trơn; đo chiều cao 3 cái cùng cỡ bằng thước kẹp | — |
 | Keo khóa ren cường độ trung bình | Loại "tháo được bằng dụng cụ tay" (ví dụ Loctite 243, màu xanh) `[spec — Henkel TDS]` | Vít kim loại vào kim loại chịu rung (gá motor) | 150–300k | Hạn dùng; nắp kín | Ốc khóa nylon (với mối có đai ốc) |
-| Quản lý cáp | Dây rút nhiều cỡ, đế dán + đế bắt vít cho dây rút, grommet, ống lưới bọc dây | Giảm lực kéo lên đầu nối (C2.3) | 80–150k | — | — |
-| Đai giữ pin | Dây đai có khóa (strap) + miếng chống trượt; hoặc hộp gá | Băng dính gai dán không giữ được 1 kg khi phanh gấp (C2.2) | 30–80k | — | Gá in 3D ôm pin + đai |
+| Quản lý cáp, đai giữ pin | Dây rút, đế bắt vít, grommet; đai có khóa + miếng chống trượt | Giảm lực kéo lên đầu nối (C2.3); băng gai dán không giữ 1 kg khi phanh gấp (C2.2) | 100–250k | — | — |
 | Vật giả pin, mini PC | Hộp gỗ/túi cát cùng kích thước và khối lượng **đo được** (C1 cho số pin) | Bố trí khối lượng thật mà không có rủi ro pin | ~0 | Cân | Pin thật **không** được dùng thay |
 | 3× cân điện tử | Giống nhau, ≥5 kg, phân giải 1 g | Cân ba điểm chạm cùng lúc (C2.4) | 3× 100–200k | Cân cùng một vật trên cả ba: lệch nhau ≤ vài g `[tự đo]` | 1 cân + 2 khối kê cùng độ cao, cân từng điểm một (chậm hơn, kém hơn) |
-| Thước kẹp điện tử 150 mm | Phân giải 0,01 mm | Đo trục, bánh, lỗ | 150–300k | Đóng ngàm, về 0; đo một mũi khoan đã biết cỡ | Thước lá (kém 10 lần) |
+| Thước kẹp điện tử 150 mm | Phân giải 0,01 mm | Đo trục, bánh, lỗ | 150–300k | Đóng ngàm về 0 | Thước lá |
 | Máy khoan/vặn vít cầm tay có ly hợp (clutch) + mũi khoan 3,2/3,5/4,5 mm + mũi vát | Có nấc ly hợp mô-men, có đảo chiều | Lỗ cho M3 là ~3,2–3,4 mm, M4 là ~4,3–4,5 mm `[chuẩn — lỗ lọt ISO 273]` | 500k–1,5tr | Khoan thử lỗ trên gỗ thừa; vít lọt | Khoan tay + tua vít (chậm) |
-| Bộ lục giác đầu bi hệ mét, tua vít PH1/PH2, cờ lê/tuýp 5,5 và 7 mm | 1,5–5 mm | 5,5 mm là đai ốc M3, 7 mm là M4 `[chuẩn — ISO 4032]` | 150–300k | — | — |
-| Đột tâm, giũa nhỏ, kẹp chữ C ×2, bút sơn đánh dấu | — | Mũi khoan không trượt; vát ba via; kẹp phôi; vạch đánh dấu siết (C2.3) | 150–300k | — | — |
+| Dụng cụ tay nhỏ | Lục giác hệ mét 1,5–5 mm, tuýp 5,5/7 mm, đột tâm, giũa, kẹp chữ C ×2, bút sơn | 5,5 mm là đai ốc M3, 7 mm là M4 `[chuẩn — ISO 4032]` | 300–600k | — | — |
 
 **Tổng C2 `[ước lượng]`:** ~2,5–5tr, phần lớn là motor, bánh, máy khoan và cân. Nếu mua khung nhôm dựng sẵn thì bớt việc khoan nhưng phải kiểm nó có chở được mini PC và pin không (bản gốc K7 đã cảnh báo: đừng mua khung mini thiết kế cho Pi).
 
@@ -101,7 +98,7 @@ Giá `[ước lượng 10/2026]`, kiểm lại ở cửa hàng (danh sách nơi 
 | Bó cáp, giảm lực kéo | C2.3 | Một bó dây thừa trên tấm thừa | Kéo dây gần đầu nối, lực truyền vào điểm buộc, không vào đầu nối | Dây căng như dây đàn tới đầu nối; dây rút cắt vào vỏ dây |
 | Cân ba điểm, đo nghiêng | C2.4 | Cân một hộp đã biết khối lượng | Tổng ba cân khớp cân đơn trong vài g | Cân bị kê lệch, bánh chạm mép cân |
 
-**Cầm máy khoan:** hai tay, khuỷu thẳng hàng với mũi; bắt đầu tốc độ chậm cho mũi ăn vào vết đột tâm, rồi tăng; ấn vừa đủ, để mũi tự cắt; sắp xuyên thủng thì giảm lực (lúc này mũi hay giật). Nhôm: nhỏ một giọt dầu. Lỗ ≥5 mm trên nhôm: khoan mồi 2,5–3 mm trước.
+**Cầm máy khoan:** hai tay, khuỷu thẳng hàng với mũi; chậm cho mũi ăn vào vết đột tâm rồi tăng; sắp xuyên thủng thì giảm lực (mũi hay giật). Nhôm: một giọt dầu, lỗ ≥5 mm thì khoan mồi trước.
 
 **Cầm tua vít điện:** đặt ly hợp ở nấc thấp nhất, thử; vít chưa xuống thì tăng một nấc. Máy chỉ dùng để **đưa vít xuống**; siết lần cuối bằng tay (lục giác chữ L, cầm đầu ngắn) để cảm được lúc vít "chạm" rồi thêm khoảng 1/8–1/4 vòng `[ước lượng — quy tắc tay cho M3 inox vào đai ốc thép; vào gỗ/nhựa ít hơn]`.
 
@@ -181,8 +178,6 @@ Chưa nối gì vào gì ở C2: dây được **đặt và buộc**, đầu dâ
 | Một bánh kéo quay trơn khi đặt trên sàn | Bố trí 4 điểm tựa, sàn không phẳng → bánh nhấc lên | Tờ giấy dưới bánh (bước 5c) | Ba điểm tựa, hoặc caster có lò xo/treo (C2.2) |
 | Lỗ khoan lệch, vít không lọt | Không đột tâm; dưỡng giấy co giãn; khoan nghiêng | Đo khoảng tâm lỗ bằng thước kẹp | Khoan theo thứ tự: một lỗ, bắt vít tạm, rồi khoan lỗ thứ hai qua lỗ của chi tiết thật |
 | Đầu vít lục giác toét | Lục giác hệ inch/mòn; không ấn đủ; máy vặn quá nấc | Thử lục giác vào đầu vít mới: có rơ không | Lục giác hệ mét đúng cỡ, đầu thẳng (không dùng đầu bi) để siết lần cuối |
-| Tấm ván ép nứt quanh vít | Siết quá; vít sát mép | Nhìn mép | Long đen to; lỗ cách mép ≥2–3 lần đường kính vít `[ước lượng]` |
-| Mini PC nóng hơn khi lên khung | Che khe gió | Sờ vỏ sau 15 phút chạy (ở C5) | Kê standoff để hở đáy; không đặt pin sát cửa gió |
 | Caster rung lắc (shimmy) khi đẩy nhanh | Caster rơ trục đứng, độ lệch trục (offset) nhỏ | Đẩy ở các tốc độ | Caster tốt hơn; caster bi |
 
 ## 7. Lăng kính data infra
@@ -233,7 +228,7 @@ Copy vào `build-log/c02.md`, một mục mỗi buổi:
 
 Năm 1902–1903, anh em Wright cần một động cơ cho chiếc Flyer. Họ đã có số liệu lực nâng và lực cản đo bằng ống gió tự làm, nên tính được trước **cần bao nhiêu lực đẩy** và từ đó bao nhiêu công suất. Không nhà sản xuất động cơ ô tô nào họ hỏi chịu làm một động cơ đủ nhẹ cho công suất đó, nên thợ máy Charlie Taylor của họ đúc một động cơ khối nhôm khoảng 12 mã lực; còn cánh quạt thì họ tự thiết kế bằng lý thuyết, vì không có tài liệu nào về cánh quạt máy bay `[chuẩn — lịch sử được ghi chép rộng rãi, ví dụ Smithsonian National Air and Space Museum]`. Thứ đáng học không phải động cơ nhôm. Đó là **thứ tự**: yêu cầu (lực, tốc độ) → con số → rồi mới chọn hoặc làm phần cứng.
 
-Người mới dựng robot thường làm ngược: mua motor "trông khỏe", lắp, thấy robot ì hoặc bò lên dốc không nổi, rồi mua motor khác. Với robot chở mini PC và pin, sai lầm còn đắt hơn: motor tỉ số truyền quá thấp thì kéo dòng lớn, nóng và làm sụt nguồn; quá cao thì robot không bao giờ đạt tốc độ, và (phần ít ai biết) **chính rotor của motor trở thành một khối lượng ảo** mà bạn phải tăng tốc mỗi lần khởi hành.
+Người mới thường làm ngược: mua motor "trông khỏe", lắp, thấy robot ì, mua motor khác. Tỉ số truyền quá thấp thì kéo dòng lớn và nóng; quá cao thì không đạt tốc độ, và **chính rotor của motor thành một khối lượng ảo** phải tăng tốc mỗi lần khởi hành.
 
 ### 2. Mô hình tư duy
 
@@ -307,14 +302,13 @@ for name, N, rpm0, ts_kgcm, I0, Is in cands:
           f"I đều {I_cruise:.2f} A")
 ```
 
-Vì sao ngưỡng "≤50% mô-men hãm" cho đỉnh: ở 50% mô-men hãm motor cho công suất cơ lớn nhất nhưng hiệu suất không quá ~50% và dòng bằng nửa dòng hãm; nhiệt cuộn dây tỉ lệ `I²R` `[chuẩn]`. Các listing JGB37 ghi "mô-men định mức" (chạy liên tục) chỉ cỡ 1/4–1/3 mô-men hãm `[spec người bán]`. Đỉnh ngắn (≈1 s) được phép lên gần 50%; chạy đều phải nằm dưới định mức. Đây là quy tắc kỹ thuật thô, không phải định luật; bạn được đổi nếu có lý do và ghi vào `decisions.md`.
+Vì sao "≤50% mô-men hãm" cho đỉnh: ở đó motor cho công suất cơ lớn nhất nhưng hiệu suất ≤ ~50% và nhiệt cuộn dây ∝ `I²R` `[chuẩn]`; listing JGB37 ghi mô-men định mức (liên tục) chỉ cỡ 1/4–1/3 mô-men hãm `[spec người bán]`. Đỉnh ngắn được lên gần 50%, chạy đều phải dưới định mức. Quy tắc thô, đổi được nếu ghi lý do vào `decisions.md`.
 
 ### 3. Cầu nối từ backend
 
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
 | Capacity planning: tính QPS đỉnh và trung bình, chọn instance có dư | Tính mô-men đỉnh và chạy đều, chọn tỉ số truyền có dư | Instance to hơn chỉ tốn tiền. Tỉ số truyền "to hơn" (N lớn) **làm hỏng** điều kiện kia: mất tốc độ và tăng quán tính rotor theo N². Không có lựa chọn "cứ lớn cho chắc" | Mua 1:90 "cho khỏe" → robot không bao giờ đạt 0,5 m/s khi pin yếu; PID bão hòa ở tốc độ cao |
-| Chọn họ instance (CPU-optimized vs memory-optimized) cùng giá, đổi tỉ lệ tài nguyên | Cùng một motor, đổi N là đổi tỉ lệ mô-men/tốc độ ở cùng công suất | Instance type đổi được trong 5 phút. Hộp số đổi là tháo robot, mua motor mới, và mọi hệ số encoder (count/vòng) đổi theo | Coi tỉ số truyền là "cấu hình chỉnh sau" → phải làm lại C3, C6 |
 | Không cộng p99 của từng service để ra p99 hệ thống (các đỉnh không đồng thời) | Không chồng đỉnh tăng tốc + dốc + tốc độ tối đa vào một điểm | Ở backend, cộng p99 cho ra con số **quá bi quan** nhưng vẫn an toàn. Ở đây, chồng điều kiện có thể loại **mọi** motor (thử: bỏ tách hai điều kiện trong code), đẩy bạn sang motor to gấp đôi, nặng hơn, ăn dòng hơn | Over-provision → motor nặng → khối lượng tăng → vòng lặp tính lại |
 | Headroom 20–30% để autoscaler kịp phản ứng | Dư 25% tốc độ cho PID | PID cần dư để **sửa sai số** (tải đổi, pin sụt), không phải để "kịp scale". Không dư thì ở tốc độ đặt tối đa, bộ điều khiển bão hòa và mất điều khiển | Đặt `headroom = 1.0` → robot chạy 0,5 m/s trên sàn phẳng lúc pin đầy, chậm dần khi pin yếu mà không ai biết |
 
@@ -400,7 +394,6 @@ commit: <hash>  ngày: <yyyy-mm-dd>
 - Nếu không tách hai điều kiện (chồng đỉnh và tốc độ tối đa vào một điểm), **cả ba** tỉ số đều trượt. Đó là bản chạy đầu tiên khi viết bài này.
 - Bánh 65 mm (`r = 0.0325`): rpm cần tăng (~183 rpm có dư), mô-men cần giảm → điểm làm việc dịch về phía tỉ số thấp; 1:56 không còn đạt tốc độ khi pin 12 V. Kết luận: **bánh và tỉ số truyền chọn cùng nhau**.
 - I đỉnh ~1 A mỗi motor là dòng **tăng tốc theo kế hoạch**. Lúc khởi động từ đứng yên với lệnh bậc thang, motor chạm gần **dòng hãm** trong vài ms (C3.1) — đó mới là con số chọn driver và cầu chì.
-- C_rr đo bằng kéo (bước 6) trên sàn gạch thường ra **cao hơn** con số giáo khoa của bánh cao su đơn thuần, vì gồm caster và hộp số bị kéo ngược `[ước lượng — tự đo]`.
 
 </details>
 
@@ -411,8 +404,6 @@ commit: <hash>  ngày: <yyyy-mm-dd>
 | Tính tay lệch script ~10 lần | kg·cm vs N·m; hoặc mm vs m | In từng số hạng | Đơn vị SI trong code, đổi ở biên |
 | Tính tay lệch script đúng 2 lần | Quên chia hai bánh, hoặc dùng đường kính thay bán kính | — | — |
 | Không tỉ số nào đạt | Khối lượng/dốc quá tham vọng; hoặc pin quá thấp áp | Chạy độ nhạy | Bỏ yêu cầu dốc (văn phòng không dốc?), bánh to hơn, hoặc họ motor lớn hơn; ghi quyết định |
-| Listing ghi mô-men hãm nhưng không ghi dòng hãm | Phổ biến | — | Ước bằng `V/R` với R đo ở Lắp bước 1 (C3.1 đo kỹ) |
-| C_rr đo được rất lệch giữa các lần kéo | Kéo không đều; đọc lúc giật | Quay video màn hình cân | Kéo bằng sợi dây dài, đi bộ đều; bỏ 1 m đầu |
 | Hai listing cùng mã cho số khác xa nhau | Người bán sao chép bảng của motor khác | So rpm × N: phải ra cùng tốc độ motor gốc | Tin số đo ở C3 hơn listing; mua 1 motor thử trước |
 
 ### 9. Câu hỏi ngược
@@ -445,14 +436,7 @@ Khi bị kéo, hộp số chạy ngược chiều truyền lực (bánh kéo mot
 
 </details>
 
-5. **[Liên ngành]** Xe đạp có líp nhiều tầng. Người đạp xe chuyển số để giữ cadence (vòng đạp/phút) gần một khoảng. Điều đó tương ứng với cái gì trong bài, và chỗ nào khác?
-<details><summary>Hướng nghĩ</summary>
-
-Giống: hộp số đặt điểm làm việc trên đường đặc tính của "động cơ". Khác: robot của bạn có **một** tỉ số cố định, nên chọn sai là sai suốt đời; và đường đặc tính của người không thẳng như motor DC.
-
-</details>
-
-6. **[Phản biện]** "Cứ mua motor to hơn hai cỡ cho chắc, pin thừa sức." Bạn phản bác bằng ba con số nào trong `motor_sizing.md`?
+5. **[Phản biện]** "Cứ mua motor to hơn hai cỡ cho chắc, pin thừa sức." Bạn phản bác bằng ba con số nào trong `motor_sizing.md`?
 <details><summary>Hướng nghĩ</summary>
 
 Khối lượng motor (vào lại phương trình), dòng hãm (vào driver, cầu chì, C1), và mô-men phanh khi phanh gấp (vào chống lật, C2.2). "To hơn" không miễn phí ở cả ba.
@@ -463,7 +447,6 @@ Khối lượng motor (vào lại phương trình), dòng hãm (vào driver, c�
 
 - **Thang máy và đối trọng.** Motor thang máy không nâng cả cabin: đối trọng cân bằng cabin cộng khoảng nửa tải định mức, nên motor chỉ gánh phần chênh. Giống: tách thành phần "luôn có" khỏi phần "thỉnh thoảng". Khác: robot không có đối trọng cho dốc; thứ gần nhất là chọn N sao cho trường hợp thường xuyên nằm ở vùng hiệu suất tốt.
 - **Hàng không, chân vịt bước thay đổi (variable-pitch propeller).** Máy bay cánh quạt đổi bước cánh để động cơ làm việc gần vòng tua tối ưu ở cả cất cánh (cần lực đẩy) và bay bằng (cần tốc độ). Đây chính là "hai điểm làm việc" của bài, được giải bằng một hộp số biến thiên. Robot rẻ không có thứ đó, nên phải thỏa hiệp bằng tính toán.
-- **Điện toán đám mây, chọn instance theo profile.** Cùng giá, đổi tỉ lệ tài nguyên. Khác: ở đây bạn chỉ có **một** lần chọn, và sai thì phải tháo máy.
 
 ### 11. Độ tin cậy và sửa lỗi
 
@@ -580,7 +563,7 @@ Rẽ gấp cũng lật được, theo cùng công thức với nửa khoảng c�
 
 - *"Robot nặng thì khó lật."* **SAI.** `a_lật = g·d/h` không chứa khối lượng. Phản ví dụ: thêm 2 kg pin dự phòng **ở tầng trên** làm robot nặng hơn và **dễ** lật hơn (h tăng).
 - *"Trọng tâm càng thấp càng tốt, hết chuyện."* **ĐÚNG MỘT PHẦN.** Đúng về lật. Nhưng trọng tâm thấp cũng phải nằm đúng chỗ theo phương ngang (tải trên bánh kéo), và có giới hạn: pin sát sàn thì khoảng sáng gầm nhỏ, kẹt ngưỡng cửa. Phản ví dụ: robot lùn nhưng pin dồn về phía caster → bánh kéo gánh ít tải, trượt khi tăng tốc dù không bao giờ lật.
-- *"Caster chỉ là bánh phụ, chọn cái nào cũng được."* **SAI.** Caster là một điểm tựa của tam giác ổn định (đặt d), và là thứ kẹt đầu tiên ở ngưỡng cửa hay dây điện trên sàn. Caster xoay còn có hiệu ứng "lật hướng" khi robot đổi chiều: bánh caster xoay 180° quanh trục đứng, đẩy robot lệch một chút — một nguồn sai số odometry (→ K7 C6.3).
+- *"Caster chỉ là bánh phụ, chọn cái nào cũng được."* **SAI.** Caster là một điểm tựa của tam giác ổn định (đặt d), và là thứ kẹt đầu tiên ở ngưỡng cửa hay dây điện trên sàn. Caster xoay còn "lật hướng" khi robot đổi chiều, đẩy robot lệch một chút (→ K7 C6.3).
 
 ### 4. Thuật ngữ
 
@@ -676,13 +659,6 @@ Pin trượt trong gá khi phanh; cột camera rung/uốn; người đặt đồ
 
 </details>
 
-4. **[Liên ngành]** Xe tải chở chất lỏng có vách ngăn trong bồn. Vì sao, và robot của bạn có gì tương tự?
-<details><summary>Hướng nghĩ</summary>
-
-Chất lỏng dồn về phía trước khi phanh, dịch trọng tâm đúng lúc nguy hiểm nhất. Ở robot: món gá lỏng (pin, dây bó nặng) cũng "dồn" như vậy, chỉ ít hơn.
-
-</details>
-
 ### 10. Liên kết ra ngoài
 
 - **Xe nâng và tam giác ổn định** (câu chuyện): giống hệt hình học. Khác: xe nâng có tải **thay đổi độ cao** liên tục, người lái được đào tạo; robot có firmware, nên quy tắc phải được viết thành giới hạn số.
@@ -714,3 +690,418 @@ Chất lỏng dồn về phía trước khi phanh, dịch trọng tâm đúng l�
   </details>
 
 ---
+
+## Bài C2.3 — Gá lắp: vít, ốc khóa, rung, standoff, strain relief (4h)
+
+> **Vị trí:** C2.2 → **C2.3** → C2.4 · **Cần trước:** C0.3 (dụng cụ tay), C2.2 · **Sau bài này bạn quyết định được:** với mỗi mối ghép trên robot, dùng vít dài bao nhiêu, cần đai ốc khóa nylon, keo khóa ren, hay chỉ siết đúng; standoff kim loại hay nylon; và dây buộc ở đâu để lực kéo không đi vào đầu cắm.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 1969, kỹ sư Đức Gerhard Junker công bố thí nghiệm cho thấy mối ghép bu lông tự lỏng chủ yếu vì **rung theo phương ngang** (vuông góc trục vít): mỗi lần hai tấm trượt nhẹ lên nhau, ren cũng trượt và vít xoay ngược một chút. Máy thử Junker trở thành phép thử chuẩn cho các giải pháp chống lỏng, và kết quả nổi tiếng nhất của nó là **long đen vênh (lò xo) hầu như không giúp gì** dưới rung ngang `[chuẩn — Junker 1969; NASA Fastener Design Manual (RP-1228) cũng ghi long đen vênh không hiệu quả chống lỏng]`. Năm 1981, sảnh khách sạn Hyatt Regency ở Kansas City sập lối đi treo, 114 người chết; nguyên nhân là một thay đổi **chi tiết ghép nối** (thanh treo liền bị đổi thành hai thanh, làm đai ốc và dầm hộp phía trên gánh gấp đôi tải) `[chuẩn — điều tra NBS 1982]`. Hai câu chuyện cùng một bài: mối ghép là đường đi của lực, không phải chi tiết phụ.
+
+Robot của bạn rung liên tục (motor, hộp số, mối nối gạch). Một vít gá motor lỏng làm bánh chụm lại vài phần mười độ, odometry lệch (C6), và không có log nào báo.
+
+### 2. Mô hình tư duy
+
+```
+  MỐI GHÉP VÍT = MỘT LÒ XO ĐƯỢC KÉO CĂNG
+     ┌──┐ đầu vít            Siết vít = kéo dãn thân vít (vài µm) → lực kẹp (preload) ép hai tấm.
+  ═══╪══╪═══ long đen         Ma sát giữa hai tấm (do lực kẹp) chịu lực ngang.
+  ▓▓▓▓│  │▓▓▓ tấm 1           Lực ngang > ma sát  → hai tấm trượt → ren trượt → vít xoay lỏng dần
+  ▓▓▓▓│  │▓▓▓ tấm 2           (Junker). Mất lực kẹp → trượt nhiều hơn → vòng lặp dương.
+  ═══╪══╪═══ long đen
+     ╞══╡ đai ốc (M3: cao 2,4 mm, ISO 4032)
+      ╧╧  ≥ 2 bước ren lòi ra (M3: bước 0,5 mm)
+  Chiều dài vít tối thiểu = tổng chiều dày tấm + long đen + chiều cao đai ốc + 2 bước ren
+  Vít vào lỗ ren (không đai ốc): ăn ren ≥ 1–1,5 × đường kính vào kim loại; nhiều hơn vào nhựa/gỗ
+```
+
+| Cách chống lỏng | Cơ chế | Chống **mất lực kẹp**? | Chống **rơi hẳn**? | Dùng ở robot của bạn |
+|---|---|---|---|---|
+| Siết đúng (đủ preload) | Ma sát giữ hai tấm không trượt | Có, nếu đủ | Gián tiếp | Mọi mối, luôn |
+| Keo khóa ren trung bình (Loctite 243) | Keo kỵ khí đóng rắn trong khe ren, khóa ren | Có | Có | Kim loại vào kim loại: gá motor vào mặt hộp số, vít trí bánh |
+| Đai ốc khóa nylon (nyloc) | Vòng nylon kẹp ren, tạo mô-men cản | Không nhiều | Có | Mối có đai ốc qua tấm gỗ/nhựa; caster |
+| Long đen vênh | Lò xo nhỏ | Hầu như không (Junker) | Hầu như không | Không dựa vào nó |
+| Long đen phẳng | Rải lực, bảo vệ bề mặt | Gián tiếp (giảm lún) | Không | Dưới đầu vít và đai ốc trên gỗ/nhôm mềm |
+| Vạch sơn đánh dấu (torque stripe) | Không chống gì; **cho thấy** vít đã xoay | — | — | Mọi mối quan trọng |
+
+Ba câu bản chất:
+
+1. **Vít giữ được vì nó là lò xo đang căng.** Lực kẹp chứ không phải "độ chặt của ren" giữ hai tấm. Siết quá thì đứt vít/toét ren/nứt tấm; siết thiếu thì tấm trượt và vít tự lỏng.
+2. **Rung ngang là kẻ thù; mọi biện pháp khác là phụ.** Chặn trượt ngang (chốt, cữ, lỗ khít) giúp nhiều hơn mọi loại long đen.
+3. **Đầu cắm điện không phải điểm neo cơ khí.** Lực kéo trên dây phải đi vào một điểm buộc chắc **trước** đầu cắm (strain relief); đầu cắm chỉ mang điện. Thiếu điều này, chân đầu cắm hoặc mối bấm (C0.3) gãy dần sau hàng nghìn lần rung.
+
+**Standoff kim loại hay nylon:** đo bằng thông mạch giữa lỗ bắt vít của bo mạch và chân GND. Lỗ nối GND + standoff đồng + khung nhôm = khung thành GND của bo đó; hai bo như vậy trên cùng khung nhôm là một đường GND song song ngoài ý muốn (→ K7 C5.1 quyết định nối khung thế nào). Chưa quyết thì dùng **nylon** cho bo mạch, kim loại cho tầng khung.
+
+**Strain relief, bốn quy tắc:** (1) buộc dây vào khung bằng dây rút qua đế **bắt vít** (đế dán bong khi nóng) cách đầu cắm 3–5 cm; (2) chừa vòng dư (service loop) để tháo đầu cắm không phải cắt dây rút; (3) dây không được căng qua chỗ có chuyển động (bánh, caster): khoảng hở ≥ vài cm ở mọi góc xoay caster; (4) mọi lỗ xuyên tấm có grommet; dây rút siết vừa, không cắt vào vỏ dây.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Config drift: server lệch dần khỏi trạng thái khai báo | Vít tự lỏng dưới rung | Drift ở server phát hiện được bằng diff tự động. Vít lỏng không có "diff" nào ngoài mắt người, trừ khi bạn **cố ý tạo dấu**: vạch sơn là checksum vật lý | Không đánh dấu → phát hiện vít lỏng khi bánh đã chụm, odometry đã trôi hàng tuần |
+| Không cho client gọi thẳng DB; đi qua một tầng chịu tải | Không để lực kéo dây đi thẳng vào đầu cắm; đi qua điểm buộc | Tầng trung gian backend có thể scale; điểm buộc có giới hạn cơ học cố định và chính nó cũng cần kiểm (dây rút giòn theo thời gian, nhiệt) | Đầu JST gánh lực → mối bấm gãy âm thầm, encoder mất kênh lúc có lúc không |
+
+**Chấm mô hình:** *"Bản chất ngành hardware là luôn có buffer ở giữa để kiểm soát ổn định và tradeoff"* (mô hình của bạn ở K3 lượt 6, nói về buffer dữ liệu). Áp sang cơ khí: vòng dư dây, đệm cao su, khe hở là "buffer" cho chuyển vị. **ĐÚNG MỘT PHẦN.** Đúng là cơ khí cũng dùng phần tử hấp thụ (đệm, lò xo, vòng dư) để tách hai bên có chuyển động khác nhau. Gãy ở chỗ: buffer cơ khí **có hại khi đặt sai chỗ**. Phản ví dụ: đệm cao su dưới gá motor làm motor lắc theo mô-men → bánh đổi góc mỗi lần tăng tốc → odometry sai; ở chỗ truyền lực bạn cần **cứng**, không cần buffer. Quy tắc: cứng trên đường truyền lực và đường đo (motor, encoder, camera ở C7.1), mềm trên đường dây và chỗ cần cách ly rung (mini PC nếu cần).
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Lực kẹp (preload) | Lực căng trong thân vít sau khi siết, ép hai chi tiết | "Độ chặt" của ren |
+| 🟢 | Nyloc | Đai ốc có vòng nylon tạo mô-men cản | Thứ giữ lực kẹp — nó chỉ chống rơi hẳn |
+| 🟢 | Keo khóa ren (kỵ khí) | Đóng rắn khi không có không khí và có kim loại | Keo dán đa năng |
+| 🟢 | Strain relief, service loop | Điểm neo cơ khí cho dây; đoạn dây dư để tháo lắp | Dây rút ở bất kỳ đâu |
+| 🟡 | Standoff | Trụ ren nâng bo mạch/tầng | Chi tiết cơ khí thuần — kim loại thì dẫn điện |
+| 🔴 | Tính mô-men siết theo cấp bền, hệ số ma sát ren | Kỹ sư cơ khí | — |
+
+### 5. Dự đoán
+
+**Đề:** thí nghiệm lỏng vít ở bước 3 phần Làm (4 mẫu: a thiếu lực kẹp, b siết đúng, c siết đúng + nyloc, d siết đúng + long đen vênh, mỗi mẫu 200 lần lắc ngang). Xếp hạng bốn mẫu theo góc xoay vạch sơn, từ nhiều nhất tới ít nhất; đoán mẫu nào xoay **hơn 90°**. Đoán thêm: tổng số vít/đai ốc trên robot của bạn, và bao nhiêu mối cần keo.
+
+```markdown
+# prediction.md — K7 C2.3
+commit: <hash>
+- Xếp hạng xoay nhiều → ít: ... > ... > ... > ...
+- Mẫu xoay > 90°: ...
+- Số mối ghép: ...   cần keo: ...   cần nyloc: ...
+## Tôi sẽ ngạc nhiên nếu...
+```
+
+### 6. Làm
+
+1. **Bảng mối ghép:** liệt kê mọi mối ghép trên bản vẽ mô hình bìa: `joint_id, vật liệu hai bên, vít (M?, dài), đai ốc/lỗ ren, chống lỏng, chịu lực gì`. Tính chiều dài vít theo công thức ở phần 2, chọn cỡ có sẵn gần nhất **lớn hơn**, kiểm đầu vít không chĩa vào vùng pin.
+2. **Luyện trên phế liệu (theo mục 3 của chặng):** 10 vít vào gỗ thừa bằng máy có ly hợp, siết tay lần cuối; 2 vít + keo khóa ren vào đai ốc; 2 nyloc. Cắt đôi một mối gỗ đã siết quá để thấy thớ gỗ bị nghiền.
+3. **Thí nghiệm lỏng vít (30 phút):** hai thanh nhôm/gỗ bắt bằng một vít M3 + đai ốc thường, siết tay vừa chạm (thiếu preload). Đánh vạch sơn. Kẹp một thanh vào bàn, gõ/lắc thanh kia **ngang** 200 lần. Lặp với (b) siết đúng, (c) siết đúng + nyloc, (d) siết đúng + long đen vênh. Chụp vạch sơn. Ghi góc xoay ước lượng của mỗi mẫu.
+4. Lắp thật (Lắp bước 5–7 của chặng) theo bảng mối ghép. Đánh vạch sơn mọi vít gá motor, bánh, caster, standoff tầng.
+5. Sau Lắp bước 9 (thử nghiêng, thử đẩy): kiểm lại mọi vạch sơn; ghi số vạch bị lệch vào `measurements.jsonl` (`quantity: fastener_moved`).
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+- Mẫu (a) thiếu lực kẹp xoay nhiều nhất, thường thấy rõ sau vài chục lần lắc. Mẫu (d) long đen vênh **không** khá hơn (b) rõ rệt; nếu bạn xếp (d) tốt nhì là bạn đã tin vào long đen vênh như nhiều người. (b) và (c) xoay ít; (c) nếu có xoay thì đai ốc vẫn không rơi.
+- Thí nghiệm tay này thô (lực lắc không đều), nên chỉ tin **thứ hạng lớn**, không tin chênh lệch vài độ. Phép thử Junker thật dùng máy tạo dịch chuyển ngang có biên độ xác định.
+- Robot cỡ này thường có 60–100 vít/đai ốc `[ước lượng]`; mối cần keo là kim loại vào kim loại chịu rung (gá motor, vít trí bánh), thường dưới 15.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Vạch sơn lệch sau vài giờ | Thiếu preload; trượt ngang | Lắc tay thấy rơ | Siết lại đúng; thêm keo (kim loại) hoặc nyloc; chặn trượt ngang |
+| Ren đai ốc nyloc "trơn" sau 2–3 lần tháo | Vòng nylon mòn | Mô-men vặn đai ốc lên rất nhẹ | Thay đai ốc mới; nyloc nên coi là dùng một lần `[chuẩn]` |
+| Keo khóa ren không đóng rắn | Ren dính dầu; vật liệu không kim loại (keo kỵ khí cần ion kim loại) `[spec — Henkel TDS]` | Sau 24 h vít vẫn xoay dễ | Lau ren bằng cồn; dùng primer hoặc đổi sang nyloc |
+| Mica/nhựa trong nứt quanh vít có keo | Keo khóa ren làm nứt ứng suất (stress crazing) nhựa acrylic/polycarbonate `[spec — Henkel cảnh báo trên TDS]` | Nhìn vết nứt hình tia | Thay tấm; với nhựa dùng nyloc |
+| Encoder lúc có lúc không khi chạm dây | Mối bấm/đầu cắm gánh lực | Lắc dây gần đầu cắm, nhìn PulseView (C3.3) | Strain relief đúng quy tắc 1 |
+
+### 9. Câu hỏi ngược
+
+1. **[Vì sao không]** Vì sao không dùng keo khóa ren cho **mọi** vít, cho chắc?
+<details><summary>Hướng nghĩ</summary>
+
+Nghĩ về: tháo bảo trì (C10 soak sẽ cần), vật liệu không tương thích (nhựa), keo chảy vào nơi không muốn (ổ bi, khớp quay), và việc keo che giấu một mối ghép thiếu preload.
+
+</details>
+
+2. **[Quy mô]** 100 robot, mỗi robot 60 vít, rung 8 giờ/ngày. Bạn thiết kế quy trình kiểm tra định kỳ thế nào để không tốn 6000 lần kiểm?
+<details><summary>Hướng nghĩ</summary>
+
+Phân hạng mối ghép theo hậu quả (gá motor, caster: hạng A; nắp che: hạng C); vạch sơn + ảnh chụp tự động so sánh; dữ liệu odometry (UMBmark trôi theo thời gian) làm cảm biến gián tiếp cho gá motor lỏng. Đó là giám sát dựa trên rủi ro, giống phân hạng SLO.
+
+</details>
+
+3. **[Failure mode]** Kể một cách strain relief **gây** hỏng thay vì ngăn.
+<details><summary>Hướng nghĩ</summary>
+
+Dây rút siết quá cắt vào vỏ dây theo thời gian → chạm khung nhôm; điểm buộc quá gần đầu cắm, dây bị bẻ gập ngay tại mối bấm; vòng dư quá dài cuốn vào bánh.
+
+</details>
+
+4. **[Liên ngành]** Ngành hàng không dùng vít có dây khóa (safety wire) và chốt chẻ cho mối quan trọng. Nó khác keo khóa ren ở điểm nào về khả năng **kiểm tra bằng mắt**?
+<details><summary>Hướng nghĩ</summary>
+
+Dây khóa nhìn thấy được trạng thái từ xa; keo thì không. Kiểm tra được là một thuộc tính thiết kế, giống observability.
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Xe tải: chỉ thị đai ốc bánh xe (wheel nut indicator).** Một mũi nhựa gắn trên mỗi đai ốc, cùng chỉ một hướng khi siết đúng; tài xế nhìn lướt là thấy đai ốc nào đã xoay. Giống vạch sơn của bạn. Khác: có ngưỡng nhìn rõ và quy trình kiểm trước mỗi chuyến.
+- **Hàng không: dây khóa an toàn (safety wire)** ở câu hỏi 4: chống lỏng **và** kiểm được bằng mắt.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Lỏng vít chủ yếu do rung ngang; long đen vênh hầu như vô dụng | [chuẩn] | Junker 1969; NASA RP-1228 |
+| Keo kỵ khí cần kim loại, làm nứt acrylic/polycarbonate | [spec] | Henkel TDS và hướng dẫn tương thích nhựa |
+| Nyloc nên coi là dùng một lần | [chuẩn] | Thực hành phổ biến; NASA RP-1228 nói về giảm mô-men cản sau mỗi lần dùng |
+| M3: đai ốc cao 2,4 mm, bước 0,5 mm; lỗ lọt 3,2–3,4 mm | [chuẩn] | ISO 4032, ISO 261, ISO 273 |
+| Hyatt Regency 1981: đổi chi tiết thanh treo làm gấp đôi tải lên mối ghép | [chuẩn] | Báo cáo NBS 1982 |
+| "Siết chạm + 1/8–1/4 vòng" cho M3 | [ước lượng] | Quy tắc tay, không thay cờ lê lực |
+
+**Đã sửa so với bản gốc:** K7 gốc không có nội dung gá lắp; bài mới.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** NASA, *Fastener Design Manual* (Barrett, NASA RP-1228, 1990); Henkel/Loctite, Technical Data Sheet của loại keo bạn mua.
+- **Giải thích:** NASA RP-1228 phần chống lỏng; tài liệu về phép thử Junker (DIN 65151 là tiêu chuẩn phép thử rung ngang `[spec — kiểm tên tiêu chuẩn]`).
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao long đen vênh không chống lỏng dưới rung ngang; (2) vẽ lại mối ghép lò xo từ trí nhớ; (3) câu dưới.
+
+  Gá motor: tấm ván 6 mm + gá thép 2 mm + long đen 0,5 mm mỗi bên, đai ốc M3. Vít M3 dài tối thiểu?
+  <details><summary>Đáp án</summary>
+
+  6 + 2 + 2 × 0,5 + 2,4 + 2 × 0,5 = 12,4 mm → chọn M3×14 hoặc M3×16 (kiểm đầu thừa không chạm gì).
+
+  </details>
+
+---
+
+## Bài C2.4 — Đo và cân robot: tham số hình học đầu tiên cho sim (5h)
+
+> **Vị trí:** C2.3 → **C2.4** → C3; dùng ở → K7 C6.1 (động học), C6.2 (UMBmark hiệu chuẩn tiếp), C11.1 (model sim) · **Cần trước:** → F1.1 (độ bất định, lan truyền sai số); đọc kèm → F6.4 · **Sau bài này bạn quyết định được:** con số hình học nào đủ tin để đưa vào sim và động học, con số nào phải hiệu chuẩn bằng chuyển động (C6.2), và phép đo nào cần làm lại khi đổi phần cứng.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 1999, tàu Mars Climate Orbiter mất khi vào quỹ đạo sao Hỏa. Ban điều tra của NASA kết luận phần mềm mặt đất của một nhà thầu xuất xung lực đẩy theo đơn vị lbf·s, trong khi phần mềm điều hướng dùng nó như N·s; sai số tích lũy qua nhiều lần hiệu chỉnh quỹ đạo đưa tàu xuống quá thấp `[chuẩn — Mars Climate Orbiter Mishap Investigation Board, Phase I Report, 1999]`. Một file tham số chuyển từ hệ này sang hệ khác mà **không mang theo đơn vị và nguồn gốc**.
+
+`robot_params.yaml` của bạn sẽ đi đúng con đường đó: từ thước kẹp và cân bếp, vào động học ở C6, vào sim ở C11. Bài này làm cho mỗi con số mang theo ba thứ: đơn vị, cách đo, và độ bất định.
+
+### 2. Mô hình tư duy
+
+| Tham số | Ký hiệu | Đo bằng | Độ bất định điển hình `[ước lượng]` | Ai dùng | Hiệu chuẩn tiếp ở |
+|---|---|---|---|---|---|
+| Khối lượng | m | 3 cân cộng lại | vài g | sim (C11.1), C2.1 | — |
+| Trọng tâm ngang | x_G, y_G | cân bằng mô-men 3 cân | vài mm | sim, C2.2 | — |
+| Chiều cao trọng tâm | h | phép nghiêng (code dưới) | vài mm nếu nghiêng đủ | sim, chống lật | góc lật tĩnh (Lắp bước 9) |
+| Đường kính bánh hiệu dụng | D_T, D_P | lăn có tải 5 m, đếm vòng | ~0,1% | C6.1 | C6.2 (UMBmark) |
+| Khoảng cách bánh | b | thước giữa tâm vết bánh | 1–2 mm (vết bánh rộng) | C6.1 | C6.2 (UMBmark) |
+| Vị trí caster | x_c | thước | vài mm | sim | — |
+| Quán tính quay quanh trục đứng | I_z | con lắc hai dây (tùy chọn) | ~5–10% | sim | C11.1 |
+
+Bốn câu bản chất:
+
+1. **Tham số là một phép đo, không phải một hằng số.** Nó có phương pháp, thời điểm, và sai số. Đường kính in trên bánh "85 mm" là danh nghĩa; bánh cao su **có tải** lăn với đường kính hiệu dụng nhỏ hơn.
+2. **Đo cái ảnh hưởng tới hành vi, theo cách hành vi dùng nó.** Đường kính hiệu dụng đo bằng **lăn** dưới tải, không đo bằng thước kẹp ở bánh treo.
+3. **Có tham số đo tĩnh đủ tốt, có tham số chỉ hiệu chuẩn được bằng chuyển động.** Khoảng cách bánh "hiệu dụng" phụ thuộc vết tiếp xúc bánh trên sàn; số đo thước là điểm khởi đầu, UMBmark ở C6.2 cho số cuối.
+4. **Phép đo gián tiếp khuếch đại sai số.** h suy từ chênh lệch nhỏ giữa hai số cân chia cho `tanθ` nhỏ; nghiêng ít quá thì sai số cân lấn tín hiệu (→ F1.1, lan truyền sai số).
+
+**Mô phỏng: trọng tâm từ ba cân, chiều cao từ phép nghiêng, và nghiêng bao nhiêu là đủ.** Phép nghiêng: robot đặt hai bánh kéo trên hai cân, caster trên cân thứ ba; kê caster (cùng cân của nó) cao thêm dz; tổng hai cân bánh kéo tăng lên vì trọng tâm dịch về phía thấp.
+
+```python
+# [đã chạy] Trọng tâm từ cân: vị trí ngang từ 3 cân, chiều cao từ phép nghiêng + độ bất định
+import numpy as np
+from scipy.optimize import brentq
+rng = np.random.default_rng(1)
+# Điểm chạm (m) trong base_link (gốc dưới trục bánh kéo): bánh trái, bánh phải, caster
+P = np.array([[0.0, +0.10], [0.0, -0.10], [0.20, 0.0]])
+W = np.array([2.10, 2.02, 1.30])            # kg đọc trên 3 cân (số ví dụ)
+m = W.sum()
+x_g, y_g = (W[:, None] * P).sum(0) / m      # cân bằng mô-men quanh hai trục
+print(f"m = {m:.2f} kg, trọng tâm x = {x_g*1000:.0f} mm, y = {y_g*1000:+.0f} mm")
+# Phép nghiêng: kê caster cao thêm dz, đọc lại tổng hai cân bánh kéo.
+r, rc, Lc = 0.0425, 0.025, 0.20             # bán kính bánh kéo, bánh caster, khoảng trục–caster
+zc = rc - r                                 # độ cao trục caster so với trục bánh kéo
+def theta_of(dz):                           # góc thân khi caster được kê cao dz
+    return brentq(lambda t: Lc*np.sin(t) + zc*(np.cos(t) - 1) - dz, 0, 1.2)
+def caster_load(th, zg):                    # zg: độ cao trọng tâm trên TRỤC bánh kéo
+    return m * (x_g*np.cos(th) - zg*np.sin(th)) / (Lc*np.cos(th) - zc*np.sin(th))
+def zg_from(Wc, th):                        # giải ngược từ số cân caster
+    return (x_g*np.cos(th) - Wc*(Lc*np.cos(th) - zc*np.sin(th))/m) / np.sin(th)
+h_true = 0.12                               # chiều cao thật trên SÀN (chỉ để mô phỏng)
+res_w, res_dz = 0.01, 0.001                 # cân 10 g, thước 1 mm
+for dz in (0.02, 0.05, 0.10):
+    th = theta_of(dz)
+    Wd = m - caster_load(th, h_true - r)    # tổng hai cân bánh kéo khi nghiêng
+    n = 20000                               # Monte Carlo: sai số cân + sai số đo dz
+    Wd_n = Wd + rng.uniform(-res_w, res_w, (2, n)).sum(0)
+    th_n = np.array([theta_of(d) for d in dz + rng.uniform(-res_dz, res_dz, n)])
+    h = zg_from(m - Wd_n, th_n) + r         # đổi về độ cao trên sàn
+    lo, hi = np.percentile(h, [2.5, 97.5])
+    print(f"kê {dz*100:3.0f} cm (θ={np.degrees(th):4.1f}°): bánh kéo tăng "
+          f"{(Wd-(m-W[2]))*1000:5.0f} g -> h = {np.median(h)*1000:5.1f} mm, "
+          f"95%: [{lo*1000:5.1f}, {hi*1000:5.1f}]")
+```
+
+Code giả định bánh kéo và bánh caster tròn, điểm chạm luôn nằm ngay dưới trục, và caster không xoay khi nghiêng (khóa hướng caster bằng băng dính). Sai số cân lấy 10 g cho cân hành lý/cân rẻ; cân bếp 1 g cho kết quả tốt hơn — đổi `res_w` để thấy.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| File config có schema, validate ở CI | `robot_params.yaml` có `value, unit, std, method, measured_at` | Config backend đúng hay sai là nhị phân. Tham số vật lý luôn "sai một ít"; câu hỏi là sai bao nhiêu và hành vi nhạy bao nhiêu với nó | Ghi `wheel_diameter: 0.085` không sai số → C6 hiệu chuẩn ra 0,0838, không ai biết đó là sửa lỗi hay là trôi |
+| Reconciliation: hai nguồn số độc lập phải khớp | Tổng `mass_budget.csv` vs cân tổng; h từ bảng vs h từ nghiêng vs góc lật tĩnh | Reconciliation tài chính khớp tới đồng. Ở đây khớp "trong sai số": phải biết sai số mới nói được là khớp | Thấy lệch 30 g, sửa bảng cho khớp → giấu một món chưa cân |
+| Golden file cho test | Góc lật tĩnh đo được là golden value cho model sim | Golden file backend sinh lại được từ code. Golden value vật lý chỉ có được bằng đo lại; robot đổi phần cứng thì nó hết hạn | Giữ golden value cũ sau khi thêm loa → test sim "pass" trên một robot không còn tồn tại |
+
+**Chấm mô hình:** *"Đo một lần thật cẩn thận là xong, sim cứ thế dùng."* **ĐÚNG MỘT PHẦN.** Đúng với khối lượng và vị trí caster (ổn định). Sai với đường kính bánh hiệu dụng (đổi theo tải, mòn, áp lực bánh) và khoảng cách bánh hiệu dụng (đổi theo sàn). Phản ví dụ: đo D lúc pin giả 1 kg, sau đó lắp pin thật 1,4 kg và loa: bánh cao su lún thêm, D hiệu dụng giảm, odometry ngắn đi một tỉ lệ không đổi — đúng loại sai số hệ thống C6.2 tìm thấy.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Đường kính hiệu dụng (effective rolling diameter) | Quãng đường mỗi vòng chia π, đo khi lăn có tải | Đường kính in trên bánh |
+| 🟢 | Khoảng cách bánh (track width) b | Khoảng giữa hai điểm tiếp xúc bánh kéo | Chiều rộng khung |
+| 🟢 | Độ bất định 1σ (`std`) | Độ lệch chuẩn ước lượng của sai số (→ F1.1) | Phân giải của dụng cụ |
+| 🟡 | Mô-men quán tính I_z | "Khối lượng" đối với chuyển động quay | Tính được từ khối lượng là xong |
+| 🟡 | URDF | Định dạng mô tả robot của ROS (link, joint, khối lượng, quán tính) | Chỉ để vẽ robot trong RViz |
+| 🔴 | Tensor quán tính đầy đủ (Ixy, Ixz…) | Cần cho robot 3D phức tạp | — |
+
+### 5. Dự đoán
+
+**Đề:**
+1. Tổng ba cân so với tổng `mass_budget.csv`: lệch bao nhiêu, theo hướng nào? (món nào bạn đã quên cân?)
+2. x_G, y_G từ ba cân so với dự kiến ở C2.2.
+3. Chạy mô phỏng **trước khi** nghiêng robot thật: kê caster bao nhiêu cm thì khoảng 95% của h hẹp dưới ±5 mm với cân của bạn?
+4. D hiệu dụng so với đường kính danh nghĩa: lớn hơn, nhỏ hơn, bao nhiêu phần trăm?
+5. Góc lật tĩnh hai hướng từ h đo được: `θ = atan(d/h)`.
+
+**Phương pháp:** lan truyền sai số kiểu B (→ F1.1): cân phân giải q có sai số đều ±q/2… ±q tùy cách đọc; thước 1 mm; đếm vòng ±3° vạch.
+
+```markdown
+# prediction.md — K7 C2.4
+commit: <hash>   cân: <model, phân giải>   thước: <loại>
+- m (3 cân) = ... kg   tổng mass_budget = ... kg   lệch dự đoán = ... (vì ...)
+- x_G = ... mm   y_G = ... mm
+- kê caster dz = ... cm để h có 95% ±5 mm
+- h dự đoán = ... mm (từ mass_budget)
+- D hiệu dụng / D danh nghĩa = ... %
+- θ lật tĩnh: chúi trước ...°, ngửa sau ...°
+## Tôi sẽ ngạc nhiên nếu...
+```
+
+### 6. Làm
+
+1. **Kiểm cân:** cân cùng một vật (chai nước) trên cả ba cân; ghi lệch giữa các cân vào `instruments.jsonl` (C0.5). Đặt ba cân trên sàn phẳng; kê đệm để mặt ba cân cùng độ cao (kiểm bằng thước thủy hoặc ứng dụng điện thoại).
+2. **Cân ba điểm:** đặt mỗi bánh kéo giữa một cân, caster trên cân thứ ba (khóa hướng caster). Đọc 3 lần, mỗi lần nhấc robot lên đặt lại; ghi cả 9 số. Đo tọa độ các điểm chạm bằng thước (trục bánh kéo là gốc `base_link`, `x` tới trước, `y` sang trái — REP-103).
+3. **Nghiêng:** kê cân caster lên khối gỗ cao dz bạn đã chọn ở dự đoán 3; đọc lại hai cân bánh kéo (3 lần). Có người giữ hờ phía trên. Tính h bằng các hàm trong code (thay số của bạn).
+4. **Đường kính hiệu dụng:** robot đủ tải (pin giả đúng khối lượng), dán vạch băng dính trên mỗi bánh và trên sàn; đẩy robot thẳng **chậm** đúng 10 vòng bánh trái, đo quãng đường bằng thước dây (±2 mm); lặp cho bánh phải, 3 lần mỗi bánh. `D = L/(10π)`. Sai số: ±2 mm trên ~2,7 m và ±3° vạch là cỡ 0,1% `[ước lượng]`. (Ở C3, encoder sẽ đếm thay mắt.)
+5. **Khoảng cách bánh:** đo mép ngoài–mép ngoài và mép trong–mép trong của hai bánh **chỗ chạm sàn** (ấn tờ giấy than hoặc bột phấn để thấy vết), lấy trung bình; sai số ít nhất ± một nửa độ rộng vết bánh chia √3 `[ước lượng]`.
+6. **(Tùy chọn, 1h) Quán tính I_z bằng con lắc hai dây (bifilar):** treo robot nằm ngang bằng hai dây song song dài L, cách nhau d, đối xứng qua trọng tâm; xoay nhẹ quanh trục đứng, đo chu kỳ T qua 10 dao động. `I_z = m·g·d²·T² / (16·π²·L)` `[chuẩn — công thức con lắc hai dây]`. Không treo khi có pin thật hoặc mini PC thật.
+7. **Xuất `hw/robot_params.yaml`:**
+
+```yaml
+# robot_params.yaml — mọi số SI, base_link theo REP-103
+calibration_id: geom-01@2026-MM-DD-a
+mass:            {value: 5.42,   unit: kg, std: 0.01,  method: three_scales, measured_at: 2026-MM-DD}
+cog_x:           {value: 0.048,  unit: m,  std: 0.002, method: three_scales}
+cog_y:           {value: 0.001,  unit: m,  std: 0.002, method: three_scales}
+cog_z:           {value: 0.120,  unit: m,  std: 0.003, method: tilt_dz_0.05}
+wheel_diameter_left:  {value: 0.0841, unit: m, std: 0.0001, method: roll_10rev_loaded}
+wheel_diameter_right: {value: 0.0843, unit: m, std: 0.0001, method: roll_10rev_loaded}
+track_width:     {value: 0.205,  unit: m,  std: 0.004, method: tape_contact_patch, note: "C6.2 sẽ hiệu chuẩn"}
+caster_x:        {value: 0.200,  unit: m,  std: 0.002, method: tape}
+inertia_zz:      {value: null,   unit: kg*m^2, std: null, method: not_measured}
+```
+(Số trong mẫu là ví dụ định dạng, không phải đáp án.) Viết một script nhỏ kiểm: mọi trường có `unit`, `std`, `method`; trọng tâm nằm trong đa giác tựa; tổng `mass_budget.csv` khớp `mass` trong ngưỡng Gate. Chạy nó trong CI.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Mô phỏng (cân 10 g, thước 1 mm, h thật 120 mm):**
+
+| Kê caster | Góc | Hai cân bánh kéo tăng | Khoảng 95% của h |
+|---|---|---|---|
+| 2 cm | 5,7° | ~220 g | ±7–8 mm |
+| 5 cm | 14,3° | ~550 g | ±3 mm |
+| 10 cm | 29,3° | ~1180 g | ±1,5 mm |
+
+Kê 5 cm là thỏa hiệp tốt: đủ chính xác, chưa tới góc mà đồ trên robot trượt hay robot lật. Kê 2 cm cho số "trông hợp lý" nhưng sai số gấp đôi.
+
+- Tổng ba cân **nặng hơn** `mass_budget.csv` vài chục tới vài trăm gram là bình thường ở lần đầu: dây, vít, dây rút, đai, keo — những thứ không ai cân. Lệch theo hướng ngược lại (cân nhẹ hơn bảng) nghĩa là một cân đọc sai hoặc robot không nằm trọn trên cân.
+- D hiệu dụng của bánh cao su có tải thường **nhỏ hơn** danh nghĩa khoảng 0,5–2% `[ước lượng — tự đo]`, và hai bánh "giống nhau" lệch nhau vài phần nghìn. Vài phần nghìn đó là thứ làm robot đi cong ở C6.
+- Góc lật tĩnh đo ở Lắp bước 9 khớp `atan(d/h)` trong 2–3° là tốt; lệch hơn thì nghi h (nghiêng quá ít), nghi điểm lật (caster xoay, bánh lún), hoặc đồ trên robot dịch khi nghiêng.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Ba lần đặt lại cho x_G lệch nhau nhiều mm | Caster xoay hướng khác nhau mỗi lần; bánh không ở giữa mặt cân | Nhìn caster | Khóa hướng caster; đánh dấu vị trí trên cân |
+| h âm hoặc lớn vô lý | Dấu dz sai; quên đổi g → kg; caster xoay khi nghiêng | In từng bước tính | Sửa đơn vị; khóa caster |
+| D hai bánh lệch >1% | Bánh khác lô; một bánh bơm/lún khác; vạch đếm sai một vòng | Lăn lại, đổi bánh trái–phải | Ghi số thật; nếu bánh lỗi thì thay |
+| Góc lật tĩnh nhỏ hơn dự đoán nhiều | Món trên robot trượt khi nghiêng (trọng tâm dịch) | Quay video khi nghiêng | Gá chặt hơn (C2.3); đo lại |
+
+### 9. Câu hỏi ngược
+
+1. **[Nếu…thì]** Nếu sim ở C11 lật robot ở góc khác với góc lật tĩnh bạn đo, bạn nghi tham số nào trước, và vì sao không nghi "engine vật lý sai" trước?
+<details><summary>Hướng nghĩ</summary>
+
+Góc lật tĩnh chỉ phụ thuộc hình học (d, h) — hai thứ bạn đã đo có sai số. Nếu sai lệch lớn hơn sai số đo, nghi cách bạn chuyển tham số vào model (đơn vị, gốc tọa độ, collision shape của bánh) trước khi nghi engine. Đó là verification trước validation (→ F6.2).
+
+</details>
+
+2. **[Quy mô]** 100 robot, mỗi robot một `robot_params.yaml`. Một năm sau bạn cần biết robot nào đang chạy với tham số đo trước khi thay bánh. Bạn cần lưu gì?
+<details><summary>Hướng nghĩ</summary>
+
+`calibration_id` có version, gắn vào metadata mọi bản ghi MCAP (CONVENTIONS mục 4); lịch sử thay phần cứng theo robot; tham số là dữ liệu có lineage (→ F3.8), không phải file ghi đè.
+
+</details>
+
+3. **[Failure mode]** Kể một cách `robot_params.yaml` "đúng" về mọi số nhưng vẫn làm sim sai.
+<details><summary>Hướng nghĩ</summary>
+
+Gốc tọa độ khác: bạn đo trọng tâm từ trục bánh kéo, URDF đặt `base_link` ở tâm khung; hoặc quy ước dấu `y`. Số đúng trong hệ quy chiếu sai — chính bài học Mars Climate Orbiter.
+
+</details>
+
+4. **[Phản biện]** "Đường kính bánh và khoảng cách bánh sẽ được UMBmark hiệu chuẩn ở C6 nên đo ở C2 làm gì cho mất công." Bạn trả lời thế nào?
+<details><summary>Hướng nghĩ</summary>
+
+Hiệu chuẩn cần điểm khởi đầu và cần một giá trị độc lập để kiểm: nếu UMBmark ra b lệch số thước 10%, đó là dấu hiệu lỗi ở đâu đó (encoder, trượt), không phải "kết quả hiệu chuẩn".
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Hàng không, cân và cân bằng (weight and balance):** mọi chuyến bay tính khối lượng và trọng tâm theo bảng từng hạng mục và kiểm trọng tâm nằm trong giới hạn cho phép; máy bay được cân lại định kỳ. Giống `mass_budget.csv` + cân ba điểm. Khác: hàng không có quy định pháp lý và dung sai được chứng nhận.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Công thức trọng tâm từ ba cân và từ phép nghiêng | [chuẩn] | Cân bằng mô-men; code kiểm bằng giá trị đã biết |
+| Bánh cao su có tải: D hiệu dụng nhỏ hơn danh nghĩa 0,5–2% | [ước lượng] | Tự đo |
+| `I_z = m·g·d²·T²/(16π²L)` | [chuẩn] | Con lắc hai dây, góc nhỏ |
+| Mars Climate Orbiter: lbf·s vs N·s | [chuẩn] | Báo cáo Mishap Investigation Board 1999 |
+
+**Đã sửa so với bản gốc:** K7 gốc dùng đường kính danh nghĩa 65 mm trong ví dụ mm/count và để UMBmark (Bài 4 gốc) gánh toàn bộ sai số; bài mới thêm đo tĩnh có sai số trước, để kết quả UMBmark ở C6.2 có giá trị đối chiếu.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** ROS REP-103 (đơn vị, hệ trục); tài liệu URDF của ROS (thẻ `<inertial>`).
+- **Giải thích:** JCGM 100 (GUM) — phần độ bất định loại B, hoặc viên nang → F1.1.
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao đường kính hiệu dụng phải đo bằng lăn; (2) vẽ lại bảng tham số ở phần 2; (3) câu dưới.
+
+  Robot 5 kg, ba cân đọc: bánh trái 1,8 kg, bánh phải 1,9 kg, caster 1,3 kg; caster ở x = 0,22 m, bánh ở y = ±0,1 m. x_G, y_G?
+  <details><summary>Đáp án</summary>
+
+  x_G = 1,3 × 0,22 / 5 = 0,057 m; y_G = (1,8 × 0,1 − 1,9 × 0,1)/5 = −0,002 m (lệch 2 mm về bên phải).
+
+  </details>
+
+---
+
+## Gate chặng 2
+
+Tiêu chí mới (K7 gốc không có gate cơ khí; theo `_KE-HOACH-K7.md` mục 7, C2 có gate "thông số hình học"). Mọi tiêu chí nhị phân, có bằng chứng trong repo.
+
+```
+[ ] 1. hw/motor_sizing.md: script C2.1 chạy với số listing thật (≥3 tỉ số), bảng độ nhạy,
+       quyết định tỉ số + bánh, dòng đỉnh/chạy đều mỗi motor; commit TRƯỚC ngày mua motor
+       (hoặc ghi rõ đã mua trước và kiểm lại sau)
+[ ] 2. hw/mass_budget.csv: ≥90% khối lượng là "measured"; tổng lệch cân tổng ≤3%
+[ ] 3. hw/robot_params.yaml: m, cog_x, cog_y, cog_z, D trái, D phải, track_width, caster_x —
+       mỗi số có unit, std, method, measured_at; script kiểm chạy xanh trong CI
+[ ] 4. Góc lật tĩnh đo được hai hướng; so với atan(d/h) từ robot_params.yaml, ghi lệch;
+       a_lật hai hướng tính ra và quyết định giới hạn gia tốc (hoặc "không cần") ghi trong decisions.md
+[ ] 5. Ba điểm tựa (hoặc 4 điểm có cơ cấu bảo đảm bánh kéo chạm): kiểm tờ giấy ở 3 vị trí sàn
+[ ] 6. Bảng mối ghép; mọi mối gá motor/bánh/caster có vạch sơn; sau Lắp bước 9 không vạch nào lệch
+[ ] 7. Cáp đã đặt theo mục 4: kéo thử 10 N mọi cáp, lực không vào đầu cắm; mọi lỗ xuyên tấm có grommet
+[ ] 8. Không có pin thật trên khung; vít không chĩa vào vùng pin (ảnh chụp)
+```
+
+**FAIL action:** chặng chạm 40h (30h + 10h dư) mà chưa PASS → tiêu chí 1, 3 (tối thiểu m, D trái/phải, track_width), 5, 8 là bắt buộc; tiêu chí 2, 4, 6, 7 ghi "nợ" vào `decisions.md` kèm hạn trả ở C5 (trước lần cấp pin đầu tiên lên khung). Không được nợ tiêu chí 8.

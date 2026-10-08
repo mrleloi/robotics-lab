@@ -131,7 +131,7 @@ Ba ý bản chất:
 
 - *"Trong một system vật lý có số tác nhân biết trước, được thu thập dữ liệu đầy đủ trong thời gian dài, thì mọi công thức vật lý gần như là hằng số"* (mô hình của bạn ở K3 lượt 12, đã chấm ở K3 Bài 6, F1.6 và K6 Bài 14 từ các góc khác). Ở góc miền hiệu lực: **ĐÚNG MỘT PHẦN.** Định luật là hằng số; **tham số hiệu dụng** của mô hình rút gọn thì không, vì chúng gói gọn những cơ chế bị bỏ, và các cơ chế đó đổi theo chế độ. Phản ví dụ: "hệ số ma sát bánh–sàn" là hằng số chừng nào bánh còn dính; khi trượt, nó thành một số khác (μ_k < μ_s), và odometry đổi từ "gần đúng" sang "sai hẳn" mà không có tác nhân mới nào xuất hiện. Bài tập mục 5 đo đúng chỗ này.
 - *"Mô hình hoặc đúng hoặc sai."* **SAI.** Đúng/sai chỉ có nghĩa khi kèm miền và dung sai. `T = 2π√(L/g)` "đúng" ở 10° với dung sai 1%, "sai" ở 30° với dung sai 0,5%. Phản ví dụ: cùng công thức, cùng con lắc, hai kết luận ngược nhau chỉ vì đổi dung sai.
-- *"Thêm cơ chế vào mô hình thì miền rộng ra."* **ĐÚNG MỘT PHẦN.** Rộng ra theo chiều của cơ chế mới, nhưng mỗi cơ chế mang tham số mới, và tham số mới cần dữ liệu ở vùng nó tác động để nhận dạng được (F6.4). Phản ví dụ: K6 Bài 16 phần E, mô hình ma sát ba thành phần dự đoán tốt hơn nhưng hệ số fit ra âm, vô nghĩa vật lý, vì dữ liệu không đủ để tách ba cơ chế.
+- *"Thêm cơ chế vào mô hình thì miền rộng ra."* **ĐÚNG MỘT PHẦN.** Rộng ra theo chiều của cơ chế mới, nhưng mỗi cơ chế mang tham số mới, và tham số mới cần dữ liệu ở vùng nó tác động để nhận dạng được (F6.4). Phản ví dụ: mô hình ma sát ba thành phần (Coulomb + nhớt + bậc hai) fit trên một dải biên độ hẹp có thể dự đoán tốt trong dải mà hệ số vô nghĩa vật lý, vì dữ liệu không đủ để tách ba cơ chế; K6 Bài 16 phần E cho bạn kiểm điều này.
 
 ### 4. Thuật ngữ
 
@@ -272,13 +272,7 @@ Checklist khi đọc một khẳng định "mô hình X khớp / đúng / đã k
    Bụi, sàn ướt, pin đổi chỗ, lốp mòn, robot chở thêm đồ. Biên an toàn của một mô hình là khoảng cách tới cạnh dốc gần nhất, không phải sai số đo được hôm nay. Liên hệ với "headroom" trong capacity planning, và vì sao không ai chạy cluster ở 95% CPU.
 
    </details>
-4. **[Liên ngành]** Thuốc được thử lâm sàng trên người lớn, rồi bác sĩ kê cho trẻ em ("off-label"). Đó là ngoại suy có lý do hay không có lý do?
-   <details><summary>Hướng nghĩ</summary>
-
-   Có lý do một phần: dược động học theo cân nặng. Không đủ: chuyển hóa gan và thận của trẻ thuộc chế độ khác. Ngành dược xử lý bằng nghiên cứu nhi khoa riêng, tức đo trong miền mới. Giống với chuyển bảng hiệu chuẩn sang robot khác.
-
-   </details>
-5. **[Phản biện]** "Mô hình đủ tốt thì không cần miền; MuJoCo mô phỏng được mọi thứ." Phản biện bằng một cơ chế cụ thể MuJoCo không có trong robot của bạn.
+4. **[Phản biện]** "Mô hình đủ tốt thì không cần miền; MuJoCo mô phỏng được mọi thứ." Phản biện bằng một cơ chế cụ thể MuJoCo không có trong robot của bạn.
    <details><summary>Hướng nghĩ</summary>
 
    Độ bẹp lốp theo tải, khe hở hộp số (backlash), sụt áp pin làm đổi đường cong PWM→vận tốc, cáp kéo. MuJoCo giải đúng các phương trình nó có; miền là câu hỏi về các phương trình nó không có (F6.2).
@@ -289,7 +283,6 @@ Checklist khi đọc một khẳng định "mô hình X khớp / đúng / đã k
 
 - **Flight envelope trong hàng không.** Máy bay được chứng nhận trong một miền (tốc độ, độ cao, hệ số tải, trọng tâm); ngoài miền, mô hình khí động có thể đổi chế độ (thất tốc là cạnh dốc điển hình). Giống: miền nhiều chiều, cạnh dốc, có giới hạn cứng trong phần mềm điều khiển. Khác: họ đo miền bằng bay thử có rủi ro được quản lý và tài liệu hóa nghiêm; robot hobby thường không có tài liệu nào.
 - **Mô hình rủi ro tài chính và LTCM (1998).** Quỹ Long-Term Capital Management dùng mô hình được hiệu chỉnh trên giai đoạn thị trường bình thường; khi Nga vỡ nợ, tương quan giữa các tài sản đổi chế độ và mô hình mất hiệu lực đúng lúc nó cần nhất [chuẩn]. Giống: tham số hiệu dụng (tương quan) chỉ đúng trong chế độ đã thấy. Khác: thị trường phản ứng với chính mô hình (người khác cũng dùng nó); sàn nhà thì không.
-- **Phần mềm Ariane 4 → 5** (mục 1): ngành phần mềm học được rằng dùng lại code là dùng lại cả giả định ngầm về dải dữ liệu, và các phân tích "không thể vượt" phải được ghi thành yêu cầu đi kèm.
 
 ### 9. Áp vào khóa chính
 
@@ -392,9 +385,9 @@ Ba ý bản chất:
 
 **Chấm mô hình:**
 
-- *"Sim chạy tất định và khớp golden hash nên đã được verify."* **ĐÚNG MỘT PHẦN.** Tất định và khớp golden là điều kiện để **có thể** verify (kết quả lặp lại được), không phải verification. Phản ví dụ: code ở mục 5 tất định, khớp golden của chính nó, và chia khối lượng hai lần.
-- *"Tách validation set như trong ML là đủ để validate một mô hình vật lý."* **SAI** khi tập đó lấy từ cùng điều kiện với dữ liệu fit. Phản ví dụ: mục 5, dữ liệu mới ở cùng khối lượng cho RMS bằng sàn nhiễu dù mô hình có bug.
-- *"Verification cần dữ liệu thật để so."* **SAI.** Verification so code với toán; dữ liệu thật trộn sai số đo và sai số mô hình vào, làm mờ chính thứ verification cần thấy. Phản ví dụ: mục 5 bắt bug bằng một nghiệm cos, không cần cảm biến nào.
+- *"Sim chạy tất định và khớp golden hash nên đã được verify."* **ĐÚNG MỘT PHẦN.** Tất định và khớp golden là điều kiện để **có thể** verify (kết quả lặp lại được), không phải verification. Phản ví dụ: code ở mục 5 tất định, sẽ khớp golden của chính nó mãi mãi, và có một bug chia khối lượng hai lần.
+- *"Tách validation set như trong ML là đủ để validate một mô hình vật lý."* **SAI** khi tập đó lấy từ cùng điều kiện với dữ liệu fit. Phản ví dụ: tự dựng ở mục 5 (câu 3) — dự đoán trước xem dữ liệu mới cùng khối lượng có lộ bug không.
+- *"Verification cần dữ liệu thật để so."* **SAI.** Verification so code với toán; dữ liệu thật trộn sai số đo và sai số mô hình vào, làm mờ chính thứ verification cần thấy. Phản ví dụ: mục 5 câu 4 dùng một nghiệm giải tích, không cần cảm biến nào.
 
 ### 4. Thuật ngữ
 
@@ -535,13 +528,7 @@ Checklist khi đọc một khẳng định "mô hình đã được kiểm":
    Mọi thay đổi của robot (mòn, lỏng, firmware) bị hấp thụ vào tham số, và cả bug mới của sim cũng vậy. Theo dõi **tham số** theo thời gian (drift của k̂, ĉ) thay vì chỉ theo dõi sai số fit; một tham số nhảy bất thường là tín hiệu.
 
    </details>
-4. **[Liên ngành]** Trong y học, một xét nghiệm mới được hiệu chỉnh trên một bệnh viện rồi thử ở bệnh viện khác (external validation). Vì sao ngành y bắt buộc bước đó?
-   <details><summary>Hướng nghĩ</summary>
-
-   Vì "dữ liệu mới cùng bệnh viện" chia sẻ máy móc, quy trình, dân số với dữ liệu hiệu chỉnh: đúng cấu trúc của validation cùng 0,8 kg ở mục 5. Đổi bệnh viện là đổi điều kiện mà sai số bù trừ phụ thuộc.
-
-   </details>
-5. **[Phản biện]** "Mô hình ML end-to-end học từ dữ liệu, không có phương trình, nên không cần verification." Đúng không?
+4. **[Phản biện]** "Mô hình ML end-to-end học từ dữ liệu, không có phương trình, nên không cần verification." Đúng không?
    <details><summary>Hướng nghĩ</summary>
 
    Vẫn có thứ để verify: pipeline tiền xử lý (đơn vị, frame, thứ tự quaternion, F6.8), code train (gradient check), code eval. Bug ở đó cũng bị "học thuộc" giống sai số bù trừ. Phần không còn là "phương trình vật lý"; phần còn nguyên là "code có làm đúng điều ta định không".
@@ -552,7 +539,6 @@ Checklist khi đọc một khẳng định "mô hình đã được kiểm":
 
 - **Thiết bị y tế (ASME V&V 40, 2018).** Chuẩn cho mô hình tính toán dùng trong hồ sơ trình FDA, với ý "mức nghiêm ngặt của V&V tỉ lệ với rủi ro của quyết định" (risk-informed credibility) [spec: ASME V&V 40-2018]. Giống: NASA-STD-7009B cũng theo hướng này. Khác: robot của bạn không có cơ quan duyệt; bạn phải tự đặt mức, và mục 6 là bộ khung để làm thế.
 - **Kế toán và kiểm toán.** Kế toán viên tự đối chiếu sổ (verification: sổ khớp với quy tắc ghi sổ); kiểm toán độc lập đi kiểm kho thật (validation: sổ khớp thế giới). Giống: hai việc, hai người, vì người ghi sổ có động cơ chỉnh cho khớp. Khác: kiểm toán có chuẩn mực pháp lý; sim thì chưa.
-- **Phần mềm điều khiển bay (DO-178C).** Ngành hàng không tách "verification" phần mềm (phần mềm làm đúng yêu cầu) khỏi việc yêu cầu có đúng với máy bay không, và đòi truy vết hai chiều giữa yêu cầu và test. Giống: thứ tự và trách nhiệm tách bạch. Khác: DO-178C nói về code điều khiển, không về mô hình vật lý.
 
 ### 9. Áp vào khóa chính
 
@@ -598,7 +584,7 @@ Checklist khi đọc một khẳng định "mô hình đã được kiểm":
 
 ### 1. Câu chuyện
 
-Năm 1967, Loup Verlet mô phỏng chuyển động của 864 nguyên tử argon để tính tính chất nhiệt động của chất lỏng [chuẩn: L. Verlet, *Physical Review* 159, 1967]. Ông dùng một sơ đồ bước thời gian rất đơn giản (cập nhật vị trí bằng hiệu của hai vị trí trước, cộng gia tốc), về sau mang tên ông dù Carl Størmer đã dùng nó từ đầu thế kỷ 20 để tính quỹ đạo hạt mang điện trong cực quang [chuẩn]. Sơ đồ này chỉ có bậc hai, kém xa Runge–Kutta bậc bốn về sai số mỗi bước. Nhưng các mô phỏng phân tử chạy hàng triệu bước, và điều người ta cần không phải vị trí từng nguyên tử (hệ này hỗn loạn, vị trí riêng lẻ mất nghĩa rất nhanh) mà là **thống kê đúng**: nhiệt độ, áp suất, năng lượng. Integrator bậc cao nhưng làm năng lượng trôi chậm và đều sẽ làm "nóng" hoặc "nguội" hệ qua thời gian dài; Verlet giữ năng lượng dao động quanh giá trị đúng mãi mãi. Gần 30 năm sau, toán học giải thích vì sao: các integrator **symplectic** giải đúng một hệ Hamilton "bóng" (shadow Hamiltonian) gần với hệ thật, nên năng lượng của hệ bóng được bảo toàn chính xác [chuẩn: Hairer, Lubich, Wanner, *Geometric Numerical Integration*].
+Năm 1967, Loup Verlet mô phỏng 864 nguyên tử argon để tính tính chất nhiệt động của chất lỏng [chuẩn: L. Verlet, *Physical Review* 159, 1967], bằng một sơ đồ bước thời gian chỉ bậc hai (Størmer đã dùng nó từ đầu thế kỷ 20 cho quỹ đạo hạt trong cực quang). Mô phỏng phân tử chạy hàng triệu bước, và thứ cần đúng không phải vị trí từng nguyên tử (hệ hỗn loạn) mà là **thống kê**: nhiệt độ, áp suất, năng lượng. Một integrator bậc cao nhưng làm năng lượng trôi chậm và đều sẽ "hâm nóng" hệ qua thời gian dài; sơ đồ của Verlet thì không. Toán học giải thích vì sao muộn hơn nhiều: các integrator **symplectic** giải đúng một hệ "bóng" gần với hệ thật, nên năng lượng của hệ bóng được bảo toàn [chuẩn: Hairer, Lubich, Wanner, *Geometric Numerical Integration*]. Bài học: chọn integrator theo **tính chất cần giữ**, không theo bậc.
 
 Câu chuyện thứ hai không phải sự cố mà là một nghịch lý. Năm 1895, Paul Painlevé chỉ ra rằng một thanh cứng trượt trên mặt có ma sát Coulomb, ở một số cấu hình, có phương trình chuyển động **không có nghiệm** hoặc **có nhiều nghiệm** [chuẩn: nghịch lý Painlevé]. Không phải lỗi số học: chính mô hình "vật rắn tuyệt đối + ma sát Coulomb" là bài toán đặt không chỉnh. Mọi physics engine bạn sẽ dùng (MuJoCo, Bullet, PhysX, Drake) đều phải chọn một cách **làm mềm** hoặc **diễn giải lại** tiếp xúc để có câu trả lời. Cách chọn đó là một phần của mô hình, có tham số, có hiện vật (artifact) riêng, và K6 Bài 17 đã cho bạn thấy một trong số đó (creep dưới ngưỡng ma sát).
 
@@ -644,7 +630,6 @@ Dòng cuối là chỗ "sai số tích lũy" và "hỗn loạn" gặp nhau. Mộ
 | EMA để làm mượt metric: `s += α·(x − s)` | Đó **chính là** Euler hiện cho `ds/dt = k·(x − s)` với `α = k·h` | Giống hệt về toán: EMA ổn định khi 0 < α < 2, vọt lố khi α > 1. Khác: trong backend bạn chọn α một lần; trong sim, "α" ẩn của mỗi lò xo/tiếp xúc là `k·h/m`, đổi theo vật và theo dt | Đặt dt cho đúng với khung xe rồi thêm một vật nhẹ vào cảnh: "α" của tiếp xúc vượt 2, sim nổ ở đúng vật đó |
 | Autoscaler điều chỉnh theo chu kỳ 60 s cho tải đổi trong 10 s, dao động lên xuống (thrashing) | dt quá lớn so với thang thời gian của hệ | Autoscaler còn có độ trễ đo và độ trễ khởi động; integrator thì không trễ, chỉ thô | Chữa thrashing bằng "thêm damping" (cooldown) trong khi nguyên nhân là chu kỳ lấy mẫu |
 | Game loop "fix your timestep" (bước vật lý cố định, render tách riêng) | Bước tích phân cố định, tách khỏi thời gian thực | Game chỉ cần trông đúng; robotics cần **đo được**: dt và integrator phải ghi vào metadata kịch bản (K6 Bài 5) | Dùng dt biến thiên theo tốc độ máy, mất cả determinism lẫn khả năng so sánh |
-| Cộng float không kết hợp, kết quả đổi theo số luồng (F2.2) | Sai số làm tròn là một nhiễu nhỏ mỗi bước | Trong backend, sai bit cuối hiếm khi quan trọng; trong hệ hỗn loạn/nhánh rẽ, nó quyết định kết cục | Đổ lỗi cho integrator khi thật ra là nhánh rẽ của tiếp xúc |
 
 **Tên chuẩn của thứ bạn đã làm:** khi bạn đặt α cho EMA "nhỏ thôi cho an toàn", bạn đã chọn một điểm trong **miền ổn định** của Euler hiện. Khi bạn tăng tần số tick của một vòng điều khiển cho hết dao động, bạn đã giảm `ω·h`. Thứ còn thiếu: biết rằng có integrator mà giảm h không đổi được **chiều** của sai số năng lượng, và biết bậc hội tụ là phép kiểm verification.
 
@@ -652,7 +637,6 @@ Dòng cuối là chỗ "sai số tích lũy" và "hỗn loạn" gặp nhau. Mộ
 
 - *"Integrator bậc cao hơn luôn tốt hơn."* **ĐÚNG MỘT PHẦN.** Đúng cho quỹ đạo ngắn, hệ trơn, sai số mỗi bước. Gãy ở ba chỗ: (1) với tiếp xúc, bậc thực tế sụp về thấp, ưu thế mất; (2) tốn nhiều lần tính lực mỗi bước (RK4: bốn lần), nên cùng ngân sách tính toán, bậc thấp với h nhỏ có thể thắng; (3) không bảo toàn cấu trúc (năng lượng, diện tích pha) qua thời gian dài. Phản ví dụ: mặc định của MuJoCo là Euler bán ẩn, bậc một [spec: MuJoCo docs, `option/integrator`; tự đo: mặc định `mjINT_EULER` ở 3.15.0].
 - *"Năng lượng của sim không bảo toàn thì sim có bug."* **ĐÚNG MỘT PHẦN.** Với hệ không ma sát, năng lượng trôi **có hệ thống** là dấu hiệu integrator hoặc dt không hợp (verification). Nhưng năng lượng dao động bị chặn quanh giá trị đúng là bình thường với integrator symplectic, và với ma sát/tiếp xúc, tính chất đúng là "không tăng", không phải "không đổi" (F2.4). Phản ví dụ: có integrator cho năng lượng của lò xo dao động mỗi chu kỳ mà không có bug nào (bài tập mục 5 cho bạn tìm ra cái nào).
-- *"Sai số tích lũy theo số bước, nên chạy lâu thì sim càng sai."* **ĐÚNG MỘT PHẦN.** Với integrator không ổn định hoặc trôi có hệ thống: đúng. Với integrator symplectic trên hệ dao động: sai số **năng lượng** bị chặn, sai số **pha** tăng tuyến tính. Với hệ hỗn loạn: sai số quỹ đạo bão hòa ở cỡ không gian trạng thái, còn thống kê có thể vẫn đúng. "Sai" nghĩa là sai đại lượng nào phải nói rõ.
 
 ### 4. Thuật ngữ
 
@@ -798,11 +782,6 @@ for tc, mass, rs in ((0.02, 1.0, True), (0.02, 0.01, True), (0.004, 1.0, True),
    - Bán ẩn cho **2** ở t = 10 s và **1** ở t = 10,25 s. Ở t = 10 s (đúng 10 chu kỳ), các thành phần sai số bậc một triệt tiêu nhau do đối xứng của bài toán; ở thời điểm "không đặc biệt", bậc thật lộ ra. Đây là bẫy verification kinh điển: một phép thử ở điểm đối xứng cho bậc cao giả. Trên con lắc phi tuyến (θ₀ = 1 rad), bán ẩn cho bậc 1,00 [đã chạy, kiểm riêng]. Cùng bài học với m = 1 ở F6.2: chọn điểm kiểm không đặc biệt.
 4. Euler hiện: |λ| = √(1 + ω²h²) > 1 với **mọi** h > 0, không ổn định ở bất kỳ dt nào (trên hệ không ma sát). Bán ẩn: `trace A = 2 − ω²h²`, `det A = 1`; trị riêng nằm trên đường tròn đơn vị khi |trace| ≤ 2, tức **ω·h ≤ 2**. RK4: **ω·h ≤ 2√2 ≈ 2,83**. Vậy với dt = 2 ms (mặc định MuJoCo), mode nhanh nhất mà bán ẩn chịu được là ω ≈ 1000 rad/s (~160 Hz).
 
-```
-mặt phẳng pha (x, v/ω), 10 chu kỳ, dt = 0,02 s:
-  Euler hiện: xoắn ốc RA ngoài       bán ẩn: elip hơi nghiêng, khép kín     RK4: vòng tròn, co vào cực chậm
-```
-
 **Đề B** (mujoco 3.15.0):
 
 | timeconst | khối lượng | refsafe | lún sâu nhất (mm) | lún nằm yên (mm) | nảy lên (mm) |
@@ -843,7 +822,7 @@ Checklist khi đọc một khẳng định về timestep, integrator, ổn đị
 
 (a) **ĐÚNG MỘT PHẦN.** Đúng hiện tượng: trong tác vụ có tiếp xúc, sai lệch bit cuối có thể đổi kết cục (gắp trúng/trượt). Sai ở ba chỗ: (1) không phải mọi hệ tiếp xúc đều hỗn loạn; hộp nằm yên trên sàn hút mọi nhiễu về cùng một trạng thái. Cái gây khuếch đại thường là **nhánh rẽ** (vật sát mép, ngón kẹp chạm đúng góc), không phải hỗn loạn trên toàn quỹ đạo. (2) Khuếch đại do **động lực học**, không do bước tích phân: integrator ổn định không tự khuếch đại sai số; gán cho "Euler/Runge-Kutta" là nhầm nguồn (Euler hiện thì có tự khuếch đại, nhưng đó là chuyện khác, xảy ra cả khi không có tiếp xúc). (3) "Hàm mũ sau mỗi bước" chỉ đúng trong pha tăng, rồi bão hòa (F2.6). Hệ quả thực hành vẫn đúng: so phân bố, không so quỹ đạo đơn lẻ (K6 Bài 15).
 
-(b) **ĐÚNG MỘT PHẦN.** Giảm dt **giảm** sai số số học với integrator ổn định, không "tránh" được; muốn biết còn bao nhiêu phải quét dt (solution verification, F6.2). Với Euler hiện, giảm dt không đổi chiều trôi. Với MuJoCo còn một tầng: giảm dt từ 2 ms xuống 1 ms nới khóa refsafe (2·dt), nên tiếp xúc có thể **cứng hơn** nếu solref đặt nhỏ, tức là đổi **mô hình** chứ không chỉ đổi sai số số học. Và nếu sai số số học đã nhỏ hơn gap mô hình nhiều lần, giảm dt chỉ tốn tiền (K6 Bài 16 phần D).
+(b) **ĐÚNG MỘT PHẦN.** Giảm dt **giảm** sai số số học với integrator ổn định, không "tránh" được; muốn biết còn bao nhiêu phải quét dt (solution verification, F6.2). Với Euler hiện, giảm dt không đổi chiều trôi. Với MuJoCo còn một tầng: giảm dt từ 2 ms xuống 1 ms nới khóa refsafe (2·dt), nên tiếp xúc có thể **cứng hơn** nếu solref đặt nhỏ, tức là đổi **mô hình** chứ không chỉ đổi sai số số học. Và nếu sai số số học đã nhỏ hơn gap mô hình nhiều lần, giảm dt chỉ tốn tiền (K6 Bài 16 phần D cho bạn kiểm điều này trên con lắc).
 
 (c) **ĐÚNG MỘT PHẦN.** Phân kỳ sau một đoạn giống hệt là chữ ký của nhánh rẽ/khuếch đại động lực học, hay gặp ở tiếp xúc: hướng chẩn đoán đúng. Hai điều cần thêm trước khi gọi là "bình thường": (1) loại trừ nguồn phi tất định chưa khóa (thứ tự luồng, F2.2): hai lần chạy **cùng máy, cùng build** không được phân kỳ nếu sim tất định; (2) kiểm điểm phân kỳ có trùng sự kiện tiếp xúc trong log không. "Bình thường với hệ hỗn loạn" đúng khi nguồn nhiễu đã biết; nếu chưa biết, đó là một lỗi determinism chưa tìm ra.
 
@@ -869,13 +848,7 @@ Checklist khi đọc một khẳng định về timestep, integrator, ổn đị
    Bất ổn số học (ω·h vượt miền ổn định ở vật nhẹ: chạy lại với dt nhỏ hơn thì mất); vật khởi tạo lồng nhau (lực phục hồi khổng lồ ở bước đầu: kiểm khoảng cách lúc khởi tạo); tham số tiếp xúc bị tắt khóa an toàn (refsafe tắt, timeconst < 2·dt). Thêm một detector "năng lượng tăng đột ngột" là một property test rẻ (F2.4).
 
    </details>
-4. **[Liên ngành]** Cơ học thiên thể tính quỹ đạo Hệ Mặt Trời cho hàng tỉ năm. Họ dùng loại integrator nào, và vì sao lý do của họ giống/khác lý do của MuJoCo?
-   <details><summary>Hướng nghĩ</summary>
-
-   Symplectic (Wisdom–Holman và họ hàng), vì cần năng lượng không trôi qua thời gian cực dài. Khác MuJoCo: không có tiếp xúc, hệ trơn, nên giữ được cả bậc cao lẫn cấu trúc. MuJoCo chọn bán ẩn chủ yếu vì ổn định và rẻ trong hệ có tiếp xúc, symplectic là phần thưởng phụ (mà ma sát phá đi).
-
-   </details>
-5. **[Phản biện]** "Sim chỉ cần đủ giống để policy học được; mấy chuyện bậc hội tụ là việc của nhà toán học." Phản biện bằng một cơ chế cụ thể làm policy học sai.
+4. **[Phản biện]** "Sim chỉ cần đủ giống để policy học được; mấy chuyện bậc hội tụ là việc của nhà toán học." Phản biện bằng một cơ chế cụ thể làm policy học sai.
    <details><summary>Hướng nghĩ</summary>
 
    Policy tối ưu hóa mọi thứ nó khai thác được, kể cả lỗi số học: năng lượng bơm vào khi rung nhanh (Euler hiện), tiếp xúc mềm cho phép "lún" vào vật để kẹp chắc hơn. Goodhart với simulator. Verification là cách biết policy đang học vật lý hay học lỗi của sim.
@@ -884,7 +857,6 @@ Checklist khi đọc một khẳng định về timestep, integrator, ổn đị
 
 ### 8. Liên kết ra ngoài
 
-- **Động lực học phân tử** (mục 1). Giống: chạy cực dài, cần thống kê đúng, dùng symplectic. Khác: không cần bám thế giới thật ở mức quỹ đạo; robotics thì cuối cùng phải đối chiếu với robot thật (F6.5).
 - **Mô phỏng mạch điện (SPICE).** Mạch có tụ nhỏ và điện trở lớn cạnh nhau là hệ stiff kinh điển; SPICE dùng integrator ẩn (trapezoidal, Gear) và điều chỉnh bước theo sai số ước lượng [chuẩn]. Giống: stiffness chặn dt; lối ra là implicit. Khác: SPICE có thể đổi bước liên tục vì không cần chạy thời gian thực hay tất định theo bước cố định như sim cho RL.
 - **Dự báo thời tiết.** Mô hình khí quyển hỗn loạn; trung tâm dự báo chạy **ensemble** (nhiều lần với nhiễu ban đầu nhỏ) và dự báo xác suất thay vì một quỹ đạo [chuẩn]. Giống: tách sai số số học khỏi khuếch đại động lực học, chuyển sang phân bố. Khác: họ có dữ liệu thật đồng hóa mỗi vài giờ (data assimilation, họ hàng gần của Kalman, F6.7); sim robot thường chạy "mù" suốt episode.
 
@@ -989,8 +961,8 @@ Ba cái bẫy kỹ thuật, ngắn: (1) **đạo hàm số của tín hiệu nhi
 
 **Chấm mô hình:**
 
-- *"Fit khớp dữ liệu thì tham số đúng."* **SAI.** Khi X gần suy biến, có cả một đường (hay mặt) tham số cho cùng độ khớp; bộ giải trả về một điểm trên đó. Phản ví dụ: bài tập mục 5, tín hiệu hằng.
-- *"Chạy nhiều lần thấy tham số ít dao động, vậy là chắc chắn."* **SAI.** Độ ổn định giữa các lần chạy đo **phương sai**, không đo **chệch**. Khi một hướng tham số không nhận dạng được, bộ giải có thể trả về cùng một điểm sai mỗi lần. Phản ví dụ: mục 5, tín hiệu một bậc.
+- *"Fit khớp dữ liệu thì tham số đúng."* **SAI.** Khi X gần suy biến, có cả một đường (hay mặt) tham số cho cùng độ khớp; bộ giải trả về một điểm trên đó. Phản ví dụ: tự tìm ở mục 5 — một trong bốn tín hiệu cho đúng tình huống này.
+- *"Chạy nhiều lần thấy tham số ít dao động, vậy là chắc chắn."* **SAI.** Độ ổn định giữa các lần chạy đo **phương sai**, không đo **chệch**. Khi một hướng tham số không nhận dạng được, bộ giải có thể trả về cùng một điểm sai mỗi lần. Phản ví dụ: mục 5 câu 4.
 - *"Dữ liệu vận hành đủ nhiều thì không cần thí nghiệm riêng."* **ĐÚNG MỘT PHẦN.** Nhiều dữ liệu giảm σ²/n; không thêm **hạng** cho X. Đúng khi vận hành tự nhiên đã phủ đủ chế độ (robot đổi chiều, tăng giảm tốc thường xuyên). Phản ví dụ: robot tuần tra chỉ chạy một chiều ở tốc độ đều, 1000 giờ log không tách được K với c.
 
 ### 4. Thuật ngữ
@@ -1148,13 +1120,6 @@ Checklist khi đọc một kết quả "đã nhận dạng / đã fit tham số"
    Trong vòng kín, u được tính từ ω đo, nên u mang theo nhiễu và chính động lực học; least squares có thể nhận dạng một phần **bộ điều khiển** thay vì motor. Đổi gain là đổi cấu trúc dữ liệu. Chữa: kích thích độc lập cộng vào lệnh, hoặc phương pháp dành cho vòng kín (biến công cụ).
 
    </details>
-4. **[Liên ngành]** Thử nghiệm lâm sàng ngẫu nhiên hóa liều thuốc thay vì để bác sĩ chọn. Liên hệ với PRBS và dữ liệu vòng kín.
-   <details><summary>Hướng nghĩ</summary>
-
-   Bác sĩ chọn liều theo tình trạng bệnh nhân = bộ điều khiển chọn u theo ω: liều tương quan với kết cục qua confounder. Ngẫu nhiên hóa cắt tương quan đó, giống PRBS cắt tương quan giữa các cột X. Khác: bệnh nhân không lặp lại được; motor thì lặp hàng nghìn lần.
-
-   </details>
-
 ### 8. Liên kết ra ngoài
 
 - **Hiệu chuẩn tay máy công nghiệp.** Nhận dạng tham số động lực học (khối lượng, quán tính từng khâu) dùng quỹ đạo kích thích tối ưu (chuỗi Fourier hữu hạn, tối ưu cond hoặc det) và chỉ ra được **tham số gộp**, không phải từng tham số [chuẩn: Swevers và cộng sự, 1997; Khalil & Dombre]. Giống: cấu trúc y = Y(q, q̇, q̈)·θ, tham số gộp. Khác: nhiều khớp, ràng buộc va chạm khi thiết kế quỹ đạo.
@@ -1163,7 +1128,7 @@ Checklist khi đọc một kết quả "đã nhận dạng / đã fit tham số"
 ### 9. Áp vào khóa chính
 
 - **K1 Bài 9–10:** câu (c) mục 6; khi fit LED (Bài 10), chọn các điểm dòng trải đều thang log để Rs và n tách được.
-- **K6 Bài 16 phần F–G:** "mở rộng dải biên độ, gộp nhiều lần thả" trong phần E của bài đó là thiết kế kích thích; tính cond(X) cho mô hình ma sát ba thành phần trước và sau khi mở rộng dải.
+- **K6 Bài 16 phần E–G:** với mô hình ma sát nhiều thành phần, tính cond(X) trước khi diễn giải hệ số; nếu lớn, cách chữa là thiết kế kích thích (dải biên độ rộng hơn, nhiều lần thả), không phải thêm tham số.
 - **K6 Bài 14:** khi chọn "đo hay randomize", hỏi trước: tham số này có nhận dạng được bằng một thí nghiệm rẻ không? Không được thì randomize là lựa chọn chính đáng.
 - **K7 C2.4:** khối lượng, trọng tâm, đường kính là tham số **đo** (cân, thước); quán tính, ma sát, trễ là tham số **fit**: thiết kế kích thích cho từng cái.
 - **K7 C6.2:** UMBmark là thiết kế kích thích hai chiều; đọc kết quả kèm điều kiện. **K7 C11.1:** dùng PRBS/chirp cho motor ở vòng hở trên giá kê bánh trước khi fit trên sàn.
@@ -1263,7 +1228,7 @@ Chỗ hay nhầm: DR tối ưu `E_{θ~p}[J(π, θ)]` (hiệu năng trung bình t
 **Chấm mô hình:**
 
 - *"Sim-to-real gap là một con số đặc trưng của simulator."* **SAI.** Gap là của (sim, policy, kịch bản, metric). Phản ví dụ: cùng sim xe với μ sai, policy tốc độ thấp không bao giờ trượt cho gap gần 0; policy phanh gấp cho gap lớn (F6.1 mục 5).
-- *"Sửa kênh gây gap lớn nhất trước."* **ĐÚNG MỘT PHẦN.** Đúng tinh thần (Pareto). Gãy ở chữ "lớn nhất theo cách đo nào": thêm-một, bớt-một, Shapley có thể xếp hạng khác nhau. Câu hỏi đúng là "kênh nào rẻ nhất để đo và làm gap giảm nhiều nhất **cho task tôi chấm**". Phản ví dụ: bài tập mục 5.
+- *"Sửa kênh gây gap lớn nhất trước."* **ĐÚNG MỘT PHẦN.** Đúng tinh thần (Pareto). Gãy ở chữ "lớn nhất theo cách đo nào": thêm-một, bớt-một, Shapley có thể gán cho cùng một kênh những tỉ lệ rất khác nhau, và khi tương tác mạnh thì xếp hạng cũng đổi. Câu hỏi đúng là "kênh nào rẻ nhất để đo và làm gap giảm nhiều nhất **cho task tôi chấm**". Phản ví dụ: bài tập mục 5.
 - *"Policy chạy tốt trên dải DR rộng thì sẽ chạy tốt ngoài đời."* **ĐÚNG MỘT PHẦN.** Chỉ khi θ* nằm trong dải và mọi kênh task phụ thuộc đều có trong sim. Phản ví dụ: kênh "độ rơ hộp số" không có trong MJCF; không dải ma sát nào phủ được nó.
 
 ### 4. Thuật ngữ
@@ -1417,13 +1382,6 @@ Checklist khi đọc một khẳng định về sim-to-real gap hoặc cách thu
    Thứ tăng là J_real trên sàn cũ, không phải độ đúng của sim. Câu đúng: "trong dải [μ_min, μ_max] và trên sàn S, DR tăng success thật từ 60% lên 80% (CI...)". Sàn mới có thể nằm ngoài dải, hoặc kéo theo kênh khác. Miền (F6.1) phải đi kèm mọi con số chuyển giao.
 
    </details>
-4. **[Liên ngành]** Mô hình dịch tễ học (COVID) dự báo tốt cho một nước rồi sai cho nước khác. Phân tích bằng "gap theo kênh" và "policy-dependent".
-   <details><summary>Hướng nghĩ</summary>
-
-   Kênh: tham số lây truyền, cấu trúc tuổi, xét nghiệm, hành vi. "Policy" ở đây là chính sách của chính phủ, và nó **phản ứng với dự báo**: mô hình đổi hành vi của thế giới nó mô tả. Robot không có vòng phản hồi kiểu đó với sim, nhưng policy học trong sim thì có: nó đi về nơi sim sai có lợi.
-
-   </details>
-
 ### 8. Liên kết ra ngoài
 
 - **Hầm gió và CFD trong thiết kế máy bay.** Kết quả hầm gió trên mô hình thu nhỏ phải hiệu chỉnh theo hiệu ứng tỉ lệ (số Reynolds) và hiệu ứng thành hầm khi chuyển sang máy bay thật; ngành có cả một bộ hiệu chỉnh theo từng nguồn sai lệch [chuẩn]. Giống: chia gap theo nguồn (kênh) và sửa từng nguồn. Khác: họ có lý thuyết đồng dạng cho phép chuyển đổi; robot tiếp xúc gần như không có.
@@ -1519,8 +1477,8 @@ Ba ý bản chất:
 
 **Chấm mô hình:**
 
-- *"Đã đẩy từng tham số tới ±2σ, đầu ra vẫn trong giới hạn, vậy an toàn ở mức ~95%."* **SAI.** ±2σ từng trục không nói gì về xác suất của tổ hợp; và với k tham số độc lập, xác suất **mọi** tham số cùng trong ±2σ là 0,954ᵏ, nhưng vùng hỏng có thể nằm ngay trong hộp đó (góc). Phản ví dụ: mục 5.
-- *"Tham số giải thích nhiều phương sai nhất là tham số cần đo kỹ nhất."* **ĐÚNG MỘT PHẦN.** Đúng khi mục tiêu là dự đoán chính xác một đại lượng trơn, không ngưỡng (K6 Bài 16 phần F dùng đúng kiểu phân tích này cho chu kỳ con lắc; tự tìm tham số trội ở đó). Sai khi mục tiêu là tránh hỏng và tham số có cạnh dốc. Phản ví dụ: mục 5, tham số ít phương sai nhất lại là tham số dẫn hỏng.
+- *"Đã đẩy từng tham số tới ±2σ, đầu ra vẫn trong giới hạn, vậy an toàn ở mức ~95%."* **SAI.** ±2σ từng trục không nói gì về xác suất của tổ hợp; và với k tham số độc lập, xác suất **mọi** tham số cùng trong ±2σ là 0,954ᵏ, nhưng vùng hỏng có thể nằm ngay trong hộp đó (góc). Phản ví dụ: tự dựng ở mục 5 câu 2–3.
+- *"Tham số giải thích nhiều phương sai nhất là tham số cần đo kỹ nhất."* **ĐÚNG MỘT PHẦN.** Đúng khi mục tiêu là dự đoán chính xác một đại lượng trơn, không ngưỡng (K6 Bài 16 phần F dùng đúng kiểu phân tích này cho chu kỳ con lắc; tự tìm tham số trội ở đó). Có thể sai khi mục tiêu là tránh hỏng và một tham số có cạnh dốc (F6.1). Phản ví dụ: mục 5 câu 4–5 cho bạn kiểm điều này.
 - *"Cộng sai số theo căn tổng bình phương (GUM) là đủ, Monte Carlo là thừa."* **ĐÚNG MỘT PHẦN.** Đủ khi mô hình gần tuyến tính trong dải bất định và phân bố gần chuẩn (GUM Supplement 1 nói rõ điều kiện và đề xuất Monte Carlo khi không thỏa [spec: JCGM 101:2008]). Có ngưỡng (phanh bị ma sát chặn) hay phân bố lệch thì không.
 
 ### 4. Thuật ngữ
@@ -1773,9 +1731,9 @@ Hình răng cưa đó là toàn bộ trực giác. Ba hệ quả:
 
 **Chấm mô hình:**
 
-- *"Kalman là trung bình có trọng số."* **ĐÚNG MỘT PHẦN.** Bước cập nhật đúng là thế. Thiếu bước dự đoán: không có mô hình chuyển động thì không có gì để làm khi mất phép đo, và không biết P tăng bao nhiêu giữa hai lần đo. Phản ví dụ: mục 5, "marker giữ mẫu cuối" (chỉ có phép đo) trôi hàng mét khi mất marker.
-- *"Dùng model AI dự đoán thay cho tầng đo vật lý"* (mô hình của bạn ở K3 lượt 12, ở góc ước lượng trạng thái). **ĐÚNG MỘT PHẦN.** Dự đoán bằng mô hình là một nửa của mọi bộ ước lượng tốt, đúng như bạn nói. Nửa còn lại là phép đo sửa nó, vì mô hình nào cũng tích lũy sai số theo thời gian (P chỉ tăng khi chỉ dự đoán). Phản ví dụ: mục 5, odometry thuần là "dự đoán không đo", sai cỡ nửa mét sau hai phút dù mô hình chỉ sai 2%.
-- *"R và Q lấy từ datasheet là đủ."* **ĐÚNG MỘT PHẦN.** R từ datasheet/đo đứng yên là điểm xuất phát tốt cho nhiễu trắng. Q từ nhiễu trắng của encoder bỏ sót sai số hệ thống, và bộ lọc thành tự tin quá. Phản ví dụ: mục 5, dòng "Q chỉ từ nhiễu trắng".
+- *"Kalman là trung bình có trọng số."* **ĐÚNG MỘT PHẦN.** Bước cập nhật đúng là thế. Thiếu bước dự đoán: không có mô hình chuyển động thì không có gì để làm khi mất phép đo, và không biết P tăng bao nhiêu giữa hai lần đo. Phản ví dụ: mục 5 câu 2, cách "marker giữ mẫu cuối" (chỉ có phép đo, không có mô hình) khi mất marker.
+- *"Dùng model AI dự đoán thay cho tầng đo vật lý"* (mô hình của bạn ở K3 lượt 12, ở góc ước lượng trạng thái). **ĐÚNG MỘT PHẦN.** Dự đoán bằng mô hình là một nửa của mọi bộ ước lượng tốt, đúng như bạn nói. Nửa còn lại là phép đo sửa nó, vì mô hình nào cũng tích lũy sai số theo thời gian (P chỉ tăng khi chỉ dự đoán). Phản ví dụ: mục 5 câu 1, odometry thuần là "dự đoán không đo"; tự tính nó sai bao nhiêu sau hai phút khi mô hình chỉ sai 2%.
+- *"R và Q lấy từ datasheet là đủ."* **ĐÚNG MỘT PHẦN.** R từ datasheet/đo đứng yên là điểm xuất phát tốt cho nhiễu trắng. Q từ nhiễu trắng của encoder bỏ sót sai số hệ thống còn lại (mục 2 ý 3). Phản ví dụ: mục 5 câu 4.
 
 ### 4. Thuật ngữ
 
@@ -1932,13 +1890,6 @@ Checklist khi đọc một kết quả ước lượng trạng thái / hợp nh�
    Mỗi cập nhật kéo ước lượng về vị trí 6 cm phía sau: sai có hệ thống, không phải nhiễu, nên P (vốn giả định nhiễu trắng) không phản ánh. Cách đúng: đóng dấu thời gian phép đo ở lúc chụp (F4.6) và cho bộ lọc áp nó vào đúng thời điểm (nhiều thư viện có cơ chế lưu lịch sử để làm việc này [tự đo theo thư viện]).
 
    </details>
-4. **[Liên ngành]** Đồng hóa dữ liệu trong dự báo thời tiết (data assimilation) và Kalman: giống và khác ở đâu?
-   <details><summary>Hướng nghĩ</summary>
-
-   Cùng cấu trúc dự đoán–cập nhật với covariance. Khác: trạng thái hàng trăm triệu chiều, không lưu được P đầy đủ; dùng ensemble (EnKF) hoặc tối ưu theo cửa sổ thời gian (4D-Var). Họ gặp đúng bài toán "Q gánh sai số mô hình" ở quy mô lớn nhất.
-
-   </details>
-
 ### 8. Liên kết ra ngoài
 
 - **Điều hướng Apollo và GPS/INS.** Từ Apollo đến máy bay dân dụng hiện nay, hợp nhất quán tính (trôi, liên tục) với vô tuyến/GPS (tuyệt đối, thưa, có lúc mất) theo đúng cấu trúc odometry + marker của bạn [chuẩn]. Giống: hai nguồn bổ sung, covariance quyết định trộn. Khác: IMU hàng không trôi chậm hơn odometry bánh xe nhiều bậc, và hệ thống được chứng nhận với kiểm tra tính toàn vẹn (integrity monitoring) — phát hiện khi một nguồn nói dối.
@@ -2000,7 +1951,7 @@ T_A_B =  │                │            T_A_C = T_A_B · T_B_C      (chỉ s�
          └ 0 0 0     1    ┘            T_B_A = (T_A_B)⁻¹ = [Rᵀ, −Rᵀt; 0, 1]
 ```
 
-Quy ước đặt tên `T_cha_con` với chỉ số "khớp nhau" khi nhân là cách rẻ nhất để không sai thứ tự [chuẩn: cách viết của Tedrake trong *Robotic Manipulation*, và nhiều thư viện]. Nhân ma trận **không giao hoán**: đổi thứ tự là đổi kết quả.
+Quy ước đặt tên `T_cha_con` với chỉ số "khớp nhau" khi nhân là cách rẻ nhất để không sai thứ tự [chuẩn: cùng tinh thần với ký hiệu monogram `X_AB` của Drake mà Tedrake dùng trong *Robotic Manipulation*]. Nhân ma trận **không giao hoán**: đổi thứ tự là đổi kết quả.
 
 **Cây TF của robot** (REP-105, `CONVENTIONS.md` mục 2):
 
@@ -2034,7 +1985,7 @@ Thứ tự thành phần là bẫy data infra kinh điển: ROS `geometry_msgs/Q
 
 **Chấm mô hình:**
 
-- *"Quaternion là bốn góc."* **SAI.** Nó là (sin(θ/2)·trục, cos(θ/2)) cho phép quay góc θ quanh một trục đơn vị. Phản ví dụ: quay 90° quanh z là (0, 0, 0,707, 0,707), không có thành phần nào bằng 90.
+- *"Quaternion là bốn góc."* **SAI.** Nó là (sin(θ/2)·trục, cos(θ/2)) cho phép quay góc θ quanh một trục đơn vị. Phản ví dụ: quay 180° quanh trục x là (x, y, z, w) = (1, 0, 0, 0), không có thành phần nào bằng 180.
 - *"Robot chạy trên sàn phẳng, chỉ cần yaw, góc Euler là đủ."* **ĐÚNG MỘT PHẦN.** Với pose 2D của base thì đúng (một góc, không có gimbal lock). Gãy khi xử lý IMU (gắn nghiêng, đo cả roll/pitch), camera (optical frame xoay so với body), hoặc ghép dữ liệu 3D từ dataset ngoài.
 - *"Nội suy hướng giữa hai mẫu bằng trung bình từng thành phần là được."* **ĐÚNG MỘT PHẦN.** Xem khẳng định (c) ở mục 6.
 
@@ -2197,7 +2148,7 @@ Checklist khi đọc một dữ liệu/khẳng định có vị trí hoặc hư�
 | Hamilton, 16/10/1843, cầu Brougham | [chuẩn] | |
 | Gimbal lock của IMU Apollo; câu đùa "fourth gimbal" của Collins | [chuẩn] | Bản ghi Apollo 11; được trích nhiều nơi, kiểm nguyên văn nếu cần dẫn |
 | ROS `geometry_msgs/Quaternion` thứ tự (x, y, z, w); scipy `as_quat()` mặc định (x, y, z, w) | [spec] | Định nghĩa message ROS 2; tài liệu scipy (từ 1.14 có tham số `scalar_first`) — kiểm theo phiên bản |
-| MuJoCo `qpos` của freejoint dùng (w, x, y, z) | [spec] | Tài liệu MuJoCo, mục freejoint / quaternion; [tự đo] theo phiên bản |
+| MuJoCo `qpos` của freejoint dùng (w, x, y, z) | [spec] + [tự đo] | `qpos0` của một freejoint ở mujoco 3.15.0 là (0, 0, 0, 1, 0, 0, 0): vị trí rồi quaternion w trước |
 | REP-103 optical frame: z ra trước, x phải, y xuống | [spec] | REP-103; `CONVENTIONS.md` mục 2 |
 | Bảng mục 5 | [đã chạy] | scipy 1.18.1 |
 
@@ -2206,7 +2157,7 @@ Checklist khi đọc một dữ liệu/khẳng định có vị trí hoặc hư�
 ### 11. Đọc thêm và tự kiểm tra
 
 - **Nguồn gốc:** REP-103 và REP-105 (ros.org/reps), mỗi cái vài trang.
-- **Giải thích:** R. Tedrake, *Robotic Manipulation* (ghi chú bài giảng MIT, miễn phí trực tuyến), chương về pick-and-place, phần ký hiệu không gian (spatial algebra, quy ước `X^A_B`).
+- **Giải thích:** R. Tedrake, *Robotic Manipulation* (ghi chú bài giảng MIT, miễn phí trực tuyến), chương về pick-and-place, phần ký hiệu không gian (spatial algebra, quy ước monogram `X_AB` của Drake: pose của B đo trong A).
 - **Đào sâu (tùy chọn):** J. Solà, *Quaternion kinematics for the error-state Kalman filter* (arXiv 1711.02508, 2017), chương 1–2.
 - **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao đọc nhầm thứ tự quaternion nguy hiểm hơn đọc nhầm endianness; (2) vẽ lại cây TF; (3) câu hỏi:
 
@@ -2218,3 +2169,27 @@ Checklist khi đọc một dữ liệu/khẳng định có vị trí hoặc hư�
   </details>
 
 ---
+
+## Tranh luận đang mở trong nghề
+
+**1. Randomize rộng hay đo chính xác (và real-to-sim)?** Một phía (truyền thống OpenAI Dactyl, ADR) cho rằng thế giới quá nhiều chi tiết để đo; cứ randomize rộng, cho policy có bộ nhớ để tự thích nghi, và trả giá bằng tính toán. Phía kia (Tan và cộng sự 2018, Hwangbo và cộng sự 2019, nhóm làm real-to-sim và sim khả vi) cho rằng vài kênh quyết định (actuator, trễ) phải đo hoặc học từ dữ liệu thật, randomize chỉ phần còn lại, vì DR rộng mua độ bền bằng tính bảo thủ (K6 Bài 14). Điểm chưa ngã ngũ: khi nào chi phí đo vượt chi phí tính toán, và ai chịu trách nhiệm cho kênh không có trong sim (F6.5 sơ đồ, dòng cuối). Viên nang F6.4 và F6.5 cho bạn công cụ để tự trả lời câu đó cho robot của mình thay vì chọn phe.
+
+**2. Mô hình thế giới học từ dữ liệu có cần V&V như simulator vật lý không?** Các "world model" và simulator học (neural) dự đoán khung hình và trạng thái tiếp theo từ dữ liệu. Một phía coi chúng là mô hình như mọi mô hình: cần miền hiệu lực, verification của pipeline, validation trên dữ liệu không dùng khi train, và báo bất định (F6.1, F6.2). Phía kia cho rằng khung V&V cổ điển giả định phương trình tường minh, nên với mô hình học thì chỉ còn eval thống kê trên tập giữ kín (F2.8) là có ý nghĩa. Chưa có chuẩn nào được chấp nhận rộng cho việc này trong robotics; NASA-STD-7009B và ASME V&V 40 đều viết cho mô hình có cấu trúc rõ [spec: phạm vi của hai chuẩn; kiểm bản mới nhất].
+
+**3. Tiếp xúc cứng hay mềm: mô hình nào "đúng" hơn?** Phía ràng buộc cứng (bài toán bù, LCP) nói vật rắn thì không lún, và mô hình mềm tạo ra hiện vật (lún, creep, nảy sai). Phía mềm (MuJoCo, và mô hình tiếp xúc "hydroelastic" của Drake theo Elandt và cộng sự 2019) nói vật thật đều có biến dạng, mô hình mềm đặt chỉnh (well-posed) và khả vi, còn ràng buộc cứng gặp nghịch lý Painlevé và nhập nhằng phân bố lực (F6.3). Cuộc tranh luận thật ra là về **miền**: mô hình nào đúng hơn cho cặp vật liệu, tốc độ và câu hỏi nào. Đó là lý do K6 Bài 17 đo theo kênh thay vì chọn engine theo uy tín.
+
+**4. Khung chấm độ tin cậy (7009, V&V 40) có đáng cho robot học máy không?** Một phía (người từ hàng không, y tế) cho rằng không có hồ sơ độ tin cậy thì "sim nói PASS" là lời hứa suông; tám yếu tố của 7009 (F6.2) đều có tương đương rẻ trong data infra (lineage, độ nhạy, lịch sử dùng). Phía kia (nhóm nghiên cứu chạy nhanh) cho rằng chi phí tài liệu hóa giết tốc độ lặp và phần lớn quyết định trong nghiên cứu rủi ro thấp. Chuẩn 7009B tự nó đã đi theo hướng "mức nghiêm ngặt tỉ lệ rủi ro của quyết định"; câu hỏi mở là ai đặt mức rủi ro cho một robot chạy trong văn phòng có người.
+
+## Bài kiểm tra cuối khóa nền — hồ sơ độ tin cậy cho sim twin của robot (8–12h, làm dần)
+
+Gắn vào dự án thật: robot vi sai của K7 và sim twin ở C11. Làm được **trước khi có robot** bằng cách dùng một "thật giả" (một MJCF hoặc một mô hình Python với tham số ẩn do script có seed bạn không xem sinh ra, như K6 Bài 14 bước 6); khi có robot, thay "thật giả" bằng số đo. Nộp một thư mục `lab/f6-credibility/` gồm:
+
+1. **Thẻ mô hình (F6.1).** Bảng sáu thành phần (phương trình, giả định, tham số, miền, dung sai, mục đích) cho ba mô hình: odometry, motor bánh, sim twin. Mỗi tham số có nguồn (đo / fit / mặc định) và điều kiện đo. Đánh dấu ít nhất một cạnh dốc dự kiến và cách bạn sẽ đo nó.
+2. **Verification (F6.2, F6.3).** Ba phép thử tự động trong CI: (a) sim đi thẳng không ma sát so với `x = v·t`; (b) quay tại chỗ so với `θ = ω·t` với ω tính từ B; (c) quét dt (2 ms, 1 ms, 0,5 ms) cho kịch bản dừng khẩn, báo bậc hội tụ quan sát được ở thời điểm không đặc biệt và chênh lệch so với dt mặc định. Ghi tham số tiếp xúc **hiệu dụng** (refsafe).
+3. **System ID (F6.4).** Nhận dạng K/J, b/J, c/J (và trễ nếu đo được) của motor bằng PRBS hoặc chirp ở vòng hở; báo cond(X) và Cov(θ̂); validation trên một tín hiệu khác. Nói rõ tham số nào không nhận dạng được về cấu trúc và bạn lấy nó từ đâu.
+4. **Gap theo kênh (F6.5).** Cho hai hiện tượng (dừng khẩn từ 0,4 m/s; bậc vận tốc 0 → 0,3 m/s): gap danh định, thêm-một và bớt-một cho ít nhất ba kênh, kèm câu "các phần không cộng lại vì…".
+5. **Bất định và hỏng (F6.6).** Monte Carlo quãng dừng (hoặc một tiêu chí an toàn khác của robot bạn) trên phân bố tham số có nguồn; báo P(vượt) kèm sai số chuẩn, và tham số dẫn hỏng (lệch trung bình ở mẫu hỏng) so với tham số dẫn phương sai.
+6. **Ước lượng trạng thái (F6.7).** Kalman 1D hoặc cấu hình `robot_localization` với Q, R từ số đo của mục 3 và C6; báo tỉ lệ sai số thật trong ±2σ trên một lần chạy có điểm ground truth, và trung bình innovation chuẩn hóa.
+7. **Audit hình học (F6.8).** Script kiểm tự động trên một file MCAP: mọi message có `frame_id`; quaternion chuẩn hóa; gia tốc kế quay về `base_link` khi đứng yên chỉ (0, 0, +g) trong dung sai bạn tự tính.
+
+**PASS** khi: mỗi mục có `prediction.md` commit **trước** khi chạy; mỗi con số có nhãn (đo / fit / mặc định / [ước lượng]); mục 2 chạy trong CI; mục 3 có validation trên dữ liệu không dùng để fit; mục 4–6 có độ bất định đi kèm; và có một trang `README.md` một màn hình viết theo checklist mục 6 của F6.2: bằng chứng nào là verification, calibration, validation, và miền đã kiểm là gì. **FAIL action:** mục nào thiếu độ bất định hoặc thiếu dữ liệu B thì ghi `CHƯA RÕ` trong README thay vì bỏ trống, và mở issue cho nó. Một hồ sơ trung thực có ba mục `CHƯA RÕ` giá trị hơn một hồ sơ "PASS hết" không có dữ liệu B.

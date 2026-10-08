@@ -81,7 +81,6 @@ Dòng dữ liệu mới: ESP32 đọc INA226 qua I2C ở ~1,5 kHz → USB serial
 | Dây hoặc bo bốc khói khi đang nối pin | Công tắc chính OFF nếu với tới mà không đưa tay qua khói; nếu không: rút XT60 bằng kìm cách điện, hoặc rời đi. Sau đó đợi nguội ≥15 phút | Không giật dây bằng tay trần; không cắt dây đang mang dòng bằng kìm |
 | Cầu chì nhánh đứt | Công tắc OFF → rút pin → đo điện trở nhánh đó → tìm chập → ghi vào sổ | Không thay ngay cầu chì mới rồi bật lại "xem sao" |
 | Pin nóng khi đang sạc | Rút phích sạc ở ổ tường (không chạm pin) → để pin trong túi/hộp, theo dõi từ xa ≥1 h | Không tháo dây sạc khỏi pin nếu pin đang bốc khói |
-| Mini PC tắt đột ngột khi robot chạy | Không phải sự cố an toàn ngay, nhưng là dấu hiệu BMS cắt hoặc DC-DC sụt. Ghi lại, đo ở Bài C1.5 | Không tăng ngưỡng bảo vệ để "hết tắt" |
 
 ## 2. BOM chặng
 
@@ -221,8 +220,6 @@ Thứ tự: khái niệm pin → nhận pin (chưa nối gì) → đo tải từ
 | Toàn bộ hệ tắt rồi tự bật lại sau vài giây | BMS quá dòng (OC) cắt rồi tự phục hồi | Dòng đỉnh log so với ngưỡng OC trên thông số BMS | Giảm dòng đỉnh (ramp, giới hạn dòng driver) hoặc pack có BMS ngưỡng cao hơn; KHÔNG bỏ BMS |
 | ESP32 reset khi relay đóng/nhả | Thiếu diode dập cuộn relay; GND ESP32 đi chung dây với dòng relay/motor | Đọc `esp_reset_reason()` (→ K3 Bài 6); xem dây GND | Diode song song cuộn; dây GND riêng về điểm sao |
 | Cầu chì nhánh motor đứt khi bật bóng đèn | Cầu chì loại nhanh, dòng khởi động bóng nguội vượt | Log INA226 dòng đỉnh × thời gian; so với bảng thời gian–dòng (Bài C1.3) | Cầu chì đúng loại/đúng cỡ cho dây; không tăng quá sức chịu dây |
-| XT60 ấm sau 10 phút ở 3 A | Mối hàn nguội, chân XT60 bị lỏng do nhiệt khi hàn | Đo sụt áp qua đầu nối ở dòng cố định (đồ gá C0) | Hàn lại; thay đầu |
-| INA226 đọc dòng âm | IN+ và IN− đảo; hoặc shunt đặt phía về | Đọc giá trị khi không tải và khi có tải | Đảo hai dây sense; đặt shunt phía + |
 | INA226 bão hòa ở ~0,8 A | Đang dùng shunt 0,1 Ω có sẵn trên module | Đọc chữ trên điện trở (R100 = 0,1 Ω) | Tháo shunt module, dùng shunt rời (Bài C1.5) |
 | Áp ra buck 5 V đúng khi không tải, tụt khi WiFi ESP32 bật | Module buck rẻ, dây 5 V dài/mảnh, Dupont | Đo áp tại chân ESP32, không tại module | Dây ngắn hơn, JST thay Dupont, tụ 100 µF sát ESP32 |
 | Tia lửa to mỗi lần cắm XT60 | Tụ đầu vào DC-DC và tụ 1000 µF nạp tức thời | Nghe/nhìn; công tắc chính ON hay OFF lúc cắm? | Cắm khi công tắc OFF (công tắc gánh tia lửa); tụ lớn hơn nữa thì cần mạch pre-charge (C10.1) |
@@ -357,8 +354,6 @@ So ba lựa chọn cho robot này (số cell điển hình `[ước lượng]`; 
 | 🟢 | BMS: OV/UV/OC/SC | Bốn ngưỡng cắt cơ bản | "Bảo vệ mọi thứ" |
 | 🟢 | Thermal runaway | Cell tự nóng làm phản ứng tỏa nhiệt nhanh hơn, không tự dừng | "Cháy pin thông thường", dập là xong |
 | 🟡 | Cân bằng thụ động/chủ động | Xả cell cao qua điện trở / chuyển năng lượng giữa cell | "Cân bằng = sạc" |
-| 🟡 | Cổng chung / cổng riêng (common/separate port) | BMS dùng chung hay tách cực sạc và cực xả | Không quan trọng (quan trọng: cổng riêng thì đường xả có thể không có bảo vệ quá áp sạc) |
-| 🔴 | Hóa học điện cực chi tiết (SEI, mạ lithium) | Cơ chế lão hóa bên trong | Cần cho bài này |
 
 ### 5. Dự đoán
 
@@ -368,23 +363,7 @@ Với pack bạn **định mua** (đọc từ trang bán: hóa học, xSyP, Ah; 
 3. Khi bạn đo OCV một pack mới nhận, nó nằm ở đâu trong dải (shop thường giao pin ở mức sạc lưu kho)?
 4. Đo R_pack thô bằng điện trở 10 Ω 50 W: ΔV dự kiến bao nhiêu mV, và UT33D+ ở thang 20 V (độ phân giải 10 mV `[spec — tra manual]`) có đo nổi không?
 
-```python
-# [đã chạy] So ba cấu hình pack: dải áp, năng lượng, dòng ngắn mạch thô
-# Số cell là [ước lượng] điển hình; thay bằng số trên nhãn pack/datasheet cell của bạn
-packs = {
-    # tên: (S, P, V_min_cell, V_nom_cell, V_max_cell, Ah_cell, R_cell_ohm)
-    "4S2P NMC 18650": (4, 2, 3.0, 3.6, 4.20, 3.0, 0.030),
-    "4S2P LFP 26650": (4, 2, 2.5, 3.2, 3.65, 3.0, 0.020),
-    "3S2P NMC 18650": (3, 2, 3.0, 3.6, 4.20, 3.0, 0.030),
-}
-R_wire = 0.010   # ohm: dây + đầu nối từ pack tới chỗ chập [ước lượng]
-print(f"{'pack':16s} {'Vmin':>5s} {'Vnom':>5s} {'Vmax':>5s} {'Wh':>5s} {'I_sc(A)':>8s}")
-for name, (S, P, vmin, vnom, vmax, ah, rc) in packs.items():
-    R_pack = rc * S / P                  # S cell nối tiếp cộng R, P nhánh song song chia R
-    wh = S * vnom * P * ah
-    i_sc = S * vnom / (R_pack + R_wire)  # chập ngay đầu pack, chưa tính BMS cắt
-    print(f"{name:16s} {S*vmin:5.1f} {S*vnom:5.1f} {S*vmax:5.1f} {wh:5.0f} {i_sc:8.0f}")
-```
+Công thức (mô phỏng dây nóng khi chập đã có ở → K7 C0.2, không lặp): V_pack = S·V_cell; Wh = S·V_nom·P·Ah_cell; R_pack = R_cell·S/P; I_chập ≈ S·V_nom/(R_pack + R_dây). Tính cho cả ba cấu hình ở bảng so sánh, số cell điển hình 3,0 Ah, R_cell 20–30 mΩ, R_dây 10 mΩ `[ước lượng]` nếu chưa có datasheet.
 
 Mẫu `prediction.md`:
 ```markdown
@@ -402,13 +381,13 @@ Mẫu `prediction.md`:
 2. **Đo OCV** sau khi pack nghỉ ≥1 h ở nhiệt độ phòng: UT33D+ thang 20 V DC (sai số tra manual, cỡ ±(0,5% + vài digit) `[spec — tra manual UT33D+]`), que đo vào **trong** đầu nối, không chạm hai cực cùng lúc bằng que. Ghi `quantity=ocv_pack`.
 3. **Đo áp sạc không tải**, ghi `quantity=charger_vout`. Sạc lần đầu theo C1.6.
 4. **Đo R_pack thô** (sau khi sạc, pack nghỉ 1 h): làm một dây tải: XT60 đực → 18 AWG → điện trở nhôm 10 Ω 50 W **bắt lên tấm nhôm hoặc đế kim loại** → về. Đo OCV ngay trước; nối tải 10 s; đọc V trong lúc tải; tháo. R ≈ (OCV − V_tải)/(V_tải/10 Ω). Lặp 3 lần, cách nhau 1 phút. Ghi cả độ phân giải: ΔV chỉ vài digit thì kết quả có bất định lớn (→ F1.1, bất định loại B = độ phân giải/√3). Số chính xác hơn có ở Bài C1.5 bằng INA226.
-5. **Kiểm thông số BMS** (đọc, không thử): ngưỡng OC xả, trễ cắt OC, có SC không, có NTC không, cổng chung hay riêng. Thiếu thông số nào → ghi `unknown` vào `decisions.md`, không đoán.
+5. **Kiểm thông số BMS** (đọc, không thử): ngưỡng OC xả, trễ cắt OC, có SC không, có NTC không, cổng chung hay riêng (BMS dùng chung hay tách cực sạc và cực xả). Thiếu thông số nào → ghi `unknown` vào `decisions.md`, không đoán.
 
 ### 7. Số phải ra
 
 <details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
 
-Chạy code phần 5 với số điển hình:
+Với số điển hình (tính bằng công thức phần 5, đã kiểm bằng script):
 
 | pack | V cạn | V danh định | V đầy | Wh | I chập (A) |
 |---|---|---|---|---|---|
@@ -457,19 +436,11 @@ Chạy code phần 5 với số điển hình:
    "Ít nguy hiểm hơn" khác "không nguy hiểm": LFP vẫn có năng lượng lớn, vẫn cháy dây khi chập ngoài, khí thoát ra vẫn độc và dễ cháy. Quy tắc không phụ thuộc hóa học rẻ hơn quy tắc có điều kiện mà người mệt phải nhớ.
 
    </details>
-5. **[Liên ngành]** 787 (C0.2) sửa bằng cách chứa hậu quả (hộp thép, thoát khí), không loại bỏ nguyên nhân. Ở hệ thống phần mềm của bạn, đâu là chỗ bạn đã chọn "chứa" thay vì "ngăn"?
-   <details><summary>Hướng nghĩ</summary>
-
-   Bulkhead, sandbox, cgroup memory limit, giới hạn blast radius của deploy. Chứa là đúng khi không thể chứng minh nguyên nhân đã hết, như chập trong cell.
-
-   </details>
 
 ### 10. Liên kết ra ngoài
 
 - **Điện tử tiêu dùng (Note 7):** giống: một lỗi sản xuất lọt qua QA đi tới hàng triệu thiết bị; Samsung sau đó công bố quy trình kiểm pin 8 bước. Khác: bạn không có QA nhà máy, "QA" của bạn là mua pack có nguồn gốc, kiểm khi nhận và sạc có người trông.
 - **Hàng không (787, C0.2):** giống: lỗi một thành phần không được phép lan; khác: phần mềm có thể restart thành phần hỏng, cell đã runaway thì không có "restart", chỉ có chứa và thoát khí.
-- **Lưu trữ điện lưới (BESS):** các trạm pin quy mô MW chuyển nhiều sang LFP vì lý do an toàn nhiệt và tuổi thọ, chấp nhận mật độ năng lượng thấp hơn `[ước lượng — xu hướng ngành]`; cùng trao đổi bạn vừa làm ở bảng so sánh, ở quy mô lớn hơn triệu lần.
-- **Y sinh (máy tạo nhịp):** dùng pin sơ cấp lithium (không sạc), hóa học chọn vì đường xả có thể dự báo được để báo "sắp thay pin" trước nhiều tháng. Giống: SOC đọc được từ áp là một tính năng an toàn. Khác: LFP của bạn có đường phẳng, đọc áp gần như vô ích ở giữa dải.
 
 ### 11. Độ tin cậy và sửa lỗi
 
@@ -537,7 +508,6 @@ Power budget có **ba con số khác nhau cho mỗi tải**, phục vụ ba quy�
 | Capacity planning: tổng request CPU/RAM của pod ≤ node | Tổng P TB ≤ năng lượng pack / thời gian; tổng I liên tục ≤ BMS, cầu chì | Kubernetes **throttle** pod vượt limit (chậm đi, còn sống). Nguồn không throttle: vượt ngưỡng là **cắt** toàn bộ, kể cả tải vô tội (mini PC) | Budget theo kiểu "overcommit vì không phải lúc nào cũng full" → mỗi lần đỉnh trùng là mini PC sập |
 | p50/p99 latency | P TB / I đỉnh | Latency p99 làm chậm một request. Dòng đỉnh làm **mọi** tải trên cùng nguồn sụt áp cùng lúc (tương quan hoàn toàn) | Tối ưu theo trung bình, bỏ qua đỉnh 50 ms quyết định brownout |
 | Burst credit (EC2 T-series) | Pin cho dòng đỉnh lớn hơn liên tục trong thời gian ngắn | Burst credit có số dư đọc được. "Credit" của dây và cầu chì là **nhiệt**, không có API, chỉ có đường cong thời gian–dòng (Bài C1.3) | Coi dòng đỉnh ngắn là "free" cho cả cầu chì loại nhanh |
-| Load test trước khi go-live | Đo từng khối trên nguồn bàn trước khi lên pin | Load test có traffic replay; ở đây bạn phải **tự tạo kịch bản tải** (stress CPU, bật tắt tải giả) và kịch bản đó là một giả định cần ghi lại | Đo mini PC ở idle, robot thật chạy perception → budget lệch 3–4 lần |
 
 **Chấm mô hình:**
 - *"Power budget = cộng công suất trên nhãn các thiết bị."* — **SAI.** Nhãn adapter 36 W là định mức nguồn, không phải mức ăn; nhãn motor không ghi dòng khởi động/kẹt. Phản ví dụ: adapter mini PC 12 V 3 A, mini PC idle chỉ cỡ 1/5 con số đó `[ước lượng — đo ở phần 6]`; motor "12 V 0,3 A" (dòng không tải) kẹt ăn gấp nhiều lần (C3).
@@ -647,9 +617,7 @@ Số đo của bạn, khoảng hợp lý `[ước lượng]`:
 | Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
 |---|---|---|---|
 | Mini PC không boot trên nguồn bàn, nguồn báo CC | I_set dưới dòng khởi động (tụ đầu vào + boot) | Tăng I_set từng 0,5 A | Ghi I_set tối thiểu boot được: đó là một số đo |
-| Mini PC idle cao bất thường (>12 W) | Quạt/iGPU, màn hình HDMI cắm, BIOS hiệu năng cao | Rút HDMI, kiểm BIOS | Ghi cấu hình đo cùng số đo |
 | Số dòng nhảy liên tục, không đọc được | Tải biến động nhanh hơn màn hình | Đọc 10 lần, lấy trung vị + min/max | Chấp nhận `inconclusive` cho đỉnh, đo lại ở C1.5 |
-| Runtime tính ra quá ngắn | Pack nhỏ hoặc kịch bản quá nặng | Tải nào chiếm % lớn nhất | Đổi kịch bản/pack; ghi `decisions.md` |
 
 ### 9. Câu hỏi ngược
 
@@ -671,18 +639,11 @@ Số đo của bạn, khoảng hợp lý `[ước lượng]`:
    Pin lạnh hoặc già (R tăng → sụt sâu hơn ở cùng đỉnh), pin gần cạn (tải công suất kéo dòng lớn hơn), motor kẹt vào thảm (đỉnh dài thành liên tục). Câu chuyện iPhone ở Bài C1.5 là đúng điều này.
 
    </details>
-4. **[Phản biện]** "Đo làm gì, lấy số datasheet nhân 1,5 là đủ." Khi nào câu này đúng?
-   <details><summary>Hướng nghĩ</summary>
-
-   Đúng cho linh kiện có datasheet đầy đủ và tải ổn định. Sai cho mini PC (hành vi phụ thuộc phần mềm), motor kẹt (datasheet hàng phổ thông hay thiếu) và mọi đỉnh ngắn. Hệ số 1,5 không có cơ sở khi không biết phân bố.
-
-   </details>
 
 ### 10. Liên kết ra ngoài
 
 - **Không gian (Philae):** giống: budget quyết định chạy lệnh nào khi năng lượng cạn. Khác: Philae không sạc được và không có người tới thay pin; robot của bạn có, nên câu hỏi chuyển từ "còn đủ không" sang "về sạc lúc nào" (C10).
 - **Điện lưới:** nhà máy điện lập kế hoạch theo **đỉnh** phụ tải (công suất lắp đặt) và theo **năng lượng** (nhiên liệu): đúng hai trục P đỉnh / Wh. Khác: lưới có nhiều nguồn chia tải; robot chỉ có một pack.
-- **Data center:** công suất điện đặt hàng theo đỉnh của rack, không theo trung bình; vượt là nhảy aptomat cả rack. Giống hệt "chạm BMS sập tất cả".
 
 ### 11. Độ tin cậy và sửa lỗi
 
@@ -789,7 +750,6 @@ for name, n, L, i_avg, i_pk, v, r_extra in branches:
 |---|---|---|---|
 | Timeout ở mỗi hop, ngắn dần về phía client | Cầu chì nhỏ dần từ pin ra nhánh (15 → 10 → 5 → 2 A) | Timeout so thời gian; cầu chì so **I²t**, và hai cầu chì nối tiếp có thể đứt cùng lúc khi chập nặng (không có "phối hợp" nếu không chọn kỹ) | Chập nhánh C làm đứt F0, sập cả robot thay vì một nhánh |
 | Health check phát hiện service chết | Cầu chì phát hiện quá dòng | Mối nối lỏng tóe lửa ở dòng bình thường: không quá dòng, cầu chì "khỏe", vẫn cháy (Swissair) | Tin cầu chì thay kiểm mối nối (C0.3) và kiểm nhiệt (Gate) |
-| Network latency do khoảng cách | Sụt áp do R dây × I | Latency cộng thêm; sụt áp còn **đổi hành vi tải**: DC-DC kéo thêm dòng để bù, làm sụt thêm | Tính sụt áp ở dòng TB, quên dòng đỉnh |
 
 **Chấm mô hình:**
 - *"Cầu chì to hơn thì an toàn hơn, khỏi đứt vặt."* — **SAI.** Cầu chì to hơn sức chịu dây biến dây thành cầu chì. Phản ví dụ: F 15 A trên dây 22 AWG; chập ở 12 A: cầu chì sống mãi, dây nóng chảy vỏ.
@@ -804,7 +764,6 @@ for name, n, L, i_avg, i_pk, v, r_extra in branches:
 | 🟢 | I²t, đường cong thời gian–dòng | Cầu chì đứt theo năng lượng nhiệt | "Cầu chì 10 A đứt ở 10,1 A" |
 | 🟢 | Interrupting rating | Dòng lớn nhất cầu chì cắt được an toàn ở áp định mức | Định mức dòng |
 | 🟡 | Phối hợp bảo vệ (selectivity) | Chỉ cầu chì gần lỗi nhất đứt | Tự có khi cầu chì nhỏ dần |
-| 🟡 | Strain relief | Đỡ dây để lực kéo/rung không dồn vào mối nối | Trang trí |
 
 ### 5. Dự đoán
 
@@ -843,7 +802,6 @@ Thời gian đứt cầu chì 2 A ở 5 A: __ s (khoảng __ – __ s)
 | Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
 |---|---|---|---|
 | Cầu chì không đứt sau 30 s | Nguồn bàn đã hạ xuống dưới 5 A (V_set quá thấp để giữ 5 A qua R mạch) | Đọc chế độ CV/CC trên màn | Tăng V_set vừa đủ để vào CC |
-| Đế cầu chì nóng hơn cầu chì | Tiếp xúc lưỡi–đế kém, đế rẻ | Đo sụt áp qua đế | Đế khác; không bẻ cong lưỡi |
 | Sụt áp một mối gấp đôi mối khác cùng loại | Mối hàn nguội, sợi đứt | So với đối chứng dây nguyên | Làm lại mối |
 
 ### 9. Câu hỏi ngược
@@ -864,12 +822,6 @@ Thời gian đứt cầu chì 2 A ở 5 A: __ s (khoảng __ – __ s)
    <details><summary>Hướng nghĩ</summary>
 
    R hiệu dụng của đường nguồn = ΔV/ΔI giữa INA226 ở pack và áp đo ở tải, theo thời gian. Mối lỏng làm R tăng dần, thường trước khi gây sự cố. Cần ít nhất hai điểm đo áp.
-
-   </details>
-4. **[Liên ngành]** Nhà dân dùng aptomat; robot dùng cầu chì. Vì sao không dùng aptomat DC nhỏ cho robot?
-   <details><summary>Hướng nghĩ</summary>
-
-   Được, nếu ghi định mức DC đúng áp và cắt được dòng chập của pack; đổi lại khối lượng, giá, và aptomat AC rẻ thường không cắt DC an toàn (hồ quang DC không tự tắt qua điểm 0).
 
    </details>
 
@@ -894,7 +846,6 @@ Thời gian đứt cầu chì 2 A ở 5 A: __ s (khoảng __ – __ s)
 
 - **Nguồn gốc:** Littelfuse, datasheet ATO Blade Fuse (0257); TSB Canada, *Aviation Investigation Report A98H0003* (tóm tắt).
 - **Giải thích:** K7 C0.2, C0.3.
-- **Đào sâu (tùy chọn):** ABYC E-11 (đi dây DC trên tàu thuyền) là chuẩn thực hành tốt cho hệ 12 V có pin, nhiều bảng cỡ dây công khai dựa trên nó — đọc bảng sụt áp 3%/10%.
 - **Tự kiểm tra:** (1) giải thích "cầu chì bảo vệ dây" trong 5 câu; (2) vẽ lại sơ đồ cầu chì nhánh; (3) Nhánh 5 V dây 22 AWG, tải 0,5 A TB, 1 A đỉnh: cầu chì 2 A hay 5 A?
   <details><summary>Đáp án</summary>
 
@@ -965,7 +916,6 @@ for vin in (16.8, 14.4, 13.0, 12.0, 10.0):   # tải công suất không đổi:
 |---|---|---|---|
 | Adapter/proxy chuyển giao thức | DC-DC chuyển "định dạng" áp | Proxy có thể từ chối request lỗi; DC-DC hết headroom thì **lặng lẽ cho ra áp thấp hơn**, tải nhận dữ liệu "sai" (áp thấp) mà không có lỗi trả về | Tin "có DC-DC thì 12 V luôn là 12 V" |
 | Retry storm khi service hồi phục | Dao động UVLO | Retry storm có backoff để dập. UVLO chỉ có hysteresis vài trăm mV `[ước lượng]`; R pack lớn hơn mức đó là dao động | Mini PC reboot vòng lặp lúc pin gần cạn, hỏng file |
-| Autoscaling theo tải | Tải công suất không đổi | Autoscaling thêm tài nguyên; ở đây "tài nguyên" (Wh, áp) **đang giảm** đúng lúc nhu cầu dòng tăng (vòng phản hồi dương) | Chọn DC-DC theo dòng ở áp danh định |
 
 **Chấm mô hình:**
 - *"Cần 12 V từ pin 12 V thì khỏi DC-DC."* — **SAI.** 4S LFP đầy 14,6 V, cạn ~10 V; mini PC nhận dải đó trực tiếp là ngoài thông số `[spec — nhãn adapter 12 V; dung sai đầu vào N100 không công bố, tự đo không được: không thử]`. `_KE-HOACH-K7.md` mục 5: không được để mini PC ăn trực tiếp pin không ổn áp.
@@ -1047,12 +997,6 @@ Code với số mẫu:
    η và nhiệt theo tải, Vout min trong mỗi đỉnh, gắn mã lô vào metadata robot. Phân phối theo lô, không trung bình chung.
 
    </details>
-4. **[Liên ngành]** Ổ cắm USB-C PD đàm phán áp trước khi cấp. Vì sao robot DIY ít làm thế?
-   <details><summary>Hướng nghĩ</summary>
-
-   PD giải quyết "nhiều thiết bị, một sạc"; robot là hệ đóng, áp cố định, thêm đàm phán là thêm một điểm hỏng. Một số mini PC đời mới nhận nguồn qua USB-C PD: khi đó phía robot cần nguồn PD source, đổi hẳn bài toán.
-
-   </details>
 
 ### 10. Liên kết ra ngoài
 
@@ -1081,3 +1025,331 @@ Code với số mẫu:
 
   </details>
 
+
+## Bài C1.5 — Lắp bo nguồn và đo dòng đỉnh (INA226 hoặc shunt) (5h)
+
+> **Vị trí:** C1.4 → **C1.5** → C1.6, Gate; log này thành `/battery` và `/power/raw` ở C5–C7 · **Cần trước:** C1.2, C1.4; K3 Bài 6 (đọc `reset_reason`, ADC nhanh); → F5.5 (lấy mẫu), → F1.2 (phân bố, p99) · **Sau bài này bạn quyết định được:** cột `i_peak` của budget có còn là ước lượng không; BMS/DC-DC/cầu chì có chịu được đỉnh thật không; và tần số lấy mẫu nào đủ để thấy đỉnh.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Cuối 2016, nhiều iPhone 6 và 6s tự tắt khi pin còn 30–40%. Tháng 2/2017 Apple giải thích: pin lithium-ion kém khả năng đáp ứng **dòng đỉnh** khi lạnh, khi mức sạc thấp, hoặc khi già; một đỉnh tải của CPU kéo áp xuống dưới ngưỡng và thiết bị tắt để bảo vệ linh kiện. Bản iOS 10.2.1 thêm quản lý hiệu năng lúc tải đỉnh, giảm số lần tắt hơn 80% trên iPhone 6s `[chuẩn — thông báo Apple 2/2017, TechCrunch thuật lại]`. Cuối 2017, khi người dùng phát hiện máy bị làm chậm, Apple xin lỗi công khai và giảm giá thay pin `[chuẩn]`.
+
+Trung bình dòng của điện thoại không đổi. Thứ thay đổi là **đỉnh** gặp **R trong tăng**. Công cụ đo trung bình (pin còn bao nhiêu %, màn nguồn bàn, đồng hồ vạn năng) không thấy gì bất thường. Robot của bạn có đúng cấu trúc đó, với motor thay CPU.
+
+### 2. Mô hình tư duy
+
+Mỗi dụng cụ đo là một **bộ lọc + bộ lấy mẫu**. Thứ bạn đọc là trung bình trong cửa sổ tích phân, lấy mỗi chu kỳ một lần:
+
+```
+ dòng thật   ____╱▔▔╲_____________          (đỉnh ~40 ms)
+ DMM ~3 Hz   [========= 333 ms =========]   → một số trung bình, đỉnh bị "pha loãng"
+ INA226 avg16 [35 ms][35 ms][35 ms]          → thấy có gì đó, đỉnh thấp hơn thật
+ INA226 1,1ms |||||||||||||||||||||           → thấy hình dạng đỉnh
+              shunt│bus│shunt│bus│…          ← ở chế độ shunt+bus, hai kênh LẦN LƯỢT, không đồng thời
+```
+
+INA226 `[spec — TI INA226 datasheet, SBOS547]`: đo áp trên shunt (±81,92 mV, LSB 2,5 µV) và áp bus (0–36 V, LSB 1,25 mV); thời gian chuyển đổi mỗi kênh chọn trong 140 µs … 8,244 ms; trung bình 1 … 1024 mẫu; chu kỳ có kết quả ≈ (t_shunt + t_bus) × số trung bình. ADC tích phân trong t_conv, nên nó tự lọc gợn PWM tần số cao, nhưng không bỏ sót đỉnh dài hơn t_conv.
+
+UT33D+ `[spec — manual/thông số nhà bán: thang DC 2000 µA / 20 mA / 200 mA / 10 A; 10 A có cầu chì riêng và giới hạn thời gian đo trong manual; tốc độ cập nhật màn hình vài lần/giây — tự kiểm manual]`: thang 10 A đủ **lớn** cho dòng robot nhưng quá **chậm** cho đỉnh, và phải cắm que vào lỗ 10 A, nối tiếp vào mạch: một mối nối tạm trên đường dòng lớn.
+
+**Chọn shunt:** R_shunt × I_max ≤ 81,92 mV. Module INA226 bán sẵn hay gắn shunt 0,1 Ω → I_max ≈ 0,82 A, không dùng được cho robot. Shunt rời 50 A/75 mV (1,5 mΩ): I_max ≈ 54 A, độ phân giải 2,5 µV/1,5 mΩ ≈ 1,7 mA, công suất tỏa ở 5 A chỉ ~38 mW. Đặt shunt ở **phía +** (high-side): shunt phía GND làm GND của tải lệch khỏi GND hệ theo dòng, đúng thứ ground sao muốn tránh.
+
+```python
+# [đã chạy] Cùng một cú khởi động motor, mỗi dụng cụ "thấy" dòng đỉnh bao nhiêu?
+import numpy as np, matplotlib
+matplotlib.use("Agg"); import matplotlib.pyplot as plt
+dt = 10e-6; t = np.arange(0, 1.0, dt)                       # 1 s, bước 10 µs
+I_RUN, I_START, TAU = 0.4, 5.0, 0.040                         # A, A, s [ước lượng, đo ở C3]
+i = np.where(t >= 0.2, I_RUN + (I_START - I_RUN) * np.exp(-(t - 0.2) / TAU), 0.05)
+i += 0.3 * np.sign(np.sin(2 * np.pi * 20e3 * t)) * (t >= 0.2)   # gợn PWM 20 kHz
+
+def integrating_adc(i, t_conv, n_avg=1, gap=0.0):
+    """ADC tích phân: mỗi mẫu = trung bình dòng trong t_conv; n_avg mẫu gộp thành 1 kết quả.
+    gap = thời gian kênh kia (bus voltage) chiếm giữa hai lần đo shunt."""
+    n_conv, n_gap = int(t_conv / dt), int(gap / dt)
+    out, k = [], 0
+    while k + n_conv <= len(i):
+        out.append(i[k:k + n_conv].mean()); k += n_conv + n_gap
+    out = np.array(out)
+    m = len(out) // n_avg
+    return out[:m * n_avg].reshape(m, n_avg).mean(axis=1), (t_conv + gap) * n_avg
+
+cases = {"DMM ~3 lần/s (TB 0,33 s)": (0.333, 1, 0),
+         "INA226 1,1 ms shunt+bus, avg 16": (1.1e-3, 16, 1.1e-3),
+         "INA226 1,1 ms shunt+bus, avg 1": (1.1e-3, 1, 1.1e-3),
+         "INA226 140 µs chỉ shunt, avg 1": (140e-6, 1, 0)}
+print(f"đỉnh thật (lọc 140 µs): {integrating_adc(i, 140e-6)[0].max():.2f} A")
+fig, ax = plt.subplots(figsize=(8, 4))
+ax.plot(t * 1e3, i, lw=0.3, color="0.7", label="dòng thật")
+for name, (tc, na, gap) in cases.items():
+    y, period = integrating_adc(i, tc, na, gap)
+    print(f"{name:34s} chu kỳ {period*1e3:7.2f} ms -> đỉnh thấy {y.max():4.2f} A")
+    ax.step(np.arange(len(y)) * period * 1e3, y, where="post", label=name)
+ax.set_xlim(150, 450); ax.set_xlabel("ms"); ax.set_ylabel("A"); ax.legend(fontsize=7)
+plt.savefig("c15_lay_mau.png", dpi=120)        # trong bài có thể dùng plt.show()
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Metric scrape 15 s của Prometheus, rate() trên cửa sổ | DMM, màn nguồn bàn | Prometheus thiếu spike thì thiếu một điểm trên dashboard. Ở đây spike bị bỏ sót chính là **nguyên nhân** reset/cắt | Kết luận "dòng chỉ 1 A, an toàn" từ đồng hồ |
+| Histogram có bucket + max thay vì chỉ avg | Log 1,5 kHz → p99, max, thời gian trên ngưỡng | Ở backend max thường là outlier bỏ qua được. Ở đây max **là** con số thiết kế (BMS OC) | Báo cáo p99 thay max cho quyết định ngưỡng cắt |
+| Coordinated omission (→ F1.3) | Logger chậm/đầy buffer làm lỡ đúng lúc tải nặng | Lúc motor khởi động cũng là lúc ESP32 bận nhất, USB có thể nghẽn | Mẫu bị lỡ rơi đúng vào đỉnh; đếm `gap_count` |
+
+**Chấm mô hình:**
+- *"Đồng hồ đo dòng 10 A thì đo được dòng đỉnh 8 A."* — **SAI.** Thang đo nói về **biên độ**, không nói về **thời gian**. Phản ví dụ: code trên: đỉnh ~5 A dài vài chục ms, DMM thấy dưới 1 A.
+- *"Lấy mẫu càng nhanh càng tốt."* — **ĐÚNG MỘT PHẦN.** Nhanh hơn thì nhiễu mỗi mẫu lớn hơn (t_conv ngắn, ít trung bình), log lớn hơn, I2C/USB dễ lỡ mẫu. Đủ nhanh nghĩa là t_conv ngắn hơn rõ so với độ dài đỉnh cần thấy (vài lần), không phải tối đa. Phản ví dụ: 140 µs chỉ-shunt bỏ mất kênh áp bus, trong khi bạn cần cả hai để tính sụt áp và R pack.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Shunt | Điện trở rất nhỏ đã biết, đo dòng qua áp rơi trên nó | Cầu chì |
+| 🟢 | High-side / low-side | Shunt phía + / phía GND | Như nhau |
+| 🟢 | Conversion time, averaging | Cửa sổ tích phân của ADC; số mẫu gộp | Tần số lấy mẫu (chu kỳ = tổng các kênh × avg) |
+| 🟢 | Kelvin (4 dây) | Dây đo áp đi riêng từ mép shunt | Nối chung với dây dòng |
+
+### 5. Dự đoán
+
+1. Chạy mô phỏng (đề, không phải đáp án): cấu hình nào thấy đỉnh trong khoảng 10% so với thật? Dự đoán trước.
+2. Bóng 21 W: từ R nguội đo ở C1.2, dự đoán dòng đỉnh lúc bật ở 13,2 V (chặn trên: V/R_nguội, chưa tính R dây, pack).
+3. Với cấu hình firmware dưới (332 µs + 332 µs, avg 1): chu kỳ lý thuyết? Ở I2C 400 kHz, một lần đọc thanh ghi 2 byte (ghi con trỏ + đọc) mất ~50 bit-time ≈ 125 µs: mỗi chu kỳ đọc 3 thanh ghi có kịp không?
+4. R pack từ bước dòng: R = −ΔV_bus/ΔI. Dự đoán từ C1.1.
+
+Mẫu `prediction.md`: bảng 4 dòng (cấu hình → đỉnh thấy), I đỉnh bóng đèn, chu kỳ, thời gian I2C/chu kỳ, R pack.
+
+### 6. Làm
+
+**Lắp** (Lắp bước 7, trên nguồn bàn, I_set 3 A):
+1. Tháo shunt 0,1 Ω trên module INA226 (hoặc cắt nối), nối IN+ / IN− bằng hai dây xoắn tới hai **vít sense** nhỏ ở mép shunt rời (không phải vít dòng lớn). Shunt nằm sau công tắc chính, trước thanh cái (sơ đồ mục 4). VBUS nối phía tải của shunt. Nguồn module (VS) 3,3 V từ ESP32; GND module về điểm sao.
+2. ✅ Checkpoint trước khi cấp điện: đo thông mạch shunt (vài mΩ, UT33D+ chỉ báo ~0); IN+ và IN− **không** chạm GND; module không chạm kim loại tấm đế.
+3. Quét I2C từ ESP32: thấy 0x40 (hoặc theo A0/A1). Nạp firmware:
+
+```cpp
+// [chưa chạy] ESP32-S3 + INA226: log dòng/áp ~1,5 kHz qua USB serial (Arduino-ESP32 core 3.x [tự đo])
+#include <Wire.h>
+const uint8_t ADDR = 0x40;          // A0=A1=GND [spec]; kiểm bằng quét I2C
+const float R_SHUNT = 0.0015;       // ohm: shunt rời 50 A/75 mV [tự đo: nhãn shunt]
+const float LSB_VSH = 2.5e-6, LSB_VBUS = 1.25e-3;   // V/bit [spec INA226]
+void wr(uint8_t reg, uint16_t v) {
+  Wire.beginTransmission(ADDR); Wire.write(reg); Wire.write(v >> 8); Wire.write(v & 0xFF);
+  Wire.endTransmission();
+}
+uint16_t rd(uint8_t reg) {
+  Wire.beginTransmission(ADDR); Wire.write(reg); Wire.endTransmission(false);
+  Wire.requestFrom(ADDR, (uint8_t)2);
+  return (Wire.read() << 8) | Wire.read();
+}
+void setup() {
+  Serial.begin(921600);
+  Wire.begin(8, 9, 400000);          // SDA, SCL: chân theo bảng chân của bạn [tự đo]
+  // 0x00 Configuration: bit14 giữ 1, AVG=000 (1 mẫu), VBUSCT=010 (332 µs), VSHCT=010 (332 µs),
+  // MODE=111 (shunt + bus liên tục) -> 0x4097; một cặp kết quả mỗi ~664 µs
+  wr(0x00, 0x4097);
+  Serial.println("t_us,i_A,v_V");
+}
+void loop() {
+  if (!(rd(0x06) & 0x0008)) return;  // Mask/Enable bit CVRF: có kết quả mới chưa (đọc là xóa cờ)
+  uint32_t t = micros();
+  float i = (int16_t)rd(0x01) * LSB_VSH / R_SHUNT;   // shunt voltage, có dấu
+  float v = rd(0x02) * LSB_VBUS;                     // bus voltage
+  Serial.printf("%lu,%.4f,%.4f\n", t, i, v);
+}
+```
+
+4. **Đối chứng tĩnh:** điện trở nhôm 10 Ω làm tải, nguồn bàn 13,2 V: so I của INA226 với màn nguồn bàn và thang 10 A của UT33D+ (đo ngắn, theo giới hạn thời gian trong manual). Lệch >3–5% → kiểm R_SHUNT thật (shunt 75 mV có sai số ghi trên nhãn, thường 0,25–0,5% `[spec — nhãn shunt]`) và dây Kelvin.
+5. **Đo đỉnh:** bật/tắt bóng 21 W 20 lần qua relay E-stop (nhả/bấm nút). Lưu log: `cat /dev/ttyACM0 > data/c01/power-$(date +%s).csv` (hoặc `pio device monitor`); thoát sau 30 s.
+6. **Phân tích:**
+
+```python
+# [đã chạy] Đọc log INA226 (t_us,i_A,v_V) -> chu kỳ lấy mẫu thật, đỉnh, p99, năng lượng, sụt áp
+import sys, numpy as np
+d = np.genfromtxt(sys.argv[1] if len(sys.argv) > 1 else "log_c15.csv", delimiter=",", names=True)
+t = (d["t_us"] - d["t_us"][0]) * 1e-6; i, v = d["i_A"], d["v_V"]
+dt = np.diff(t)
+nominal = np.median(dt)
+gaps = int((dt > 1.5 * nominal).sum())          # mẫu bị lỡ: log không kịp, USB nghẽn
+print(f"{len(t)} mẫu trong {t[-1]:.2f} s · chu kỳ trung vị {nominal*1e6:.0f} µs · {gaps} khoảng trống")
+print(f"I: TB {i.mean():.2f} A · p99 {np.percentile(i, 99):.2f} A · max {i.max():.2f} A")
+print(f"V: min {v.min():.3f} V (sụt {v.max() - v.min():.3f} V so với max)")
+e_wh = np.sum(v[:-1] * i[:-1] * dt) / 3600      # tích phân hình chữ nhật trái
+print(f"Năng lượng {e_wh*1e3:.1f} mWh · P TB {e_wh*3600/t[-1]:.2f} W")
+thr = 0.8 * i.max()                             # đỉnh kéo dài bao lâu trên 80% max
+above = i > thr
+print(f"Thời gian trên {thr:.2f} A: {above.sum() * nominal * 1e3:.1f} ms tổng cộng")
+```
+
+7. Lặp bước 5–6 **trên pin thật** ở Lắp bước 8, ở hai mức sạc: đầy và còn ~20%. So I đỉnh, V min, R pack (= −ΔV/ΔI ở cạnh bật đèn). Ghi các `quantity` ở mục 7 đầu chặng vào `measurements.jsonl`; cập nhật `i_peak`, `peak_ms` trong `budget.csv` với `source=measured:<file>`; chạy lại `c12_budget.py`.
+8. **E-stop khi đang có tải:** bấm 20 lần khi bóng sáng; mỗi lần log 12 V/5 V vẫn đúng (ESP32 vẫn in, mini PC ping được), ESP32 không reset (`esp_reset_reason()` → K3 Bài 6).
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Mô phỏng (đỉnh thật ~5,1 A, dài ~40 ms):
+
+| Cấu hình | Chu kỳ | Đỉnh thấy |
+|---|---|---|
+| DMM ~3 lần/s | 333 ms | ~0,7 A |
+| INA226 1,1 ms + bus, avg 16 | ~35 ms | ~2,8 A |
+| INA226 1,1 ms + bus, avg 1 | 2,2 ms | ~5,0 A |
+| INA226 140 µs chỉ shunt | 0,14 ms | ~5,1 A |
+
+Số DMM phụ thuộc pha của cửa sổ so với đỉnh; con số nhỏ hơn thật nhiều lần là bản chất, không phải lỗi mô phỏng.
+
+- Firmware: chu kỳ ~664 µs (~1,5 kHz). Ba lần đọc ~375 µs ở 400 kHz: kịp, nhưng sát; thêm in serial chậm là bắt đầu lỡ mẫu → `gap_count` > 0. Thêm cờ CVRF bị đọc trễ thì một chu kỳ bị bỏ, không phải đọc trùng.
+- Bóng 21 W: đỉnh lúc bật thường gấp nhiều lần dòng sáng ổn định (~1,6 A ở 13,2 V), trong vài chục ms; số thật bị chặn bởi R dây, cầu chì, pack nên thấp hơn V/R_nguội.
+- Log mẫu tổng hợp (`log_c15.csv` tạo bằng mô hình, không phải phần cứng): ~7500 mẫu/5 s, chu kỳ 664 µs, ~15 khoảng trống, max ~5,3 A, p99 ~3,4 A, V min ~12,9 V. p99 thấp hơn max nhiều vì đỉnh chỉ chiếm <1% thời gian: đây là lý do max mới là số cho ngưỡng BMS.
+- R pack đo bằng bước dòng: cùng bậc với C1.1 nhưng chính xác hơn nhiều (LSB bus 1,25 mV so với 10 mV). Ở mức sạc 20% R thường lớn hơn khi đầy `[ước lượng]`: đúng câu chuyện iPhone.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| I luôn 0 hoặc nhiễu ±vài chục mA khi không tải | Dây sense lỏng; offset | Nối tắt IN+/IN− tại module: đọc offset | Trừ offset đo được; siết vít sense |
+| I đúng ở 1 A, sai 10% ở 5 A | Dây sense đặt trên vít dòng (cộng R tiếp xúc) | Dời sense vào vít riêng | Kelvin đúng |
+| `gap_count` lớn | Serial chậm, in quá nhiều | Tăng baud; in nhị phân; giảm tốc | avg 2 hoặc t_conv lớn hơn có chủ đích |
+| ESP32 reset khi relay nhả | Thiếu diode dập cuộn; GND chung đường | `reset_reason` | Diode; dây GND riêng |
+
+### 9. Câu hỏi ngược
+
+1. **[Failure mode]** INA226 treo bus I2C (SDA kẹt thấp) khi motor nhiễu. Những gì khác trên cùng bus chết theo? Thiết kế lại thế nào?
+   <details><summary>Hướng nghĩ</summary>
+
+   IMU cùng bus mất. Tách bus, phục hồi bus (9 xung SCL), watchdog đọc. Một bus là một miền lỗi chung.
+
+   </details>
+2. **[Quy mô]** 100 robot log 1,5 kHz × 2 kênh suốt ngày. Bao nhiêu dữ liệu/ngày, và bạn giữ gì?
+   <details><summary>Hướng nghĩ</summary>
+
+   Tự tính (byte/mẫu × tần số × giờ × robot). Giữ thô một cửa sổ quanh sự kiện (trigger theo ngưỡng), giữ tổng hợp (max, p99, Wh) mỗi phút: giống giữ trace có lấy mẫu + metric đầy đủ.
+
+   </details>
+
+### 10. Liên kết ra ngoài
+
+- **Điện thoại (iPhone 2016–17):** giống: đỉnh + R tăng → tắt; sửa bằng giới hạn đỉnh ở phần mềm. Robot làm tương tự bằng ramp motor (C4.4). Khác: Apple chịu phản ứng vì không nói với người dùng; với robot, mọi giới hạn như vậy phải ghi trong `decisions.md` và log.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| INA226: ±81,92 mV, LSB 2,5 µV / 1,25 mV, bus 0–36 V, t_conv 140 µs–8,244 ms, avg 1–1024 | [spec] | TI SBOS547 |
+| Thanh ghi 0x00/0x01/0x02/0x06, mã cấu hình 0x4097 | [spec] | Kiểm bảng thanh ghi trong datasheet trước khi nạp |
+| UT33D+ có thang 10 A, cập nhật chậm | [spec]/[tự đo] | Manual; review ghi cầu chì 10 A riêng cho thang 10 A |
+| Firmware Arduino-ESP32 | [chưa chạy] | API Wire ổn định; chân SDA/SCL theo bảng chân C4.1 |
+| Thông báo Apple iOS 10.2.1 | [chuẩn] | Thông báo 2/2017; thư xin lỗi 12/2017 |
+
+**Đã sửa so với bản gốc:** K7 gốc "đo dòng đỉnh lúc boot và lúc tải nặng" không nói dụng cụ; ở đây chỉ rõ đồng hồ không đo được, và module INA226 bán sẵn thường có shunt 0,1 Ω chỉ đo tới ~0,8 A.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** TI, *INA226 datasheet* (SBOS547) — mục "Device Functional Modes", "Register Maps".
+- **Giải thích:** → F5.5 (lấy mẫu, aliasing), → F1.2 (max vs p99).
+- **Đào sâu (tùy chọn):** TI application note về đo dòng phía high-side và lựa chọn shunt.
+- **Tự kiểm tra:** (1) giải thích vì sao đồng hồ 10 A không đo được đỉnh 8 A; (2) vẽ lại hình cửa sổ tích phân; (3) shunt 2 mΩ: I_max của INA226 và độ phân giải dòng?
+  <details><summary>Đáp án</summary>
+
+  81,92 mV / 2 mΩ ≈ 41 A; 2,5 µV / 2 mΩ = 1,25 mA.
+
+  </details>
+
+
+## Bài C1.6 — Sạc, bảo quản, xử lý pin hỏng (1,5h) (khung rút gọn)
+
+> **Vị trí:** C1.1 → **C1.6** (phần 1–3, 6 đọc trước Lắp bước 1; còn lại trước Lắp bước 8) → Gate · **Cần trước:** C1.1, K7 C0 mục 1 (bảng sự cố) · **Sau bài này bạn quyết định được:** sạc ở đâu, bao lâu, ai trông; cất pin ở mức nào; khi nào một pack bị loại và đi đâu.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Ngày 6/7/2016, CPSC (Mỹ) thu hồi khoảng 501.000 xe điện cân bằng (hoverboard) của 10 công ty: pack lithium-ion có thể quá nhiệt, bốc khói, cháy hoặc nổ; có ít nhất 99 báo cáo sự cố, gồm bỏng và thiệt hại tài sản. Chủ tịch CPSC nói các mẫu này được sản xuất và bán khi chưa có tiêu chuẩn an toàn nào `[spec — thông báo thu hồi CPSC 7/2016]`. Nhiều vụ xảy ra khi đang sạc, trong nhà. Pack của bạn cùng loại sản phẩm: pack phổ thông, nguồn gốc khó kiểm, sạc trong phòng ở.
+
+### 2. Mô hình tư duy
+
+```
+ SẠC CC/CV (do SẠC làm, BMS chỉ là chốt chặn):
+ I ▲ ━━━━━━━━━━━━━┓                 V ▲             ┏━━━━━━━━━━  V_max (LFP 3,65 V/cell · NMC 4,2 V/cell)
+   │  CC (dòng cố định)┗━━┓            │        ┏━━━┛
+   │                      ┗━━━ ngắt khi I < ~0,05–0,1C   │ ━━━━━┛  CV (áp cố định)
+   └──────────────────────► t        └─────────────────────► t
+```
+
+| Việc | LFP 4S | NMC 4S | Vì sao |
+|---|---|---|---|
+| Áp sạc | 14,6 V | 16,8 V | Sạc NMC vào LFP: 4,2 V/cell, vượt xa 3,65 V → quá sạc, chỉ còn BMS OV chặn `[chuẩn]`. Sạc LFP vào NMC: thiếu sạc (an toàn, mất dung lượng) |
+| Dòng sạc mặc định | ≤0,5C | ≤0,5C | Ít nóng; nhanh hơn chỉ khi datasheet cho phép `[ước lượng]` |
+| Nhiệt độ sạc | không sạc dưới ~0 °C | như LFP | Mạ lithium khi sạc lạnh `[chuẩn]` |
+| Cất lâu (>2 tuần) | ~50% (~13,2 V nghỉ) | ~40–60% (~3,7–3,8 V/cell) | Ít lão hóa; không để cạn vì tự xả + dòng chờ BMS làm tụt dưới UV `[chuẩn]` |
+| Kiểm khi cất | mỗi tháng đo áp nghỉ | như LFP | Tụt nhanh bất thường = cell hỏng |
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Job chạy đêm không người trông, có alert | Sạc qua đêm | Alert báo **sau** sự cố; cháy pin cần người có mặt trong vài phút đầu | Sạc khi ngủ |
+| Quarantine host nghi lỗi, không reimage rồi dùng lại | Pack phồng/rơi: loại, không "thử lại xem" | Host lỗi tắt là xong; pack hỏng vẫn chứa năng lượng khi đã rút ra | Cất pack phồng trong ngăn kéo |
+
+### 6. Làm
+
+**Sạc (mỗi lần):** pack trong túi chống cháy/hộp kim loại, trên gạch/gốm, cách vật dễ cháy ≥1 m, cạnh lối ra; bạn ở trong phòng, tỉnh. Đo áp nghỉ trước. Cắm sạc vào ổ **sau** khi nối pack (theo hướng dẫn sạc của bạn). 10 phút đầu: sờ/IR vỏ pack, sạc. Ghi giờ bắt đầu, giờ đầy, áp nghỉ sau 1 h. Pack ấm quá ~45 °C `[ước lượng]` khi sạc 0,5C: dừng, xem bảng sự cố C0.
+
+**Lần sạc đầu tiên:** thêm: dùng nguồn bàn CV/CC đặt đúng áp sạc và I_set 0,2C nếu muốn **thấy** đường CC→CV (ghi V, I mỗi 5 phút hoặc log INA226). Đây cũng là lần đo dung lượng nạp (Ah) đầu tiên.
+
+**Loại pack khi:** phồng, móp, rách vỏ, mùi lạ, rơi mạnh, nóng khi để yên, áp nghỉ tụt >0,1 V/tuần khi cất `[ước lượng]`, hoặc đã xuống dưới UV và không lên lại với sạc đúng trong 5 phút.
+
+**Xử lý pack bị loại:** chuyển ngay vào hộp kim loại có cát, để ngoài ban công/chỗ thoáng, xa vật cháy. Dán băng keo cách điện lên đầu nối. KHÔNG đục, cắt, đốt, ngâm nước muối "để xả" (phản ứng điện phân, ăn mòn, có thể sinh khí; không phải quy trình an toàn cho người mới). Mang tới điểm thu gom pin: ở Việt Nam có các chương trình thu gom pin cũ và rác điện tử (ví dụ chương trình "Việt Nam Tái Chế"; một số siêu thị điện máy có hộp thu pin) `[tự đo: hỏi trước họ có nhận pack lithium cỡ này không]`. KHÔNG vứt vào thùng rác sinh hoạt: pin bị ép trong xe rác là nguồn cháy.
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Sạc báo đầy ngay | Pack đầy sẵn; BMS cắt sạc (OV một cell do lệch) | Áp nghỉ pack | Đầy sẵn: bình thường. Lệch: pack cân bằng dần qua vài chu kỳ; không cải thiện → loại |
+| Sạc không bao giờ báo đầy | Sạc sai áp (thấp), cell rò | Đo áp ra sạc không tải | Đổi sạc; cell rò → loại |
+| Pack về 0 V sau khi cất 3 tháng | Tự xả + dòng chờ BMS | — | Theo tiêu chí loại; lần sau cất 50% và đo mỗi tháng |
+
+### 9. Câu hỏi ngược
+
+1. **[Failure mode]** Sạc "tự ngắt khi đầy" hỏng phần ngắt. Từ đó, chỉ còn lớp nào? Quy trình của bạn bắt được trước khi nguy hiểm không?
+   <details><summary>Hướng nghĩ</summary>
+
+   BMS OV, rồi không còn gì. Người trông + giờ sạc dự kiến (Ah thiếu / dòng sạc): quá giờ là dấu hiệu. Hai lớp độc lập là tối thiểu.
+
+   </details>
+2. **[Quy mô]** 20 robot sạc đêm ở văn phòng. Quy trình "có người trông" không còn khả thi. Thay bằng gì?
+   <details><summary>Hướng nghĩ</summary>
+
+   Tủ/kệ sạc chống cháy, sạc có giám sát nhiệt từng pack, phát hiện khói, cắt nguồn tự động, vị trí xa lối thoát hiểm. Quy trình con người được thay bằng thiết bị; đó là chi phí của quy mô.
+
+   </details>
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** CPSC, thông báo thu hồi "Self-Balancing Scooters/Hoverboards Recalled by 10 Firms" (7/2016); hướng dẫn sạc/cất trên tài liệu pack của bạn.
+- **Giải thích:** K7 C0.2 (năng lượng pin), bảng sự cố C0 mục 1.
+- **Tự kiểm tra:** (1) nói lại ba lớp giữa "sạc hỏng" và "cháy"; (2) LFP 4S cất ở bao nhiêu V? (3) sạc 16,8 V vào pack LFP 4S thì mỗi cell bị đẩy tới bao nhiêu V?
+  <details><summary>Đáp án</summary>
+
+  (2) ~13,2 V nghỉ (~50%). (3) 16,8/4 = 4,2 V/cell, vượt 3,65 V; chỉ BMS OV còn chặn.
+
+  </details>
+
+## Gate chặng 1
+
+Tiêu chí mới của chặng (không có trong K7 gốc; theo `_KE-HOACH-K7.md` mục 7: "C1: power budget đo được, bảo vệ"). Nhị phân; ghi mỗi tiêu chí một dòng `measurements.jsonl` (`step=C1-gate-N`) với `result` pass/fail/inconclusive.
+
+| # | Tiêu chí | Cách kiểm | FAIL thì |
+|---|---|---|---|
+| 1 | Bo nguồn đúng sơ đồ: F0 ≤10 cm từ cực pin; mỗi nhánh có cầu chì ≤ sức chịu dây của nhánh; màu và nhãn theo C0.5; `wires.csv` đủ mọi dây | Đối chiếu bảng dây với bo, ảnh | Sửa trước mọi tiêu chí khác |
+| 2 | Điện trở + ↔ GND của bo (tắt, cầu chì cắm) không gần 0 Ω; mọi mối 14/16 AWG có sụt áp ở 3 A trong ngưỡng C0.3 | UT33D+, đồ gá C0.3 | Làm lại mối |
+| 3 | DC-DC: 12 V ra trong 12,0 V ± 5% và 5 V trong 5,0–5,25 V trên **cả dải áp pack**, ở tải thử; ngưỡng UVLO đã ghi | Bài C1.4 bước 1–3 | Module khác / loại khác (buck-boost) |
+| 4 | E-stop: bấm 20/20 lần → áp đầu ra động lực < 1 V; 12 V, 5 V không đổi; mini PC không mất ping; ESP32 không reset | Bài C1.5 bước 8 + log | Kiểm cuộn relay, diode, GND sao |
+| 5 | Log INA226 ≥1 kHz, `gap_count` < 1% số mẫu, đối chứng tĩnh lệch ≤5% so với nguồn bàn | Bài C1.5 bước 4–6 | Kelvin, baud, cấu hình |
+| 6 | `power/budget.csv`: mọi tải có `i_idle`, `i_avg` là `measured:`; `i_peak` của mini PC và tải giả/motor là `measured:` từ log; `c12_budget.py` PASS cả ba kiểm với giới hạn BMS/cầu chì **thật** | Script trong CI | Đổi pack/BMS, ramp tải, hoặc ghi rõ giới hạn vận hành trong `decisions.md` |
+| 7 | Chạy trên pin thật 30 phút (mini PC `stress-ng` + bóng đèn bật/tắt mỗi 10 s): không reset ngoài ý muốn; không điểm nào (dây, XT60, F0, đế cầu chì, DC-DC) tăng > 20 K so với nhiệt độ phòng | Log + nhiệt kế IR tại phút 0/15/30 | Tìm điểm nóng, làm lại; ngưỡng 20 K là đề xuất của chặng này |
+| 8 | Sạc lần đầu đã làm đúng quy trình C1.6, có log V/I hoặc ghi chép mỗi 5 phút; pack đo áp nghỉ sau 1 h | Sổ build | Làm lại theo quy trình |
+| 9 | `validate_buildlog.py` (C0.5) PASS trên `measurements.jsonl` của C1; `build-log/c01.md` có mục mỗi buổi, ghi near miss (kể cả "không") | CI | Bổ sung |
+| 10 | `decisions.md` có: hóa học + S/P đã chọn và lý do; buck hay buck-boost và lý do (số từ C1.4); ngưỡng ngắt mềm dự kiến cho C5.4 | Đọc | Viết |
+
+**Tự hỏi trước khi qua C2/C5:** nếu ngày mai bạn thêm một tải 15 W, bạn có biết phải đổi những gì không, chỉ bằng cách sửa một dòng CSV và chạy một script?
