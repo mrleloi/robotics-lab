@@ -160,7 +160,7 @@ if __name__ == "__main__":
 **Chấm mô hình:**
 
 - *"MCU thì tất định, Linux thì không."* (`robotics-data-infra-roadmap.md`, mục 2.1) — **ĐÚNG MỘT PHẦN.** Đúng về xu hướng phân bố: MCU có ít nguồn bất định hơn nhiều. Gãy ở chỗ: tất định là thuộc tính của **cách bạn viết code** trên nền tảng, không phải của con chip. *Phản ví dụ:* trên ESP32-S3, một hàm đặt trong flash bị cache miss đúng lúc ghi NVS (flash cache bị tắt khi ghi/xóa flash) sẽ chờ tới khi thao tác flash xong `[spec: ESP-IDF, mục "Concurrency Constraints for Flash on SPI1", tự đo theo phiên bản]`; một vòng điều khiển dùng `vTaskDelay(1)` ở tick 100 Hz có độ phân giải 10 ms. Ngược lại, Linux với PREEMPT_RT, CPU cô lập và cấu hình đúng đạt độ trễ đánh thức đuôi cỡ vài chục µs trên phần cứng phù hợp `[tự đo, → F5.4]`.
-- *Mô hình K3 lượt 3 của bạn: "ESP32 chỉ làm dispatcher, chỉ giữ flag bật/tắt/âm lượng."* — **ĐÚNG MỘT PHẦN.** Đúng: ESP32 không nên là nơi sinh nội dung (TTS chạy trên N100). Gãy ở chỗ "chỉ giữ flag": ESP32 là **chủ đồng hồ** của đường I2S — nó phát BCK/LRCK, nó quyết định mẫu nào ra dây ở micro-giây nào, và ring buffer + DMA của nó là nơi hấp thụ jitter của Linux (K3 Bài 4). Mất vai trò đó thì "dispatcher" phải được thay bằng một thứ khác cũng giữ nhịp. *Phản ví dụ:* nếu ESP32 chỉ chuyển tiếp byte mà không có buffer và không sở hữu nhịp, một lần Linux trễ 20 ms (bạn sẽ thấy con số cỡ này trong bài tập trên) là một tiếng tách nghe được.
+- *Mô hình K3 lượt 3 của bạn: "ESP32 chỉ làm dispatcher, chỉ giữ flag bật/tắt/âm lượng."* — **ĐÚNG MỘT PHẦN.** Đúng: ESP32 không nên là nơi sinh nội dung (TTS chạy trên N100). Gãy ở chỗ "chỉ giữ flag": ESP32 là **chủ đồng hồ** của đường I2S — nó phát BCK/LRCK, nó quyết định mẫu nào ra dây ở micro-giây nào, và ring buffer + DMA của nó là nơi hấp thụ jitter của Linux (K3 Bài 4). Mất vai trò đó thì "dispatcher" phải được thay bằng một thứ khác cũng giữ nhịp. *Phản ví dụ:* nếu ESP32 chỉ chuyển tiếp byte mà không có buffer và không sở hữu nhịp, mỗi lần Linux thức dậy muộn hơn khoảng cách giữa hai khung là một tiếng tách nghe được — bài tập mục 5 cho bạn đo xem Linux của bạn muộn tới đâu.
 
 **Tên chuẩn của thứ bạn đã làm:** tách "hot path tất định" khỏi "control plane linh hoạt" trong backend (ví dụ data plane của proxy viết bằng C, control plane bằng Go/Python) chính là mẫu **mixed-criticality** của hệ nhúng. Thứ còn thiếu: ở robot, ranh giới đó được vẽ theo **hậu quả vật lý khi trễ**, và nó đi kèm một hợp đồng an toàn khi mất liên lạc.
 
@@ -412,7 +412,13 @@ for nbuf in (2, 3):
 **Chấm mô hình:**
 
 - *"DMA nghĩa là CPU rảnh."* (`robotics-data-infra-roadmap.md`: "lý do I2S có thể stream audio liên tục mà CPU vẫn rảnh") — **ĐÚNG MỘT PHẦN.** Đúng: CPU không chép từng mẫu. Gãy: (1) DMA và CPU **chia chung bus/bộ nhớ**; (2) CPU vẫn phải **nạp** khối kế tiếp trước deadline — nếu task nạp trễ, DMA phát lại dữ liệu cũ hoặc im lặng tùy cấu hình (`auto_clear` ở I2S ESP-IDF `[spec, tự đo]`); (3) buffer DMA phải nằm ở vùng nhớ DMA đọc được (`MALLOC_CAP_DMA`) `[spec: ESP-IDF heap capabilities]`. *Phản ví dụ:* K3 Bài 10 — CPU "rảnh" 90% nhưng một task ưu tiên cao hơn chạy 10 ms liền vẫn gây underrun.
-- *"Thêm khối DMA thì trễ tăng."* — **ĐÚNG MỘT PHẦN.** Với đường **phát** (playback), host giữ ring gần đầy nên thêm khe → mức đầy tăng → trễ tăng. Với đường **thu** xử lý ngay khi khối đầy, thêm khe chỉ nới deadline, **không** tăng trễ trung bình (trễ do B quyết định). Bài tập mục 5 cho bạn thấy điều này bằng số. *Phản ví dụ:* ghi âm 3 khối thay vì 2 khối cùng B: trễ như nhau, lỡ deadline ít hơn.
+- *"Thêm khối DMA thì trễ tăng."* — **ĐÚNG MỘT PHẦN.** Với đường **phát** (playback), host giữ ring gần đầy nên thêm khe → mức đầy tăng → trễ tăng. Đường **thu** thì sao? Đó là câu 3 của bài tập mục 5; phản ví dụ nằm trong khối gập:
+
+  <details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+  Với đường thu xử lý ngay khi khối đầy, thêm khe chỉ nới deadline, **không** tăng trễ trung bình (trễ do B quyết định, vì mức đầy trung bình không đổi). *Phản ví dụ:* ghi âm 3 khối thay vì 2 khối cùng B: trễ như nhau, lỡ deadline ít hơn.
+
+  </details>
 
 **Tên chuẩn của thứ bạn đã làm:** bạn đã dùng bounded queue, batch, và coalescing; tên trong nhúng là **ring buffer, ping-pong buffer, DMA descriptor chain, interrupt moderation**. Thứ còn thiếu: tính **deadline của consumer phần cứng** và đọc độ trễ bằng **mức đầy** (Little), không bằng dung lượng.
 
@@ -1115,7 +1121,7 @@ Với tín hiệu số trên dây (logic analyzer), câu hỏi khác: bạn khô
 
 Gãy khi: (1) tín hiệu nhỏ hơn full-scale — mất đúng bấy nhiêu dB; (2) tín hiệu đồng bộ với lưới mẫu hoặc quá đơn giản — sai số thành **méo hài** thay vì nhiễu; (3) tín hiệu nhỏ hơn Δ/2 — ra toàn số 0; (4) nhiễu analog (mic, phòng, nguồn) lớn hơn Δ — bit thêm không đổi gì.
 
-**Dither:** cộng nhiễu ~1 LSB (phân bố tam giác, TPDF) **trước** khi lượng tử. Giá: SNR giảm ~4,8 dB (nhiễu tổng gấp 3). Được: sai số độc lập với tín hiệu, không còn méo, và **lấy trung bình nhiều mẫu đo được giá trị nhỏ hơn 1 LSB**. Oversampling + trung bình: mỗi lần gấp 4 số mẫu được thêm ~1 bit, chỉ khi nhiễu đủ lớn để "khuấy" qua các mức.
+**Dither:** cộng nhiễu ~1 LSB (phân bố tam giác, TPDF) **trước** khi lượng tử. Giá: SNR giảm một lượng tính được từ phương sai của dither (bài tập câu 4). Được: sai số độc lập với tín hiệu, không còn méo, và **lấy trung bình nhiều mẫu đo được giá trị nhỏ hơn 1 LSB**. Oversampling + trung bình: mỗi lần gấp 4 số mẫu được thêm ~1 bit, chỉ khi nhiễu đủ lớn để "khuấy" qua các mức.
 
 ```python
 # [đã chạy] F5.5 — aliasing, SNR lượng tử, và dither
@@ -1426,7 +1432,7 @@ print(f"\ntrễ thật {true_delay*1e3:.1f} ms | đỉnh nguyên = {lags[k]/fs2*
 **Chấm mô hình:**
 
 - *"Muốn thấy rõ tần số hơn thì zero-pad cho FFT dài hơn."* — **SAI** (phần lớn). Zero-padding cho nhiều điểm hơn trên **cùng** đường cong phổ (nội suy, hữu ích để đọc vị trí đỉnh mịn hơn), không tách được hai vạch gần hơn 1/T. Muốn phân giải hơn phải **ghi lâu hơn**. *Phản ví dụ:* 50 Hz và 50,5 Hz trong 1 s dữ liệu: zero-pad lên 1 triệu điểm vẫn là một búp chung.
-- *"Lọc là bước tiền xử lý vô hại."* — **SAI** cho mọi tín hiệu dùng trong vòng kín hoặc để căn thời gian: lọc nhân quả thêm trễ (bài tập: MA10 ở 1 kHz = 4,5 ms), lọc không nhân quả không làm được online.
+- *"Lọc là bước tiền xử lý vô hại."* — **SAI** cho mọi tín hiệu dùng trong vòng kín hoặc để căn thời gian: lọc nhân quả thêm trễ (trễ nhóm của MA N mẫu là (N−1)/2 mẫu), lọc không nhân quả không làm được online.
 
 **Tên chuẩn của thứ bạn đã làm:** rolling window, EWMA, so lag giữa hai chuỗi metric — đó là **FIR, IIR bậc 1, cross-correlation**. Thứ còn thiếu: mỗi phép đó có **đáp ứng tần số** và **trễ** tính được trước; với robot, trễ đó đi thẳng vào ngân sách vòng điều khiển và ngân sách đồng bộ thời gian.
 
@@ -1910,7 +1916,7 @@ Mô hình bỏ qua bão hòa PWM, vùng chết, lượng tử encoder, ma sát �
 **Chấm mô hình:**
 
 - *"Chạy PID nhanh hơn luôn tốt hơn."* — **ĐÚNG MỘT PHẦN.** Đúng: T nhỏ hơn thì trễ ZOH và trễ đo nhỏ hơn. Gãy: (1) vận tốc từ encoder lượng tử thô hơn khi T nhỏ (Δđếm ít đi); (2) ESP32 tốn CPU hơn, jitter tương đối tăng; (3) không cải thiện gì nếu θ bị chi phối bởi bộ lọc hoặc kênh truyền. *Phản ví dụ:* encoder 1320 xung/vòng bánh `[ước lượng]`, bánh 1 vòng/s, ở 1 kHz: Δđếm ≈ 1,3 mỗi chu kỳ — vận tốc nhảy giữa 1 và 2 xung, nhiễu ±40%; phải lọc → thêm trễ, mất phần lợi.
-- *"Trễ chỉ làm phản ứng chậm hơn."* — **SAI.** Trễ trong vòng kín đổi **ổn định**, không chỉ tốc độ. *Phản ví dụ:* mô phỏng mục 2, trễ đo 40 ms → phân kỳ, cùng hệ số PID ổn định ở 10 ms.
+- *"Trễ chỉ làm phản ứng chậm hơn."* — **SAI.** Trễ trong vòng kín đổi **ổn định**, không chỉ tốc độ. *Phản ví dụ:* với PI triệt cực ở mục 2, khi ω_c·θ chạm π/2 thì **cùng bộ hệ số** đang ổn định trở thành dao động tăng dần; câu 1 bài tập mục 5 cho bạn tìm ngưỡng đó bằng số.
 
 **Tên chuẩn của thứ bạn đã làm:** autoscaler với cooldown, rate limiter thích nghi, controller của Kubernetes — đều là **điều khiển phản hồi**. Thứ còn thiếu: mô hình plant (τ, K), khái niệm **tần số cắt và biên pha**, và thói quen **đo trễ toàn vòng** (từ lúc đọc cảm biến tới lúc lệnh có hiệu lực) như một con số hạng nhất.
 
