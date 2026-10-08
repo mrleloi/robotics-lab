@@ -640,6 +640,13 @@ Số đo của bạn, khoảng hợp lý `[ước lượng]`:
 
    </details>
 
+4. **[Phản biện]** "Lấy số datasheet nhân 1,5 là đủ, khỏi đo." Khi nào đúng?
+   <details><summary>Hướng nghĩ</summary>
+
+   Đúng cho linh kiện có datasheet đầy đủ, tải ổn định. Sai cho mini PC (phụ thuộc phần mềm), motor kẹt, mọi đỉnh ngắn: hệ số 1,5 vô nghĩa khi không biết phân bố.
+
+   </details>
+
 ### 10. Liên kết ra ngoài
 
 - **Không gian (Philae):** giống: budget quyết định chạy lệnh nào khi năng lượng cạn. Khác: Philae không sạc được và không có người tới thay pin; robot của bạn có, nên câu hỏi chuyển từ "còn đủ không" sang "về sạc lúc nào" (C10).
@@ -825,6 +832,13 @@ Thời gian đứt cầu chì 2 A ở 5 A: __ s (khoảng __ – __ s)
 
    </details>
 
+4. **[Phản biện]** "Dùng dây 12 AWG cho mọi nhánh, khỏi tính." Bác bằng số.
+   <details><summary>Hướng nghĩ</summary>
+
+   Khối lượng và độ cứng dây (C2), đầu JST/ESP32 không nhận 12 AWG, và quan trọng nhất: cầu chì nhánh vẫn phải nhỏ cho **tải**, nên dây to không bỏ được việc tính cầu chì.
+
+   </details>
+
 ### 10. Liên kết ra ngoài
 
 - **Hàng không (Swissair 111 → AFCI):** sau các vụ hồ quang dây, ngành phát triển aptomat phát hiện hồ quang (arc-fault). Nhà ở Mỹ cũng bắt buộc AFCI ở nhiều phòng theo NEC `[chuẩn]`. Giống: thêm cảm biến cho kiểu lỗi mà bảo vệ nhiệt không thấy. Khác: robot của bạn dựa vào kiểm mối nối định kỳ thay vì thiết bị.
@@ -995,6 +1009,13 @@ Code với số mẫu:
    <details><summary>Hướng nghĩ</summary>
 
    η và nhiệt theo tải, Vout min trong mỗi đỉnh, gắn mã lô vào metadata robot. Phân phối theo lô, không trung bình chung.
+
+   </details>
+
+4. **[Vì sao không]** Vì sao không nối hai module (boost lên 15 V rồi buck xuống 12 V) thay vì mua buck-boost?
+   <details><summary>Hướng nghĩ</summary>
+
+   Được, nhưng hai tầng nhân hiệu suất (0,9 × 0,9), hai UVLO, hai điểm hỏng. Buck-boost 4 công tắc làm trong một tầng.
 
    </details>
 
@@ -1226,6 +1247,19 @@ Số DMM phụ thuộc pha của cửa sổ so với đỉnh; con số nhỏ hơ
    <details><summary>Hướng nghĩ</summary>
 
    Tự tính (byte/mẫu × tần số × giờ × robot). Giữ thô một cửa sổ quanh sự kiện (trigger theo ngưỡng), giữ tổng hợp (max, p99, Wh) mỗi phút: giống giữ trace có lấy mẫu + metric đầy đủ.
+
+   </details>
+
+3. **[Vì sao không]** Vì sao không dùng ADC của ESP32 đọc trực tiếp áp trên shunt 1,5 mΩ?
+   <details><summary>Hướng nghĩ</summary>
+
+   5 A chỉ cho 7,5 mV; offset và nhiễu ADC ESP32 cùng bậc hoặc lớn hơn `[spec — tra mục ADC trong datasheet ESP32-S3]`. Cần khuếch đại; INA226 đã làm việc đó, có ADC tích phân và LSB 2,5 µV.
+
+   </details>
+4. **[Liên ngành]** Đồng hồ điện nhà đo kWh, nhưng hóa đơn điện doanh nghiệp lớn có thể tính theo công suất đỉnh. Vì sao?
+   <details><summary>Hướng nghĩ</summary>
+
+   Lưới đầu tư theo đỉnh (biến áp, dây), bán theo năng lượng: đúng hai trục P đỉnh / Wh của C1.2, và đo đỉnh cần thiết bị khác.
 
    </details>
 
