@@ -632,7 +632,7 @@ Pairwise mua đúng thứ nó hứa (mọi cặp) với ít hơn 27 lần kịch
 
 **Đại học Duke, 2006–2011.** Một nhóm nghiên cứu công bố "chữ ký gen" dự đoán bệnh nhân ung thư đáp ứng với thuốc hóa trị nào, và các thử nghiệm lâm sàng bắt đầu chọn thuốc cho bệnh nhân theo chữ ký đó. Hai nhà thống kê ở MD Anderson, Keith Baggerly và Kevin Coombes, cố tái lập phân tích từ dữ liệu và mô tả công bố, và mất rất nhiều tháng vì không có code, không có phiên bản dữ liệu, không có các bước xử lý. Khi dựng lại được, họ tìm thấy những lỗi như nhãn nhạy/kháng bị đảo, hàng dữ liệu lệch một vị trí so với nhãn, mẫu bị lặp. Họ gọi công việc đó là *forensic bioinformatics* (Annals of Applied Statistics, 2009). Các thử nghiệm bị dừng, nhiều bài báo bị rút, và Viện Y học Hoa Kỳ (IOM) ra báo cáo năm 2012 về quy trình phát triển xét nghiệm dựa trên omics [chuẩn].
 
-Điều đáng sợ không phải là có lỗi; mọi phân tích đều có lỗi. Điều đáng sợ là **mất nhiều tháng chỉ để biết con số được tính từ cái gì**. Câu hỏi của bài, *nhìn một con số trong báo cáo, tôi truy về được những gì*, có hai nửa: **ghi** đủ đường truy (sáu trường của bản gốc và vài trường bản gốc thiếu), và **giữ** đủ artifact để đường truy dẫn tới một thứ còn tồn tại. Ngành phần mềm đi đến cùng kết luận qua đường khác: sau các vụ tấn công chuỗi cung ứng như SolarWinds (2020), khung SLSA và định dạng in-toto chuẩn hóa *provenance* của một bản build: build từ commit nào, bằng builder nào, với đầu vào nào, có chữ ký [chuẩn].
+Đáng sợ không phải là có lỗi, mà là **mất nhiều tháng chỉ để biết con số được tính từ cái gì**. Câu hỏi *nhìn một con số trong báo cáo, tôi truy về được những gì* có hai nửa: **ghi** đủ đường truy, và **giữ** đủ artifact để đường truy dẫn tới thứ còn tồn tại.
 
 ### 2. Mô hình tư duy
 
@@ -717,16 +717,16 @@ if __name__ == "__main__":
 
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
-| Endpoint `/version` trả commit SHA, build info | Trường "code" của provenance | Ở backend, commit + "đã deploy" là đủ vì môi trường do hạ tầng quản. Ở đây commit là **một trong sáu**; cùng commit, khác image hay khác lớp CPU là kết quả khác (Bài 3) | Bạn ghi commit, tưởng đủ, rồi không giải thích được vì sao hai run cùng commit lệch nhau |
-| Docker tag trong manifest deploy | Image digest | Ở backend dùng tag và chấp nhận tag dời (`:stable`). Ở đây tag dời = thí nghiệm khác. Và bên trong container không có cách chuẩn để tự biết digest của image mình: launcher phải bơm vào | Bạn đọc tag từ biến môi trường, hoặc điền `"local-dev"` khi thiếu, và provenance "đầy đủ" mà vô dụng |
-| Pipeline agent tự chạy → test → deploy → báo cáo của bạn | Run có provenance → báo cáo (Bài 10) | Báo cáo backend nói "deploy thành công". Báo cáo eval nói một **con số**; con số không kèm đường truy là con số không kiểm được, kể cả với chính bạn ba tuần sau | Agent của bạn chạy eval trên working tree bẩn (nó vừa sửa code), báo cáo con số đẹp, không ai biết code nào sinh ra nó |
-| Distributed tracing (trace id đi qua mọi service) | Run id dẫn về mọi đầu vào | Trace đi **xuôi** theo thời gian và hết hạn sau vài ngày. Provenance đi **ngược** từ kết quả về đầu vào, và phải sống lâu bằng kết quả | Bạn áp chính sách giữ của log/trace (7–30 ngày) cho image và checkpoint, và mọi kết quả trên một tháng tuổi thành "không tái lập được" |
+| Endpoint `/version` trả commit SHA | Trường "code" của provenance | Ở backend môi trường do hạ tầng quản, commit là đủ. Ở đây commit là **một trong sáu**; cùng commit, khác image hay lớp CPU là kết quả khác (Bài 3) | Không giải thích được vì sao hai run cùng commit lệch nhau |
+| Docker tag trong manifest deploy | Image digest | Backend chấp nhận tag dời (`:stable`); ở đây tag dời = thí nghiệm khác. Container không tự biết digest của mình: launcher phải bơm vào | Điền `"local-dev"` khi thiếu; provenance "đầy đủ" mà vô dụng |
+| Pipeline agent tự chạy → test → deploy → báo cáo của bạn | Run có provenance → báo cáo (Bài 10) | Báo cáo backend nói "deploy thành công"; báo cáo eval nói một **con số**, và con số không có đường truy thì không kiểm được | Agent chạy eval trên working tree bẩn nó vừa sửa, báo con số đẹp, không ai biết code nào sinh ra |
+| Distributed tracing | Run id dẫn về mọi đầu vào | Trace đi **xuôi** và hết hạn sau vài ngày; provenance đi **ngược** và phải sống lâu bằng kết quả | Áp retention 7–30 ngày của trace cho image, checkpoint; mọi kết quả quá một tháng thành "không tái lập được" |
 
 **Chấm mô hình:**
 
-1. *"Thiếu một trong sáu, kết quả không tái lập được."* (bản gốc), và hệ quả người đọc hay tự rút ra: *"đủ sáu là tái lập được."* — **ĐÚNG MỘT PHẦN.** Vế đầu đúng: mỗi trường là một đầu vào thật. Vế sau sai theo hai cách. (a) Sáu trường là **cần**, không **đủ**: định nghĩa thành công (Bài 11), asset tải lúc chạy, biến môi trường (`MUJOCO_GL`, `OMP_NUM_THREADS`, `PYTHONHASHSEED`), backend (C hay MJX, Module 3), cấu hình harness (`max_steps`, số episode) đều đổi kết quả mà không nằm trong sáu trường. (b) Ghi không phải giữ. Phản ví dụ: run đủ sáu trường, image đã bị `docker image prune` dọn sau khi nâng MuJoCo (Bài 4 đã cảnh báo); đường truy hoàn hảo dẫn tới một digest không còn ở đâu.
-2. *"`platform.processor()` cho model CPU; `os.getenv('DOCKER_IMAGE_DIGEST', 'local-dev')` cho digest."* (Gemini K6 lượt 7, hàm `collect_provenance`) — **SAI.** Trên Linux, `platform.processor()` thường trả về kiến trúc (`'x86_64'`) hoặc chuỗi rỗng, không phải tên CPU [đã chạy: Python 3.13, Linux]; tên và cờ tập lệnh phải đọc từ `/proc/cpuinfo`. Giá trị mặc định `'local-dev'` biến "thiếu provenance" thành "có provenance sai". Phản ví dụ: thêm `import os` cho hàm của Gemini chạy được, rồi chạy trên N100 và trên runner CI: trường `cpu` giống nhau (`'x86_64'`), trong khi đó chính là hai lớp máy mà Bài 4 phải tách golden.
-3. *"`git status --porcelain` rỗng là code sạch."* — **ĐÚNG MỘT PHẦN.** Đúng cho repo này, và nó bắt cả file untracked (tốt: một module mới chưa `git add` vẫn được import). Sai ở ba chỗ: (a) code chạy từ ngoài repo (editable install của một repo khác, notebook, script trong `~/`) không hiện ra; (b) commit chưa push thì "sạch" nhưng người khác không lấy được; (c) chạy trong container mà `.git` không được copy vào image thì lệnh `git` thất bại hoặc báo về một repo khác. Phản ví dụ nhỏ: `git describe --always --dirty` **không** coi file untracked là bẩn, còn `git status --porcelain` thì có [đã chạy: git 2.x]; hai công cụ, hai định nghĩa "bẩn".
+1. *"Thiếu một trong sáu, kết quả không tái lập được"* (bản gốc), và hệ quả hay tự rút ra: *"đủ sáu là tái lập được."* — **ĐÚNG MỘT PHẦN.** Vế đầu đúng. Vế sau sai hai cách: (a) sáu trường là **cần**, không **đủ**: định nghĩa thành công (Bài 11), asset tải lúc chạy, biến môi trường (`MUJOCO_GL`, `OMP_NUM_THREADS`, `PYTHONHASHSEED`), backend (C/MJX), cấu hình harness đều đổi kết quả; (b) ghi không phải giữ. Phản ví dụ: run đủ sáu trường, image đã bị `docker image prune` sau khi nâng MuJoCo; đường truy hoàn hảo dẫn tới một digest không còn ở đâu.
+2. *"`platform.processor()` cho model CPU; `os.getenv('DOCKER_IMAGE_DIGEST', 'local-dev')` cho digest."* (Gemini K6 lượt 7) — **SAI.** Trên Linux `platform.processor()` thường trả kiến trúc hoặc chuỗi rỗng, không phải tên CPU; tên và cờ tập lệnh đọc từ `/proc/cpuinfo`. Mặc định `'local-dev'` biến "thiếu provenance" thành "provenance sai". Phản ví dụ: chạy hàm của Gemini (thêm `import os`) trên N100 và runner CI: trường `cpu` giống nhau, trong khi đó là hai lớp máy Bài 4 phải tách golden.
+3. *"`git status --porcelain` rỗng là code sạch."* — **ĐÚNG MỘT PHẦN.** Đúng cho repo này, và bắt cả file untracked. Sai khi: code chạy từ ngoài repo (editable install, notebook); commit chưa push; container không có `.git`. Phản ví dụ nhỏ: `git describe --always --dirty` **không** coi file untracked là bẩn, `git status --porcelain` thì có [đã chạy: git 2.x]: hai công cụ, hai định nghĩa "bẩn".
 
 ### 4. Thuật ngữ
 
@@ -740,7 +740,6 @@ if __name__ == "__main__":
 | 🟢 | Chạy thăm dò (exploratory) vs chạy chính thức | Run có cờ `--allow-dirty` hay thiếu trường: được chạy, không được báo cáo | Run hỏng |
 | 🟡 | Chính sách giữ (retention) | Artifact nào giữ bao lâu để provenance còn dẫn tới thứ có thật | Dọn đĩa |
 | 🟡 | SLSA, in-toto attestation | Khung và định dạng chuẩn cho provenance của bản build phần mềm, có chữ ký | Thứ phải cài ở khóa này |
-| 🔴 | W3C PROV | Mô hình dữ liệu chuẩn cho provenance (entity, activity, agent) | Cần thiết cho dự án một người |
 
 ### 5. Dự đoán
 
@@ -797,18 +796,18 @@ print(collect_provenance({}))
 ### 6. Làm
 
 1. **Thêm cả sáu trường vào output** (bản gốc). **Fail cứng nếu working tree bẩn** và không có cờ `--allow-dirty` (bản gốc). Chi tiết bản gốc chưa nói:
-   - **Code:** kiểm dirty và lấy commit **ở máy chủ, trước khi** `docker run` (launcher), rồi bơm vào container qua biến môi trường; hoặc mount repo chỉ đọc. Kiểm thêm commit đã có trên remote (`git branch -r --contains HEAD` không rỗng), nếu không thì run là thăm dò. Với `--allow-dirty`: ghi `diff_sha256` **và lưu chính file diff** (kể cả nội dung file untracked; `git diff HEAD` không gồm chúng) vào artifact của run, đặt `exploratory: true`.
+   - **Code:** kiểm dirty và lấy commit **ở launcher, trước** `docker run`, bơm vào container (hoặc mount repo chỉ đọc). Commit phải có trên remote (`git branch -r --contains HEAD`), nếu không run là thăm dò. Với `--allow-dirty`: lưu `diff_sha256` **và chính file diff** (kể cả file untracked, `git diff HEAD` không gồm), đặt `exploratory: true`.
    - **Môi trường:** launcher bơm `IMAGE_DIGEST` (repo digest nếu đã push, image ID nếu chưa; ghi rõ loại nào). Bên trong image, lockfile hash ghi lúc build (ví dụ một file `/build-info.json` sinh trong Dockerfile).
-   - **Policy:** sha256 của file checkpoint (hoặc của mọi file trong thư mục checkpoint, sắp xếp, rồi hash danh sách); với checkpoint từ Hugging Face Hub, ghi cả `revision` (commit hash của repo model, không phải `main`).
+   - **Policy:** sha256 checkpoint (thư mục: hash danh sách hash file đã sắp xếp); checkpoint từ Hugging Face Hub ghi cả `revision` (commit hash, không phải `main`).
    - **Seed:** `seed_root` + chuỗi mô tả công thức dẫn xuất + version của hàm dẫn xuất (Bài 3, Bài 6).
    - **Phần cứng:** model CPU, lớp ISA (cùng định nghĩa với khóa golden ở Bài 4), số core logic, GPU + driver nếu có; tần số CPU trung bình được Module 3 thêm (K6 Bài 8).
-   - **Trường bổ sung** (bản gốc thiếu): `set_hash` (Bài 6), hash khối định nghĩa thành công (Bài 11 sẽ điền), hash thư mục asset nếu asset nằm ngoài image, các biến môi trường ảnh hưởng tính toán (`MUJOCO_GL`, `OMP_NUM_THREADS`, `PYTHONHASHSEED`), cấu hình harness (`n_episodes`, `max_steps`).
+   - **Trường bổ sung** (bản gốc thiếu): `set_hash` (Bài 6), hash định nghĩa thành công (Bài 11), hash asset ngoài image, biến môi trường ảnh hưởng tính toán, cấu hình harness (`n_episodes`, `max_steps`).
    - **Báo cáo (Bài 10) từ chối** mọi run có `exploratory: true`.
 2. **Viết `reproduce.py`** (bản gốc): đưa vào một `run_id`, script tự dựng lại đúng môi trường và chạy lại. Ba giai đoạn:
    - *Kiểm đủ artifact*: image theo digest kéo/nạp được, commit fetch được, checkpoint có đúng sha256, manifest `set_hash` còn. Thiếu bất kỳ thứ gì → phán quyết **KHÔNG TÁI LẬP ĐƯỢC**, liệt kê tên artifact thiếu, dừng. Không "chạy thử với bản gần nhất".
    - *Chạy lại*: `docker run <image>@<digest>` với code ở đúng commit, cùng seed root, cùng biến môi trường đã ghi.
    - *So sánh*: theo `DETERMINISM.md` (Bài 1) và quy tắc golden có khóa (Bài 4): cùng lớp ISA → so hash; khác lớp → so dung sai, phần bit-exact INCONCLUSIVE. Phán quyết: **TÁI LẬP ĐƯỢC** / **KHÁC** (in trường đầu tiên lệch và episode đầu tiên lệch) / **KHÔNG TÁI LẬP ĐƯỢC**.
-3. **Test bằng một kết quả từ 2 tuần trước** (bản gốc). Nếu bạn chưa có kết quả nào đủ cũ (module này làm xong trong dưới 2 tuần), chạy một run chính thức ngay bây giờ, ghi `run_id` vào `notes/07-reproduce.md`, và làm bước 3 vào tuần sau đó; trong lúc chờ, chạy `reproduce.py` trên máy khác (laptop, runner CI) để thử nhánh "khác lớp ISA".
+3. **Test bằng một kết quả từ 2 tuần trước** (bản gốc). Chưa có kết quả đủ cũ thì chạy một run chính thức ngay, ghi `run_id` vào `notes/07-reproduce.md`, làm bước này sau 2 tuần; trong lúc chờ, chạy `reproduce.py` trên máy khác để thử nhánh "khác lớp ISA".
 4. **(Thêm) Canary cho chính provenance** (cùng tinh thần Bài 4, → F2.5): cố ý phá từng thứ và kiểm `reproduce.py` cho đúng phán quyết, nêu đúng trường: xóa image cục bộ (và không có trên registry) → KHÔNG TÁI LẬP ĐƯỢC (`env.image_digest`); đổi một byte checkpoint → KHÔNG TÁI LẬP ĐƯỢC (`policy.hash`); sửa code không commit rồi chạy không cờ → bị chặn; chạy với seed root khác → `can_compare` báo "khác đầu vào". Một provenance chưa từng được thử phá là provenance chưa biết có hoạt động không.
 5. **(Thêm) Viết chính sách giữ** vào `decisions.md`: image nào giữ bao lâu (gợi ý: mọi image từng sinh ra một kết quả được báo cáo, giữ đến khi kết quả đó bị thay thế công khai), checkpoint nào giữ, nơi giữ (registry, `docker save` ra object store của K5). Dùng con số ở câu 4 phần Dự đoán.
 
@@ -840,9 +839,9 @@ Sai số của dụng cụ đo: phán quyết của `reproduce.py` thừa hưở
 | `os.getenv` / `os.cpu_count()` | **crash** (`NameError: name 'os' is not defined`) | Gemini không `import os`. Thứ tự crash khi chạy thử: ngoài repo git → `CalledProcessError` ở `git rev-parse`; trong repo không có `uv.lock` → `FileNotFoundError`; có `uv.lock` → `NameError` [đã chạy] |
 | `torch.cuda…` | đúng | |
 
-**Reproduce sau 2 tuần** (câu 3): kết quả phổ biến nhất ở lần đầu là **KHÔNG TÁI LẬP ĐƯỢC** hoặc **KHÁC**, không phải TÁI LẬP ĐƯỢC [ước lượng: từ các lỗi hay gặp ở K4 Bài 14 và Bài 2–4 của khóa này]. Thủ phạm thường gặp: image đã build lại cùng tag (digest khác), checkpoint tham chiếu bằng đường dẫn, asset tải lúc chạy, hoặc run gốc chạy với `--allow-dirty`. Mỗi thủ phạm là một trường bạn sửa ở bước 1. Nếu lần đầu ra TÁI LẬP ĐƯỢC, chạy bước 4 (canary) trước khi tin.
+**Reproduce sau 2 tuần** (câu 3): lần đầu thường ra **KHÔNG TÁI LẬP ĐƯỢC** hoặc **KHÁC** [ước lượng]. Thủ phạm hay gặp: image build lại cùng tag, checkpoint tham chiếu bằng đường dẫn, asset tải lúc chạy, run gốc chạy `--allow-dirty`. Ra TÁI LẬP ĐƯỢC ngay lần đầu thì chạy canary (bước 4) trước khi tin.
 
-**Giữ artifact** (câu 4) [ước lượng, thay số đo của bạn]: image eval MuJoCo + robosuite + PyTorch CPU cỡ vài GB; 12 tháng, nâng mỗi 3–6 tuần → 9–17 phiên bản. Layer chung (base, apt, PyTorch) chỉ lưu một lần nếu bạn không đổi chúng, nên phần tăng thêm mỗi phiên bản thường là layer Python packages, cỡ vài trăm MB. Checkpoint VLA vài GB mỗi cái là phần đắt nhất; giữ theo "checkpoint nào từng vào báo cáo".
+**Giữ artifact** (câu 4) [ước lượng, thay số đo của bạn]: image vài GB; 12 tháng nâng mỗi 3–6 tuần → 9–17 phiên bản, nhưng layer chung chỉ lưu một lần nên mỗi phiên bản thêm cỡ vài trăm MB. Checkpoint VLA vài GB mỗi cái là phần đắt nhất; giữ theo "checkpoint nào từng vào báo cáo".
 
 **Ngưỡng của bản gốc** (giữ, có làm rõ):
 
@@ -876,46 +875,39 @@ Sai số của dụng cụ đo: phán quyết của `reproduce.py` thừa hưở
    <details><summary>Hướng nghĩ</summary>Tái lập được = lặp lại được, không phải đúng (Bài 1, câu ngược 4). Bug trong định nghĩa thành công, trong thống kê, hay trong chính kịch bản (Bài 5: tham số không có hiệu lực) đều tái lập hoàn hảo. Vụ Duke: Baggerly tái lập được, và chính nhờ tái lập mà thấy lỗi. Provenance là điều kiện để **tìm** lỗi, không thay cho việc tìm.</details>
 4. **[Nếu…thì]** Nếu một người ngoài (Gate Khóa 6 mục 6) chạy lại trên máy của họ với GPU và lớp CPU khác, `reproduce.py` của bạn trả gì? Phán quyết đó có đủ để họ "xác nhận" không?
    <details><summary>Hướng nghĩ</summary>Phần bit-exact INCONCLUSIVE, phần dung sai PASS/FAIL. "Xác nhận" có nghĩa ở mức tương đương thống kê: tỉ lệ thành công của họ nằm trong khoảng tin cậy của bạn. Viết điều đó ra trước (README), đừng để người ngoài tự định nghĩa "chạy lại được".</details>
-5. **[Liên ngành]** Kế toán có *audit trail*: mỗi con số trên báo cáo tài chính truy về chứng từ gốc. Điều gì kế toán có mà bạn không cần, và điều gì bạn cần mà kế toán không?
-   <details><summary>Hướng nghĩ</summary>Kế toán cần **chống sửa** (ghi sổ kép, sổ cái bất biến, kiểm toán độc lập) vì có động cơ gian lận; bạn cần ít hơn, nhưng hash nội dung cho bạn chống sửa gần như miễn phí. Bạn cần **chạy lại** phép tính; kế toán chỉ cần cộng lại. Hỏi tiếp: khi nào eval robot có động cơ gian lận (leaderboard, báo cáo cho nhà đầu tư)?</details>
 
 ### 10. Liên kết ra ngoài
 
 - **Chuỗi cung ứng phần mềm: SLSA và in-toto.** Provenance của một bản build là một *attestation* có chữ ký: builder nào, từ commit nào, với đầu vào nào sinh ra artifact có digest nào [chuẩn]. Giống: định danh bằng hash nội dung, fail đóng khi thiếu. Khác: ở đó mối đe dọa là **kẻ tấn công** (nên cần chữ ký, builder cô lập); ở bạn mối đe dọa là **chính bạn ba tuần sau** (nên cần đầy đủ và giữ artifact hơn là chữ ký).
 - **Nghiên cứu tái lập được: Claerbout và Buckheit & Donoho (WaveLab, 1995).** Ý tưởng được Buckheit và Donoho tóm từ Jon Claerbout: bài báo chỉ là quảng cáo cho học thuật; học thuật thật là toàn bộ môi trường phần mềm và dữ liệu sinh ra các hình [chuẩn]. Giống: báo cáo eval của bạn là "quảng cáo", run + provenance + artifact là "học thuật". Khác: họ phát hành mọi thứ để người khác chạy lại; bạn còn cần phán quyết **tự động** (ba trạng thái) vì bạn chạy lại hằng đêm, không phải một lần.
-- **Pháp y sinh học (vụ Duke).** Giống: không có provenance, việc tái lập thành điều tra pháp y tốn nhiều tháng. Khác: ở đó dữ liệu đầu vào là dữ liệu đo thật (không tái sinh được), nên provenance của **dữ liệu** quan trọng nhất; ở sim, đầu vào tái sinh được, nên provenance của **cách sinh** (kịch bản, seed, image) quan trọng nhất. Module 5 (dữ liệu thật) sẽ đưa bạn về phía bài toán của Duke.
 
 ### 11. Độ tin cậy và sửa lỗi
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| `platform.processor()` trả `'x86_64'` trên Linux | [đã chạy] | Python 3.13; Python docs nói giá trị có thể rỗng hoặc chỉ là kiến trúc |
-| `git status --porcelain` liệt kê file untracked; `git describe --dirty` không tính chúng | [đã chạy] | git 2.x; xem `git help status`, `git help describe` |
-| `RepoDigests` chỉ có khi image đến từ/đã đẩy lên registry | [chuẩn] | Docker docs, `docker inspect`; kiểm trên máy bạn [tự đo] |
-| Vụ Duke: Baggerly & Coombes, Annals of Applied Statistics 2009; báo cáo IOM 2012 | [chuẩn] | Tên bài: *Deriving chemosensitivity from cell lines: Forensic bioinformatics and reproducible research in high-throughput biology* |
-| SLSA ra đời sau các vụ tấn công chuỗi cung ứng như SolarWinds | [chuẩn] | slsa.dev |
-| Kích thước image và layer tăng thêm mỗi phiên bản | [ước lượng] | Đo `docker image ls`, `docker history` |
-| Phán quyết phổ biến ở lần reproduce đầu | [ước lượng] | Không có số liệu ngành; là kinh nghiệm chung |
+| `platform.processor()` trả `'x86_64'` trên Linux | [đã chạy] | Python 3.13; docs nói có thể rỗng hoặc chỉ kiến trúc |
+| `git status --porcelain` liệt kê untracked; `git describe --dirty` không | [đã chạy] | git 2.x |
+| `RepoDigests` chỉ có khi image đến từ/đẩy lên registry | [chuẩn] | Docker docs `docker inspect` [tự đo] |
+| Vụ Duke: Baggerly & Coombes, Ann. Appl. Stat. 2009; báo cáo IOM 2012 | [chuẩn] | *Deriving chemosensitivity from cell lines: Forensic bioinformatics and reproducible research in high-throughput biology* |
+| SLSA ra đời sau các vụ chuỗi cung ứng như SolarWinds | [chuẩn] | slsa.dev |
+| Kích thước image/layer; phán quyết phổ biến ở lần reproduce đầu | [ước lượng] | Đo `docker image ls`, `docker history`; không có số liệu ngành |
 
 **Đã sửa so với bản gốc/Gemini:**
-- Bản gốc: "thiếu một trong sáu, kết quả không tái lập được" có thể đọc thành "đủ sáu là đủ". Thêm các trường bản gốc thiếu (định nghĩa thành công, asset, biến môi trường, backend, cấu hình harness, `set_hash`) và chính sách giữ artifact.
-- Bản gốc: `reproduce.py` "tự dựng lại đúng môi trường" không nói khi môi trường không còn. Thêm phán quyết thứ ba KHÔNG TÁI LẬP ĐƯỢC, kiểm đủ artifact trước khi chạy.
-- Gemini, `collect_provenance`: `platform.processor()` không cho model CPU (đã chạy); thiếu `import os` (`NameError`); `DOCKER_IMAGE_DIGEST` mặc định `"local-dev"` là fail mở; `git` gọi trong container thường không có `.git`; `compute_canonical_scenario_hash(scenario_spec)` băm spec thô thay vì cấu hình hiệu lực (Bài 5); `policy_checkpoint_path`, `current_seed_root` là biến không định nghĩa.
-- Gemini, Bước 3: "commit hiện tại không khớp → cảnh báo hoặc checkout". Cảnh báo rồi chạy tiếp là fail mở; sửa thành chạy đúng commit đã ghi hoặc dừng.
-- Thêm canary cho provenance (bước 4): bản gốc không kiểm `reproduce.py` có bắt được thiếu artifact không.
+- Bản gốc: "thiếu một trong sáu" dễ đọc thành "đủ sáu là đủ" → thêm trường bổ sung và chính sách giữ artifact.
+- Bản gốc: `reproduce.py` không nói khi môi trường không còn → thêm phán quyết KHÔNG TÁI LẬP ĐƯỢC, kiểm artifact trước khi chạy; thêm canary provenance.
+- Gemini, `collect_provenance`: `platform.processor()` không cho model CPU; thiếu `import os`; `"local-dev"` là fail mở; `git` trong container thường không có `.git`; băm spec thô thay vì cấu hình hiệu lực; biến không định nghĩa.
+- Gemini, Bước 3: "commit không khớp → cảnh báo hoặc checkout" → chạy đúng commit đã ghi hoặc dừng.
 
 ### 12. Đọc thêm và tự kiểm tra
 
 - **Nguồn gốc:** SLSA specification, mục *Provenance* (slsa.dev); Docker docs, `docker inspect` và *image digests*.
 - **Giải thích:** Baggerly & Coombes, *Deriving chemosensitivity from cell lines: Forensic bioinformatics and reproducible research in high-throughput biology*, Annals of Applied Statistics, 2009.
 - **Đào sâu (tùy chọn):** Buckheit & Donoho, *WaveLab and Reproducible Research* (1995).
-- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao "ghi provenance" và "tái lập được" là hai việc; (2) vẽ lại DAG ở phần 2 từ trí nhớ, kể cả các trường bản gốc thiếu; (3) hai câu dưới.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao "ghi provenance" và "tái lập được" là hai việc; (2) vẽ lại DAG ở phần 2 từ trí nhớ, kể cả các trường bản gốc thiếu; (3) câu dưới.
 
 **Câu 1.** Nếu đã lưu git commit, tại sao vẫn phải lưu image digest và lockfile hash? (Câu của Gemini, đáp án mở rộng.)
 <details><summary>Đáp án</summary>Commit chỉ định danh code **của bạn**. MuJoCo, robosuite, numpy, PyTorch, thư viện hệ thống (Mesa cho render) nằm ngoài repo và đổi bit kết quả (Bài 2–3). Gemini dừng ở đây; thêm: image digest định danh **bản đã build**, còn lockfile chỉ định danh **công thức Python**: không gồm apt, không gồm base image. Và cả hai vẫn không định danh CPU, nên còn trường phần cứng.</details>
 
-**Câu 2.** `reproduce.py` trả "KHÔNG TÁI LẬP ĐƯỢC: env.image_digest". Bạn còn kết luận được gì về con số cũ?
-<details><summary>Đáp án</summary>Không kết luận nó sai, nhưng nó không còn kiểm được. Có thể chạy lại bằng image gần nhất và báo **thí nghiệm mới** (đầu vào khác, `can_compare` báo "khác đầu vào"), so về mặt thống kê với con số cũ, ghi rõ trong báo cáo. Không được gọi đó là tái lập. Và sửa chính sách giữ để điều này không lặp lại với các kết quả còn đang được dùng.</details>
 
 ---
 

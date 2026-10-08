@@ -590,15 +590,15 @@ Bản gốc nói "n = 50, chênh có thể tới 10–15 điểm" — thấp hơ
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
-Năm 2015, Optimizely — một nền tảng A/B testing lớn — thay động cơ thống kê của mình bằng "Stats Engine" dựa trên kiểm định tuần tự, cùng nhóm Ramesh Johari ở Stanford [chuẩn]. Lý do: khách hàng nhìn dashboard liên tục và dừng thí nghiệm ngay khi thấy "có ý nghĩa". Mỗi lần nhìn là một lần tung đồng xu thêm; nhìn đủ nhiều lần, một thí nghiệm A/A cũng sẽ có lúc "thắng". CI của bạn là một dashboard mà người ta bấm "re-run" khi nó đỏ.
+Năm 2015, Optimizely thay động cơ thống kê của nền tảng A/B testing bằng "Stats Engine" dựa trên kiểm định tuần tự, cùng nhóm Ramesh Johari ở Stanford [chuẩn]. Lý do: khách hàng nhìn dashboard liên tục và dừng ngay khi thấy "có ý nghĩa"; nhìn đủ nhiều lần, A/A cũng có lúc "thắng". CI của bạn là một dashboard mà người ta bấm "re-run" khi nó đỏ.
 
-Cái bẫy thứ hai nổi tiếng nhờ một con cá. Năm 2009, Craig Bennett và cộng sự đặt một con cá hồi **đã chết** vào máy fMRI, cho "xem" ảnh người trong các tình huống xã hội, và tìm được một cụm voxel "hoạt động có ý nghĩa" trong não cá — vì họ cố ý không hiệu chỉnh cho hàng chục nghìn phép kiểm định voxel [chuẩn]. Một bảng 20 task × 6 metric tô màu theo p < 0.05 là con cá hồi của bạn.
+Bẫy thứ hai nổi tiếng nhờ một con cá: năm 2009, Craig Bennett và cộng sự tìm được một cụm voxel "hoạt động có ý nghĩa" trong não một con cá hồi **đã chết** trong máy fMRI, vì cố ý không hiệu chỉnh cho hàng chục nghìn phép kiểm định [chuẩn]. Một bảng 20 task × 6 metric tô màu theo p < 0.05 là con cá hồi của bạn.
 
-Bản gốc đặt đúng câu hỏi: verdict phải là thống kê, và phải có loại thứ ba. Bài này thêm thứ bản gốc chưa nói: **chính cái cổng cũng là một dụng cụ đo có tỉ lệ sai**, và định nghĩa ba trạng thái của bản gốc chồng lên nhau.
+Bài này thêm thứ bản gốc chưa nói: **chính cái cổng là một dụng cụ đo có tỉ lệ sai**, và ba trạng thái của bản gốc chồng lên nhau.
 
 ### 2. Mô hình tư duy
 
-Bản gốc định nghĩa PASS = "không tệ hơn baseline một cách có ý nghĩa". Theo định nghĩa đó, một run n = 10 gần như luôn PASS — tức đúng cái lỗi bản gốc muốn chặn. "Không bác bỏ được H₀: không tệ hơn" **không phải** bằng chứng là không tệ hơn. Sửa: PASS phải là một khẳng định được **chứng minh**, cần một **biên δ** — mức regression bạn chấp nhận được, chọn theo sản phẩm, khai báo trước. Đọc trên CI của Δ = p_cand − p_base:
+Bản gốc: PASS = "không tệ hơn baseline một cách có ý nghĩa". Theo đó một run n = 10 gần như luôn PASS, đúng lỗi bản gốc muốn chặn: "không bác bỏ được" **không phải** bằng chứng. PASS phải được **chứng minh**, cần một **biên δ**: mức regression chấp nhận được, chọn theo sản phẩm, khai báo trước. Đọc trên CI của Δ = p_cand − p_base:
 
 ```
                         −δ           0
@@ -615,13 +615,13 @@ Quy tắc ba nhánh, **dùng chung với K6 Bài 18** (CI khép kín), xét theo
 - **PASS** ⇔ không FAIL **và** cận dưới ≥ −δ. Đây là **kiểm định non-inferiority** [chuẩn], cùng loại mà y học dùng để chứng minh thuốc mới "không kém hơn quá δ" thuốc cũ. Bài 18 gọi biên này là MDE: chọn δ bằng MDE của thiết kế (Bài 12), và δ là một quyết định sản phẩm khai báo trước.
 - **INCONCLUSIVE** ⇔ còn lại. **ERROR** ⇔ phép so sánh không hợp lệ — tách khỏi INCONCLUSIVE, vì "thiếu bằng chứng" và "dụng cụ hỏng" cần hai hành động khác nhau.
 
-Dòng (2) là một lựa chọn có chủ ý của quy tắc chung: tụt nhỏ nhưng **chắc chắn** vẫn bị chặn. Ở n rất lớn, chênh 1 điểm cũng FAIL — tức ở nightly n lớn, cổng thực chất là "mọi regression phát hiện được". Nếu bạn muốn tụt nhỏ trong biên được qua (PASS kèm cảnh báo), đó là một quy tắc khác; ghi vào `EVAL.md` và báo cáo, đừng âm thầm đổi.
+Dòng (2) là lựa chọn có chủ ý: tụt nhỏ nhưng **chắc chắn** vẫn bị chặn, nên ở nightly n lớn cổng thành "mọi regression phát hiện được". Muốn tụt nhỏ trong biên được qua kèm cảnh báo là một quy tắc khác; ghi vào `EVAL.md`, đừng âm thầm đổi.
 
 Ba hệ quả:
 
-1. **Cổng có hai tỉ lệ sai, cả hai đặt bằng α:** chặn nhầm = P(FAIL | Δ = 0) ≤ α/2; lọt lưới = P(PASS | Δ = −δ) ≤ α/2 (với CI 95%, mỗi phía 2.5%). Cái giá: code không đổi chỉ PASS khi n đủ lớn; ở n nhỏ, câu trả lời trung thực là INCONCLUSIVE. Cổng không bao giờ nói INCONCLUSIVE ở n = 50 là cổng đang nói dối.
-2. **"Không tệ hơn" khác "tương đương".** Với PR thêm tính năng, chỉ phía dưới quan trọng (non-inferiority, một phía). Với thay đổi **không được phép đổi hành vi** — nâng MuJoCo, rebuild image, refactor loader — câu hỏi là tương đương: Δ nằm trong (−δ, +δ). Đó là **TOST** (two one-sided tests), tương đương với CI 90% nằm gọn trong (−δ, +δ) ở α = 0.05 [chuẩn — Schuirmann 1987]; giữ CI 95% như cổng thì TOST ở mức 2.5% mỗi phía, bảo thủ hơn. Sau một refactor thuần, success rate *tăng* 6 điểm cũng là tín hiệu lỗi.
-3. **Mỗi lần nhìn lại là một lần thử thêm.** Bội so sánh (nhiều task) và peeking (nhiều lần nhìn) là cùng một bệnh: số phép thử thật lớn hơn số bạn nghĩ. Thuốc khác nhau: theo task thì hiệu chỉnh α; theo thời gian thì thiết kế tuần tự có ngân sách α.
+1. **Cổng có hai tỉ lệ sai, đặt bằng α:** chặn nhầm = P(FAIL | Δ = 0) ≤ α/2; lọt lưới = P(PASS | Δ = −δ) ≤ α/2 (CI 95%, mỗi phía 2.5%). Cái giá: code không đổi chỉ PASS khi n đủ lớn; ở n nhỏ, câu trả lời trung thực là INCONCLUSIVE.
+2. **"Không tệ hơn" khác "tương đương".** PR thêm tính năng: non-inferiority, một phía. Thay đổi **không được đổi hành vi** (nâng MuJoCo, rebuild image, refactor loader): tương đương, Δ ∈ (−δ, +δ), tức **TOST**, tương đương CI 90% nằm gọn trong (−δ, +δ) ở α = 0.05 [chuẩn — Schuirmann 1987]; dùng CI 95% của cổng thì bảo thủ hơn. Sau refactor thuần, success *tăng* 6 điểm cũng là tín hiệu lỗi.
+3. **Mỗi lần nhìn lại là một lần thử thêm.** Bội so sánh (nhiều task) và peeking (nhiều lần nhìn) là cùng bệnh; thuốc khác nhau: hiệu chỉnh α theo task, thiết kế tuần tự có ngân sách α theo thời gian.
 
 Mô phỏng: tỉ lệ ba verdict theo Δ thật và n, và bộ 20 task:
 
@@ -667,17 +667,16 @@ for n, z_fail in [(1000, 1.96), (1000, 3.023), (2500, 3.023)]:   # 3.023 = z_{1�
 
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
-| Script chấm pass/fail/inconclusive của bạn (deterministic + AI review) | Verdict PASS/FAIL/INCONCLUSIVE/ERROR | Inconclusive của bạn nhiều khả năng nghĩa là "oracle không chắc / hai oracle bất đồng / môi trường lỗi". Ở đây INCONCLUSIVE là **thiếu độ chính xác**, đo được bằng độ rộng CI, giảm được bằng n. Tên chuẩn của phân biệt này có trong TTCN-3 (ETSI): verdict `pass`, `fail`, `inconc`, `error`, `none` | Gộp "harness lỗi" với "thiếu episode": người ta chạy thêm 1.000 episode trên một harness hỏng |
-| `assert result == expected` | `assert non_inferior(cand, base, δ)` | δ là quyết định sản phẩm, không phải hằng số kỹ thuật; không có δ thì không có PASS | Chọn δ sau khi thấy kết quả — dời cột gôn (Bài 11) |
-| Bấm "re-run" khi CI đỏ / retry flaky | Chạy thêm episode khi verdict không vừa ý | Retry có điều kiện theo kết quả là **optional stopping**: mỗi lần chạy lại là một phép thử nữa với cùng α | Tỉ lệ lọt lưới tăng mà không ai đổi dòng code nào (đo ở mô phỏng peeking) |
-| Alert trên 20 dashboard, alert fatigue | 20 task × verdict | Ops chỉnh ngưỡng theo kinh nghiệm; ở đây tính được FWER = 1 − (1 − α)^m | Phần lớn PR có ít nhất một task đỏ giả; người ta học cách lờ cổng đi |
-| Golden/snapshot file, cập nhật bằng lệnh tường minh | Baseline có version | Golden là sự thật tất định; baseline là **một phép đo có sai số**, dùng lại cho mọi PR | Baseline "may" cao 3 điểm làm mọi PR trong ba tháng trông tệ hơn — lỗi tương quan, không phải ngẫu nhiên |
+| Script chấm pass/fail/inconclusive của bạn (deterministic + AI review) | Verdict PASS/FAIL/INCONCLUSIVE/ERROR | Inconclusive của bạn thường là "oracle không chắc / môi trường lỗi". Ở đây INCONCLUSIVE là **thiếu độ chính xác**, đo bằng độ rộng CI, giảm được bằng n. Tên chuẩn có trong TTCN-3 (ETSI): `pass`, `fail`, `inconc`, `error`, `none` | Gộp "harness lỗi" với "thiếu episode": chạy thêm 1.000 episode trên harness hỏng |
+| Bấm "re-run" khi CI đỏ / retry flaky | Chạy thêm episode khi verdict không vừa ý | Retry có điều kiện theo kết quả là **optional stopping**: mỗi lần là một phép thử nữa với cùng α | Tỉ lệ lọt lưới tăng mà không ai đổi dòng code nào |
+| Alert trên 20 dashboard, alert fatigue | 20 task × verdict | Ở đây tính được FWER = 1 − (1 − α)^m | Phần lớn PR có một task đỏ giả; người ta học cách lờ cổng |
+| Golden/snapshot file | Baseline có version | Golden là sự thật tất định; baseline là **phép đo có sai số** dùng chung cho mọi PR | Baseline "may" cao 3 điểm làm mọi PR ba tháng trông tệ hơn: lỗi tương quan |
 
 **Chấm mô hình:**
 
-- *"Script của tôi đã có pass/fail/inconclusive rồi, chỉ cần đổi điều kiện sang p-value."* (mô hình suy từ vốn của bạn) — **ĐÚNG MỘT PHẦN.** Khung ba trạng thái là đúng và hiếm. Gãy ở ba chỗ: (a) thiếu biên δ (Bài 18 gọi là MDE) thì không có PASS hợp lệ — chỉ có "chưa thấy FAIL"; (b) inconclusive của bạn gộp "oracle không chắc" với "thiếu mẫu"; cần ERROR riêng; (c) nếu AI review là một phần của oracle thành công, tỉ lệ sai của judge đi vào p. Judge sai **như nhau** ở hai arm kéo Δ về 0 (mất power); sai **khác nhau** (policy mới đổi góc camera thấy) làm Δ lệch có hệ thống. Phản ví dụ: judge bỏ sót 10% thành công ở cả hai arm; Δ thật −6 điểm đo ra khoảng −5.4, cổng cần thêm cỡ 20–25% episode để bắt cùng regression [ước lượng].
-- *"Bonferroni cho mọi thứ là an toàn nhất."* — **SAI** cho phía PASS. Kết luận "cả bộ PASS" đòi **mọi** task PASS; đó là kiểm định giao–hợp (intersection–union), và mỗi task ở α đã đủ giữ tỉ lệ lọt lưới của cả bộ ≤ α, không cần hiệu chỉnh [chuẩn — Berger 1982]. Hiệu chỉnh cần cho phía FAIL ("có ít nhất một task tệ hơn"). Phản ví dụ: áp Bonferroni cho cả cận dưới, bộ 20 task cần n mỗi task lớn hơn hẳn để PASS mà không mua thêm an toàn nào.
-- *"Có INCONCLUSIVE thì cứ chạy thêm cho đến khi ra PASS hoặc FAIL."* — **ĐÚNG MỘT PHẦN.** Chạy thêm là hành động đúng; chạy thêm **rồi nhìn lại với cùng ngưỡng** là peeking. Phản ví dụ: mô phỏng peeking dưới đây — mười lần nhìn, mỗi 100 episode.
+- *"Script của tôi đã có pass/fail/inconclusive, chỉ cần đổi điều kiện sang p-value."* (suy từ vốn của bạn) — **ĐÚNG MỘT PHẦN.** Khung ba trạng thái đúng và hiếm. Gãy: (a) thiếu biên δ (Bài 18 chọn δ = MDE) thì không có PASS hợp lệ, chỉ "chưa thấy FAIL"; (b) inconclusive của bạn gộp "oracle không chắc" với "thiếu mẫu", cần ERROR riêng; (c) nếu AI review là một phần oracle thành công, sai số judge đi vào p: sai **như nhau** ở hai arm kéo Δ về 0 (mất power), sai **khác nhau** làm Δ lệch có hệ thống. Phản ví dụ: judge bỏ sót 10% thành công ở cả hai arm; Δ thật −6 điểm đo ra ≈ −5.4, cổng cần thêm cỡ 20–25% episode để bắt cùng regression [ước lượng].
+- *"Bonferroni cho mọi thứ là an toàn nhất."* — **SAI** cho phía PASS. "Cả bộ PASS" đòi **mọi** task PASS: kiểm định giao–hợp (intersection–union), mỗi task ở α đã giữ tỉ lệ lọt lưới cả bộ ≤ α [chuẩn — Berger 1982]. Hiệu chỉnh chỉ cần cho phía FAIL. Phản ví dụ: Bonferroni cả cận dưới, bộ 20 task cần n lớn hơn hẳn để PASS mà không mua thêm an toàn nào.
+- *"INCONCLUSIVE thì cứ chạy thêm cho đến khi ra PASS hoặc FAIL."* — **ĐÚNG MỘT PHẦN.** Chạy thêm đúng; chạy thêm **rồi nhìn lại với cùng ngưỡng** là peeking. Phản ví dụ: mô phỏng peeking ở bước 6.
 
 ### 4. Thuật ngữ
 
@@ -691,7 +690,6 @@ for n, z_fail in [(1000, 1.96), (1000, 3.023), (2500, 3.023)]:   # 3.023 = z_{1�
 | 🟡 | Intersection–union test | "Mọi thành phần đều đạt" — không cần hiệu chỉnh bội | Phải Bonferroni như mọi phép đa kiểm định |
 | 🟢 | Peeking / optional stopping | Quyết định dừng dựa trên kết quả đang xem | Kiểm tra tiến độ vô hại |
 | 🟡 | Group sequential, alpha spending | Nhìn nhiều lần theo lịch, chia α cho các lần nhìn (Pocock, O'Brien–Fleming) | Phép thuật dừng sớm miễn phí |
-| 🟡 | SPRT | Kiểm định tuần tự của Wald (1945), dừng ngay khi tỉ số hợp lý vượt ngưỡng | Chỉ có trong lý thuyết |
 
 ### 5. Dự đoán
 
@@ -848,9 +846,7 @@ Peeking nhân **cả hai** tỉ lệ sai lên khoảng 4 lần. Bonferroni qua l
    <details><summary>Hướng nghĩ</summary>Với FWER 2.5% phía FAIL mỗi PR: ~5 PR chặn nhầm/tháng. Lọt lưới phụ thuộc số PR có regression thật và kích thước của nó so với δ. Chặn nhầm đốt niềm tin vào cổng (người ta bắt đầu bypass); lọt lưới tích lũy (nhiều regression nhỏ hơn δ cộng lại). Cần thêm cổng định kỳ so với baseline xa (tháng trước), không chỉ so với commit trước.</details>
 3. **[Failure mode]** Mỗi PR đều PASS non-inferiority với δ = 3 điểm so với baseline của PR trước. Sau 10 PR, success rate có thể đã tụt bao nhiêu mà cổng không bao giờ đỏ?
    <details><summary>Hướng nghĩ</summary>Đến gần 10 × 3 = 30 điểm về nguyên tắc ("biocreep" trong thử nghiệm non-inferiority nối tiếp). Lối ra: baseline neo (anchor) không trôi theo từng PR, chỉ đổi bằng `promote_baseline` có lý do; và một cổng định kỳ so với baseline neo.</details>
-4. **[Vì sao không]** Vì sao không dùng FDR (Benjamini–Hochberg) cho cổng merge, khi nó mạnh hơn Holm?
-   <details><summary>Hướng nghĩ</summary>FDR giới hạn *tỉ lệ* phát hiện giả trong số đã gắn cờ, không giới hạn xác suất có ít nhất một. Với cổng chặn merge, một FAIL giả là một PR bị chặn — đơn vị chi phí là từng phép thử, nên FWER hợp hơn. FDR hợp với báo cáo khám phá, nơi bạn sẽ xem tay danh sách bị gắn cờ.</details>
-5. **[Liên ngành]** Thuốc generic được duyệt bằng bioequivalence: CI 90% của tỉ số AUC phải nằm trong 80–125%. Vì sao 90% chứ không 95%, và vì sao biên không đối xứng?
+4. **[Liên ngành]** Thuốc generic được duyệt bằng bioequivalence: CI 90% của tỉ số AUC phải nằm trong 80–125%. Vì sao 90% chứ không 95%, và vì sao biên không đối xứng?
    <details><summary>Hướng nghĩ</summary>CI 90% hai phía = hai kiểm định một phía ở α = 0.05 (TOST). Biên 80–125% đối xứng trên thang log (ln 0.8 = −ln 1.25), vì tỉ số được phân tích trên log. Bạn đang làm đúng TOST ở bước 7, trên thang hiệu tuyệt đối.</details>
 
 ### 10. Liên kết ra ngoài
@@ -884,13 +880,11 @@ Peeking nhân **cả hai** tỉ lệ sai lên khoảng 4 lần. Bonferroni qua l
 - **Nguồn gốc:** R. Johari, P. Koomen, L. Pekelis, D. Walsh (2017), *Peeking at A/B Tests: Why it matters, and what to do about it*, KDD.
 - **Giải thích:** D. Lakens (2017), *Equivalence Tests: A Practical Primer for t Tests, Correlations, and Meta-Analyses*, Social Psychological and Personality Science — TOST dễ hiểu nhất.
 - **Đào sâu (tùy chọn):** C. Jennison, B. Turnbull (2000), *Group Sequential Methods with Applications to Clinical Trials*.
-- **Tự kiểm tra:** (1) giải thích cho một backend engineer trong 5 câu vì sao "không bác bỏ được" không phải PASS; (2) vẽ lại năm dòng CI trên trục Δ từ trí nhớ; (3) hai câu dưới.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer trong 5 câu vì sao "không bác bỏ được" không phải PASS; (2) vẽ lại năm dòng CI trên trục Δ từ trí nhớ; (3) câu dưới.
 
 *Câu 1: Cổng của bạn có tỉ lệ chặn nhầm 2.5% và lọt lưới 2.5% (ở Δ = −δ). Một regression thật −2δ có bị lọt với xác suất 2.5% không?*
 <details><summary>Đáp án</summary>Không — nhỏ hơn nhiều, nếu n đủ: tỉ lệ lọt lưới chỉ chạm mức danh nghĩa tại Δ = −δ và giảm nhanh khi regression lớn hơn. Nhưng ở n nhỏ, regression −2δ thường cho INCONCLUSIVE chứ không phải FAIL (bảng Δ = −10, n = 50). "Không lọt" khác "bị bắt".</details>
 
-*Câu 2: Vì sao một refactor thuần nên dùng TOST chứ không phải non-inferiority?*
-<details><summary>Đáp án</summary>Vì câu hỏi là "hành vi không đổi", hai phía. Non-inferiority PASS cả khi success rate tăng 10 điểm — dấu hiệu refactor đã đổi thứ gì đó (seed, timestep, định nghĩa thành công).</details>
 
 ---
 

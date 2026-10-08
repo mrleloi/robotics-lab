@@ -51,6 +51,7 @@ Dòng năng lượng duy nhất trong chặng: lưới 220 V → (bên trong v�
 - KHÔNG cấp điện cho mẫu thử mới khi chưa đo điện trở giữa + và − của nó. Gần 0 Ω thì không cấp.
 - KHÔNG nối mẫu thử vào đầu ra nguồn đang bật. Tắt OUTPUT → nối → kiểm cực → bật OUTPUT (Bài C0.4).
 - KHÔNG đặt `I_set` cao "cho chắc" (Bài C0.4).
+- KHÔNG chạm que đo vào nguồn hay pin khi núm xoay đang ở thang dòng (µA/mA/A) hoặc que đỏ đang ở lỗ **10A**. Ở thang dòng, đồng hồ là một sợi dây gần 0 Ω: chạm hai cực là **ngắn mạch qua đồng hồ**. Trước **mỗi** lần đo áp, đọc to: "núm ở V, que đỏ ở lỗ VΩ". Đo dòng xong, trả núm và que về V ngay (Bài C0.4 bước 3).
 - KHÔNG để mỏ hàn ngoài giá khi buông tay. Mỏ rơi thì để rơi, KHÔNG chụp.
 - KHÔNG co nhiệt bằng bật lửa gần pin, cồn IPA, dung môi đang mở nắp.
 - KHÔNG sạc, xả, hay để pin cắm sạc khi không có người trong phòng (từ C1).
@@ -573,7 +574,7 @@ Tham số: điện trở dây đồng theo AWG (bảng AWG chuẩn, Ω/km ở 20
 1. Cắm XT60 cần hàn vào một đầu XT60 đối diện (giữ chân thẳng khi nhựa nóng).
 2. Kẹp, mạ thiếc dây; luồn ống co hai dây; đổ thiếc đầy khoảng 2/3 cốc hàn.
 3. Hâm cốc tới khi thiếc trong cốc chảy, nhúng dây đã mạ vào, giữ yên tới khi đông. Mỗi cốc ≤ 5 s; nhựa mềm hay chân nghiêng → dừng, để nguội.
-4. Phía có điện (pin, nguồn) dùng **đầu cái** để chân có điện nằm khuất `[chuẩn — quy ước phổ biến]`. Đỏ vào cực có dấu "+" trên vỏ (cạnh vát).
+4. Phía có điện (pin, nguồn) dùng **đầu cái** để chân có điện nằm khuất `[chuẩn — quy ước phổ biến]`. Đỏ vào chân có ký hiệu "+" đúc trên vỏ; theo quy ước phổ biến "+" là phía **cạnh phẳng**, "−" là phía **cạnh vát** `[chuẩn — quy ước, không bắt buộc]`. Tin ký hiệu đúc trên vỏ, không tin hình dạng, và kiểm bằng đồng hồ trước lần cắm đầu tiên.
 5. Co nhiệt phủ hết cốc hàn.
 
 **E. Bấm JST-XH (3 mẫu, 22 AWG) và ferrule (2 mẫu, 18 AWG).**
@@ -583,7 +584,7 @@ Tham số: điện trở dây đồng theo AWG (bảng AWG chuẩn, Ω/km ở 20
 **F. Kiểm ba lớp, theo thứ tự, ghi mỗi phép đo một dòng JSONL (Bài C0.5).**
 1. **Mắt:** theo hình đạt/hỏng; chụp ảnh `sample_id`.
 2. **Sụt áp (Kelvin):** đồ gá ở mục 4 của chặng. Nguồn bàn: OUTPUT OFF, V_set 2 V, I_set 5 A (dây 22 AWG của JST: 2 A), nối, OUTPUT ON, chờ màn hình báo CC và dòng ổn định. Đo áp trên span 50 mm của **đoạn nguyên** (đối chứng) rồi span 50 mm **chứa mối**, mỗi cái 3 lần, lấy trung vị. Giữ dòng ≤ 30 s mỗi lần. Tiêu chí của khóa này: `V_mối ≤ 1,5 × V_nguyên` → pass; vượt rõ ra ngoài → fail; nếu chênh nằm trong sai số đồng hồ ±(sai số hai phép đo) quanh ngưỡng → **inconclusive**, đo lại ở dòng cao hơn hoặc span dài hơn `[ước lượng — ngưỡng 1,5× là quy ước của khóa]`. Với XT60: đo từ dây bên này qua cặp đầu cắm sang dây bên kia; đối chứng là cùng chiều dài dây 14 AWG.
-3. **Kéo thử:** treo mẫu vào cân hành lý, kéo đều tới ngưỡng, giữ 5 s; mối không được trượt, nứt, đổi hình. Ngưỡng tham chiếu theo bảng lực kéo tối thiểu UL 486A cho đầu cos: 22 AWG **36 N** (8 lbf), 18 AWG **89 N** (20 lbf), 16 AWG **133 N** (30 lbf) `[spec — UL 486A theo bảng tóm tắt của Cirris; kiểm bản tiêu chuẩn]`; 14 AWG dùng ngưỡng 16 AWG cho C0 `[ước lượng]`. Đầu JST-XH: dùng giá trị trong tài liệu crimp của JST nếu tìm được `[tự đo]`, không thì 36 N. Kéo thử làm sau đo sụt áp (kéo có thể làm hỏng mối).
+3. **Kéo thử:** treo mẫu vào cân hành lý, kéo đều tới ngưỡng, giữ 5 s; mối không được trượt, nứt, đổi hình. Ngưỡng tham chiếu theo bảng lực kéo tối thiểu UL 486A cho đầu cos: 22 AWG **36 N** (8 lbf), 18 AWG **89 N** (20 lbf), 16 AWG **133 N** (30 lbf), 14 AWG **222 N** (50 lbf) `[spec — UL 486A theo bảng tóm tắt của Cirris; kiểm bản tiêu chuẩn]`. Bảng này viết cho đầu bấm/đầu cos (ferrule, JST). Mối **hàn** XT60 không thuộc UL 486A; khóa này kéo thử XT60 trên 14 AWG ở 133 N `[ước lượng — quy ước của khóa]`: đủ chứng minh mối không hỏng ngay, không kéo tới mức phá cốc hàn. Đầu JST-XH: dùng giá trị trong tài liệu crimp của JST nếu tìm được `[tự đo]`, không thì 36 N. Kéo thử làm sau đo sụt áp (kéo có thể làm hỏng mối).
 
 **G. Kết thúc.** Mẫu đạt: dán nhãn, cất vào túi zip ghi `sample_id` (gate cần xem lại). Mẫu fail: cắt đôi theo chiều dọc bằng kìm cắt để nhìn bên trong (thiếc có thấm không, cánh bấm ôm gì), chụp ảnh. Đây là dữ liệu đắt nhất của bài.
 
@@ -641,13 +642,16 @@ Rung và chu kỳ nhiệt; đầu bấm bằng máy/kìm có kiểm định cho 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
 | Swissair 111: cháy bắt đầu từ hồ quang dây điện | `[chuẩn]` | Báo cáo TSB Canada A98H0003 (2003) |
-| Lực kéo UL 486A: 22 AWG 8 lbf, 18 AWG 20 lbf, 16 AWG 30 lbf | `[spec]` | Bảng tóm tắt của Cirris; kiểm bản tiêu chuẩn |
+| Lực kéo UL 486A: 22 AWG 8 lbf, 18 AWG 20 lbf, 16 AWG 30 lbf, 14 AWG 50 lbf | `[spec]` | Bảng tóm tắt của Cirris; kiểm bản tiêu chuẩn. Áp cho đầu bấm; ngưỡng 133 N cho mối hàn XT60 là quy ước của khóa |
+| XT60: "+" phía cạnh phẳng | `[chuẩn]` | Quy ước phổ biến, không bắt buộc; tin ký hiệu đúc trên vỏ |
 | Không hàn lên đầu bấm; không nhúng thiếc dây vào cầu đấu vít | `[chuẩn]` | IPC/WHMA-A-620; hướng dẫn của nhà sản xuất cầu đấu |
 | 18 AWG ≈ 20,9 mΩ/m | `[chuẩn]` | Bảng AWG |
 | Ngưỡng sụt áp 1,5× đoạn nguyên | `[ước lượng]` | Quy ước của khóa; C1 có thể siết lại khi có INA226 |
 | Thang mV của UT33D+ | `[tự đo]` | Kiểm manual |
 
 Đã sửa so với nguồn: K1 Bài 8 bước J (luyện tùy chọn) chỉ yêu cầu "kéo thử" không có ngưỡng; ở đây thêm ngưỡng lực theo AWG và phép đo sụt áp có đối chứng.
+
+Reviewer sửa: (1) XT60 "dấu + ở cạnh vát" là sai quy ước — quy ước phổ biến là "+" ở cạnh phẳng; giờ bắt tin ký hiệu đúc và đo. (2) Bổ sung ngưỡng UL 486A cho 14 AWG (50 lbf ≈ 222 N) và nói rõ bảng UL áp cho đầu bấm, ngưỡng 133 N cho mối hàn XT60 là quy ước của khóa.
 
 ### 12. Đọc thêm và tự kiểm tra
 
@@ -762,7 +766,7 @@ Linh kiện từ kit K1: điện trở 1/4 W 220, 100, 47, 22, 10 Ω; một LED 
 
 1. **Kiểm nguồn lần đầu.** Đầu ra hở, `V_set` 5,00 V: đo bằng UT33D+ ở cọc ra. Nối tắt hai cọc bằng dây 18 AWG khi OUTPUT OFF, `I_set` = 0,10 A, OUTPUT ON: màn hình phải báo CC, I ≈ 0,10 A, V gần 0. Ghi cả hai vào `measurements.jsonl` với `instrument_id` của nguồn.
 2. **Bảng tải.** Mỗi tải: OUTPUT OFF → đặt `V_set` = 3,0 V, `I_set` = 50 mA (đặt `I_set` bằng cách nối tắt đầu ra và vặn núm dòng nếu nguồn của bạn đặt theo cách đó, `[tự đo — manual]`) → nối tải → OUTPUT ON → ghi chế độ, V, I từ màn hình, V đo bằng UT33D+ trên hai chân điện trở. Sờ (sau khi OFF) điện trở nóng nhất.
-3. **Đối chiếu dòng:** tải 100 Ω, UT33D+ ở thang 200 mA, **cắm que đỏ sang lỗ mA** và mắc nối tiếp. Xong thì **trả que đỏ về lỗ V** ngay (quên là đứt cầu chì 0,2 A ở lần đo áp tiếp theo `[spec — teardown UT33D+]`).
+3. **Đối chiếu dòng:** tải 100 Ω, **OUTPUT OFF**, mắc UT33D+ **nối tiếp** (cắt mạch, đồng hồ thành một đoạn dây). Họ UT33+ có ba lỗ: `10A`, `COM` và một lỗ chung cho V/Ω/mA `[spec — review lygte-info UT33A+/UT33D+; kiểm lại trên mặt đồng hồ của bạn]`: dòng 200 mA dùng **lỗ chung** và **núm xoay** sang thang 200 mA, không có lỗ mA riêng. OUTPUT ON, đọc, OUTPUT OFF. Xong thì **xoay núm về V ngay**. Để núm ở thang mA rồi đo áp tiếp theo là ngắn mạch qua shunt của đồng hồ: ít nhất đứt cầu chì mA (0,2 A theo review). Với **pin** (từ C1) hậu quả nặng hơn nhiều: que ở lỗ `10A` chạm hai cực pack là chập pack qua đồng hồ; cầu chì thủy tinh 5×20 mm trong đồng hồ không được thiết kế để cắt hàng trăm ampe, và một teardown UT33D đời cũ thấy **dây đồng** thay cho cầu chì 10 A `[spec — teardown trên diễn đàn EEVblog, đời UT33D không "+"; tự đo: mở nắp đồng hồ của bạn, ghi định mức hai cầu chì vào `instruments.jsonl`]`. Quy tắc: **không bao giờ đo dòng của pin bằng đồng hồ**; dòng pin đo bằng INA226 (C1.5).
 4. **LED không điện trở** (câu 3), OUTPUT OFF khi nối, chú ý cực (chân dài là +). Rồi thử `I_set` = 20 mA và 2 mA: độ sáng và V thay đổi thế nào.
 5. **Nếu nguồn có OCP:** bật OCP, lặp lại phép nối tắt: đầu ra phải tắt. Ghi có/không.
 6. **Quy trình bring-up một khối mới** (dùng từ C1 trở đi), viết vào `build-log/quy-trinh-cap-dien.md`:
@@ -793,7 +797,7 @@ Linh kiện từ kit K1: điện trở 1/4 W 220, 100, 47, 22, 10 Ω; một LED 
 |---|---|---|---|
 | Không bao giờ thấy CC | `I_set` đặt cao hơn mức tải đòi | Đọc `I_set` (nút xem/đặt) | Đặt lại 50 mA |
 | CC ngay cả với 220 Ω | `I_set` gần 0; dây đo chập | Đo Ω tải khi OFF | Đặt lại; tách dây đo |
-| UT33D+ báo 0 khi đo dòng | Cầu chì mA đã đứt; que ở lỗ V | Thông mạch qua cầu chì (manual) | Thay cầu chì đúng loại |
+| UT33D+ báo 0 khi đo dòng | Cầu chì mA đã đứt (thường do lần trước đo áp khi núm còn ở thang mA); núm sai thang; que sai lỗ | Thông mạch qua cầu chì (manual) | Thay cầu chì **đúng định mức và loại** (không thay bằng cầu chì to hơn hay dây); ghi near miss |
 | V đo bằng UT33D+ thấp hơn màn hình khi tải lớn | Sụt áp trên dây đo và kẹp | Đo tại cọc nguồn rồi tại tải | Bình thường; dây ngắn, to hơn |
 
 ### 9. Câu hỏi ngược
@@ -829,10 +833,12 @@ Linh kiện từ kit K1: điện trở 1/4 W 220, 100, 47, 22, 10 Ω; một LED 
 |---|---|---|
 | Hành vi CV/CC, điểm chuyển R = V_set/I_set | `[chuẩn]` | Mô phỏng ở phần 2, đo ở phần 6 |
 | Tụ đầu ra xả vào tải khi nối lúc đang bật | `[chuẩn]` | Mức độ phụ thuộc nguồn `[tự đo]` |
-| UT33D+ có thang 10 A và thang mA dùng cầu chì 0,2 A | `[spec]` | Đánh giá/teardown UT33D+ (lygte-info.dk); kiểm manual |
+| UT33D+ có thang 10 A (lỗ riêng) và thang mA dùng lỗ chung với V, cầu chì 0,2 A; 10 A có cầu chì 10 A/250 V | `[spec]` | Review lygte-info.dk (UT33D+); teardown UT33D đời cũ trên EEVblog thấy dây thay cầu chì 10 A → mở nắp kiểm máy của bạn |
 | Sai số màn hình nguồn | `[tự đo]` | Phần 6 bước 3 |
 
 Đã sửa so với nguồn: K1 Bài 4 nói CC "không ngắt" nhưng chưa phân biệt CC với OCP và chưa nói về tụ đầu ra; bổ sung ở đây.
+
+Reviewer sửa: bước 3 trước đây bảo "cắm que đỏ sang lỗ mA" — họ UT33+ không có lỗ mA riêng (mA dùng lỗ chung với V, chọn bằng núm); đã viết lại và thêm cảnh báo ngắn mạch pin qua thang dòng/lỗ 10A, quy tắc cứng ở mục 1.
 
 ### 12. Đọc thêm và tự kiểm tra
 

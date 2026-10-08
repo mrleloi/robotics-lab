@@ -45,7 +45,7 @@ flowchart LR
 ```
 
 Ba điều đọc từ hình:
-1. **E-stop chỉ nằm trên nhánh A.** Bấm E-stop: motor mất điện, mini PC và ESP32 vẫn sống để ghi log và báo cáo. Đây là quyết định kiến trúc (`_KE-HOACH-K7.md` mục 5); C10.1 làm E-stop cứng đầy đủ, C1 làm điểm cắt.
+1. **E-stop chỉ nằm trên nhánh A.** Bấm E-stop: motor mất điện, mini PC và ESP32 vẫn sống để ghi log và báo cáo. Đây là quyết định kiến trúc (`_KE-HOACH-K7.md` mục 5); C10.1 làm E-stop cứng đầy đủ, C1 làm điểm cắt. Mạch C1 là **fail-safe** theo nghĩa hẹp: tiếp điểm thường hở (NO) của relay chỉ đóng khi cuộn hút có điện qua nút NC; mất cuộn, đứt dây, bấm nút, đứt FD đều = cắt `[chuẩn]`. Ba giới hạn phải biết, C10.1 xử lý: (a) **xoay nhả nút là động lực có lại ngay**, không có bước reset (C10.1 thêm mạch tự giữ); (b) diode song song cuộn làm relay nhả **chậm hơn** (dòng cuộn tắt dần qua diode) nên tiếp điểm mở chậm, hồ quang DC lâu hơn; đo thời gian nhả ở C10.1, có thể dùng diode + zener `[chuẩn]`; (c) relay đóng vào tụ 1000 µF phía driver có dòng nạp rất lớn, lâu dần có thể **hàn dính tiếp điểm**, tức E-stop hỏng ở trạng thái đóng mà không ai biết: kiểm mỗi lần khởi động rằng bấm E-stop làm áp động lực về ~0 (test `test_estop_isolation` ở mục 7). Relay 12 V của ô tô được thiết kế cho áp ắc quy ~9–16 V; đọc dải áp cuộn trong datasheet relay, kiểm nó còn hút chắc ở 10 V (pack cạn) và chịu được 14,6 V (pack đầy) `[spec — datasheet relay]`.
 2. **Mỗi đường dây có cầu chì ở đầu nguồn của nó.** Cầu chì chính bảo vệ dây chính; cầu chì nhánh bảo vệ dây nhánh (Bài C1.3).
 3. **Dòng điện về đi theo hình sao,** không nối tiếp qua nhau. Dòng motor không được chảy qua dây GND của ESP32.
 
@@ -66,6 +66,8 @@ Dòng dữ liệu mới: ESP32 đọc INA226 qua I2C ở ~1,5 kHz → USB serial
 - KHÔNG sạc bằng sạc khác hóa học hoặc khác số S. Sạc LiFePO4 4S (14,6 V) và sạc Li-ion 4S (16,8 V) **không** thay nhau được (Bài C1.6).
 - KHÔNG sạc khi không có người trong phòng; KHÔNG sạc trên giường, sofa, thảm; sạc trong túi chống cháy hoặc hộp kim loại, trên mặt không cháy.
 - KHÔNG nối pin vào mạch nào chưa qua đủ ba bước: (1) đo điện trở + và − của mạch khi tắt hết (không được gần 0 Ω); (2) cấp bằng nguồn bàn với giới hạn dòng thấp và thấy đúng các điện áp; (3) công tắc chính ở OFF lúc cắm XT60.
+- KHÔNG chạm que đồng hồ vào pin khi núm đang ở thang dòng hoặc que đỏ ở lỗ `10A` (→ K7 C0.4 bước 3): đó là chập pack qua đồng hồ. Trước mỗi lần đo áp pin: "núm ở V DC, que đỏ ở lỗ VΩ". KHÔNG đo dòng của pin bằng đồng hồ; dòng pin chỉ đo bằng INA226 (Bài C1.5).
+- KHÔNG cắt hai dây ra của pack bằng một nhát kìm, và KHÔNG để hai đầu dây pin cùng trần một lúc: lưỡi kìm bắc qua hai lõi là chập pack. Gắn F0 và XT60 vào dây pin theo đúng thứ tự ở Lắp bước 3a.
 - KHÔNG làm việc trên dây đang nối pin. Muốn sửa: công tắc chính OFF → **rút XT60 của pin** → đặt đầu XT60 pin quay ra xa → mới sửa. Công tắc OFF chưa đủ vì đoạn từ pin tới công tắc vẫn có điện.
 - KHÔNG để đầu dây trần nào nối với pin. Mọi đầu dây nối pin phải có đầu nối có vỏ hoặc được co nhiệt bọc kín trước khi nối phía kia.
 - KHÔNG đặt cầu chì chính xa pin. Đoạn dây từ cực pin tới cầu chì chính là đoạn **không có gì bảo vệ**; giữ ≤10 cm `[ước lượng — thực hành phổ biến]`.
@@ -89,7 +91,7 @@ Giá `[ước lượng 10/2026]`, kiểm lại ở cửa hàng. Nơi mua theo `d
 | Món | Thông số phải chọn | Vì sao (bằng số) | Giá | Kiểm khi nhận hàng | Thay thế được bằng |
 |---|---|---|---|---|---|
 | **Pack pin dựng sẵn** | 4S LiFePO4 12,8 V, 6–10 Ah (77–128 Wh), **BMS tích hợp** liên tục ≥15 A, ghi rõ ngưỡng quá dòng; dây ra ≥14 AWG | Wh quyết định bằng runtime tính ở Bài C1.2; BMS phải chịu tổng dòng đỉnh motor + mini PC (Bài C1.2) | 0,9–2tr | Đo điện áp nghỉ (Bài C1.1 bước 2); nhìn: không phồng, vỏ co nhiệt không rách; đọc nhãn: hóa học, S, Ah, dòng xả; hỏi/đòi thông số BMS | 4S2P Li-ion NMC 14,4 V có BMS (Bài C1.1 so sánh); **không** thay bằng LiPo RC trần |
-| **Sạc đúng hóa học** | LiFePO4 4S, 14,6 V, 1–3 A, có đèn báo đầy, tự ngắt | Sạc 0,2–0,5C an toàn cho pack 6 Ah `[ước lượng]` (Bài C1.6) | 150–400k | Đo áp ra không tải: phải ≈14,6 V (với pack NMC 4S: 16,8 V) | Nguồn bàn CV/CC đặt 14,6 V + dòng ≤0,5C, **có người trông** |
+| **Sạc đúng hóa học** | LiFePO4 4S, 14,6 V, 1–3 A, có đèn báo đầy, tự ngắt | Sạc 0,2–0,5C an toàn cho pack 6 Ah `[ước lượng]` (Bài C1.6) | 150–400k | Đo áp ra không tải: phải ≈14,6 V (với pack NMC 4S: 16,8 V) | Nguồn bàn CV/CC, **có người trông**, theo quy trình ở Bài C1.6 (V_set 14,4 V kiểm bằng đồng hồ, tự tháo khi dòng tụt) |
 | Cầu chì lưỡi ATO/ATC + đế cầu chì inline có nắp | Bộ 1, 2, 3, 5, 7,5, 10, 15 A; đế cho dây 14 AWG | Định mức 32 V DC, cắt được 1000 A `[spec — datasheet Littelfuse 0257/ATO]`, đủ cho pack 4S | 100–200k | Đo thông mạch từng cầu chì; đọc chữ in số ampe | Hộp cầu chì nhiều nhánh (fuse block 4–6 đường) có nắp |
 | Công tắc chính | Ghi định mức **DC** ≥20 A, ≥24 V DC (công tắc ngắt pin xe máy/thuyền) | Nhiều công tắc rocker chỉ ghi định mức AC; ngắt DC khó hơn vì hồ quang không tự tắt ở điểm qua 0 `[chuẩn]` | 100–300k | Đo thông mạch ON/OFF; đọc định mức DC trên thân | Rút XT60 (là "công tắc" an toàn nhất, nhưng không tiện) |
 | Relay E-stop | Relay ô tô 12 V, tiếp điểm 30–40 A, cuộn ~100–200 mA; có đế | Cắt nhánh motor; relay ô tô được thiết kế cho tải DC 12 V `[spec — đọc datasheet relay: dải áp cuộn hút, định mức tiếp điểm DC]` | 50–150k | Cấp 12 V từ nguồn bàn vào cuộn: nghe "tách", đo thông tiếp điểm; đo dòng cuộn | Contactor DC nhỏ (to, đắt hơn) |
@@ -166,8 +168,10 @@ Cỡ dây, chiều dài là đề xuất ban đầu `[ước lượng]`; Bài C1
 | W30/W31 | VIN_5V / GND | FC → buck 5 V; về điểm sao | 22 | đỏ/đen | ~0,25 | FC 2 A |
 | W40 | ESTOP_COIL | FD → nút → cuộn → GND | 22 | có nhãn đỏ ở hai đầu (quy ước C0.5) | ~0,5 | FD 1 A |
 | W32/W33 | 5V / GND | buck 5 V → ESP32, INA226 VS | 22 | **tím**/đen | ~0,3 | (giới hạn dòng của buck) |
-| W50 | SENSE± | mép shunt → INA226 | 24–26 xoắn đôi | màu không trùng net nguồn + nhãn SENSE | ~0,1 | không cần (dòng µA) |
+| W50 | SENSE± (+ VBUS) | mép shunt → INA226 | 24–26 xoắn đôi | màu không trùng net nguồn + nhãn SENSE | ~0,1 | **điện trở 10 Ω nối tiếp mỗi dây, đặt sát mép shunt** (xem dưới bảng) |
 | W60 | I2C | INA226 → ESP32 (JST 4 chân) | 26 | Qwiic: đen GND, đỏ 3V3*, xanh dương SDA, vàng SCL | ~0,2 | — |
+
+**Dây sense không mang dòng nhưng nối thẳng vào VBAT.** Dòng đo chỉ cỡ µA, nhưng nếu dây 26 AWG cọ thủng vỏ chạm GND, nó là một đường chập chỉ được F0 15 A bảo vệ, và dây 26 AWG cháy trước khi F0 kịp đứt. Hai cách: giữ dây sense ≤10 cm, buộc chặt, và đặt điện trở 10 Ω (1/4 W) nối tiếp mỗi dây **ngay tại mép shunt**: chập thì điện trở tự cháy hở như một cầu chì, dây không cháy. 10 Ω cũng là giá trị lọc đầu vào tối đa mà datasheet INA226 khuyên, vì dòng phân cực đầu vào chạy qua nó gây sai số offset/độ lợi `[spec — TI INA226 datasheet, mục input filtering; tự đo: đọc offset khi không tải]`. Cùng lý do cho dây VBUS.
 
 Màu theo quy ước dây của → K7 C0.5: **đỏ VBAT, cam 12 V, tím 5 V, đen GND, I2C theo Qwiic**. *Cáp Qwiic dùng đỏ cho 3,3 V; trong bo nguồn đây là ngoại lệ duy nhất của "đỏ = VBAT", nên đầu JST của cáp I2C phải có nhãn "3V3". Mã `F0, FA…FD` và `W01…` dán nhãn thật trên dây và cầu chì.
 
@@ -189,6 +193,13 @@ Thứ tự: khái niệm pin → nhận pin (chưa nối gì) → đo tải từ
 6. **Học Bài C1.3** (dây, cầu chì).
 7. **Lắp bước 3 — Làm bó dây chính và dây nhánh** (chưa nối gì vào pin)
    - Làm: pigtail pin (XT60 cái + F0 + 14 AWG), dây chính, dây nhánh theo bảng dây; ferrule mọi đầu vào cầu đấu; nhãn W.., F...
+   - **Bước 3a — Gắn F0 và XT60 cái vào pack** (thao tác nguy hiểm nhất của chặng, vì đây là lần duy nhất bạn làm trên dây **đang có điện**). Nếu pack có sẵn đầu nối: KHÔNG cắt dây pin; làm một dây chuyển (đầu nối đối diện của pack → 14 AWG ≤10 cm → F0 → XT60 cái), toàn bộ làm khi chưa cắm vào pack. Nếu pack ra dây trần: tỉnh táo, bàn trống, kính, không nhẫn/đồng hồ, pack trong khay chống cháy, bình chữa cháy trong tầm tay, rồi theo đúng thứ tự:
+     1. Làm **một dây một lúc**. Dây đen (−) giữ nguyên lớp bọc/băng keo đầu dây, gập ra xa, cho tới bước 4.
+     2. Dây đỏ (+): lắp đế cầu chì inline của F0 **khi chưa cắm cầu chì** (nối dây đỏ vào một đầu đế bằng mối nối thẳng của C0.3, co nhiệt). Từ lúc này mọi thứ phía sau đế cầu chì **không có điện**.
+     3. Hàn đầu kia của đế cầu chì vào chân "+" của **XT60 cái** (→ K7 C0.3 bước D), co nhiệt phủ kín cốc hàn. Chân này chưa có điện vì F0 chưa cắm.
+     4. Bóc băng dây đen, hàn vào chân "−" của XT60 cái, co nhiệt. Đây là mối duy nhất làm trên dây sống; vì chân "+" bên cạnh đang chết (F0 chưa cắm), một giọt thiếc hay ống co trượt cũng không gây chập. Đó là lý do **cầu chì trước, cực âm sau**.
+     5. ✅ Checkpoint: đồng hồ ở **V DC, que ở lỗ VΩ**: giữa hai chân XT60 cái phải là **0 V** (F0 chưa cắm). Có áp → bạn đã nối dây đỏ vòng qua cầu chì, dừng lại. Rồi cắm F0 lúc XT60 để hở, đo lại: phải bằng OCV của pack. Bịt XT60 cái bằng nắp hoặc một đầu XT60 đực trống khi không dùng.
+     - Nếu pack có cọc vít thay vì dây: nối dây **+ (đã có F0, F0 chưa cắm) trước, − sau**; tháo theo chiều ngược lại (− trước) `[chuẩn — quy ước ắc quy ô tô: cờ lê chạm khung khi đang vặn cọc còn lại không tạo vòng chập]`.
    - ✅ Checkpoint: mỗi mối 14/16 AWG đo sụt áp bằng đồ gá C0.3 ở 3 A; ghi; thông mạch từng dây; **không** thông giữa đỏ và đen của bất kỳ cặp nào.
    - Nếu sai: cắt, hàn lại; không hâm thêm thiếc lên mối nguội.
 8. **Học Bài C1.4** (DC-DC).
@@ -207,7 +218,7 @@ Thứ tự: khái niệm pin → nhận pin (chưa nối gì) → đo tải từ
 12. **Học Bài C1.5**, **Lắp bước 7 — Gắn INA226, firmware log, đo dòng đỉnh** trên nguồn bàn (Bài C1.5 phần 6).
 13. **Học Bài C1.6 phần còn lại.**
 14. **Lắp bước 8 — Cấp điện bằng pin thật**
-    - Làm: pin vừa sạc đầy (C1.6), nằm trong túi chống cháy cạnh bo; công tắc chính OFF; đo áp pin tại XT60 cái của pin; cắm XT60; ON. Lặp lại đo áp từng nhánh, rồi chuỗi thêm tải như bước 6. Chạy log INA226 ≥10 phút với mini PC chạy tải + bóng đèn bật/tắt theo chu kỳ.
+    - Làm: pin vừa sạc đầy (C1.6), nằm trong túi chống cháy cạnh bo; công tắc chính OFF; đo áp pin tại XT60 cái của pin (núm V DC, que đỏ ở lỗ VΩ, đọc to trước khi chạm); cắm XT60; ON. Lặp lại đo áp từng nhánh, rồi chuỗi thêm tải như bước 6. Chạy log INA226 ≥10 phút với mini PC chạy tải + bóng đèn bật/tắt theo chu kỳ.
     - ✅ Checkpoint trước khi cắm: (1) bo đã PASS bước 6 trên nguồn bàn, không sửa gì sau đó (nếu đã sửa: làm lại bước 5–6); (2) điện trở + ↔ GND của bo không gần 0 Ω; (3) công tắc OFF; (4) bình chữa cháy, kìm dài trong tầm tay. Sau khi ON: sờ (mu bàn tay, cách 1 cm trước) F0, công tắc, XT60 trong 1 phút đầu: không ấm lên rõ.
     - Nếu sai: bất kỳ mùi, tiếng lách tách, khói → công tắc OFF, rút XT60, ghi near-miss.
 15. **Gate chặng 1.**
@@ -378,7 +389,7 @@ Mẫu `prediction.md`:
 ### 6. Làm
 
 1. **Kiểm khi nhận** (bàn trống, không dụng cụ kim loại gần cực): nhìn 6 mặt (phồng, móp, rách co nhiệt, dây ra bị kẹp); đọc nhãn; chụp ảnh. Bất thường → không dùng (C1.6).
-2. **Đo OCV** sau khi pack nghỉ ≥1 h ở nhiệt độ phòng: UT33D+ thang 20 V DC (sai số tra manual, cỡ ±(0,5% + vài digit) `[spec — tra manual UT33D+]`), que đo vào **trong** đầu nối, không chạm hai cực cùng lúc bằng que. Ghi `quantity=ocv_pack`.
+2. **Đo OCV** sau khi pack nghỉ ≥1 h ở nhiệt độ phòng: trước khi chạm, kiểm **núm ở 20 V DC, que đỏ ở lỗ VΩ** (không ở `10A`). UT33D+ thang 20 V DC (sai số tra manual, cỡ ±(0,5% + vài digit) `[spec — tra manual UT33D+]`), que đo vào **trong** đầu nối, không chạm hai cực cùng lúc bằng que. Ghi `quantity=ocv_pack`.
 3. **Đo áp sạc không tải**, ghi `quantity=charger_vout`. Sạc lần đầu theo C1.6.
 4. **Đo R_pack thô** (sau khi sạc, pack nghỉ 1 h): làm một dây tải: XT60 đực → 18 AWG → điện trở nhôm 10 Ω 50 W **bắt lên tấm nhôm hoặc đế kim loại** → về. Đo OCV ngay trước; nối tải 10 s; đọc V trong lúc tải; tháo. R ≈ (OCV − V_tải)/(V_tải/10 Ω). Lặp 3 lần, cách nhau 1 phút. Ghi cả độ phân giải: ΔV chỉ vài digit thì kết quả có bất định lớn (→ F1.1, bất định loại B = độ phân giải/√3). Số chính xác hơn có ở Bài C1.5 bằng INA226.
 5. **Kiểm thông số BMS** (đọc, không thử): ngưỡng OC xả, trễ cắt OC, có SC không, có NTC không, cổng chung hay riêng (BMS dùng chung hay tách cực sạc và cực xả). Thiếu thông số nào → ghi `unknown` vào `decisions.md`, không đoán.
@@ -701,14 +712,14 @@ Hai điều cho bàn làm việc của bạn. Thiết bị bảo vệ chỉ bắ
 
 Bản chất: **cầu chì bảo vệ dây, không bảo vệ thiết bị.** Mini PC chết vì quá áp, không vì quá dòng; ESP32 chết trước khi cầu chì 2 A kịp đứt. Cầu chì là một dây chì được thiết kế để là **điểm yếu nhất có chủ đích** của đoạn dây: nóng chảy ở dòng thấp hơn dòng làm vỏ dây cháy. Nó là thiết bị nhiệt: đứt theo I²·t, nên đỉnh ngắn vượt định mức nhiều lần vẫn không làm đứt.
 
-Đường cong thời gian–dòng của cầu chì lưỡi ATO (họ 0257, 3–40 A) `[spec — datasheet Littelfuse 0257]`:
+Đường cong thời gian–dòng của cầu chì lưỡi ATO (họ 0257) `[spec — datasheet Littelfuse 0257; số khác chút giữa các revision, kiểm bản bạn có]`:
 
-| Dòng / định mức | Thời gian đứt (min – max) |
-|---|---|
-| 100% | không đứt (≥100 h) |
-| 135% | 0,75 s – 600 s |
-| 200% | 0,15 s – 5 s |
-| 350% | 0,08 s – 0,5 s |
+| Dòng / định mức | 3–40 A: thời gian đứt (min – max) | 1–2 A: (min – max) |
+|---|---|---|
+| 110% | không đứt trước 100 h | như cột trái |
+| 135% | 0,75 s – 600 s | 0,5 s – 600 s |
+| 200% | 0,15 s – 5 s | 0,10 s – 5 s |
+| 350% | 0,08 s – 0,5 s | 0,02 s – 0,5 s |
 
 Đọc: một cầu chì 10 A chở 13,5 A có thể sống **10 phút**. Dây của nó phải chịu được mức đó suốt thời gian ấy.
 
@@ -799,7 +810,7 @@ Thời gian đứt cầu chì 2 A ở 5 A: __ s (khoảng __ – __ s)
 <details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
 
 - Code với số mẫu: dây chính 14 AWG ~2% ở đỉnh 15 A (phần lớn do tiếp xúc + cầu chì, không do dây); nhánh 12 V 18 AWG <1%; Dupont 26 AWG ~4% ở 1 A. Điện trở **tiếp xúc** thường lớn hơn điện trở dây ở các nhánh ngắn: chất lượng mối nối quan trọng hơn tăng cỡ dây.
-- Cầu chì 2 A ở 5 A (250%): theo bảng, giữa ~0,08–0,15 s (min) và ~0,5–5 s (max); thực tế thường vài trăm ms tới 1–2 s. Nguồn bàn có thể chuyển CC chậm và tụ đầu ra xả trước (→ K7 C0.4) làm đỉnh đầu lớn hơn 5 A, cầu chì đứt sớm hơn dự đoán.
+- Cầu chì 2 A ở 5 A (250%): dùng cột 1–2 A, nội suy giữa 200% và 350%: min ~0,02–0,10 s, max ~0,5–5 s; thực tế thường vài trăm ms tới 1–2 s. Nguồn bàn có thể chuyển CC chậm và tụ đầu ra xả trước (→ K7 C0.4) làm đỉnh đầu lớn hơn 5 A, cầu chì đứt sớm hơn dự đoán.
 - 5 A qua 14 AWG: dây tăng vài K, gần như không cảm nhận; XT60 tốt tăng vài K; nếu một điểm tăng >15–20 K so với dây kế bên: mối nối đó có điện trở cao, làm lại.
 
 </details>
@@ -849,7 +860,7 @@ Thời gian đứt cầu chì 2 A ở 5 A: __ s (khoảng __ – __ s)
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
 | Swissair 111: hồ quang, cáp IFEN, aptomat không bắt mọi hồ quang | [spec] | TSB Canada, A98H0003, 2003; báo cáo không kết luận chắc dây nào là sự kiện đầu |
-| Bảng thời gian–dòng ATO, 32 V DC, cắt 1000 A | [spec] | Datasheet Littelfuse 0257; kiểm revision |
+| Bảng thời gian–dòng ATO, 32 V DC, cắt 1000 A | [spec] | Datasheet Littelfuse 0257; kiểm revision. Reviewer sửa: hàng "100% ≥100 h" → "110% ≥100 h" theo datasheet; thêm cột 1–2 A (cầu chì 2 A của thí nghiệm dùng cột này) |
 | R dây theo AWG | [chuẩn] | Công thức trong code |
 | Dòng liên tục gợi ý theo AWG | [ước lượng] | Thận trọng; đo nhiệt ở phần 6 |
 | R tiếp xúc XT60/vít/Dupont/cầu chì | [ước lượng] | Đo bằng đồ gá C0.3 |
@@ -1071,7 +1082,7 @@ Mỗi dụng cụ đo là một **bộ lọc + bộ lấy mẫu**. Thứ bạn �
 
 INA226 `[spec — TI INA226 datasheet, SBOS547]`: đo áp trên shunt (±81,92 mV, LSB 2,5 µV) và áp bus (0–36 V, LSB 1,25 mV); thời gian chuyển đổi mỗi kênh chọn trong 140 µs … 8,244 ms; trung bình 1 … 1024 mẫu; chu kỳ có kết quả ≈ (t_shunt + t_bus) × số trung bình. ADC tích phân trong t_conv, nên nó tự lọc gợn PWM tần số cao, nhưng không bỏ sót đỉnh dài hơn t_conv.
 
-UT33D+ `[spec — manual/thông số nhà bán: thang DC 2000 µA / 20 mA / 200 mA / 10 A; 10 A có cầu chì riêng và giới hạn thời gian đo trong manual; tốc độ cập nhật màn hình vài lần/giây — tự kiểm manual]`: thang 10 A đủ **lớn** cho dòng robot nhưng quá **chậm** cho đỉnh, và phải cắm que vào lỗ 10 A, nối tiếp vào mạch: một mối nối tạm trên đường dòng lớn.
+UT33D+ `[spec — thông số nhà bán: thang DC 2000 µA / 20 mA / 200 mA / 10 A; review lygte-info: lỗ 10A riêng, cầu chì 10 A/250 V, mA dùng lỗ chung với V; teardown UT33D đời cũ thấy dây thay cầu chì 10 A → mở nắp kiểm; giới hạn thời gian đo 10 A và tốc độ cập nhật màn hình (vài lần/giây) — tự kiểm manual]`: thang 10 A đủ **lớn** cho dòng robot nhưng quá **chậm** cho đỉnh, và phải cắm que vào lỗ 10 A, nối tiếp vào mạch: một mối nối tạm trên đường dòng lớn.
 
 **Chọn shunt:** R_shunt × I_max ≤ 81,92 mV. Module INA226 bán sẵn hay gắn shunt 0,1 Ω → I_max ≈ 0,82 A, không dùng được cho robot. Shunt rời 50 A/75 mV (1,5 mΩ): I_max ≈ 54 A, độ phân giải 2,5 µV/1,5 mΩ ≈ 1,7 mA, công suất tỏa ở 5 A chỉ ~38 mW. Đặt shunt ở **phía +** (high-side): shunt phía GND làm GND của tải lệch khỏi GND hệ theo dòng, đúng thứ ground sao muốn tránh.
 
@@ -1143,7 +1154,7 @@ Mẫu `prediction.md`: bảng 4 dòng (cấu hình → đỉnh thấy), I đỉn
 ### 6. Làm
 
 **Lắp** (Lắp bước 7, trên nguồn bàn, I_set 3 A):
-1. Tháo shunt 0,1 Ω trên module INA226 (hoặc cắt nối), nối IN+ / IN− bằng hai dây xoắn tới hai **vít sense** nhỏ ở mép shunt rời (không phải vít dòng lớn). Shunt nằm sau công tắc chính, trước thanh cái (sơ đồ mục 4). VBUS nối phía tải của shunt. Nguồn module (VS) 3,3 V từ ESP32; GND module về điểm sao.
+1. Tháo shunt 0,1 Ω trên module INA226 (hoặc cắt nối), nối IN+ / IN− bằng hai dây xoắn tới hai **vít sense** nhỏ ở mép shunt rời (không phải vít dòng lớn), mỗi dây có điện trở 10 Ω sát mép shunt (mục 4). **IN+ ở phía pin, IN− ở phía tải**; ngược thì dòng đọc ra âm. Làm mọi việc này khi bo đang cấp bằng **nguồn bàn đã OUTPUT OFF**, không phải pin. Shunt nằm sau công tắc chính, trước thanh cái (sơ đồ mục 4). VBUS nối phía tải của shunt. Nguồn module (VS) 3,3 V từ ESP32; GND module về điểm sao.
 2. ✅ Checkpoint trước khi cấp điện: đo thông mạch shunt (vài mΩ, UT33D+ chỉ báo ~0); IN+ và IN− **không** chạm GND; module không chạm kim loại tấm đế.
 3. Quét I2C từ ESP32: thấy 0x40 (hoặc theo A0/A1). Nạp firmware:
 
@@ -1160,7 +1171,8 @@ void wr(uint8_t reg, uint16_t v) {
 uint16_t rd(uint8_t reg) {
   Wire.beginTransmission(ADDR); Wire.write(reg); Wire.endTransmission(false);
   Wire.requestFrom(ADDR, (uint8_t)2);
-  return (Wire.read() << 8) | Wire.read();
+  uint8_t hi = Wire.read(), lo = Wire.read();   // tách ra: thứ tự tính hai vế của | trong C++ không xác định
+  return (uint16_t)(hi << 8) | lo;
 }
 void setup() {
   Serial.begin(921600);
@@ -1175,11 +1187,11 @@ void loop() {
   uint32_t t = micros();
   float i = (int16_t)rd(0x01) * LSB_VSH / R_SHUNT;   // shunt voltage, có dấu
   float v = rd(0x02) * LSB_VBUS;                     // bus voltage
-  Serial.printf("%lu,%.4f,%.4f\n", t, i, v);
+  Serial.printf("%lu,%.4f,%.4f\n", (unsigned long)t, i, v);
 }
 ```
 
-4. **Đối chứng tĩnh:** điện trở nhôm 10 Ω làm tải, nguồn bàn 13,2 V: so I của INA226 với màn nguồn bàn và thang 10 A của UT33D+ (đo ngắn, theo giới hạn thời gian trong manual). Lệch >3–5% → kiểm R_SHUNT thật (shunt 75 mV có sai số ghi trên nhãn, thường 0,25–0,5% `[spec — nhãn shunt]`) và dây Kelvin.
+4. **Đối chứng tĩnh:** điện trở nhôm 10 Ω làm tải, nguồn bàn 13,2 V: so I của INA226 với màn nguồn bàn và thang 10 A của UT33D+ (đo ngắn, theo giới hạn thời gian trong manual). Đồng hồ ở thang dòng chỉ được mắc **nối tiếp** và chỉ trên **nguồn bàn**; xong bước này, que đỏ về lỗ VΩ, núm về V trước khi làm gì khác. Lệch >3–5% → kiểm R_SHUNT thật (shunt 75 mV có sai số ghi trên nhãn, thường 0,25–0,5% `[spec — nhãn shunt]`) và dây Kelvin.
 5. **Đo đỉnh:** bật/tắt bóng 21 W 20 lần qua relay E-stop (nhả/bấm nút). Lưu log: `cat /dev/ttyACM0 > data/c01/power-$(date +%s).csv` (hoặc `pio device monitor`); thoát sau 30 s.
 6. **Phân tích:**
 
@@ -1329,7 +1341,7 @@ Ngày 6/7/2016, CPSC (Mỹ) thu hồi khoảng 501.000 xe điện cân bằng (h
 | Áp sạc | 14,6 V | 16,8 V | Sạc NMC vào LFP: 4,2 V/cell, vượt xa 3,65 V → quá sạc, chỉ còn BMS OV chặn `[chuẩn]`. Sạc LFP vào NMC: thiếu sạc (an toàn, mất dung lượng) |
 | Dòng sạc mặc định | ≤0,5C | ≤0,5C | Ít nóng; nhanh hơn chỉ khi datasheet cho phép `[ước lượng]` |
 | Nhiệt độ sạc | không sạc dưới ~0 °C | như LFP | Mạ lithium khi sạc lạnh `[chuẩn]` |
-| Cất lâu (>2 tuần) | ~50% (~13,2 V nghỉ) | ~40–60% (~3,7–3,8 V/cell) | Ít lão hóa; không để cạn vì tự xả + dòng chờ BMS làm tụt dưới UV `[chuẩn]` |
+| Cất lâu (>2 tuần) | ~50%: sạc đầy rồi xả khoảng một nửa Ah (đếm bằng INA226 hoặc chạy robot ~nửa runtime); áp nghỉ ~13,1–13,3 V chỉ là kiểm thô vì đường LFP phẳng | ~40–60% (~3,7–3,8 V/cell) | Ít lão hóa; không để cạn vì tự xả + dòng chờ BMS làm tụt dưới UV `[chuẩn]` |
 | Kiểm khi cất | mỗi tháng đo áp nghỉ | như LFP | Tụt nhanh bất thường = cell hỏng |
 
 ### 3. Cầu nối từ backend
@@ -1343,7 +1355,11 @@ Ngày 6/7/2016, CPSC (Mỹ) thu hồi khoảng 501.000 xe điện cân bằng (h
 
 **Sạc (mỗi lần):** pack trong túi chống cháy/hộp kim loại, trên gạch/gốm, cách vật dễ cháy ≥1 m, cạnh lối ra; bạn ở trong phòng, tỉnh. Đo áp nghỉ trước. Cắm sạc vào ổ **sau** khi nối pack (theo hướng dẫn sạc của bạn). 10 phút đầu: sờ/IR vỏ pack, sạc. Ghi giờ bắt đầu, giờ đầy, áp nghỉ sau 1 h. Pack ấm quá ~45 °C `[ước lượng]` khi sạc 0,5C: dừng, xem bảng sự cố C0.
 
-**Lần sạc đầu tiên:** thêm: dùng nguồn bàn CV/CC đặt đúng áp sạc và I_set 0,2C nếu muốn **thấy** đường CC→CV (ghi V, I mỗi 5 phút hoặc log INA226). Đây cũng là lần đo dung lượng nạp (Ah) đầu tiên.
+**Lần sạc đầu tiên:** thêm: có thể dùng nguồn bàn CV/CC nếu muốn **thấy** đường CC→CV (ghi V, I mỗi 5 phút hoặc log INA226). Đây cũng là lần đo dung lượng nạp (Ah) đầu tiên. Nguồn bàn **không phải** bộ sạc, nên thêm bốn điều:
+1. Đặt `V_set` khi đầu ra **hở**, đo bằng UT33D+ tại cọc ra, chỉnh tới **14,4 V** (3,60 V/cell) cho LFP 4S, không phải 14,6 V: màn nguồn rẻ lệch ±(0,5–1 %) cộng vài digit, tức có thể đẩy cell quá 3,65 V `[ước lượng — từ sai số màn hình]`. `I_set` = 0,2C.
+2. OUTPUT OFF → nối pack (đúng cực, kiểm bằng đồng hồ) → OUTPUT ON. Ngắt theo thứ tự ngược: OUTPUT OFF → **tháo pack ngay**. KHÔNG để pack nối vào nguồn bàn đang tắt: nhiều nguồn bàn không chặn dòng ngược, pin xả ngược vào mạch đầu ra hoặc làm hỏng nó `[tự đo — manual nguồn của bạn]`.
+3. Nguồn bàn **không tự ngắt** khi đầy: ở CV nó giữ 14,4 V mãi. Bạn tự ngắt khi dòng tụt dưới ~0,05C, và đặt hẹn giờ theo thời gian dự kiến (Ah thiếu / I_set + 1 h).
+4. Không có báo đầy, không có cảm biến nhiệt: sờ/IR vỏ pack mỗi 10 phút.
 
 **Loại pack khi:** phồng, móp, rách vỏ, mùi lạ, rơi mạnh, nóng khi để yên, áp nghỉ tụt >0,1 V/tuần khi cất `[ước lượng]`, hoặc đã xuống dưới UV và không lên lại với sạc đúng trong 5 phút.
 
@@ -1379,7 +1395,7 @@ Ngày 6/7/2016, CPSC (Mỹ) thu hồi khoảng 501.000 xe điện cân bằng (h
 - **Tự kiểm tra:** (1) nói lại ba lớp giữa "sạc hỏng" và "cháy"; (2) LFP 4S cất ở bao nhiêu V? (3) sạc 16,8 V vào pack LFP 4S thì mỗi cell bị đẩy tới bao nhiêu V?
   <details><summary>Đáp án</summary>
 
-  (2) ~13,2 V nghỉ (~50%). (3) 16,8/4 = 4,2 V/cell, vượt 3,65 V; chỉ BMS OV còn chặn.
+  (2) ~50% SOC, xác định bằng đếm Ah chứ không bằng áp; áp nghỉ ~13,1–13,3 V chỉ là kiểm thô (đường OCV LFP phẳng, C1.1). (3) 16,8/4 = 4,2 V/cell, vượt 3,65 V; chỉ BMS OV còn chặn.
 
   </details>
 
