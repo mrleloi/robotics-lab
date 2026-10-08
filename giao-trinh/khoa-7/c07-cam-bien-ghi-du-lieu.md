@@ -974,3 +974,204 @@ Không phải lỗi, nhưng là một quyết định: hash của **bytes file**
 </details>
 
 ---
+
+## Bài C7.4 — Data contract cho robot của chính mình (4h)
+
+> **Vị trí:** C7.3 → **C7.4** → C8 (dữ liệu điều hướng), C11.5 (vòng đời dữ liệu) · **Cần trước:** → F3.7 (schema vs vật lý), → F2.1 (test là phép đo có FP/FN), → F2.3 (ba trạng thái); K5 Bài 16 (validation theo vật lý) nếu đã học; K7 C0.5 (`validate_buildlog.py`: contract đầu tiên) · **Sau bài này bạn quyết định được:** rule nào **chặn** một file (quarantine), rule nào chỉ **gắn cờ**, rule nào trả "không kết luận được"; mỗi ngưỡng lấy từ phép đo nào của C6–C7.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Mars Climate Orbiter (1999) mất vì một bên xuất xung lực theo lbf·s, bên kia hiểu là N·s `[chuẩn — Mishap Investigation Board]`. Dữ liệu hợp lệ về kiểu, sai về vật lý. K2 Bài 11 đã dùng câu chuyện này cho lớp L6/L7 trên dataset của người khác. Ở đây bạn là **bên sinh dữ liệu**: hợp đồng là lời hứa của robot bạn với mọi người dùng sau (bộ hợp nhất C8.3, sim C11.1, huấn luyện C11.5), viết trước khi họ tồn tại.
+
+### 2. Mô hình tư duy
+
+Một contract có ba tầng; schema chỉ là tầng đầu:
+
+| Tầng | Ví dụ trên robot của bạn | Ai kiểm |
+|---|---|---|
+| **Cấu trúc** | kiểu message, hash schema, `frame_id`, tên topic, metadata bắt buộc | `mcap doctor`, so schema hash, so metadata |
+| **Thời gian** | tần số ± dung sai, khoảng hở tối đa, đơn điệu, `t_map ≤ t_rx` (mẫu không thể lấy sau khi đã nhận) | đếm `seq`, `dt` |
+| **Vật lý** (có **tiền điều kiện**) | đứng yên ≥ 1 s → `a_z(base_link) ≈ +g`, `|ω| ≈ 0`; đang chạy, không trượt → `ω_z` gyro ≈ ω từ bánh; covariance không toàn 0 | rule + tiền điều kiện; không thỏa tiền điều kiện → INCONCLUSIVE, không phải PASS |
+
+Mỗi rule có **hành động**: `block` (file vào quarantine) chỉ cho lỗi làm hỏng mọi người dùng sau (TF sai, đơn vị sai, metadata thiếu); `flag` cho sự kiện thật của thế giới (va chạm, rớt gói có đếm). Va chạm không phải dữ liệu hỏng: nó là dữ liệu quý, được gắn cờ.
+
+```python
+# [đã chạy] Data contract cho robot của chính bạn: kiểm theo schema VÀ theo vật lý, mỗi rule có tiền điều kiện
+import numpy as np
+G = 9.80665
+CONTRACT = {   # rút gọn; bản đầy đủ là YAML trong repo, có version và schema hash
+  "imu":  {"rate_hz": 200, "rate_tol": 0.02, "max_gap_s": 0.05, "action_gap": "flag"},
+  "rules": [
+    # (tên, tiền điều kiện, kiểm, hành động)
+    ("gravity_up", "đứng yên ≥1 s (bánh và lệnh = 0)", "a_z(base_link) ∈ g ± 0,3", "block"),  # TF/đơn vị sai -> chặn
+    ("gyro_still", "đứng yên ≥1 s", "|ω| < 0,02 rad/s", "flag"),
+    ("yaw_agree", "đang chạy, không quay gắt", "|ω_z gyro − ω bánh| < 0,1 rad/s", "flag"),   # trượt/va chạm
+  ]}
+def check(t, a_z, w_z, w_wheel, still):
+    out = []
+    dt = np.diff(t); gaps = np.sum(dt > CONTRACT["imu"]["max_gap_s"])
+    rate = (t.size - 1) / (t[-1] - t[0])
+    out.append(("rate", abs(rate / CONTRACT["imu"]["rate_hz"] - 1) < CONTRACT["imu"]["rate_tol"], f"{rate:.1f} Hz"))
+    out.append(("gaps", gaps == 0, f"{gaps} khoảng hở > 50 ms"))
+    out.append(("monotonic", np.all(dt > 0), f"{np.sum(dt <= 0)} lần lùi"))
+    if still.sum() < 200:                                             # tiền điều kiện không thỏa -> không kết luận
+        out.append(("gravity_up", None, "INCONCLUSIVE: không có ≥1 s đứng yên"))
+    else:
+        m = np.median(a_z[still]); out.append(("gravity_up", abs(m - G) < 0.3, f"a_z median {m:.2f}"))
+        s = np.median(np.abs(w_z[still])); out.append(("gyro_still", s < 0.02, f"|ω| median {s:.3f}"))
+    mv = ~still; r = np.abs(w_z[mv] - w_wheel[mv]); bad = np.sum(r > 0.1)
+    out.append(("yaw_agree", bad == 0, f"{bad} mẫu lệch > 0,1 rad/s ({bad/ max(mv.sum(),1):.1%})"))
+    return out
+rng = np.random.default_rng(0)
+t = np.arange(0, 60, 1 / 200); t = np.delete(t, np.s_[4000:4100])     # mất 0,5 s dữ liệu IMU
+still = t < 10                                                        # 10 s đầu đứng yên
+w_wheel = np.where(still, 0, 0.3 * np.sin(0.2 * t))
+w_z = w_wheel + 0.003 + 0.004 * rng.standard_normal(t.size)
+w_z[(t > 30) & (t < 30.5)] += 0.8                                     # va chạm: thân xoay, bánh không biết
+for label, sgn in [("IMU gắn đúng", 1), ("IMU úp ngược, TF chưa sửa", -1)]:   # úp ngược: z của chip = −z thân
+    a_z = sgn * (G + 0.05 * rng.standard_normal(t.size))
+    print(f"== {label}")
+    for name, ok, msg in check(t, a_z, sgn * w_z, w_wheel, still):
+        st = "INCONCLUSIVE" if ok is None else ("PASS" if ok else "FAIL")
+        act = next((r[3] for r in CONTRACT["rules"] if r[0] == name), CONTRACT["imu"]["action_gap"])
+        print(f"  {name:11s} {st:12s} {msg:38s} hành động nếu FAIL: {act}")
+```
+
+Ngưỡng trong code là ví dụ; ngưỡng thật lấy từ số đo của bạn: dung sai `gravity_up` từ offset accel đo ở K5 Bài 4 và độ nghiêng sàn; `gyro_still` từ bias gyro trên robot (C7.1 bước 5); `yaw_agree` từ phần dư trên 10 lần chạy thẳng không va chạm (C6.2), cộng lề.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Data contract giữa team (schema registry, kiểu, nullable) | Contract của robot | Contract backend dừng ở kiểu và tính tương thích. Dữ liệu robot hợp lệ về kiểu vẫn có thể sai vật lý; rule vật lý cần **tiền điều kiện** về trạng thái thế giới | Contract xanh 100 % trên file có IMU úp ngược |
+| Test ba trạng thái pass/fail/inconclusive (bạn đã tự làm) | Rule không thỏa tiền điều kiện → INCONCLUSIVE | Ở đây inconclusive có **nguyên nhân vật lý** (robot không đứng yên lần nào trong file) và sửa được bằng **quy trình** (mỗi phiên bắt đầu bằng 5 s đứng yên) | Coi inconclusive là pass; file không bao giờ được kiểm trọng lực |
+| Trung bình tỉ lệ request thành công | Tần số trung bình | Trung bình che khoảng hở | Tần số trung bình đạt mà mất nửa giây dữ liệu (xem mục 7) |
+
+**Chấm mô hình:**
+
+1. *"Contract kiểm schema là đủ, vật lý là việc của người phân tích."* **SAI** với robot. **Phản ví dụ:** IMU úp ngược mà URDF chưa sửa: mọi message đúng kiểu, đúng frame_id, đúng tần số; chỉ rule vật lý `gravity_up` thấy. Người phân tích sau ba tháng sẽ không biết robot từng được gá thế nào.
+2. *"Rule nào FAIL thì chặn file."* **ĐÚNG MỘT PHẦN.** Đúng cho lỗi làm hỏng mọi người dùng. Gãy cho sự kiện thật: chặn mọi file có va chạm là xóa đúng dữ liệu C8, C10 cần nhất. **Phản ví dụ:** `yaw_agree` FAIL ở cả hai lần chạy mô phỏng, nhưng lần đầu là một va chạm thật trên robot gá đúng.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Data contract | Lời hứa có version của bên sinh về cấu trúc, thời gian, vật lý của dữ liệu | File schema |
+| 🟢 | Tiền điều kiện của rule | Trạng thái thế giới phải đúng để rule có nghĩa | Bộ lọc dữ liệu |
+| 🟢 | block / flag / inconclusive | Chặn file; gắn cờ sự kiện; không đủ điều kiện để kết luận | Ba mức nghiêm trọng |
+| 🟡 | Schema hash | Băm định nghĩa message để phát hiện đổi schema âm thầm | Phiên bản gói |
+
+### 5. Dự đoán
+
+**Đề:** (1) Trên một phiên 30 phút thật của robot (C7.3), rule nào FAIL, rule nào INCONCLUSIVE? (2) Chạy lại bước va chạm của C6.3 (đâm thẳng và đâm lệch ở ≤ 0,1 m/s) với IMU: `yaw_agree` có thấy cả hai không? Có báo giả ở 10 lần chạy thẳng không va chạm không? (3) Rule tần số trung bình có bắt được một khoảng hở 0,5 s không?
+
+**Tham số cần tra:** ngưỡng từ C6.2, C7.1, K5 Bài 4 như trên.
+
+```markdown
+# prediction.md — K7 C7.4
+commit: <hash>
+| Rule | Phiên 30 phút: PASS/FAIL/INCONCLUSIVE | Lý do |
+|---|---|---|
+| rate / gaps / monotonic / gravity_up / gyro_still / yaw_agree | | |
+Va chạm thẳng: yaw_agree thấy? __ · va chạm lệch: __ · báo giả trên 10 lần chạy sạch: __
+Tần số trung bình bắt khoảng hở 0,5 s? __
+## Tôi sẽ ngạc nhiên nếu...
+```
+
+### 6. Làm
+
+1. Viết `contract/robot-v1.yaml`: mỗi topic (message, schema hash, `frame_id`, tần số ± dung sai, khoảng hở tối đa, `clock_source` cho phép, `calibration_id` bắt buộc), mỗi rule (tiền điều kiện, kiểm, ngưỡng **kèm nguồn số đo**, hành động). Có `contract_version`; đổi ngưỡng = version mới, ghi `decisions.md`.
+2. Mở rộng code ở mục 2 thành `tools/contract_check.py` đọc MCAP (adapter của C7.3), trả mã thoát: 0 = PASS, 1 = có `block`, 2 = chỉ `flag`/INCONCLUSIVE (giống quy ước ba trạng thái của K2 Bài 12). Thêm rule nhân quả từ C7.2: `t_map ≤ t_rx` và `t_rx − t_map` không trôi.
+3. Quy trình phiên: mỗi phiên bắt đầu và kết thúc bằng **5 s đứng yên** (để `gravity_up`, `gyro_still` có tiền điều kiện). Ghi vào `procedure.md`.
+4. **Kiểm chính contract** (→ F2.5): tiêm lỗi vào một file sạch: đổi dấu trục z IMU, xóa 0,5 s IMU, đổi `frame_id`, xóa metadata `calibration_id`. Mỗi lỗi phải bị đúng rule bắt; ghi bảng lỗi tiêm → rule bắt.
+5. **Chạy lại va chạm C6.3 với IMU:** 3 lần đâm thẳng, 3 lần đâm lệch, 10 lần chạy thẳng sạch. Đếm TP/FP/FN của `yaw_agree`. Đây là phần "kênh độc lập" mà C6.3 đã hẹn.
+6. Gắn `contract_check.py` vào bước niêm phong (C7.3 bước 5) và vào CI của repo (chạy trên một file mẫu cố định: test hồi quy của chính contract).
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Mô phỏng:** IMU gắn đúng: `rate` PASS (198,3 Hz, trong 2 %) **dù mất 0,5 s**; `gaps` FAIL (1 khoảng hở); `gravity_up` PASS; `yaw_agree` FAIL ở ~1 % mẫu (đúng đoạn va chạm). IMU úp ngược: `gravity_up` FAIL (a_z ≈ −9,8) → **block**; `yaw_agree` FAIL ở ~90 % mẫu (dấu gyro ngược). Tần số trung bình không bắt được khoảng hở: cần rule khoảng hở riêng.
+
+**Robot thật** `[ước lượng]`: phiên 30 phút đầu tiên thường có `gaps` FAIL ở luồng ảnh hoặc IMU lúc tải nặng (nhất quán với C7.2, C7.3); `gravity_up` INCONCLUSIVE nếu chưa áp quy trình 5 s đứng yên. `yaw_agree` thấy va chạm **lệch** (thân xoay) rõ; va chạm **thẳng** có thể không thấy (thân không xoay): khớp với C6.3 mục 7 (gyro thấy xoay, không thấy "đứng yên khi bánh quay"). Báo giả thường đến từ quay tại chỗ (lốp chà, ω bánh không phản ánh ω thân): tiền điều kiện "không quay gắt" tồn tại vì thế.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| `gravity_up` FAIL nhẹ (lệch 0,3–0,5 m/s²) mà gá đúng | Offset accel chưa hiệu chuẩn; sàn nghiêng | Đo trên hai hướng ngược nhau của robot | Hiệu chuẩn offset (K5 Bài 4); nới ngưỡng **có nguồn** |
+| `yaw_agree` báo giả khi quay | Lốp chà khi quay tại chỗ | Tách theo |ω lệnh| | Tiền điều kiện `|ω| < ngưỡng`, hoặc ngưỡng theo ω |
+| Lỗi tiêm không bị bắt | Rule đọc sai topic/frame; adapter bỏ qua | Test đơn vị trên file tiêm lỗi | Sửa rule; đây chính là lý do tiêm |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot, ba phiên bản firmware, hai loại IMU. Một contract hay nhiều? Cái gì trong YAML phải tách theo robot?
+<details><summary>Hướng nghĩ</summary>
+
+Cấu trúc và thời gian: một contract theo phiên bản phần mềm. Ngưỡng vật lý: theo **từng robot** (bias, gá), tham chiếu `calibration_id`. Contract trỏ tới calibration, không chép số vào. Đây là tách schema khỏi dữ liệu tham chiếu (→ F3.8).
+
+</details>
+
+2. **[Failure mode]** Contract của bạn PASS mọi file trong một tháng. Kể hai lý do khiến điều đó đáng lo.
+<details><summary>Hướng nghĩ</summary>
+
+Rule bị vô hiệu (đọc nhầm topic, tiền điều kiện không bao giờ thỏa → tất cả INCONCLUSIVE bị đếm như PASS); hoặc ngưỡng nới dần mỗi lần báo giả cho tới khi không bắt gì. Canary: mỗi tuần chạy contract trên bộ file tiêm lỗi cố định (→ F2.5).
+
+</details>
+
+3. **[Phản biện]** "Contract nên tự sửa dữ liệu khi được (ví dụ đảo dấu trục z nếu phát hiện úp ngược) thay vì chặn." Đồng ý tới đâu?
+<details><summary>Hướng nghĩ</summary>
+
+Sửa tự động biến bộ kiểm thành một phần của pipeline biến đổi, không ai kiểm nó nữa, và che nguyên nhân (URDF sai vẫn sai cho dữ liệu trực tiếp). Cho phép **biến đổi có phiên bản** ở tầng sau (file gốc giữ nguyên, bản sửa có lineage), không ở tầng kiểm.
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Dược phẩm: tiêu chuẩn toàn vẹn dữ liệu ALCOA** (Attributable, Legible, Contemporaneous, Original, Accurate) trong hướng dẫn của cơ quan quản lý dược `[chuẩn]`. Giống: dữ liệu gốc bất biến, ghi đúng lúc, truy được nguồn. Khác: ALCOA nói về quy trình con người; contract robot tự động hóa phần lớn, nhưng tiền điều kiện (5 s đứng yên) vẫn là quy trình con người.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Rule tần số trung bình không bắt khoảng hở 0,5 s | [đã chạy] | Mô phỏng |
+| `gravity_up` bắt IMU úp ngược | [đã chạy] mô phỏng / [tự đo] robot | Bước 4 |
+| `yaw_agree` không thấy va chạm thẳng không xoay | [ước lượng] | Bước 5 đo |
+| Mars Climate Orbiter, đơn vị | [chuẩn] | Mishap Investigation Board 1999 |
+
+**Đã thêm so với bản gốc:** bản gốc không có bài contract riêng cho robot (C7.4 là bài mới theo `_KE-HOACH-K7.md`); hẹn của C6.3 (chạy lại va chạm với IMU) thực hiện ở bước 5.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** → F3.7 và các nguồn ở đó; `CONVENTIONS.md` của repo.
+- **Giải thích:** K2 Bài 11 (bảy lớp lỗi, oracle) của giáo trình này.
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao rule vật lý cần tiền điều kiện; (2) viết lại ba tầng contract từ trí nhớ; (3) câu dưới.
+
+<details><summary>Một file 5 phút robot chạy liên tục, không đứng yên lần nào. Contract trả gì cho gravity_up, và file có được upload không?</summary>
+
+INCONCLUSIVE cho `gravity_up`/`gyro_still`. Upload được nếu chính sách là "block chỉ khi FAIL", nhưng manifest ghi INCONCLUSIVE, và người dùng sau biết file này chưa được kiểm trọng lực. Sửa nguồn: quy trình 5 s đứng yên đầu và cuối phiên.
+
+</details>
+
+---
+
+## Gate chặng 7
+
+Giữ tiêu chí 5 của **GATE 7A gốc** (phần ghi dữ liệu về C7, `_KE-HOACH-K7.md` mục 7), nguyên văn. Thêm tiêu chí của chặng mới.
+
+| # | Tiêu chí | PASS khi | FAIL action |
+|---|---|---|---|
+| 1 (gốc 7A-5) | Dữ liệu ghi ra MCAP, upload được, mở được trong Foxglove, tool Khóa 2 chạy được và tìm ra ≥ 1 lỗi thật | Phiên ≥ 30 phút: file qua `ros2 bag info` và `mcap doctor` không lỗi (`CONVENTIONS.md` mục 5); có trên object store với sha256 khớp; mở trong Foxglove bằng layout đã commit; tool K2 (qua adapter) báo ≥ 1 phát hiện được **xác minh** bằng tay là lỗi thật (không phải FP) | Xem FAIL action gốc dưới bảng |
+| 2 | TF tĩnh đúng | `gravity_up` PASS trên robot đứng yên; `ω_z` dương khi quay trái; kiểm vật bên trái ảnh ở bước C7.1-8 | Sửa URDF (một nơi duy nhất), đo lại |
+| 3 | Rung và lọc có số | Phổ rung ba kiểu đế, lựa chọn đế + DLPF/AAF có lý do bằng số trong `decisions.md` | Đo lại bước C7.1-A |
+| 4 | Timestamp có ngân sách | Skew/offset ESP32 ↔ host đo 30 phút rảnh + 30 phút tải; p50/p99 stamp lúc nhận vs ánh xạ; trễ camera–IMU đo và ghi vào calibration | Làm lại C7.2 bước 4–5 |
+| 5 | Sidecar không ảnh hưởng vòng điều khiển | p99 jitter (C4.2) ba điều kiện không khác nhau quá sai số đo | Sửa firmware gửi không chặn; đo lại |
+| 6 | Pipeline chịu lỗi | `kill -9` và mất Wi-Fi 30 phút: không mất quá dự đoán, không object trùng, file local chỉ xóa sau băm lại khớp | Sửa uploader/niêm phong theo K5 Bài 14 |
+| 7 | Data contract | `contract/robot-v1.yaml` có nguồn cho mọi ngưỡng; bốn lỗi tiêm đều bị bắt; chạy trong niêm phong và CI | Sửa rule; không nới ngưỡng không nguồn |
+| 8 | Dự đoán trước, đo sau | `prediction.md` C7.1–C7.4 commit trước dữ liệu; dung lượng/giờ dự đoán và đo đặt cạnh nhau | Ghi trung thực; không viết lại dự đoán |
+
+**FAIL action (gốc Gate 7A):** "chạm 80h chưa PASS → bỏ tiêu chí 5 (ghi dữ liệu), giữ 1–4, publish, sang 7B. Phần ghi dữ liệu gắn lại sau ở 7E." Áp vào K7 mới: nếu C7 vượt trần giờ bạn đặt cho chặng (ghi trước trong `decisions.md`), **hoãn tiêu chí 1** (giữ tiêu chí 2–4 vì C8 cần TF và timestamp đúng), sang C8, và gắn lại phần ghi dữ liệu ở C11.5. Trần giờ cho chặng là quyết định của bạn: bản gốc chỉ cho trần của cả 7A (80h trên 60h); **đề xuất** dùng cùng tỉ lệ (~47h cho C7), không phải tiêu chí.
+
+Gate PASS → mở C8. Robot lúc này: odometry đã hiệu chuẩn, IMU và camera có TF và timestamp đáng tin, mọi phiên chạy thành file MCAP đã niêm phong, kiểm, upload, xem được.
