@@ -898,7 +898,7 @@ for name, args in cases.items():
 
 **Chấm mô hình:**
 
-- *"NTP đồng bộ hai máy với sai số bằng jitter mạng."* — **ĐÚNG MỘT PHẦN.** Jitter (phần ngẫu nhiên) bị bộ lọc và vòng điều khiển làm nhỏ đi; phần **cố định** của bất đối xứng thì không giảm chút nào và không hiện trong bất kỳ thống kê nào NTP báo. Phản ví dụ: cáp quang hai sợi dài khác nhau 40 m (~200 ns mỗi chiều chênh): mọi mẫu lệch cùng một lượng bằng nửa chênh lệch, std của offset vẫn chỉ là jitter.
+- *"NTP đồng bộ hai máy với sai số bằng jitter mạng."* — **ĐÚNG MỘT PHẦN.** Jitter (phần ngẫu nhiên) bị bộ lọc và vòng điều khiển làm nhỏ đi; phần **cố định** của bất đối xứng thì không giảm chút nào và không hiện trong bất kỳ thống kê nào NTP báo. Phản ví dụ: cáp quang hai sợi dài khác nhau 40 m (trễ hai chiều chênh ~200 ns): mọi mẫu lệch cùng một lượng bằng nửa chênh lệch, std của offset vẫn chỉ là jitter.
 - *"Mạng nhanh thì NTP chính xác."* — **ĐÚNG MỘT PHẦN.** δ nhỏ thì cận δ/2 nhỏ, nên mạng nhanh giới hạn sai số tối đa. Nhưng mạng chậm và đối xứng có thể chính xác hơn mạng nhanh mà bất đối xứng; và tầng đóng dấu (phần mềm) đặt sàn bất kể mạng nhanh cỡ nào.
 
 **Tên chuẩn của thứ bạn đã làm:** khi bạn so log giữa hai service và "bù" bằng cách giả định request và response đi mất thời gian như nhau, bạn đang tự chạy thuật toán của Cristian bằng tay. Các hệ tracing (Zipkin, Jaeger) có bước điều chỉnh skew dựa đúng trên ý đó: span con phải nằm trong span cha, nên dịch nó vào trong. Thứ còn thiếu: biết rằng bước dịch đó dựa trên giả định đối xứng, và cận sai số là δ/2.
@@ -1063,9 +1063,9 @@ Reviewer sửa: cận sai số từ `chronyc tracking` thiếu số hạng |Syst
 
 ### 1. Câu chuyện
 
-Cuối thập niên 1990, John Eidson ở Agilent làm hệ đo lường phân tán: nhiều thiết bị trên Ethernet phải lấy mẫu cùng lúc tới cỡ micro-giây. NTP có đúng thuật toán cần thiết (bốn timestamp, F4.4) nhưng timestamp của nó đóng ở phần mềm, sau driver và scheduler, mang theo chục tới trăm µs jitter. Đề xuất của nhóm ông thành IEEE 1588-2002: giữ thuật toán, **dời chỗ đóng dấu xuống phần cứng mạng**, lúc khung tin thật sự đi qua dây [chuẩn]. Bản 2008 (PTPv2) thêm *transparent clock* để switch không phá độ chính xác; bản 2019 bổ sung tiếp [chuẩn]. Viễn thông, lưới điện, tài chính và ô tô (gPTP, IEEE 802.1AS) lần lượt dùng nó.
+Cuối thập niên 1990, John Eidson ở Agilent làm hệ đo lường phân tán: nhiều thiết bị trên Ethernet phải lấy mẫu cùng lúc tới cỡ µs. NTP có đúng thuật toán (bốn timestamp, F4.4) nhưng đóng dấu ở phần mềm, mang theo chục tới trăm µs jitter. Đề xuất của nhóm ông thành IEEE 1588-2002: giữ thuật toán, **dời chỗ đóng dấu xuống phần cứng mạng** [chuẩn]. Bản 2008 (PTPv2) thêm *transparent clock*; bản 2019 bổ sung tiếp. Viễn thông, lưới điện, tài chính, ô tô (gPTP, IEEE 802.1AS) lần lượt dùng nó.
 
-Năm 2022, Meta công bố đã chuyển đồng bộ thời gian trong datacenter từ NTP (độ chính xác cỡ mili-giây) sang PTP nhắm tới nano-giây, sau nhiều năm phải làm lại cả phần cứng lẫn phần mềm thời gian trong server; thí nghiệm của họ cho thấy chênh lệch cỡ 100 lần giữa NTP và bản PTP đầu tiên [chuẩn: Meta Engineering blog, *Precision Time Protocol at Meta*, 11/2022]. Chi tiết đáng học nhất trong bài đó không phải con số mà là API: thư viện `fbclock` của họ không trả về "bây giờ", mà trả về một cặp `{earliest_ns, latest_ns}` — *Window of Uncertainty* — vì đồng hồ đã đồng bộ vẫn trôi giữa hai lần chỉnh và theo nhiệt độ [chuẩn: cùng bài]. PTP tốt đến đâu thì người dùng vẫn phải được biết nó sai bao nhiêu (F4.8 nối tiếp ý này).
+Năm 2022, Meta công bố chuyển đồng bộ thời gian trong datacenter từ NTP (cỡ mili-giây) sang PTP (dưới micro-giây) [chuẩn: Meta Engineering, *Precision Time Protocol at Meta*, 11/2022]. Chi tiết đáng học nhất là API: thư viện `fbclock` không trả "bây giờ" mà trả cặp `{earliest_ns, latest_ns}` — *Window of Uncertainty* — vì đồng hồ đã đồng bộ vẫn trôi giữa hai lần chỉnh [chuẩn: cùng bài]. PTP tốt đến đâu, người dùng vẫn phải biết nó sai bao nhiêu (F4.8).
 
 ### 2. Mô hình tư duy
 
@@ -1092,15 +1092,15 @@ flowchart LR
 
 Năm khối, mỗi khối một nguồn sai số riêng:
 
-1. **Hardware timestamping và PHC.** NIC có một bộ đếm thời gian riêng (PHC, lộ ra thành `/dev/ptpN`), chốt giá trị khi khung PTP đi qua giao diện MAC/PHY [spec: kernel `Documentation/driver-api/ptp.rst`]. `ethtool -T <iface>` cho biết NIC hỗ trợ không và PHC số mấy. Sai số còn lại: độ phân giải bộ đếm, trễ PHY khác nhau giữa phát và thu (bất đối xứng nhỏ, cố định), và jitter đọc PHC từ CPU.
-2. **ptp4l** chạy giao thức (Sync/Follow_Up/Delay_Req/Delay_Resp hoặc Pdelay), chọn master bằng **BMCA**, và chạy **servo** chỉnh tần số PHC của slave. Mặc định servo PI; khi offset ban đầu > `first_step_threshold` (mặc định 20 µs) thì nhảy một lần [spec: ptp4l(8)]. Log in `master offset`, `freq` (ppb chỉnh), `path delay`, và trạng thái servo `s0` (chưa khóa), `s1` (vừa nhảy), `s2` (đã khóa).
-3. **phc2sys** đồng bộ hai đồng hồ *trong một máy* (PHC ↔ `CLOCK_REALTIME`) bằng cách đọc PHC kẹp giữa hai lần đọc đồng hồ hệ thống. Không có nó, ptp4l chạy hoàn hảo mà `time.time()` vẫn sai.
-4. **BMCA** (Best Master Clock Algorithm): mỗi node quảng bá bộ thuộc tính (priority1, clockClass, clockAccuracy, offsetScaledLogVariance, priority2, cuối cùng clockIdentity để phá hòa); mọi node so cùng một thứ tự và tự suy ra ai là master [spec: IEEE 1588-2008 mục 9.3]. Không bỏ phiếu, không quorum; cấu hình bằng `priority1` hoặc ép vai bằng `serverOnly`/`clientOnly`.
-5. **Mạng.** Gói PTP xếp hàng trong switch như mọi gói khác. Switch thường: thời gian nằm hàng là trễ ngẫu nhiên và — khi tải hai chiều khác nhau — bất đối xứng, đúng thứ F4.4 nói là vô hình. **Transparent clock** (TC) đo thời gian gói nằm trong nó và cộng vào trường `correctionField`, slave trừ ra. **Boundary clock** (BC) kết thúc PTP ở một cổng (làm slave) và phát lại ở cổng khác (làm master) — mỗi tầng một servo, sai số cộng dồn theo số tầng.
+1. **Hardware timestamping và PHC.** NIC có bộ đếm thời gian riêng (PHC, `/dev/ptpN`), chốt giá trị khi khung PTP đi qua MAC/PHY [spec: kernel `Documentation/driver-api/ptp.rst`]; `ethtool -T <iface>` cho biết NIC hỗ trợ không và PHC số mấy. Sai số còn lại: độ phân giải bộ đếm, trễ PHY phát/thu khác nhau (bất đối xứng nhỏ, cố định), jitter đọc PHC từ CPU.
+2. **ptp4l** chạy giao thức, chọn master bằng **BMCA**, chạy **servo** chỉnh tần số PHC của slave (PI mặc định; offset đầu > `first_step_threshold` = 20 µs thì nhảy một lần) [spec: ptp4l(8)]. Log in `master offset`, `freq`, `path delay`, trạng thái `s0` (chưa khóa), `s1` (vừa nhảy), `s2` (đã khóa). Servo và hai tầng đồng hồ đã giải thích ở K5 Bài 9 mục 2.
+3. **phc2sys** đồng bộ PHC ↔ `CLOCK_REALTIME` *trong một máy* bằng cách đọc PHC kẹp giữa hai lần đọc đồng hồ hệ thống. Thiếu nó, ptp4l hoàn hảo mà `time.time()` vẫn sai.
+4. **BMCA:** mỗi node quảng bá thuộc tính (priority1, clockClass, clockAccuracy, offsetScaledLogVariance, priority2, clockIdentity để phá hòa); mọi node so cùng thứ tự và tự suy ra master [spec: IEEE 1588-2008 mục 9.3]. Không bỏ phiếu, không quorum; chỉnh bằng `priority1` hoặc ép vai bằng `serverOnly`/`clientOnly`.
+5. **Mạng.** Switch thường: thời gian nằm hàng là trễ ngẫu nhiên, và khi tải hai chiều khác nhau thì bất đối xứng — thứ F4.4 nói là vô hình. **Transparent clock** (TC) đo thời gian gói nằm trong nó, cộng vào `correctionField` để slave trừ ra. **Boundary clock** (BC) làm slave ở một cổng, master ở cổng khác — mỗi tầng một servo, sai số cộng dồn.
 
-**Hai instance ptp4l trên một máy** (đúng cấu hình "hai PHC trong một hộp" của K5 Bài 9): mỗi instance mở một UNIX socket quản lý (`uds_address`) và một socket chỉ đọc (`uds_ro_address`). Mặc định trên bản linuxptp hiện tại là `/var/run/ptp/ptp4l` và `/var/run/ptp/ptp4lro`; bản cũ là `/var/run/ptp4l` và `/var/run/ptp4lro` [spec: ptp4l(8), bản 3/2024]. Hai instance cùng mặc định thì giẫm lên nhau, nên **mỗi instance cần một file cấu hình riêng** với `uds_address`, `uds_ro_address`, interface, và vai trò (hoặc priority) riêng; `domainNumber` phải *giống nhau* để hai bên nói chuyện; `clockIdentity` tự sinh từ MAC nên tự khác nhau. Cờ `-p` **không** liên quan tới socket: nó chỉ định *thiết bị PHC* (ví dụ `/dev/ptp0`), đã deprecated, dành cho kernel trước v3.5 không tự tìm được PHC của interface [spec: ptp4l(8), mục OPTIONS]. Cấu hình mẫu đầy đủ nằm ở K5 Bài 9 bước 2; không chép lại ở đây để chỉ có một nơi phải sửa.
+**Hai instance ptp4l trên một máy** (rig K5 Bài 9): mỗi instance mở socket quản lý `uds_address` và socket chỉ đọc `uds_ro_address`. Mặc định là `/var/run/ptp4l` và `/var/run/ptp4lro` ở mọi bản phát hành tới v4.4 (Ubuntu 24.04 đóng gói nhánh 4.x); nhánh phát triển sau v4.4 đổi sang `/var/run/ptp/ptp4l`, `/var/run/ptp/ptp4lro` và tạo symlink ở chỗ cũ [spec: ptp4l(8) trong mã nguồn linuxptp, so tag v4.0–v4.4 với nhánh chính; kiểm `man ptp4l` bản bạn cài]. Hai instance cùng mặc định thì giẫm lên nhau, nên **mỗi instance cần file cấu hình riêng** (`uds_address`, `uds_ro_address`, interface, vai trò/priority); `domainNumber` phải *giống nhau*; `clockIdentity` tự sinh từ MAC. Cờ `-p` **không** liên quan tới socket: nó chỉ định *thiết bị PHC* (ví dụ `/dev/ptp0`), deprecated, cho kernel trước v3.5 [spec: ptp4l(8), OPTIONS]. Cấu hình mẫu ở K5 Bài 9 bước 2.
 
-Mô phỏng: offset ước lượng qua 3 switch, khi tải hai chiều bằng nhau và khi một chiều nặng hơn; switch thường vs transparent clock. Đơn vị: sai số của **một lần trao đổi**, trước khi servo lấy trung bình.
+Mô phỏng: offset ước lượng qua 3 switch, tải hai chiều bằng nhau và lệch; switch thường vs TC. Đơn vị: sai số của **một lần trao đổi**, trước khi servo lấy trung bình.
 
 ```python
 # [đã chạy] F4.5 — vì sao PTP cần transparent clock khi đi qua switch:
@@ -1138,15 +1138,15 @@ for name, tc in (("switch thường", None), ("transparent clock", 5e-9)):
 |---|---|---|---|
 | Header `Via` / tracing span do proxy thêm vào | Transparent clock ghi thời gian nằm trong switch vào `correctionField` | Proxy ghi để quan sát; TC ghi để **sửa** phép đo, và chỉ đúng khi mọi switch trên đường đều là TC | Một switch thường xen giữa chuỗi TC → bất đối xứng của nó lọt vào, các switch khác vẫn "sạch" nên bạn tin cả đường |
 | Leader election (Raft, ZooKeeper) | BMCA chọn grandmaster | BMCA là so sánh tất định, không quorum; mạng bị chia thì mỗi phần tự có master riêng và không ai báo lỗi | Hai nửa robot (hai switch) chạy theo hai grandmaster khác nhau sau khi một cáp lỏng |
-| Hai service cùng máy cần khác cổng | Hai ptp4l cùng máy cần khác `uds_address` (và file cấu hình riêng) | Ở backend xung đột cổng báo lỗi ngay khi bind; ở linuxptp hiện tại instance thứ hai **xóa** socket cũ rồi bind lại (log "uds: removed existing …"), instance đầu vẫn chạy nhưng `pmc` chỉ còn nói với instance sau [tự đo: theo mã nguồn `uds.c` nhánh chính; kiểm bản bạn cài] | Tưởng đang hỏi trạng thái slave mà thật ra đọc của master |
-| Reverse proxy terminate TLS rồi mở kết nối mới | Boundary clock | Mỗi BC là một servo mới: lỗi không chỉ đi qua mà còn được *lọc và cộng* qua từng tầng | Chuỗi 10 BC: sai số và thời gian hội tụ tăng theo tầng |
+| Hai service cùng máy cần khác cổng | Hai ptp4l cùng máy cần khác `uds_address` (file cấu hình riêng) | Backend xung đột cổng báo lỗi ngay khi bind; linuxptp thì instance thứ hai `unlink` socket cũ rồi bind lại — im lặng ở v4.0–v4.2, từ v4.3 có log "uds: removed existing …"; instance đầu vẫn chạy nhưng `pmc` chỉ còn nói với instance sau [spec: `uds.c`, mã nguồn linuxptp; hành vi thực tế tự kiểm] | Tưởng đang hỏi trạng thái slave mà thật ra đọc của master |
+| Reverse proxy terminate TLS rồi mở kết nối mới | Boundary clock | Mỗi BC là một servo mới: lỗi được *lọc và cộng* qua từng tầng | Chuỗi 10 BC: sai số và thời gian hội tụ tăng theo tầng |
 
 **Chấm mô hình:**
 
 - *"PTP chính xác hơn NTP vì thuật toán tốt hơn."* — **ĐÚNG MỘT PHẦN.** Công thức offset/delay là một. PTP hơn ở ba chỗ ngoài thuật toán: timestamp phần cứng, hỗ trợ của mạng (TC/BC), và tần số trao đổi cao (mặc định 1 Sync/s, cấu hình được nhanh hơn). Phản ví dụ: chrony với hardware timestamping trên cùng NIC đạt cỡ gần PTP trong LAN [tự đo]; ptp4l với software timestamping (`-S`) thì không hơn NTP bao nhiêu.
 - *"ptp4l khóa rồi (s2) là đồng hồ hệ thống đúng."* — **SAI.** s2 nghĩa là servo của PHC đã khóa theo master *theo phép đo của chính nó*. Đồng hồ hệ thống cần phc2sys; và "khóa" vẫn mù với bất đối xứng (F4.4). Phản ví dụ: K5 Bài 9 bước 5c — đổi tốc độ link làm offset trọng tài dịch một hằng số trong khi ptp4l vẫn s2 quanh 0.
 
-**Tên chuẩn của thứ bạn đã làm:** khi bạn đưa một service "ghi giờ" vào sát tầng mạng nhất có thể (đo latency ở load balancer thay vì trong app), bạn đang làm đúng việc IEEE 1588 làm: dời điểm đóng dấu xuống dưới các hàng đợi. Thứ còn thiếu: hàng đợi *giữa* hai điểm đóng dấu (switch) vẫn phá đo lường, và chỉ thiết bị mạng hợp tác (TC/BC) mới sửa được.
+**Tên chuẩn của thứ bạn đã làm:** đo latency ở load balancer thay vì trong app là đúng việc IEEE 1588 làm: dời điểm đóng dấu xuống dưới các hàng đợi. Thứ còn thiếu: hàng đợi *giữa* hai điểm đóng dấu (switch) vẫn phá phép đo, chỉ thiết bị mạng hợp tác (TC/BC) mới sửa được.
 
 ### 4. Thuật ngữ
 
@@ -1225,7 +1225,7 @@ Checklist khi đọc một hướng dẫn hoặc một kết quả PTP:
 
 <details><summary>🔒 Đáp án</summary>
 
-(a) **SAI** (lỗi đã biết, quy chuẩn mục 7), ở ba tầng. (1) `-p` chỉ định **thiết bị PHC**, đã deprecated, cho kernel trước v3.5 [spec: ptp4l(8)]. Theo mã nguồn linuxptp nhánh chính, khi dùng hardware timestamping mà đưa `-p /var/run/ptp4l_slave`, ptp4l thử mở đường dẫn đó như một PHC và thoát với lỗi "Failed to open …" [tự đo: kiểm trên bản bạn cài]. (2) Cách đúng: hai **file cấu hình riêng**, mỗi file có `uds_address`, `uds_ro_address`, interface và vai trò riêng (K5 Bài 9 bước 2); `pmc -s <uds_address>` để hỏi đúng instance. (3) Triệu chứng "Address already in use" cũng không chắc xảy ra: mã nguồn hiện tại xóa socket cũ trước khi bind, nên instance thứ hai lặng lẽ chiếm socket [tự đo]. Thêm: `--slaveOnly` là tên cũ, nay là `clientOnly` (hoặc cờ `-s`).
+(a) **SAI** (quy chuẩn mục 7), ở ba tầng. (1) `-p` chỉ định **thiết bị PHC**, deprecated, cho kernel trước v3.5 [spec: ptp4l(8)]. Theo `clock.c`, với hardware timestamping mà đưa `-p /var/run/ptp4l_slave`, ptp4l mở đường dẫn đó như một PHC, thất bại, in "Failed to open …" và không khởi động [spec: mã nguồn linuxptp; tự kiểm trên bản cài]. (2) Cách đúng: hai **file cấu hình riêng**, mỗi file có `uds_address`, `uds_ro_address`, interface, vai trò (K5 Bài 9 bước 2); `pmc -s <uds_address>` để hỏi đúng instance. (3) "Address already in use" gần như không xảy ra với socket UDS của ptp4l: `uds.c` (v4.0 trở đi) `unlink` socket cũ trước khi bind, nên instance thứ hai lặng lẽ chiếm socket. Thêm: `--slaveOnly` là tên cũ, nay là `clientOnly` (hoặc `-s`).
 
 (b) **SAI.** `-2` chọn transport (Ethernet L2 thay vì UDP IPv4), không bật hardware timestamping; hardware timestamping là **mặc định** (`time_stamping hardware`, cờ `-H`) [spec: ptp4l(8)]. Lý do dùng `-2` trong K5 Bài 9 là khác: hai IP trên cùng một máy thì kernel giao gói nội bộ, không ra dây. Offset vài ms sau khi bật PTP nhiều khả năng do: đang đọc đồng hồ hệ thống mà quên phc2sys, servo chưa khóa (s0/s1), hoặc đang đo bằng `phc_ctl` hai lệnh nối tiếp (F4.7).
 
@@ -1277,24 +1277,26 @@ Checklist khi đọc một hướng dẫn hoặc một kết quả PTP:
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| `-p` = thiết bị PHC, deprecated, cho kernel < v3.5 | [spec] | ptp4l(8), linuxptp, bản 3/2024 (đã đọc mã nguồn man page) |
-| `uds_address` mặc định `/var/run/ptp/ptp4l` (bản mới), `/var/run/ptp4l` (bản cũ) | [spec] | ptp4l(8); kiểm `man ptp4l` bản cài |
-| `-p` với đường dẫn không phải PHC → ptp4l thoát lỗi | [tự đo] | Suy từ `clock.c` nhánh chính; chạy thử trên bản cài |
-| Instance thứ hai xóa socket cũ ("uds: removed existing") | [tự đo] | Suy từ `uds.c` nhánh chính |
+| `-p` = thiết bị PHC, deprecated, cho kernel < v3.5; `-2` = transport IEEE 802.3; `-H` = hardware timestamping (mặc định); `-S` software | [spec] | ptp4l(8) mục OPTIONS (reviewer đọc trong mã nguồn linuxptp, tag v4.0 và nhánh chính) |
+| `uds_address` mặc định `/var/run/ptp4l` tới v4.4; nhánh chính sau v4.4 đổi sang `/var/run/ptp/ptp4l` + symlink | [spec] | ptp4l(8) theo tag; kiểm `man ptp4l` bản cài |
+| `-p` với đường dẫn không phải PHC → "Failed to open", không khởi động | [spec] / [tự đo] | `clock.c`; chạy thử trên bản cài |
+| Instance thứ hai `unlink` socket cũ (log "uds: removed existing" từ v4.3) | [spec] | `uds.c` các tag v4.0–v4.4 |
 | `first_step_threshold` mặc định 20 µs; `clientOnly`; `delayAsymmetry` | [spec] | ptp4l(8) |
 | IEEE 1588-2002/2008/2019; Eidson ở Agilent | [chuẩn] | — |
-| Meta 2022: NTP ms → PTP ns, ~100× trong thí nghiệm, fbclock trả `{earliest_ns, latest_ns}` (WOU) | [chuẩn] | Meta Engineering blog 11/2022 (đã kiểm qua tìm kiếm; trang gốc không truy cập được từ môi trường soạn) |
+| Meta 2022: NTP ms → PTP sub-µs; fbclock trả `{earliest_ns, latest_ns}` (WOU) | [chuẩn] | Meta Engineering blog 11/2022 (trang gốc không truy cập được từ môi trường soạn; kiểm qua tìm kiếm) |
 | BMCA so thuộc tính theo thứ tự cố định | [spec] | IEEE 1588-2008 mục 9.3 |
 | G.8271 ±1,5 µs cho TDD | [chuẩn] | ITU-T G.8271 |
 | Kết quả mô phỏng | [đã chạy] | seed 3 |
 
-Đã sửa so với Gemini: (K5 Bài 9) `-p` để tách socket → `-p` là PHC; hai file cấu hình với `uds_address` riêng (quy chuẩn mục 7); (K5 Bài 9) `-2` "bắt buộc" để có hardware timestamping → `-2` là transport, HW timestamping là mặc định; (K5 Bài 9) "miễn nhiễm nghẽn hàng đợi" → chỉ với cáp thẳng; switch thường đưa bất đối xứng vào; `--slaveOnly`/`--masterOnly` → `clientOnly`/`serverOnly`.
+Đã sửa so với Gemini: (K5 Bài 9) `-p` để tách socket → `-p` là PHC; hai file cấu hình với `uds_address` riêng (quy chuẩn mục 7); `-2` "bắt buộc" để có hardware timestamping → `-2` là transport, HW timestamping là mặc định (`-H`); "miễn nhiễm nghẽn hàng đợi" → chỉ với cáp thẳng; `--slaveOnly`/`--masterOnly` → `clientOnly`/`serverOnly`.
+
+Reviewer sửa: mặc định `uds_address` ghi "bản hiện tại = `/var/run/ptp/ptp4l`, bản 3/2024" → sai: mọi bản phát hành tới v4.4 (9/2024) vẫn là `/var/run/ptp4l`, chỉ nhánh chính sau v4.4 đổi; hành vi xóa socket của instance thứ hai nâng từ [tự đo] lên [spec] kèm phiên bản (im lặng ≤ v4.2, có log từ v4.3); bỏ khẳng định "chênh ~100 lần" trong bài Meta (không xác minh được); rút phần servo/hai tầng đồng hồ trùng K5 Bài 9 thành trỏ mã.
 
 ### 11. Đọc thêm và tự kiểm tra
 
 - **Nguồn gốc:** `man ptp4l`, `man phc2sys`, `man pmc` của bản linuxptp bạn cài (nguồn duy nhất đáng tin cho tên tùy chọn); kernel `Documentation/driver-api/ptp.rst`.
 - **Giải thích:** Meta Engineering, *Precision Time Protocol at Meta* (11/2022) — đọc phần kiến trúc và Window of Uncertainty.
-- **Đào sâu (tùy chọn):** IEEE 1588-2019 (trả phí; phần BMCA và transparent clock), hoặc tài liệu linuxptp về cấu hình boundary clock (`boundary_clock_jbod`).
+- **Đào sâu (tùy chọn):** IEEE 1588-2019 (trả phí; phần BMCA và transparent clock).
 - **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao "ptp4l báo offset 12 ns" không phải bằng chứng; (2) vẽ lại sơ đồ năm khối ở mục 2; (3) câu hỏi:
 
   Bạn có một switch thường giữa master và slave. Khi chép file 10 GB từ slave sang master (tải chiều slave→master), offset trọng tài dịch +8 µs. Dấu của dịch chuyển có hợp lý không, và dịch thành bao nhiêu nếu chép theo chiều ngược lại?

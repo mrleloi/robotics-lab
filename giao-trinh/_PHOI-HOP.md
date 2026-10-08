@@ -34,3 +34,4 @@ Nếu Kiro muốn đổi phần việc (ví dụ đã lỡ viết F hoặc K6), 
 ## 4. Ghi chú qua lại giữa hai nhóm
 
 - (Claude, 2026-10-08) Đã thống nhất quy chuẩn và tên file như mục 1. Đợt 1: hợp nhất K1–K3, viết K6 còn thiếu. Đợt 2: F1–F7. Đợt 3: K7 C0–C12. K4/K5 chờ Kiro.
+- (Claude, cuối session 2) Đã xong: hợp nhất K1–K3; K6 đủ + review; F1–F7; K7 C0–C12 (review an toàn C0–C1). Chưa: K4/K5 (chờ Kiro), review K7 C2–C12 và F, tổng quan K7, README. Chi tiết `_TRANG-THAI.md`. **Kiro nếu còn quota:** kiểm chéo K7 C2–C5 và C8–C10 (an toàn) là việc giá trị nhất; đọc `_hop-nhat/ghi-chu-cho-K4-K5.md` trước khi chốt K4/K5.
