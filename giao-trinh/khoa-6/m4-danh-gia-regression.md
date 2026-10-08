@@ -349,7 +349,7 @@ Chạy sau khi commit `prediction.md`. Nhìn cột cuối: nó có đổi theo n
 **Chấm mô hình:**
 
 - *"Tôi có host yên tĩnh và determinism, nhiễu đã được khử; 50 episode là đủ."* (suy từ vốn "đo trên host yên tĩnh" của bạn) — **SAI** cho success rate. Determinism đảm bảo cùng seed cho cùng kết quả; nó không làm 50 seed khác nhau cho cùng tỉ lệ. Phản ví dụ: policy p = 0.6 tất định hoàn toàn, hai run 50 episode với hai `seed_root` — xem cột p95 của mô phỏng A/A. Thứ determinism thật sự mua ở đây là quyền dùng **thiết kế theo cặp**.
-- *"Chạy xong thì tính power từ chênh lệch quan sát; power thấp nghĩa là không có ý nghĩa do thiếu n."* — **SAI.** Observed power tính từ Δ̂ là hàm một-một của p-value, không thêm thông tin [chuẩn — Hoenig & Heisey 2001]. Power là thuộc tính của **thiết kế**, tính từ Δ bạn *quan tâm*, trước khi chạy. Sau khi chạy, đại lượng đúng là CI của Δ̂. Phản ví dụ: Δ̂ = +1 điểm, observed power ~6%, nhưng CI của Δ là [−2, +4] — bạn đã loại trừ được regression quá 2 điểm, điều mà "power thấp" che mất.
+- *"Chạy xong thì tính power từ chênh lệch quan sát; power thấp nghĩa là không có ý nghĩa do thiếu n."* — **SAI.** Observed power tính từ Δ̂ là hàm một-một của p-value, không thêm thông tin [chuẩn — Hoenig & Heisey 2001]. Power là thuộc tính của **thiết kế**, tính từ Δ bạn *quan tâm*, trước khi chạy. Sau khi chạy, đại lượng đúng là CI của Δ̂. Phản ví dụ: Δ̂ = +1 điểm, observed power ~10%, nhưng CI của Δ là [−2, +4] — bạn đã loại trừ được regression quá 2 điểm, điều mà "power thấp" che mất.
 - *"Cứ chạy 10.000 episode là an toàn."* — **ĐÚNG MỘT PHẦN.** CI hẹp thật. Gãy ở hai chỗ: 10.000 episode trên 20 kịch bản với ICC cao có n hiệu dụng gần 20 hơn 10.000 cho câu hỏi về phân bố; và ở n rất lớn, chênh 0.4 điểm cũng "có ý nghĩa" mà vô dụng cho quyết định. Đó là lý do Bài 13 cần một **biên δ** do bạn chọn, không chỉ α.
 
 ### 4. Thuật ngữ
@@ -503,7 +503,7 @@ Bản gốc nói "n = 50, chênh có thể tới 10–15 điểm" — thấp hơ
 
 **Mô phỏng bước 2:** độc lập n = 388 → power ≈ 0.80. Theo cặp (`chaos` 0.5): ψ ≈ 0.23, n ≈ 178 cặp → power ≈ 0.81. Ở n = 100: độc lập ≈ 0.31, theo cặp ≈ 0.57. ρ liên tục ≈ 0.43 vs bit thành công ≈ 0.30 (nhị phân hóa ở trung vị mất khoảng 1/3 hiệu suất với phân bố chuẩn [chuẩn — Cohen 1983]). Ghép cặp mua nhiều hơn đổi metric, và không đổi estimand.
 
-**Câu 4:** không có số chung. ψ nhỏ → theo cặp rẻ hơn nhiều lần; ψ tiến tới `p₀(1−p₁) + p₁(1−p₀)` → lợi ích chỉ còn phần chặn độ khó kịch bản.
+**Câu 4:** không có số chung. ψ nhỏ → theo cặp rẻ hơn nhiều lần; ψ càng gần mức của hai run trên cùng kịch bản nhưng seed độc lập → lợi ích chỉ còn phần chặn độ khó kịch bản; chạm `p₀(1−p₁) + p₁(1−p₀)` (hai run hoàn toàn độc lập) thì hết lợi.
 
 **Câu 5:** 39/50 → Wilson [64.8, 87.2]. 71% của 50 là 35.5 — không phải số nguyên, nên con số đã làm tròn; 35/50 → [56.2, 80.9], 36/50 → [58.3, 82.5]. Tỉ lệ không khớp k/n nguyên là dấu hiệu đầu tiên để hỏi lại n. CI Newcombe của hiệu khoảng [−10, +23] điểm. n mỗi bên để phát hiện 7 điểm (0.71→0.78): **≈ 610**, không phải ~700 như bản gốc và Gemini.
 
@@ -582,3 +582,590 @@ Bản gốc nói "n = 50, chênh có thể tới 10–15 điểm" — thấp hơ
 <details><summary>Đáp án</summary>500 × 2: DEFF nhỏ khi m nhỏ, và 10 kịch bản không đại diện cho phân bố. 10 × 100 đúng khi câu hỏi là về **đúng 10 kịch bản đó** (ví dụ 10 ca regression đã biết).</details>
 
 ---
+
+## Bài 13 — Phát hiện regression tự động (6h)
+
+> **Vị trí:** Bài 12 (cỡ mẫu, MDE) → **Bài 13** → Bài 14 (domain randomization); dùng lại ở K6 Bài 18 (CI khép kín) · **Cần trước:** F1.5 (kiểm định, bội so sánh, peeking), F2.1 (test là phép đo có FP/FN), F2.3 (flaky, phán quyết ba trạng thái), F2.5 (canary lỗi cố ý); K6 Bài 4 (golden, canary trong CI), K6 Bài 10 (báo cáo so hai run) · **Sau bài này bạn quyết định được:** một PR được merge, bị chặn, hay phải chạy thêm — với tỉ lệ chặn nhầm và lọt lưới **biết trước bằng số**; và khi nào câu hỏi đúng là "không tệ hơn" còn khi nào là "tương đương".
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 2015, Optimizely — một nền tảng A/B testing lớn — thay động cơ thống kê của mình bằng "Stats Engine" dựa trên kiểm định tuần tự, cùng nhóm Ramesh Johari ở Stanford [chuẩn]. Lý do: khách hàng nhìn dashboard liên tục và dừng thí nghiệm ngay khi thấy "có ý nghĩa". Mỗi lần nhìn là một lần tung đồng xu thêm; nhìn đủ nhiều lần, một thí nghiệm A/A cũng sẽ có lúc "thắng". CI của bạn là một dashboard mà người ta bấm "re-run" khi nó đỏ.
+
+Cái bẫy thứ hai nổi tiếng nhờ một con cá. Năm 2009, Craig Bennett và cộng sự đặt một con cá hồi **đã chết** vào máy fMRI, cho "xem" ảnh người trong các tình huống xã hội, và tìm được một cụm voxel "hoạt động có ý nghĩa" trong não cá — vì họ cố ý không hiệu chỉnh cho hàng chục nghìn phép kiểm định voxel [chuẩn]. Một bảng 20 task × 6 metric tô màu theo p < 0.05 là con cá hồi của bạn.
+
+Bản gốc đặt đúng câu hỏi: verdict phải là thống kê, và phải có loại thứ ba. Bài này thêm thứ bản gốc chưa nói: **chính cái cổng cũng là một dụng cụ đo có tỉ lệ sai**, và định nghĩa ba trạng thái của bản gốc chồng lên nhau.
+
+### 2. Mô hình tư duy
+
+Bản gốc định nghĩa PASS = "không tệ hơn baseline một cách có ý nghĩa". Theo định nghĩa đó, một run n = 10 gần như luôn PASS — tức đúng cái lỗi bản gốc muốn chặn. "Không bác bỏ được H₀: không tệ hơn" **không phải** bằng chứng là không tệ hơn. Sửa: PASS phải là một khẳng định được **chứng minh**, cần một **biên δ** — mức regression bạn chấp nhận được, chọn theo sản phẩm, khai báo trước. Đọc trên CI của Δ = p_cand − p_base:
+
+```
+                        −δ           0
+  Δ = p_cand − p_base ───┼────────────┼──────────►
+  (1) FAIL          [=====]  |            |          CI nằm hẳn dưới 0, chưa loại được "tệ hơn δ"
+  (2) PASS⚠                  |  [=====]   |          CI dưới 0 nhưng cả khoảng nằm trong biên: tụt nhỏ, chấp nhận, ghi chú
+  (3) PASS                   |       [====|===]      cận dưới > −δ: CHỨNG MINH được không tệ hơn δ
+  (4) INCONCLUSIVE      [====|============|==]       chưa loại được "tệ hơn δ", cũng chưa thấy tệ hơn 0
+  (5) ERROR          provenance lệch (Bài 10), sim_unstable khác nhau giữa arm (Bài 11), harness lỗi
+```
+
+Quy tắc dùng CI 90% hai phía của Newcombe (tương đương hai kiểm định một phía ở α = 0.05):
+- **PASS** ⇔ cận dưới > −δ. Đây là **kiểm định non-inferiority** [chuẩn], cùng loại mà y học dùng để chứng minh thuốc mới "không kém hơn quá δ" thuốc cũ.
+- **FAIL** ⇔ không PASS **và** cận trên < 0 (tệ hơn có ý nghĩa).
+- **INCONCLUSIVE** ⇔ còn lại. **ERROR** ⇔ phép so sánh không hợp lệ — tách khỏi INCONCLUSIVE, vì "thiếu bằng chứng" và "dụng cụ hỏng" cần hai hành động khác nhau.
+
+Ba hệ quả:
+
+1. **Cổng có hai tỉ lệ sai, cả hai đặt bằng α:** chặn nhầm = P(FAIL | Δ = 0) ≤ α; lọt lưới = P(PASS | Δ = −δ) ≤ α. Cái giá: code không đổi chỉ PASS khi n đủ lớn; ở n nhỏ, câu trả lời trung thực là INCONCLUSIVE. Cổng không bao giờ nói INCONCLUSIVE ở n = 50 là cổng đang nói dối.
+2. **"Không tệ hơn" khác "tương đương".** Với PR thêm tính năng, chỉ phía dưới quan trọng (non-inferiority, một phía). Với thay đổi **không được phép đổi hành vi** — nâng MuJoCo, rebuild image, refactor loader — câu hỏi là tương đương: Δ nằm trong (−δ, +δ). Đó là **TOST** (two one-sided tests), tương đương với CI 90% nằm gọn trong (−δ, +δ) [chuẩn — Schuirmann 1987]. Sau một refactor thuần, success rate *tăng* 6 điểm cũng là tín hiệu lỗi.
+3. **Mỗi lần nhìn lại là một lần thử thêm.** Bội so sánh (nhiều task) và peeking (nhiều lần nhìn) là cùng một bệnh: số phép thử thật lớn hơn số bạn nghĩ. Thuốc khác nhau: theo task thì hiệu chỉnh α; theo thời gian thì thiết kế tuần tự có ngân sách α.
+
+Mô phỏng: tỉ lệ ba verdict theo Δ thật và n, và bộ 20 task:
+
+```python
+# [đã chạy]  Cổng regression ba trạng thái theo biên δ (non-inferiority) và tỉ lệ sai của CHÍNH cổng.
+import numpy as np
+rng = np.random.default_rng(13)
+
+def wilson(k, n, z):
+    p = k / n; d = 1 + z*z/n
+    c = (p + z*z/(2*n)) / d; h = z*np.sqrt(p*(1-p)/n + z*z/(4*n*n)) / d
+    return c - h, c + h
+
+def diff_ci(kc, nc, kb, nb, z):                 # Newcombe cho Δ = p_cand − p_base (vector hóa)
+    pc, pb = kc/nc, kb/nb; lc, uc = wilson(kc, nc, z); lb, ub = wilson(kb, nb, z)
+    d = pc - pb
+    return d - np.sqrt((pc-lc)**2 + (ub-pb)**2), d + np.sqrt((uc-pc)**2 + (pb-lb)**2)
+
+def verdict(kc, nc, kb, nb, delta=0.05, z_pass=1.645, z_fail=1.645):  # 1.645: một phía α = 0.05
+    lo = diff_ci(kc, nc, kb, nb, z_pass)[0]        # PASS: chứng minh được Δ > −δ (non-inferiority)
+    hi = diff_ci(kc, nc, kb, nb, z_fail)[1]        # FAIL: chứng minh được Δ < 0, và chưa chứng minh PASS
+    return np.where(lo > -delta, "PASS", np.where(hi < 0, "FAIL", "INCONCLUSIVE"))
+
+p_base, reps = 0.80, 20_000
+print("Δ thật   n/arm    PASS   FAIL   INCONCL")
+for d_true in [0.0, -0.05, -0.10]:
+    for n in [50, 200, 800, 3000]:
+        kb = rng.binomial(n, p_base, reps); kc = rng.binomial(n, p_base + d_true, reps)
+        v = verdict(kc, n, kb, n)
+        print(f"{d_true:+.2f}  {n:6d}   " + "  ".join(f"{np.mean(v == s):.3f}" for s in ["PASS", "FAIL", "INCONCLUSIVE"]))
+
+# Bội so sánh: 20 task, KHÔNG task nào thay đổi. Phía FAIL hiệu chỉnh Bonferroni, phía PASS thì không
+m = 20
+for n, z_fail in [(800, 1.645), (800, 2.807), (2000, 2.807)]:
+    kb = rng.binomial(n, p_base, (reps, m)); kc = rng.binomial(n, p_base, (reps, m))
+    v = verdict(kc, n, kb, n, z_fail=z_fail)
+    print(f"n={n:4d} z_fail={z_fail:.3f}  P(≥1 task FAIL giả) = {(v == 'FAIL').any(axis=1).mean():.3f}"
+          f"   P(cả bộ PASS) = {(v == 'PASS').all(axis=1).mean():.3f}")
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Script chấm pass/fail/inconclusive của bạn (deterministic + AI review) | Verdict PASS/FAIL/INCONCLUSIVE/ERROR | Inconclusive của bạn nhiều khả năng nghĩa là "oracle không chắc / hai oracle bất đồng / môi trường lỗi". Ở đây INCONCLUSIVE là **thiếu độ chính xác**, đo được bằng độ rộng CI, giảm được bằng n. Tên chuẩn của phân biệt này có trong TTCN-3 (ETSI): verdict `pass`, `fail`, `inconc`, `error`, `none` | Gộp "harness lỗi" với "thiếu episode": người ta chạy thêm 1.000 episode trên một harness hỏng |
+| `assert result == expected` | `assert non_inferior(cand, base, δ)` | δ là quyết định sản phẩm, không phải hằng số kỹ thuật; không có δ thì không có PASS | Chọn δ sau khi thấy kết quả — dời cột gôn (Bài 11) |
+| Bấm "re-run" khi CI đỏ / retry flaky | Chạy thêm episode khi verdict không vừa ý | Retry có điều kiện theo kết quả là **optional stopping**: mỗi lần chạy lại là một phép thử nữa với cùng α | Tỉ lệ lọt lưới tăng mà không ai đổi dòng code nào (đo ở mô phỏng peeking) |
+| Alert trên 20 dashboard, alert fatigue | 20 task × verdict | Ops chỉnh ngưỡng theo kinh nghiệm; ở đây tính được FWER = 1 − (1 − α)^m | Phần lớn PR có ít nhất một task đỏ giả; người ta học cách lờ cổng đi |
+| Golden/snapshot file, cập nhật bằng lệnh tường minh | Baseline có version | Golden là sự thật tất định; baseline là **một phép đo có sai số**, dùng lại cho mọi PR | Baseline "may" cao 3 điểm làm mọi PR trong ba tháng trông tệ hơn — lỗi tương quan, không phải ngẫu nhiên |
+
+**Chấm mô hình:**
+
+- *"Script của tôi đã có pass/fail/inconclusive rồi, chỉ cần đổi điều kiện sang p-value."* (mô hình suy từ vốn của bạn) — **ĐÚNG MỘT PHẦN.** Khung ba trạng thái là đúng và hiếm. Gãy ở ba chỗ: (a) thiếu biên δ thì không có PASS hợp lệ — chỉ có "chưa thấy FAIL"; (b) inconclusive của bạn gộp "oracle không chắc" với "thiếu mẫu"; cần ERROR riêng; (c) nếu AI review là một phần của oracle thành công, tỉ lệ sai của judge đi vào p. Judge sai **như nhau** ở hai arm kéo Δ về 0 (mất power); sai **khác nhau** (policy mới đổi góc camera thấy) làm Δ lệch có hệ thống. Phản ví dụ: judge bỏ sót 10% thành công ở cả hai arm; Δ thật −6 điểm đo ra khoảng −5.4, cổng cần thêm cỡ 20–25% episode để bắt cùng regression [ước lượng].
+- *"Bonferroni cho mọi thứ là an toàn nhất."* — **SAI** cho phía PASS. Kết luận "cả bộ PASS" đòi **mọi** task PASS; đó là kiểm định giao–hợp (intersection–union), và mỗi task ở α đã đủ giữ tỉ lệ lọt lưới của cả bộ ≤ α, không cần hiệu chỉnh [chuẩn — Berger 1982]. Hiệu chỉnh cần cho phía FAIL ("có ít nhất một task tệ hơn"). Phản ví dụ: áp Bonferroni cho cả cận dưới, bộ 20 task cần n mỗi task lớn hơn hẳn để PASS mà không mua thêm an toàn nào.
+- *"Có INCONCLUSIVE thì cứ chạy thêm cho đến khi ra PASS hoặc FAIL."* — **ĐÚNG MỘT PHẦN.** Chạy thêm là hành động đúng; chạy thêm **rồi nhìn lại với cùng ngưỡng** là peeking. Phản ví dụ: mô phỏng peeking dưới đây — mười lần nhìn, mỗi 100 episode.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Non-inferiority margin δ | Mức regression chấp nhận được, khai báo trước | Một tham số thống kê "chuẩn" |
+| 🟢 | Non-inferiority test | Chứng minh Δ > −δ (cận dưới CI > −δ) | "Không thấy khác biệt" |
+| 🟢 | Equivalence / TOST | Chứng minh −δ < Δ < δ bằng hai kiểm định một phía | Kiểm định hai phía không bác bỏ |
+| 🟢 | FWER, Bonferroni, Holm | Xác suất ≥1 báo động giả trong họ phép thử; Holm mạnh hơn Bonferroni, cùng bảo đảm | "Chỉ dân khoa học mới cần" |
+| 🟡 | FDR (Benjamini–Hochberg) | Tỉ lệ kỳ vọng phát hiện giả trong số đã gắn cờ | Một kiểu FWER lỏng hơn, dùng thay được cho gating |
+| 🟡 | Intersection–union test | "Mọi thành phần đều đạt" — không cần hiệu chỉnh bội | Phải Bonferroni như mọi phép đa kiểm định |
+| 🟢 | Peeking / optional stopping | Quyết định dừng dựa trên kết quả đang xem | Kiểm tra tiến độ vô hại |
+| 🟡 | Group sequential, alpha spending | Nhìn nhiều lần theo lịch, chia α cho các lần nhìn (Pocock, O'Brien–Fleming) | Phép thuật dừng sớm miễn phí |
+| 🟡 | SPRT | Kiểm định tuần tự của Wald (1945), dừng ngay khi tỉ số hợp lý vượt ngưỡng | Chỉ có trong lý thuyết |
+
+### 5. Dự đoán
+
+**Đề** (p_base = 0.80, δ = 5 điểm, α = 0.05 một phía, thiết kế độc lập):
+1. Điền bảng tỉ lệ PASS/FAIL/INCONCLUSIVE cho Δ thật ∈ {0, −5, −10 điểm} × n ∈ {50, 200, 800, 3.000}. Ít nhất các ô: (0, 50), (0, 800), (−5, 50), (−5, 3.000).
+2. n mỗi arm để code **không đổi gì** PASS với xác suất 0.8 ở một task. Và cho cả bộ 20 task (mọi task PASS) với xác suất 0.8.
+3. 20 task không đổi, n = 800: P(≥1 task FAIL giả) khi không hiệu chỉnh; khi Bonferroni phía FAIL.
+4. Peeking: nhìn sau mỗi 100 episode, tối đa 10 lần, dừng ở verdict đầu tiên. Tỉ lệ FAIL giả (Δ = 0) và PASS lọt (Δ = −δ) gấp bao nhiêu lần một lần nhìn ở n = 1.000?
+5. Canary −5 điểm ở n = 50: bản gốc nói "INCONCLUSIVE, không phải PASS". Kiểm điều đó bằng **một** run có được không?
+
+**Tham số cần tra:** δ của từng task (bạn quyết, viết vào `EVAL.md` trước khi chạy candidate nào — căn cứ: regression nào người dùng robot sẽ nhận ra, hoặc MDE ngân sách cho phép); `z_{0.95} = 1.645`; `z_{1−0.05/20} ≈ 2.807`; ψ đo ở Bài 12 nếu dùng thiết kế theo cặp.
+
+**Phương pháp:** câu 2 bằng công thức Bài 12 dạng một phía với Δ thật = 0 và biên δ: `n ≈ (z_{1−α} + z_{1−β})² · 2p(1−p) / δ²`. Cho cả bộ m task độc lập: power mỗi task phải là `0.8^{1/m}`. Câu 3: `1 − (1 − α)^m`.
+
+```markdown
+# prediction.md — K6 Bài 13
+## 1. Bảng verdict (PASS/FAIL/INC)
+| Δ thật \ n | 50 | 200 | 800 | 3000 |
+|---|---|---|---|---|
+| 0 | | | | |
+| −5 | | | | |
+| −10 | | | | |
+## 2. n để code không đổi PASS 80%: một task ___ ; cả bộ 20 task ___
+## 3. 20 task, n=800: P(≥1 FAIL giả) không hiệu chỉnh ___ ; Bonferroni ___
+## 4. Peeking 10 lần: FAIL giả ×___ ; PASS lọt ×___
+## 5. Kiểm "canary n=50 → INCONCLUSIVE" bằng một run được không? ___ vì ___
+## δ của tôi cho từng task (khai báo TRƯỚC): ___
+```
+
+### 6. Làm
+
+**Bước 1 — baseline có version** (bản gốc). `baselines/<task>/<version>.json`: summary, kết quả **từng episode** theo (scenario_hash, episode_seed), provenance (image digest, scenario set hash, version định nghĩa thành công Bài 11, backend). Cập nhật bằng `promote_baseline --run <id> --reason "..."` + một dòng `decisions.md`. Thêm: **n baseline ≥ n candidate** (lý tưởng 2–4×), vì sai số của baseline là sai số **chung** của mọi PR dùng nó. Nếu determinism giữ ở tầng "khác tiến trình, cùng image" (Bài 1–3), kết quả từng episode của baseline dùng lại được để **ghép cặp** với candidate cùng seed (McNemar, ψ từ Bài 12); image digest đổi thì chạy lại baseline.
+
+**Bước 2 — verdict bốn trạng thái** (bản gốc có ba; thêm ERROR). `sim_eval/regression.py`, mỗi task in: k/n, Δ̂, CI 90%, δ, verdict, MDE. ERROR khi provenance không khớp (Bài 10), tỉ lệ `sim_unstable` khác nhau có ý nghĩa giữa hai arm (Bài 11), hoặc harness exception. Nối thẳng vào script pass/fail/inconclusive cũ của bạn: điều kiện pass thành `lo > −δ`, thêm nhánh ERROR; AI review giữ vai oracle thành công có kappa đã đo (Bài 11 bước 5), không làm phán quyết thống kê.
+
+**Bước 3 — theo từng task** (bản gốc): bài học K4 Bài 8, trung bình đứng yên trong khi task dịch chuyển. Verdict tổng hợp: bộ PASS ⇔ mọi task PASS; bộ FAIL ⇔ ≥1 task FAIL; còn lại INCONCLUSIVE.
+
+**Bước 4 — bội so sánh** (bản gốc, làm rõ). Phía FAIL: Holm (hoặc Bonferroni) trên m task → FWER báo động giả ≤ α. Phía PASS: mỗi task ở α (intersection–union). Báo cáo nightly/khám phá (không chặn merge): có thể dùng FDR Benjamini–Hochberg (`statsmodels.stats.multitest.multipletests(method="fdr_bh")` `[tự đo theo phiên bản]`). Ghi rõ dùng cái nào ở đâu vào README (bản gốc yêu cầu).
+
+**Bước 5 — canary phá hoại −5 điểm** (bản gốc). Wrapper policy làm thất bại có chủ đích ~5% episode của một task (ví dụ mở kẹp sớm khi `hash(seed) % 100 < k`, k chọn để đạt −5 điểm trên baseline của bạn). Chạy ở n đủ và n = 50. **Vì verdict là ngẫu nhiên**, kiểm cổng bằng tỉ lệ: lặp K lần (hoặc mô phỏng binomial với p đo được), yêu cầu tỉ lệ PASS ở canary n = 50 ≤ α + sai số Monte Carlo. Thêm hai canary để đo đủ hai tỉ lệ sai của cổng: A/A (không đổi; FAIL ở đây là chặn nhầm) và canary đúng −δ (PASS ở đây là lọt lưới). Đây là mutation testing cho chính dụng cụ eval (→ F2.5).
+
+**Bước 6 (thêm) — chính sách cho INCONCLUSIVE, không peeking.** Viết vào `EVAL.md`, trước khi dùng:
+
+```python
+# [đã chạy]  Peeking: "chạy thêm 100 episode rồi xem lại" cho đến khi có verdict. Tỉ lệ sai của cổng đổi ra sao?
+import numpy as np
+from scipy.stats import norm
+rng = np.random.default_rng(7)
+p_base, delta, step, looks, reps = 0.80, 0.05, 100, 10, 20_000
+
+def wilson(k, n, z):
+    p = k / n; d = 1 + z*z/n
+    c = (p + z*z/(2*n)) / d; h = z*np.sqrt(p*(1-p)/n + z*z/(4*n*n)) / d
+    return c - h, c + h
+
+def diff_ci(kc, kb, n, z):
+    pc, pb = kc/n, kb/n; lc, uc = wilson(kc, n, z); lb, ub = wilson(kb, n, z)
+    d = pc - pb
+    return d - np.sqrt((pc-lc)**2 + (ub-pb)**2), d + np.sqrt((uc-pc)**2 + (pb-lb)**2)
+
+def gate(d_true, z, peek):
+    # kết quả từng episode, cộng dồn theo từng lượt nhìn
+    kb = rng.binomial(step, p_base, (reps, looks)).cumsum(1)
+    kc = rng.binomial(step, p_base + d_true, (reps, looks)).cumsum(1)
+    out = np.full(reps, "INCONCLUSIVE", dtype=object); used = np.full(reps, looks * step)
+    open_ = np.ones(reps, bool)
+    for j in (range(looks) if peek else [looks - 1]):
+        n = (j + 1) * step
+        lo, hi = diff_ci(kc[:, j], kb[:, j], n, z)
+        v = np.where(lo > -delta, "PASS", np.where(hi < 0, "FAIL", ""))
+        hit = open_ & (v != "")
+        out[hit] = v[hit]; used[hit] = n; open_ &= ~hit
+    return out, used
+
+z1, zk = norm.ppf(0.95), norm.ppf(1 - 0.05 / looks)   # một phía 5%; Bonferroni trên 10 lượt nhìn
+for label, z, peek in [("1 lần nhìn ở n=1000", z1, False),
+                       ("nhìn 10 lần, z thường", z1, True),
+                       ("nhìn 10 lần, z Bonferroni", zk, True)]:
+    v0, u0 = gate(0.0, z, peek)          # không đổi gì: FAIL ở đây là báo động giả
+    v1, u1 = gate(-delta, z, peek)       # tụt đúng δ: PASS ở đây là lọt lưới
+    print(f"{label:26s} FAIL giả {np.mean(v0 == 'FAIL'):.3f} | PASS lọt {np.mean(v1 == 'PASS'):.3f}"
+          f" | PASS khi không đổi {np.mean(v0 == 'PASS'):.2f} | n TB {u0.mean():.0f}")
+```
+
+Quy tắc mẫu: PR chạy giai đoạn 1 (n₁); INCONCLUSIVE thì tự xếp lịch giai đoạn 2 đến n₂ đã định trước, với ngưỡng mỗi lần nhìn đã chia α (Bonferroni qua số lần nhìn là bảo thủ nhưng đúng; Pocock/O'Brien–Fleming hiệu quả hơn). PR không bị chặn bởi INCONCLUSIVE nhưng mang nhãn; release thì bị chặn. **Cấm** "re-run job eval" thủ công khi FAIL — re-run chỉ hợp lệ cho ERROR.
+
+**Bước 7 (thêm) — kiểm tương đương cho thay đổi hạ tầng.** Nâng MuJoCo, rebuild image, đổi loader: dùng TOST với ±δ. Nếu PASS non-inferiority nhưng **không** PASS tương đương vì Δ̂ dương lớn, verdict là ERROR cần điều tra — một refactor không được làm robot giỏi lên.
+
+**Bước 8 — ngưỡng phát hiện tối thiểu trong README** (bản gốc, tiêu chí PASS của khóa). Ghi bằng số, theo dạng: "Ở n = ___ episode/task, p ≈ ___, α = 0.05 một phía: cổng chặn regression ≥ ___ điểm với xác suất ≥ 0.8; code không đổi PASS với xác suất ___ mỗi task, ___ cả bộ m = ___; tỉ lệ chặn nhầm cả bộ ≤ ___ (Holm)." Số lấy từ Bài 12 và từ bước 5, không phải từ lý thuyết suông.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Câu 1** (mô phỏng `b13_gate`, seed 13, 20.000 lần lặp; lệch ±0.01 là nhiễu Monte Carlo):
+
+| Δ thật | n/arm | PASS | FAIL | INCONCLUSIVE |
+|---|---|---|---|---|
+| 0 | 50 | 0.15 | 0.05 | 0.80 |
+| 0 | 200 | 0.36 | 0.05 | 0.60 |
+| 0 | 800 | 0.80 | 0.05 | 0.15 |
+| 0 | 3.000 | ≈1.00 | ≈0 | 0 |
+| −5 | 50 | 0.05 | 0.15 | 0.80 |
+| −5 | 800 | 0.05 | 0.77 | 0.18 |
+| −5 | 3.000 | 0.05 | 0.95 | 0 |
+| −10 | 200 | ≈0 | 0.75 | 0.25 |
+| −10 | 800 | 0 | ≈1.00 | 0 |
+
+Đọc: hàng Δ = −5 (đúng bằng δ) có PASS ≈ 0.05 ở **mọi** n — đó là tỉ lệ lọt lưới, đặt bởi α. Hàng Δ = 0 có FAIL ≈ 0.05 khi n còn nhỏ — tỉ lệ chặn nhầm; ở n rất lớn FAIL về 0 vì cổng chứng minh được PASS trước. Ở n = 50, code không đổi gì nhận INCONCLUSIVE 80% số lần: đó là câu trả lời trung thực.
+
+**Câu 2:** một task ≈ (1.645 + 0.842)² · 0.32 / 0.0025 ≈ **790** mỗi arm (mô phỏng: 0.80 ở n = 800). Cả bộ 20 task: power mỗi task 0.8^{1/20} ≈ 0.989 → ≈ **2.000** mỗi task mỗi arm (mô phỏng: 0.81 ở n = 2.000). Ở n = 800, cả bộ 20 task chỉ PASS ~1% số lần dù không có gì thay đổi. Đây là con số khiến người ta giảm số task trong cổng PR, không phải giảm α.
+
+**Câu 3:** không hiệu chỉnh 0.64 (= 1 − 0.95²⁰); Bonferroni phía FAIL 0.046. Hiệu chỉnh phía FAIL không làm đổi P(cả bộ PASS), vì PASS đi bằng cận dưới không hiệu chỉnh.
+
+**Câu 4** (mô phỏng `b13_peek`, seed 7):
+
+| Cách nhìn | FAIL giả (Δ = 0) | PASS lọt (Δ = −δ) | PASS khi không đổi | n trung bình |
+|---|---|---|---|---|
+| 1 lần ở n = 1.000 | 0.046 | 0.049 | 0.88 | 1.000 |
+| 10 lần, z thường | 0.154 | 0.158 | 0.84 | ~325 |
+| 10 lần, Bonferroni qua lượt nhìn | 0.023 | 0.023 | 0.67 | ~680 |
+
+Peeking nhân **cả hai** tỉ lệ sai lên khoảng 3 lần. Bonferroni qua lượt nhìn kéo về dưới α, đổi lại PASS ít hơn ở n tối đa; thiết kế tuần tự chuẩn (O'Brien–Fleming) lấy lại phần lớn khoản đó.
+
+**Câu 5:** không. Ở n = 50, canary −5 cho INCONCLUSIVE ~80%, FAIL ~15%, PASS ~5%. Một run PASS không chứng minh cổng sai, một run INCONCLUSIVE không chứng minh cổng đúng. Tiêu chí kiểm được: **tỉ lệ** PASS trên K lần lặp ≤ α (với K = 100, ngưỡng thực tế ≤ ~0.10 vì sai số Monte Carlo). Bản gốc viết "Canary −5, n = 50 → INCONCLUSIVE" như kết quả tất định; sửa thành tỉ lệ.
+
+**Bảng bản gốc, sửa:**
+
+| Kiểm tra | Kết quả đúng |
+|---|---|
+| Canary −5 điểm, n đủ (~3.000 ở p = 0.8, δ = 5) | FAIL với tỉ lệ ≥ ~0.9 |
+| Canary −5 điểm, n = 50 | Chủ yếu INCONCLUSIVE; **tỉ lệ PASS ≤ α** |
+| Không thay đổi gì | Tỉ lệ FAIL ≤ α cho cả bộ (sau Holm); PASS chỉ khi n đủ, ở n nhỏ là INCONCLUSIVE — bản gốc ghi "PASS" là sai ở n nhỏ |
+| Ngưỡng phát hiện tối thiểu | Nêu bằng số trong README (bước 8) |
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Canary −5 ở n = 50 cho PASS thường xuyên (> ~10%) | PASS định nghĩa bằng "không bác bỏ" thay vì cận dưới > −δ; hoặc δ quá rộng | In CI và δ của các run PASS | Định nghĩa PASS bằng non-inferiority |
+| Code không đổi mà bộ thường xuyên đỏ | Không hiệu chỉnh phía FAIL; hoặc baseline "may"; hoặc môi trường trôi | A/A với baseline chạy lại cùng lúc; so provenance | Holm phía FAIL; chạy lại baseline định kỳ; baseline n lớn hơn |
+| Bộ gần như không bao giờ PASS | Áp hiệu chỉnh bội cho cả phía PASS; hoặc m task quá nhiều so với n | Tính power cả bộ `(power mỗi task)^m` | Bỏ hiệu chỉnh phía PASS; giảm task trong cổng PR, giữ đủ ở nightly |
+| Verdict đổi khi chạy lại cùng commit | Cổng ngẫu nhiên đúng như thiết kế, ở vùng biên | Xem CI: có sát −δ hoặc 0 không | Chấp nhận; nếu không chấp nhận được, tăng n hoặc dùng ghép cặp |
+| Δ̂ dương lớn sau một refactor thuần | Refactor đổi hành vi (seed, timestep, định nghĩa thành công), không phải "cải thiện" | TOST; diff provenance; diff định nghĩa thành công | ERROR, điều tra như bug |
+| Nhiều INCONCLUSIVE kéo dài | δ nhỏ hơn MDE của ngân sách | So δ với bảng MDE (Bài 12) | Nới δ một cách tường minh (version mới), hoặc ghép cặp, hoặc dồn n vào ít task hơn |
+
+### 9. Câu hỏi ngược
+
+1. **[Nếu…thì]** Nếu bạn đặt δ = 0, cổng của bạn trở thành gì? Có thể có PASS không?
+   <details><summary>Hướng nghĩ</summary>PASS đòi cận dưới > 0, tức chứng minh *cải thiện*. Code không đổi sẽ không bao giờ PASS trừ khi may. δ là thứ biến "không tệ hơn" thành một khẳng định chứng minh được ở n hữu hạn; không có biên thì không có chứng minh "không tệ hơn".</details>
+2. **[Quy mô]** 200 PR mỗi tháng, mỗi PR chạy cổng 10 task. Ngay cả khi mọi tỉ lệ sai đúng thiết kế, mỗi tháng có bao nhiêu PR bị chặn nhầm, và bao nhiêu regression thật lọt? Cái nào đắt hơn cho đội?
+   <details><summary>Hướng nghĩ</summary>Với FWER 5% mỗi PR: ~10 PR chặn nhầm/tháng. Lọt lưới phụ thuộc số PR có regression thật và kích thước của nó so với δ. Chặn nhầm đốt niềm tin vào cổng (người ta bắt đầu bypass); lọt lưới tích lũy (nhiều regression nhỏ hơn δ cộng lại). Cần thêm cổng định kỳ so với baseline xa (tháng trước), không chỉ so với commit trước.</details>
+3. **[Failure mode]** Mỗi PR đều PASS non-inferiority với δ = 3 điểm so với baseline của PR trước. Sau 10 PR, success rate có thể đã tụt bao nhiêu mà cổng không bao giờ đỏ?
+   <details><summary>Hướng nghĩ</summary>Đến gần 10 × 3 = 30 điểm về nguyên tắc ("biocreep" trong thử nghiệm non-inferiority nối tiếp). Lối ra: baseline neo (anchor) không trôi theo từng PR, chỉ đổi bằng `promote_baseline` có lý do; và một cổng định kỳ so với baseline neo.</details>
+4. **[Vì sao không]** Vì sao không dùng FDR (Benjamini–Hochberg) cho cổng merge, khi nó mạnh hơn Holm?
+   <details><summary>Hướng nghĩ</summary>FDR giới hạn *tỉ lệ* phát hiện giả trong số đã gắn cờ, không giới hạn xác suất có ít nhất một. Với cổng chặn merge, một FAIL giả là một PR bị chặn — đơn vị chi phí là từng phép thử, nên FWER hợp hơn. FDR hợp với báo cáo khám phá, nơi bạn sẽ xem tay danh sách bị gắn cờ.</details>
+5. **[Liên ngành]** Thuốc generic được duyệt bằng bioequivalence: CI 90% của tỉ số AUC phải nằm trong 80–125%. Vì sao 90% chứ không 95%, và vì sao biên không đối xứng?
+   <details><summary>Hướng nghĩ</summary>CI 90% hai phía = hai kiểm định một phía ở α = 0.05 (TOST). Biên 80–125% đối xứng trên thang log (ln 0.8 = −ln 1.25), vì tỉ số được phân tích trên log. Bạn đang làm đúng TOST ở bước 7, trên thang hiệu tuyệt đối.</details>
+
+### 10. Liên kết ra ngoài
+
+- **Thử nghiệm non-inferiority trong y học.** Khi đã có thuốc hiệu quả, không được cho bệnh nhân dùng giả dược; thuốc mới chỉ cần chứng minh "không kém hơn quá δ". FDA có hướng dẫn riêng (*Non-Inferiority Clinical Trials to Establish Effectiveness*, 2016) bàn kỹ cách chọn δ và hiện tượng biocreep [chuẩn]. Giống: biên khai báo trước, cận dưới CI. Khác: họ chọn δ từ hiệu ứng lịch sử của thuốc cũ so với giả dược; bạn chọn từ điều người dùng robot nhận ra được.
+- **Sequential analysis và đạn dược Thế chiến II.** Abraham Wald phát triển SPRT trong nhóm Statistical Research Group ở Columbia để kiểm định lô vũ khí với ít mẫu nhất có thể, công bố 1945 [chuẩn]. Giống: mỗi mẫu đắt (episode là phút CPU, đạn là đạn), dừng ngay khi đủ bằng chứng. Khác: SPRT so hai giả thuyết đơn; cổng của bạn so với một baseline cũng có sai số.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Non-inferiority: PASS ⇔ cận dưới CI > −δ; tỉ lệ lọt lưới ≤ α | [chuẩn] | Mô phỏng: PASS ≈ 0.05 ở Δ = −δ mọi n |
+| TOST ⇔ CI 90% nằm trong (−δ, δ) | [chuẩn] | Schuirmann (1987), J. Pharmacokinetics and Biopharmaceutics |
+| Intersection–union không cần hiệu chỉnh bội | [chuẩn] | Berger (1982), Technometrics |
+| Peeking 10 lần nhân tỉ lệ sai ~3 lần | [chuẩn] | Mô phỏng `b13_peek`; Armitage, McPherson, Rowe (1969) |
+| Optimizely Stats Engine 2015, Johari et al. KDD 2017 | [chuẩn] | *Peeking at A/B Tests: Why it matters, and what to do about it* |
+| Cá hồi chết fMRI (2009), Ig Nobel 2012 | [chuẩn] | Bennett, Baird, Miller, Wolford |
+| TTCN-3 verdict `none/pass/inconc/fail/error`, verdict chỉ được xấu đi trong một testcase | [spec] | ETSI ES 201 873-1, mục về verdict |
+
+**Đã sửa so với bản gốc/Gemini:**
+- **Bản gốc + Gemini:** PASS = "không tệ hơn một cách có ý nghĩa" chồng lên INCONCLUSIVE (n nhỏ thì luôn "không có ý nghĩa") → PASS định nghĩa bằng non-inferiority với δ khai báo trước.
+- **Bản gốc:** "Không thay đổi gì → PASS" → chỉ đúng khi n đủ; ở n nhỏ là INCONCLUSIVE.
+- **Bản gốc:** "Canary −5, n = 50 → INCONCLUSIVE" như kết quả tất định → kiểm bằng tỉ lệ PASS ≤ α qua nhiều lần lặp.
+- **Bản gốc + Gemini:** "Bonferroni hoặc FDR" như hai lựa chọn ngang nhau cho gating → FWER (Holm) phía FAIL cho cổng merge; không hiệu chỉnh phía PASS (intersection–union); FDR cho báo cáo khám phá.
+- **Gemini:** "nếu chênh âm nhưng p-value chưa đủ nhỏ thì INCONCLUSIVE" → luật vá: Δ̂ dương với CI rộng cũng phải INCONCLUSIVE; dùng quy tắc theo CI ở phần 2.
+- **Gemini, ví dụ README:** "phát hiện suy giảm ≥ 7.5% ở n = 400" không nêu p → MDE ở n = 400, power 0.8, một phía là ~8.8 điểm ở p = 0.5 và ~7.0 ở p = 0.8; luôn kèm p.
+- **Thêm:** ERROR riêng; chính sách INCONCLUSIVE không peeking; TOST cho thay đổi hạ tầng; baseline là phép đo có sai số chung.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** R. Johari, P. Koomen, L. Pekelis, D. Walsh (2017), *Peeking at A/B Tests: Why it matters, and what to do about it*, KDD.
+- **Giải thích:** D. Lakens (2017), *Equivalence Tests: A Practical Primer for t Tests, Correlations, and Meta-Analyses*, Social Psychological and Personality Science — TOST dễ hiểu nhất.
+- **Đào sâu (tùy chọn):** C. Jennison, B. Turnbull (2000), *Group Sequential Methods with Applications to Clinical Trials*.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer trong 5 câu vì sao "không bác bỏ được" không phải PASS; (2) vẽ lại năm dòng CI trên trục Δ từ trí nhớ; (3) hai câu dưới.
+
+*Câu 1: Cổng của bạn có tỉ lệ chặn nhầm 5% và lọt lưới 5% (ở Δ = −δ). Một regression thật −2δ có bị lọt với xác suất 5% không?*
+<details><summary>Đáp án</summary>Không — nhỏ hơn nhiều, nếu n đủ: tỉ lệ lọt lưới chỉ bằng α đúng tại Δ = −δ và giảm nhanh khi regression lớn hơn. Nhưng ở n nhỏ, regression −2δ thường cho INCONCLUSIVE chứ không phải FAIL (bảng Δ = −10, n = 50). "Không lọt" khác "bị bắt".</details>
+
+*Câu 2: Vì sao một refactor thuần nên dùng TOST chứ không phải non-inferiority?*
+<details><summary>Đáp án</summary>Vì câu hỏi là "hành vi không đổi", hai phía. Non-inferiority PASS cả khi success rate tăng 10 điểm — dấu hiệu refactor đã đổi thứ gì đó (seed, timestep, định nghĩa thành công).</details>
+
+---
+
+## Bài 14 — Domain randomization và đo xem nó mua được gì (6h)
+
+> **Vị trí:** Bài 13 (cổng có tỉ lệ sai biết trước) → **Bài 14** → Module 5, Bài 15 (định nghĩa gap đo được) · **Cần trước:** F6.5 (sim-to-real gap, DR vs system ID), F6.4 (nhận dạng hệ thống), F6.6 (độ nhạy, Monte Carlo); K6 Bài 6 (randomization là phân bố khai báo, có căn cứ), K6 Bài 12–13 (n, verdict); K3 Bài 10 và K4 Bài 9 (đường cong đánh đổi) · **Sau bài này bạn quyết định được:** với một tham số vật lý cụ thể, nên **đo** nó (system ID), **randomize** nó (và rộng bao nhiêu), hay cả hai; và cường độ randomization nào được ghi vào `decisions.md`, bằng tiêu chí nào.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 2017, Josh Tobin và cộng sự (*Domain Randomization for Transferring Deep Neural Networks from Simulation to the Real World*, IROS 2017) huấn luyện một bộ định vị vật thể **chỉ** trên ảnh render với texture, ánh sáng, vị trí camera ngẫu nhiên đến mức phi thực tế, và nó chạy được trên ảnh camera thật [chuẩn]. Ý tưởng: nếu sim đủ đa dạng, thế giới thật chỉ là "một biến thể nữa". Năm 2019, OpenAI giải khối Rubik bằng tay robot với *Automatic Domain Randomization* — dải randomization tự nới rộng khi policy đạt ngưỡng — và quan sát rằng policy có bộ nhớ (LSTM) học cách tự suy ra tham số động lực học trong lúc thao tác [chuẩn — *Solving Rubik's Cube with a Robot Hand*, 2019].
+
+Mặt kia ít được kể hơn. Năm 2018, Jie Tan và cộng sự ở Google (*Sim-to-Real: Learning Agile Locomotion For Quadruped Robots*, RSS 2018) báo cáo rằng để chuyển dáng đi từ sim sang robot Minitaur, họ phải **nhận dạng** mô hình actuator và **mô hình hóa độ trễ** cho đúng, rồi mới randomize phần còn lại [chuẩn]. Năm 2019, Hwangbo và cộng sự (Science Robotics) huấn luyện một "actuator network" từ dữ liệu motor thật của ANYmal và đặt nó vào sim [chuẩn]. Bài học chung: randomization không thay được phép đo; nó phủ phần bạn **không** đo được. Bản gốc nói "phần lớn người dùng nó mà không đo". Bạn sẽ đo cả hai: nó mua được gì, và nó đắt hơn system ID khi nào.
+
+### 2. Mô hình tư duy
+
+Sim của bạn sai theo hai cách khác nhau về bản chất:
+
+```
+ tham số thật θ*   ─────────────●─────────          (bạn không biết)
+ sim danh định θ₀  ───●─────────────────────         BIAS: θ₀ ≠ θ*  → system ID sửa (đo, dời tâm)
+ biến thiên thật   ───────────[==●==]──────          SPREAD: θ* đổi theo robot/ngày/vật → DR phủ (độ rộng)
+ DR rộng quanh θ₀  [=======●=======]                 phủ được θ* nếu đủ rộng, nhưng trả giá ở mọi chỗ khác
+ SysID + DR hẹp    ───────────[==●==]──────          tâm đã đo, rộng = bất định đo + biến thiên thật
+```
+
+- **DR không thu hẹp sim-to-real gap.** Sim vẫn sai y như cũ; DR làm policy **ít nhạy** với cái sai đó *trong dải đã randomize*. Ngoài dải, nó không hứa gì. Gap thì vẫn phải đo — Module 5.
+- **Cái giá của DR là tính bảo thủ.** Policy không biết θ trong episode này buộc phải chọn hành vi chạy được với mọi θ trong dải: kẹp mạnh hơn, đi chậm hơn. Chi phí đó trả ở mọi episode, kể cả khi θ thật nằm ở chỗ dễ. Nó **giảm** khi policy quan sát được hoặc suy ra được θ (cảm biến lực, lịch sử quan sát — kiểu LSTM của OpenAI): khi đó policy thích nghi thay vì bảo thủ.
+- **Dải randomization là một khẳng định mô hình** (K6 Bài 6: phân bố phải có căn cứ). Dải chứa vùng **không khả thi** (ma sát thấp đến mức không lực kẹp nào giữ được mà không bóp hỏng vật) bắt policy thỏa hiệp vì những thế giới không tồn tại.
+- **Chọn λ bằng phân bố triển khai, không bằng điểm cắt.** Bản gốc bảo "vẽ hai đường ID và OOD, tìm điểm cắt". Điểm cắt phụ thuộc bạn định nghĩa tập OOD xa đến đâu — dời tập OOD là dời điểm cắt. Tiêu chí đúng: tối đa hóa thành công trên **tập mục tiêu** (phân bố bạn tin là gần triển khai nhất), với ràng buộc không tụt quá δ trên nominal (non-inferiority, Bài 13).
+
+```mermaid
+flowchart TD
+  P[một tham số vật lý θ] --> M{đo được với<br/>chi phí chấp nhận?}
+  M -- có --> ID[system ID: đo θ̂ ± bất định<br/>F6.4, K6 Bài 16]
+  M -- không --> V{biết dải hợp lý?<br/>datasheet, đo đội robot}
+  ID --> W[DR hẹp quanh θ̂:<br/>rộng = bất định + biến thiên thật]
+  V -- có --> DRk[DR theo dải có căn cứ]
+  V -- không --> DRw[DR rộng + ĐO OOD<br/>+ ghi 'chưa kiểm' ở Bài 17]
+  W --> E[eval: nominal · mục tiêu · OOD<br/>n theo Bài 12, verdict Bài 13]
+  DRk --> E
+  DRw --> E
+```
+
+Mô phỏng đồ chơi, không cần MuJoCo: "policy" chỉ có một tham số (lực kẹp f), môi trường một tham số (ma sát μ). Sim đoán μ = 0.80; thế giới thật có μ quanh 0.45 — trơn hơn nhiều, như một vật nhựa bóng hay găng tay đã mòn (kịch bản).
+
+```python
+# [đã chạy]  DR đồ chơi: "policy" = lực kẹp f (1 tham số); môi trường = ma sát μ. "Train" = grid search trên f.
+import numpy as np, matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from scipy.stats import norm
+rng = np.random.default_rng(14)
+MG = 5.0                                       # trọng lượng vật (N)
+
+def p_success(f, mu):                          # không trượt (2μf ≥ mg, nhiễu 0.4 N) VÀ không bóp hỏng
+    return norm.cdf((2 * mu * f - MG) / 0.4) * norm.sf(f, loc=6.5, scale=0.5)   # ngưỡng hỏng ~N(6.5, 0.5) N
+
+F = np.linspace(2, 9, 281)
+def train(mu):                                 # chọn f tối đa hóa thành công TRUNG BÌNH trên phân bố train
+    return F[np.argmax([p_success(f, mu).mean() for f in F])]
+
+MU_SIM = 0.80                                  # ma sát danh định trong sim (đoán, chưa đo)
+def train_dist(lam, center=MU_SIM, n=4000):    # cường độ λ: μ ~ U[center·(1−0.5λ), center·(1+0.5λ)]
+    return np.clip(center * (1 + 0.5 * lam * rng.uniform(-1, 1, n)), 0.05, None)
+
+evals = {"nominal μ=0.80": np.array([MU_SIM]),
+         "thật μ~N(.45,.05)": np.clip(rng.normal(0.45, 0.05, 4000), 0.05, None),  # designer không biết
+         "OOD μ∈[.36,.40]": rng.uniform(0.36, 0.40, 4000)}                      # ngoài dải train λ ≤ 1
+print(f"{'chiến lược':24s} {'f*':>5s} " + " ".join(f"{k:>18s}" for k in evals))
+res = {}
+for lam in [0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0]:
+    f = train(train_dist(lam)); res[lam] = [p_success(f, m).mean() for m in evals.values()]
+    print(f"DR λ={lam:<19} {f:5.2f} " + " ".join(f"{v:18.3f}" for v in res[lam]))
+
+meas = rng.normal(0.45, 0.05, 8) + rng.normal(0, 0.03, 8)    # system ID: 8 phép đo ma sát thật, có sai số đo
+mu_hat, s = meas.mean(), meas.std(ddof=1)
+f = train(np.clip(rng.normal(mu_hat, s, 4000), 0.05, None))  # DR hẹp quanh giá trị ĐÃ ĐO
+print(f"{f'SysID μ̂={mu_hat:.2f}±{s:.2f}':24s} {f:5.2f} " + " ".join(f"{p_success(f, m).mean():18.3f}" for m in evals.values()))
+
+lams = list(res); r = np.array([res[l] for l in lams])
+for j, k in enumerate(evals): plt.plot(lams, r[:, j], "o-", label=k)
+plt.xlabel("cường độ randomization λ"); plt.ylabel("success"); plt.legend()
+plt.savefig("b14_dr.png", dpi=120)             # trong bài: plt.show()
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Chọn timeout/retry để chịu được p99.9 của **mọi** region | DR rộng | Cấu hình chung cho worst case làm region nhanh phát hiện lỗi chậm — đúng là "chi phí bảo thủ". Ở backend bạn đổi được cấu hình theo region lúc runtime; policy không có cảm biến thì không | Randomize thứ đo được, rồi ngạc nhiên vì policy chậm ở mọi nơi |
+| Cấu hình theo region đã đo (latency map) | System ID | Latency đo lại được mỗi phút; ma sát, độ trễ actuator đo bằng thí nghiệm riêng, có bất định, và **trôi** (mòn, nhiệt) | Fit một lần, coi là hằng số; sáu tháng sau robot khác hẳn sim |
+| Chaos engineering / fault injection ở staging | DR | Chaos kiểm hệ thống **đã xây**; DR thay đổi **cái được xây** (policy học từ đó). Dải chaos là thử nghiệm; dải DR là khẳng định mô hình về thế giới | Dải DR chọn kiểu "cho chắc" như chaos, gồm cả thế giới không tồn tại |
+| Load test với traffic profile ngẫu nhiên | Eval trên phân bố DR | Pass trên profile ngẫu nhiên chỉ nói về profile đó. Eval trên chính phân bố train là đo trong nhà | Báo "bền" bằng tập eval cùng phân bố train, chưa bao giờ đo ngoài dải |
+
+**Chấm mô hình:**
+
+- *"Domain randomization thu hẹp sim-to-real gap."* (cách bản gốc và Gemini mở bài) — **ĐÚNG MỘT PHẦN.** Nó thu hẹp **khoảng tụt hiệu năng** khi chuyển, trong dải đã phủ. Nó không làm sim đúng hơn chút nào. Phản ví dụ: một vật có ma sát thấp hơn cận dưới của dải; policy DR chưa từng thấy giá trị đó, và không có lý do gì để nó chạy tốt hơn policy không DR ở đó.
+- *"Càng randomize nhiều, policy càng bền."* — **SAI** quá một ngưỡng. Phản ví dụ: dải kéo ma sát xuống tới mức không lực kẹp nào vừa giữ được vật vừa không bóp hỏng nó. Optimizer phải chia "phiếu" cho những thế giới không tồn tại, và hành vi chọn ra không còn tối ưu cho thế giới có thật.
+- *"Với đủ dữ liệu, tầng AI biểu diễn và dự đoán được mọi biến số của hệ vật lý."* (mô hình của bạn ở K3 lượt 12) — **ĐÚNG MỘT PHẦN.** Đúng với biến số **quan sát được** từ dữ liệu policy nhận. Gãy ở biến số **không quan sát được trước khi hành động**: ma sát của vật chưa chạm, khối lượng hộp kín. Policy chỉ có hai lựa chọn — phòng hờ (DR, bảo thủ) hoặc thăm dò rồi thích nghi (cần cảm biến/bộ nhớ, và thăm dò cũng tốn thời gian). Phản ví dụ: không camera nào cho biết hệ số ma sát của một cốc nhựa trước khi kẹp; dự đoán từ ảnh chỉ thu hẹp dải, không đưa về một điểm.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Domain randomization (dynamics / visual) | Train trên phân bố tham số sim thay vì một điểm | "Thêm nhiễu cho đa dạng" |
+| 🟢 | Cường độ λ | Hệ số co giãn dải randomization quanh tâm | Một tham số chuẩn có giá trị đúng |
+| 🟢 | Nominal / tập mục tiêu / OOD | Ba tập eval **cố định**, không đổi theo λ | "ID = phân bố train" (di chuyển theo λ) |
+| 🟢 | System identification | Đo/fit tham số mô hình từ dữ liệu vào–ra | Fit cho khớp là xong |
+| 🟡 | Robust vs adaptive policy | Chạy được với mọi θ trong dải vs suy ra θ rồi điều chỉnh | Hai tên của cùng một thứ |
+| 🟡 | Automatic DR (ADR) | Dải tự nới khi policy đạt ngưỡng ở biên | Thay được việc chọn dải có căn cứ |
+| 🟡 | Sim-to-sim transfer | Dùng một sim có tham số ẩn làm "thế giới thật" giả | Bằng chứng sim-to-real |
+| 🔴 | BayesSim, posterior DR | Suy ra phân bố tham số từ dữ liệu thật rồi randomize theo nó | Cần ở khóa này |
+
+### 5. Dự đoán
+
+**Đề:**
+1. Mô phỏng đồ chơi: dự đoán f* tăng hay giảm theo λ; λ nào tốt nhất trên thế giới thật; λ = 2 tốt hơn hay kém λ = 1; SysID + DR hẹp có thắng DR tốt nhất không, và trả giá ở cột nào.
+2. Hai đường nominal và OOD (λ = 0 → 1) có cắt nhau không?
+3. Trên stack thật (bước 1–4): với 4 trục (ma sát, khối lượng, độ trễ actuator, nhiễu quan sát), dự đoán **trục nào** một mình mua được nhiều nhất trên tập OOD, và trục nào gần như không mua gì cho policy của bạn.
+4. Phương sai giữa các lần **train** (seed train khác nhau, cùng λ) so với sai số eval ở n của bạn: cái nào lớn hơn?
+
+**Tham số cần tra:** dải hợp lý cho từng trục và **căn cứ** của nó (K6 Bài 6, câu 5): ma sát tiếp xúc ngón–vật (`geom_friction`, ba hệ số trượt/xoắn/lăn — đọc tài liệu MuJoCo mục contact), khối lượng vật (`body_mass`; khi đổi phải đổi `body_inertia` cùng tỉ lệ), độ trễ actuator (số bước điều khiển; số đo thật từ K5 nếu có, hoặc K3/K4 về độ trễ), nhiễu quan sát (độ lệch chuẩn từ K5 Bài 4 cho IMU, encoder). Throughput episode/giờ của bạn từ Bài 8 để tính ngân sách.
+
+**Phương pháp:** ngân sách = (số λ) × (số seed train) × (episode cho train) + (số λ) × (số seed train) × 3 tập × n. Tính trước, so với Bài 8; cắt số λ hoặc số trục trước khi cắt n.
+
+```markdown
+# prediction.md — K6 Bài 14
+## Đồ chơi: f* theo λ [tăng|giảm|tăng rồi giảm] ; λ tốt nhất trên "thật" ___ ; λ=2 vs λ=1 ___ ; SysID thắng? ___ trả giá ở ___
+## Nominal và OOD cắt nhau? ___
+## Stack thật: trục mua nhiều nhất trên OOD ___ ; trục gần như vô dụng ___ vì ___
+## Phương sai giữa seed train vs sai số eval: ___ lớn hơn
+## Ngân sách episode: train ___ + eval ___ = ___ ; ở ___ ep/giờ = ___ giờ
+```
+
+### 6. Làm
+
+**Bước 1 — ≥4 trục randomization trong schema kịch bản** (bản gốc), mỗi trục có tâm, dải ở λ = 1, dạng phân bố, và **căn cứ**:
+
+```yaml
+randomization:                     # [tự đo] tên trường theo schema Bài 5 của bạn
+  intensity: 0.5                   # λ
+  axes:
+    obj_friction:   {center: 1.0,  half_width_at_1: 0.5, dist: uniform, unit: "", basis: "đoán — chưa đo"}
+    obj_mass:       {center: 0.20, half_width_at_1: 0.3, dist: loguniform, unit: kg, basis: "cân 3 vật thật"}
+    act_delay:      {center: 1,    half_width_at_1: 3,   dist: int_uniform, unit: control_step, basis: "K4: độ trễ đo"}
+    obs_noise_std:  {center: 0.0,  half_width_at_1: 0.01, dist: fixed_at_width, unit: rad, basis: "encoder datasheet"}
+```
+
+Cài đặt: ma sát và khối lượng qua `model.geom_friction`, `model.body_mass` + `model.body_inertia` (hoặc `DynamicsModder` của robosuite `[tự đo theo phiên bản]`), áp **trước** reset mỗi episode; độ trễ bằng một hàng đợi lệnh d bước trong wrapper (giống `hist` trong mô phỏng); nhiễu quan sát cộng vào observation trước khi policy đọc. Ghi giá trị **đã áp** vào summary từng episode (Bài 9) — đây là cách duy nhất để biết randomization thật sự chạy.
+
+**Bước 1b — "train" ở mỗi λ, rẻ trên CPU.** Khóa này không train policy học sâu (bản gốc: đó là Khóa 7E). Dùng policy scripted rẻ của Bài 8 với 2–4 tham số (lực/độ đóng kẹp, độ cao tiếp cận, tốc độ nhấc, gain), và "train" = random search hoặc CEM trên tham số đó, tối đa hóa thành công trên phân bố train của λ, ngân sách cố định (ví dụ 24 ứng viên × 20 episode × 4 vòng ≈ 2.000 episode mỗi lần train) [ước lượng]. Dùng cùng bộ kịch bản và seed cho mọi ứng viên trong một vòng (ghép cặp, Bài 1/12). **≥3 seed train mỗi λ**: "policy ở λ" là một biến ngẫu nhiên. Nếu bạn có policy học từ K4 và GPU thuê, có thể train thật với DR — tính chi phí trước, theo ngân sách GPU của khóa.
+
+**Bước 2 — đánh giá ba tập cố định ở mỗi λ** (bản gốc: 0%, 25%, 50%, 100%; sửa định nghĩa tập):
+- **Nominal**: tham số mặc định của sim, một điểm.
+- **Mục tiêu**: phân bố bạn tin gần triển khai nhất, khai báo **trước** và **độc lập** với λ (ví dụ dải đo được ở K5, hoặc dải datasheet). Đây là tập dùng để chọn λ.
+- **OOD**: giá trị nằm ngoài dải train ở λ = 1 (ví dụ ma sát 0.5× tâm, khối lượng 1.5×, độ trễ +2 bước so với cận trên).
+Bản gốc định nghĩa "in-distribution = cùng phân bố đã dùng", tức tập ID **đổi theo λ** — so các điểm trên một đường mà thước đổi theo từng điểm. Giữ "phân bố train của λ" như cột chẩn đoán, không làm tiêu chí.
+
+**Bước 3 — n đủ theo Bài 12** (bản gốc): chọn n để MDE trên tập mục tiêu ≤ chênh bạn muốn phân biệt giữa hai λ liền kề. Phương sai tổng của một điểm = phương sai eval + phương sai giữa seed train; báo CI tính trên seed train (bootstrap theo seed), không chỉ CI Wilson của eval.
+
+**Bước 4 — vẽ và chọn** (bản gốc vẽ hai đường; sửa tiêu chí): ba đường theo λ, có dải tin cậy. Chọn λ* = λ tốt nhất trên tập mục tiêu **trong số** các λ PASS non-inferiority trên nominal với δ của Bài 13 so với λ = 0. Không chọn theo điểm cắt.
+
+**Bước 5 (thêm) — ablation từng trục.** Ở λ*, tắt từng trục một (giữ các trục kia). Trục nào tắt đi mà OOD/mục tiêu không đổi (theo verdict Bài 13, TOST) là trục không mua gì — bỏ khỏi cấu hình để giảm chi phí bảo thủ.
+
+**Bước 6 (thêm, nếu còn giờ) — DR vs system ID trên "thật giả".** Nhờ người khác (hoặc script có seed bạn không xem) đặt tham số ẩn cho một bộ kịch bản "thật" lệch tâm sim (ví dụ ma sát 0.6×, trễ +2 bước). Bạn được chạy ≤ 20 episode thăm dò để **đo** tham số (độ trễ: đáp ứng bậc của khớp; ma sát: lực kẹp tối thiểu không trượt). So hai chiến lược ở cùng ngân sách train: DR rộng quanh tâm sim vs DR hẹp quanh giá trị đo. Đây là bản thu nhỏ của Module 5 (Bài 16 làm system ID trên con lắc thật).
+
+**Bước 7 — `decisions.md`** (bản gốc), kèm số: λ*, từng trục giữ/bỏ và vì sao, thành công trên ba tập với CI, chi phí bảo thủ trên nominal (Δ so với λ = 0, CI), trục nào nên chuyển sang **đo** ở Module 5.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Mô phỏng đồ chơi** (seed 14; số của bạn lệch ±0.01 do Monte Carlo):
+
+| Chiến lược | f* (N) | Nominal μ = 0.8 | Thật μ ~ N(0.45, 0.05) | OOD μ ∈ [0.36, 0.40] |
+|---|---|---|---|---|
+| DR λ = 0 | 4.28 | 1.000 | 0.025 | 0.000 |
+| DR λ = 0.25 | 4.53 | 1.000 | 0.063 | 0.000 |
+| DR λ = 0.5 | 4.90 | 0.999 | 0.178 | 0.001 |
+| DR λ = 0.75 | 5.28 | 0.993 | 0.352 | 0.009 |
+| DR λ = 1.0 | 5.50 | 0.977 | **0.463** | 0.025 |
+| DR λ = 1.5 | 5.45 | 0.982 | 0.440 | 0.020 |
+| DR λ = 2.0 | 5.40 | 0.986 | 0.415 | 0.016 |
+| SysID μ̂ = 0.48 ± 0.06 + DR hẹp | 5.88 | 0.894 | **0.591** | 0.092 |
+
+Đọc:
+- Nominal giảm theo λ đến λ = 1 (chi phí bảo thủ, nhỏ ở đây vì vật chưa sát ngưỡng hỏng). Thật tăng mạnh đến λ = 1 rồi **giảm**: ở λ ≥ 1.5 dải chứa ma sát thấp đến mức không giữ được vật, optimizer "bỏ cuộc" vùng đó và hạ f — f* không đơn điệu.
+- Nominal và OOD **không cắt nhau** trong dải λ = 0 → 1 (≈1.0 vs ≤ 0.03). Theo tiêu chí bản gốc ("không cắt nghĩa là dải quá hẹp"), bạn sẽ nới dải — và đi vào vùng λ ≥ 1.5 làm tệ thế giới thật. Tiêu chí bản gốc sai.
+- SysID thắng DR tốt nhất trên thế giới thật (0.59 vs 0.46) và **thua** trên nominal (0.89). Nominal của sim không phải thứ bạn triển khai; nó chỉ là điểm mà sim đoán sai.
+- Không chiến lược nào vượt ~0.6 trên thật: với μ ≈ 0.45, lực cần để không trượt đã sát ngưỡng hỏng vật. Một policy 1 tham số không có cảm biến lực không thoát được giới hạn đó; policy thích nghi (đo trượt, tăng lực dần) mới thoát. Đó là ranh giới giữa robust và adaptive.
+
+**Stack thật** (không có số chung; thường gặp [ước lượng]):
+
+| Kiểm tra (bản gốc, sửa) | Kỳ vọng |
+|---|---|
+| Nominal theo λ | Giảm nhẹ hoặc giữ nguyên; tụt mạnh ở λ nhỏ là dấu hiệu tối ưu hóa thất bại (ngân sách train không đủ), không phải "giá của DR" |
+| Mục tiêu theo λ | Tăng nếu dải mục tiêu lệch tâm sim; có thể đỉnh rồi giảm khi dải chứa vùng không khả thi |
+| OOD theo λ | Tăng chậm; thường không bão hòa đẹp như bản gốc vẽ |
+| Hai đường cắt nhau | **Không phải tiêu chí.** Bản gốc: "có điểm tối ưu ở điểm cắt; không thấy thì dải quá hẹp" — sai; dùng tiêu chí bước 4 |
+| Trục độ trễ actuator | Với policy scripted dùng gain cao, thường là trục mua nhiều nhất trên OOD; nhiễu quan sát nhỏ thường gần như không mua gì cho policy dựa trên state |
+| Phương sai giữa seed train | Thường **cùng bậc hoặc lớn hơn** sai số eval ở n vài trăm (cùng hiện tượng Henderson et al. 2018 ở Bài 12) |
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Cả ba đường phẳng | Tham số random chưa thật sự áp vào `mjModel` trước reset (ý tốt của Gemini) | Histogram giá trị **đã áp** từ summary từng episode | Áp sau khi load model, trước `mj_resetData`; test bằng canary: λ = 1 với dải cực đoan phải làm nominal tụt |
+| Nominal sụp ngay ở λ = 0.25 | Dải vượt vật lý hợp lý; hoặc ngân sách train không đủ cho phân bố rộng hơn | Train lại cùng λ với gấp đôi ngân sách | Thu hẹp dải theo căn cứ; tăng ngân sách train trước khi kết luận về DR |
+| OOD không tăng ở bất kỳ λ nào | Trục gây lỗi thật không nằm trong 4 trục; hoặc OOD đặt ngoài vùng khả thi | Ablation; thử OOD gần hơn | Thêm trục (ví dụ hình học vật, ánh sáng nếu có camera); kiểm OOD còn khả thi không |
+| Đường lởm chởm, không đơn điệu | n eval nhỏ hoặc chỉ 1 seed train | CI bootstrap theo seed train | ≥3 seed train; n theo Bài 12 |
+| Mục tiêu cải thiện nhưng `sim_unstable` tăng ở λ cao | Khối lượng nhỏ + ma sát cao làm solver kém ổn định | Tỉ lệ `sim_unstable` theo λ (Bài 11) | Giới hạn dải, hoặc giảm `timestep`; báo tỉ lệ theo λ |
+
+### 9. Câu hỏi ngược
+
+1. **[Nếu…thì]** Nếu policy có cảm biến lực ở ngón và được phép kẹp hai lần, cột "thật" trong mô phỏng đồ chơi sẽ đổi thế nào, và DR còn cần không?
+   <details><summary>Hướng nghĩ</summary>Policy có thể thăm dò (kẹp nhẹ, thấy trượt, tăng lực) — suy ra μ trong episode, tức system ID online. DR vẫn cần để policy *học* cách thích nghi trên nhiều μ, nhưng chi phí bảo thủ trên nominal giảm. Cái giá chuyển sang thời gian episode và độ phức tạp policy.</details>
+2. **[Quy mô]** 100 robot, mỗi con ma sát khớp và độ trễ hơi khác. Một bộ tham số system ID cho mỗi con, hay một policy DR theo phân bố đo trên cả đội? Cái gì gãy trước khi đội lên 1.000 con?
+   <details><summary>Hướng nghĩ</summary>Per-robot system ID cần quy trình đo, version tham số (`calibration_id`, CONVENTIONS.md), và trôi theo thời gian — chi phí vận hành tăng tuyến tính. Policy DR theo phân bố đội thì một artifact, nhưng trả chi phí bảo thủ ở mọi con và mù với con nằm ngoài phân bố. Ở 1.000 con, phát hiện con "ngoài phân bố" (giám sát) thường gãy trước.</details>
+3. **[Failure mode]** Policy DR đạt 90% trên tập mục tiêu trong sim, triển khai thì 40%. Kể ba lý do mà mọi số trong bài này vẫn đúng.
+   <details><summary>Hướng nghĩ</summary>Tập mục tiêu khai báo sai (dải đoán, không đo). Trục gây lỗi thật không được randomize (độ cứng tiếp xúc, biến dạng vật, trễ camera). Tham số đúng dải nhưng **tương quan** ngoài đời (vật nặng thường cũng trơn) mà DR lấy mẫu độc lập. Module 5 tồn tại vì những lý do này.</details>
+4. **[Vì sao không]** Vì sao không dùng ADR (tự nới dải khi policy đạt ngưỡng) để khỏi phải chọn dải?
+   <details><summary>Hướng nghĩ</summary>ADR chọn **độ rộng**, không chọn **tâm** và không biết vùng nào là không khả thi; nó nới đến khi policy không theo kịp nữa. Nó hợp khi có ngân sách compute khổng lồ và policy có bộ nhớ để thích nghi. Với policy scripted rẻ, ADR sẽ dẫn đúng vào vùng λ ≥ 1.5 của đồ chơi.</details>
+5. **[Liên ngành]** Liều warfarin (thuốc chống đông) khác nhau nhiều lần giữa bệnh nhân; một phần biến thiên giải thích được bằng kiểu gen (CYP2C9, VKORC1). Liều cố định "an toàn cho mọi người" và liều theo kiểu gen tương ứng với chiến lược nào trong bài?
+   <details><summary>Hướng nghĩ</summary>Liều cố định thấp = policy robust (bảo thủ, kém hiệu quả ở nhiều người). Liều theo kiểu gen = system ID rồi điều chỉnh. Theo dõi INR và chỉnh liều = adaptive. Y học dùng cả ba, theo chi phí đo.</details>
+
+### 10. Liên kết ra ngoài
+
+- **Điều khiển bền vững vs điều khiển thích nghi.** Lý thuyết điều khiển tách hai trường phái từ lâu: robust control (H∞, μ-synthesis) thiết kế một bộ điều khiển đảm bảo ổn định cho mọi tham số trong một tập bất định, chấp nhận hiệu năng danh định kém hơn; adaptive control ước lượng tham số online rồi chỉnh [chuẩn]. Giống: DR là robust control bằng học, system ID + thích nghi là adaptive. Khác: robust control **chứng minh** được biên; DR chỉ đo được trên tập eval bạn chọn.
+- **Gain scheduling trong điều khiển bay.** Máy bay đổi động lực học mạnh theo tốc độ, độ cao; bộ điều khiển được thiết kế ở nhiều điểm bay và chọn theo tham số **đo được** (airspeed, altitude) [chuẩn]. Giống: đo được thì dùng số đo thay vì phòng hờ. Khác: tham số lập lịch đo trực tiếp và liên tục; ma sát của vật bạn sắp kẹp thì không.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Tobin et al. 2017, visual DR chuyển sang camera thật | [chuẩn] | IROS 2017 |
+| OpenAI 2019, ADR, policy LSTM suy ra động lực học | [chuẩn] | *Solving Rubik's Cube with a Robot Hand*, arXiv 1910.07113 |
+| Tan et al. 2018 cần mô hình actuator + độ trễ | [chuẩn] | RSS 2018, phần actuator model và latency |
+| Hwangbo et al. 2019 actuator network | [chuẩn] | Science Robotics 4(26), 2019 |
+| `geom_friction`, `body_mass`, `body_inertia` trong `mjModel`; `DynamicsModder` của robosuite | [tự đo] | Tài liệu MuJoCo bản pin; `robosuite/utils/mjmod.py` theo bản cài |
+| Ngân sách ~2.000 episode mỗi lần train scripted | [ước lượng] | 24 × 20 × 4; đổi theo số tham số và throughput Bài 8 |
+| Số của mô phỏng đồ chơi | [tự đo] | Mô hình 1 tham số; minh họa hình dạng, không dự báo stack thật |
+
+**Đã sửa so với bản gốc/Gemini:**
+- **Bản gốc + Gemini:** "DR là kỹ thuật chuẩn để thu hẹp sim-to-real gap" → DR làm policy ít nhạy với gap trong dải đã phủ; gap vẫn còn và phải đo (Module 5).
+- **Bản gốc + Gemini:** "Hai đường cắt nhau → có một điểm tối ưu; không thấy thì dải quá hẹp" → điểm cắt phụ thuộc định nghĩa tập OOD; chọn λ theo tập mục tiêu với ràng buộc non-inferiority trên nominal. Nới dải để "tìm điểm cắt" có thể làm tệ thế giới thật (đồ chơi λ ≥ 1.5).
+- **Bản gốc:** "In-distribution: cùng phân bố đã dùng" → di chuyển theo λ; thay bằng ba tập cố định.
+- **Bản gốc:** không nói làm sao có policy ở mỗi λ khi khóa không train → thêm "train" bằng tối ưu tham số policy scripted, ≥3 seed train.
+- **Gemini:** "OOD tăng rõ rệt rồi bão hòa" như kết quả chắc chắn → không có gì bảo đảm; có thể gần như phẳng nếu trục gây lỗi không nằm trong dải.
+- **Thêm:** so với system ID (→ F6.5), ablation trục, phương sai giữa seed train.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** J. Tobin et al. (2017), *Domain Randomization for Transferring Deep Neural Networks from Simulation to the Real World*; X. B. Peng et al. (2018), *Sim-to-Real Transfer of Robotic Control with Dynamics Randomization*, ICRA.
+- **Giải thích:** J. Tan et al. (2018), *Sim-to-Real: Learning Agile Locomotion For Quadruped Robots*, RSS — đọc phần actuator và latency để thấy system ID và DR đi cùng nhau.
+- **Đào sâu (tùy chọn):** F. Muratore et al. (2022), *Robot Learning from Randomized Simulations: A Review*, Frontiers in Robotics and AI.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer trong 5 câu vì sao DR không làm sim đúng hơn; (2) vẽ lại sơ đồ bias/spread ở phần 2 từ trí nhớ; (3) hai câu dưới.
+
+*Câu 1 (từ Gemini, sửa): Vì sao phải đo cả nominal lẫn tập mục tiêu và OOD, không chỉ một tập?*
+<details><summary>Đáp án</summary>Mỗi tập trả lời một câu: nominal đo chi phí bảo thủ, mục tiêu đo thứ bạn sẽ triển khai, OOD đo hành vi ngoài khẳng định mô hình. Chỉ đo OOD thì tưởng DR luôn có lợi; chỉ đo nominal thì tưởng DR luôn có hại. Chọn λ bằng tập mục tiêu, ràng buộc bằng nominal, ghi OOD là "đã kiểm tới đâu".</details>
+
+*Câu 2: Bạn đo được độ trễ actuator thật là 3 ± 1 bước. Randomize độ trễ trong dải nào?*
+<details><summary>Đáp án</summary>Quanh 3 bước, rộng bằng bất định đo cộng biến thiên thật giữa các lần chạy/robot — ví dụ 2–4 bước, không phải 0–6. Phần còn lại của ngân sách robustness để cho trục bạn không đo được.</details>
+
+---
+
+## Trước khi sang Module 5
+
+Bản gốc không có gate riêng cho Module 4. Các mục dưới là điều kiện để Module 5 và K6 Bài 18 (CI khép kín) không phải làm lại; mục 3–4 là Gate Khóa 6 mục 3 và 4.
+
+```
+[ ] Định nghĩa thành công có version, hash trong provenance; test tổng hợp kích hoạt đủ ≥5 lớp thất bại (Bài 11)
+[ ] stats.py: Wilson, Newcombe, McNemar, n_indep, n_paired — khớp statsmodels và mô phỏng (Bài 12)
+[ ] A/A theo n đã chạy và vẽ; ψ của thiết kế theo cặp đã đo trên ≥1 task (Bài 12)
+[ ] Gate K6 mục 3: verdict PASS/FAIL/INCONCLUSIVE/ERROR theo δ khai báo trước; README nêu MDE bằng số (Bài 12–13)
+[ ] Gate K6 mục 4: canary −5 điểm FAIL khi n đủ; tỉ lệ PASS ≤ α khi n = 50 (Bài 13)
+[ ] Chính sách INCONCLUSIVE (lịch nhìn, ngưỡng mỗi lượt) viết trong EVAL.md trước khi dùng (Bài 13)
+[ ] decisions.md: λ* và trục giữ/bỏ, có số trên ba tập; danh sách tham số chuyển sang ĐO ở Module 5 (Bài 14)
+```
+
+**FAIL action** (đề xuất của người soạn; bản gốc không có, suy từ FAIL action của Gate Khóa 6): Module 4 vượt 26h quá 30% → giữ nguyên Bài 12 và Bài 13 (Gate K6 mục 3–4 phụ thuộc chúng); cắt Bài 14 xuống 2 trục (ma sát, độ trễ), 3 mức λ, 1 tập mục tiêu + 1 tập OOD, bỏ bước 5–6. Không cắt số seed train dưới 3 và không cắt n dưới mức Bài 12 tính ra — "thà đo kỹ 3 task còn hơn đo hời hợt 20 task".
