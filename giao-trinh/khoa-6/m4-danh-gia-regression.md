@@ -855,7 +855,7 @@ Peeking nhân **cả hai** tỉ lệ sai lên khoảng 4 lần. Bonferroni qua l
 
 ### 10. Liên kết ra ngoài
 
-- **Thử nghiệm non-inferiority trong y học.** Khi đã có thuốc hiệu quả, không được cho bệnh nhân dùng giả dược; thuốc mới chỉ cần chứng minh "không kém hơn quá δ". FDA có hướng dẫn riêng (*Non-Inferiority Clinical Trials to Establish Effectiveness*, 2016) bàn kỹ cách chọn δ và hiện tượng biocreep [chuẩn]. Giống: biên khai báo trước, cận dưới CI. Khác: họ chọn δ từ hiệu ứng lịch sử của thuốc cũ so với giả dược; bạn chọn từ điều người dùng robot nhận ra được.
+- **Thử nghiệm non-inferiority trong y học.** Khi đã có thuốc hiệu quả, không được cho bệnh nhân dùng giả dược; thuốc mới chỉ cần chứng minh "không kém hơn quá δ". FDA có hướng dẫn riêng (*Non-Inferiority Clinical Trials to Establish Effectiveness*, 2016) bàn kỹ cách chọn δ [chuẩn]; hiện tượng biocreep (biên cộng dồn qua các thử nghiệm nối tiếp) là chủ đề quen thuộc trong tài liệu non-inferiority [chuẩn — câu ngược 3]. Giống: biên khai báo trước, cận dưới CI. Khác: họ chọn δ từ hiệu ứng lịch sử của thuốc cũ so với giả dược; bạn chọn từ điều người dùng robot nhận ra được.
 - **Sequential analysis và đạn dược Thế chiến II.** Abraham Wald phát triển SPRT trong nhóm Statistical Research Group ở Columbia để kiểm định lô vũ khí với ít mẫu nhất có thể, công bố 1945 [chuẩn]. Giống: mỗi mẫu đắt (episode là phút CPU, đạn là đạn), dừng ngay khi đủ bằng chứng. Khác: SPRT so hai giả thuyết đơn; cổng của bạn so với một baseline cũng có sai số.
 
 ### 11. Độ tin cậy và sửa lỗi

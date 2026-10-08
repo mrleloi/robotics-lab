@@ -883,7 +883,7 @@ Lực riêng dọc dây là `g·cos θ + L·θ̇²`, cả hai số hạng đạt
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
-**Columbia, 2003** [chuẩn]. Khoảng 82 giây sau khi phóng ngày 16/1/2003, một mảng bọt cách nhiệt rơi khỏi bồn nhiên liệu ngoài, va vào mép trước cánh trái ở vận tốc tương đối khoảng 870 km/h. Trong lúc tàu còn trên quỹ đạo, kỹ sư dùng mô hình **Crater** để ước lượng hư hại. Crater được hiệu chỉnh bằng dữ liệu thử với những mẩu vật cỡ vài inch khối; mảng bọt lớn hơn hàng trăm lần. Mô hình vẫn trả ra một con số, và con số đó được đọc như bằng chứng rằng hư hại không nghiêm trọng. Ban điều tra (CAIB Report, Volume I, chương 6) ghi rằng kết quả đã được dùng ngoài miền dữ liệu của mô hình mà điều đó không được nói rõ khi trình bày. Tàu vỡ khi trở lại khí quyển ngày 1/2/2003. Sau sự cố này NASA soạn NASA-STD-7009 (Bài 15).
+**Columbia, 2003** [chuẩn]. Khoảng 82 giây sau khi phóng ngày 16/1/2003, một mảng bọt cách nhiệt rơi khỏi bồn nhiên liệu ngoài, va vào mép trước cánh trái ở vận tốc tương đối khoảng 870 km/h. Trong lúc tàu còn trên quỹ đạo, kỹ sư dùng mô hình **Crater** để ước lượng hư hại. Crater được hiệu chỉnh bằng dữ liệu thử với những mẩu vật cỡ vài inch khối; mảng bọt lớn hơn hàng trăm lần về thể tích (ước tính của ban điều tra: tối đa khoảng 640 lần, ước lượng tốt nhất khoảng 400 lần). Mô hình vẫn trả ra một con số, và con số đó được đọc như bằng chứng rằng hư hại không nghiêm trọng. Ban điều tra (CAIB Report, Volume I, chương 6) ghi rằng kết quả đã được dùng ngoài miền dữ liệu của mô hình mà điều đó không được nói rõ khi trình bày. Tàu vỡ khi trở lại khí quyển ngày 1/2/2003. Sau sự cố này NASA soạn NASA-STD-7009 (Bài 15).
 
 Crater không có bug. Nó trả lời đúng cho những mẩu vật nó từng thấy. Thứ thiếu là một dòng đi kèm kết quả: *"điểm này nằm ngoài miền đã kiểm"*. Bài này viết ra dòng đó và làm cho harness tự in nó.
 
@@ -1143,7 +1143,7 @@ for sc in [{"id": "lift_nhe",   "depends_on": ["ma_sat_tinh"], "params": {"mu": 
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| Columbia: Crater được dùng ngoài miền dữ liệu hiệu chỉnh; mảng bọt lớn hơn mẫu thử hàng trăm lần | [chuẩn] | CAIB Report Vol. I (2003), chương 6; kiểm tỉ lệ cụ thể trong bản bạn đọc |
+| Columbia: Crater được dùng ngoài miền dữ liệu hiệu chỉnh; mảng bọt lớn hơn mẫu thử ~400–640 lần về thể tích | [chuẩn] | CAIB Report Vol. I (2003). Reviewer tra web: con số "tối đa 640 lần" (1.920 vs 3 inch khối) và "ước lượng tốt nhất ~400 lần" được trích từ báo cáo; chưa mở được PDF để xác nhận số trang/chương, tự kiểm |
 | `μ_s = tan θ_slip`; C_d quả cầu ≈ 0.47 ở Re ~10³–10⁵ | [chuẩn] | Bóng bàn rơi 1 m có Re cỡ 10⁴ |
 | MuJoCo: μ tiếp xúc = max của hai geom; creep giảm khi dùng elliptic + impratio lớn | [spec] + [tự đo] | MuJoCo docs, *Contact parameters*, *Computation › Contact*; `b17_incline.py` |
 | Mọi bảng số trong 🔒 | [tự đo] | numpy 2.5, scipy 1.18, mujoco 3.15.0 |
@@ -1163,7 +1163,7 @@ for sc in [{"id": "lift_nhe",   "depends_on": ["ma_sat_tinh"], "params": {"mu": 
 - **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao gap đo theo kênh chứ không theo hiện tượng; (2) vẽ lại sơ đồ checker ở phần 2 từ trí nhớ; (3) câu dưới.
 
 **Câu 1.** Một kịch bản đặt μ = 0.45, khối lượng 0.3 kg. Bảng đã đo ma sát ở (0.3, 0.1), (0.6, 0.1), (0.6, 0.5), thang 0.1. Checker nói gì? Phép đo thật nào nên làm tiếp?
-<details><summary>Đáp án</summary>Điểm này nằm trong hộp min–max nhưng cách cả ba điểm đã đo 2.5 thang, nên checker trả OUT. Đo một điểm ngay cạnh nó thì chỉ cứu được kịch bản này. Đo góc (0.3, 0.5) thì phủ cả vùng tương tác. Chọn theo số kịch bản mà phép đo đó chuyển được sang IN.</details>
+<details><summary>Đáp án</summary>Điểm này nằm trong hộp min–max nhưng cách cả ba điểm đã đo 2.5 thang, nên checker trả OUT. Đo góc (0.3, 0.5) **không** cứu kịch bản này (vẫn cách 2.5 thang), nhưng phủ góc tương tác mà `lift_goc` rơi vào. Đo một điểm ngay cạnh (0.45, 0.3) thì chỉ cứu kịch bản này. Chọn theo số kịch bản mà phép đo đó chuyển được sang IN; với lưới điểm thưa và RADIUS = 1, vùng giữa cần điểm đo riêng.</details>
 
 
 ---

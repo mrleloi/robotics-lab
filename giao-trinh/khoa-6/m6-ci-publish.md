@@ -31,7 +31,7 @@ flowchart LR
 
 **Volkswagen, 2015** [chuẩn]. Ngày 18/9/2015, Cơ quan Bảo vệ Môi trường Mỹ (EPA) gửi thông báo vi phạm cho Volkswagen. Phần mềm điều khiển động cơ diesel nhận ra khi xe đang chạy chu trình thử khí thải chuẩn và chỉ bật đầy đủ hệ thống xử lý NOx trong lúc đó. Trên đường thật, theo EPA, lượng NOx lên tới khoảng 40 lần giới hạn. Người phát hiện là một nhóm ở Đại học West Virginia làm cho ICCT, gắn thiết bị đo lên xe và **chạy ngoài chu trình thử**. Bài thử cố định, công khai, lặp lại hoàn hảo, nên bị tối ưu tới mức không còn đo thứ nó sinh ra để đo.
 
-Bản ở quy mô nhỏ hơn đang xảy ra mỗi ngày. Các báo cáo đánh giá mô hình năm 2025 (system card của Claude 3.7 Sonnet do Anthropic công bố; bài của METR về reward hacking ở các mô hình tiên tiến) ghi nhận agent lập trình viết code xử lý riêng cho các ca test, hoặc sửa chính test, để CI chuyển sang xanh [chuẩn; kiểm lại nguồn bạn đọc]. Bạn đã có pipeline agent tự chạy, tự test, tự sửa, tự deploy. Khi bạn nối pipeline đó vào CI đánh giá của khóa này, CI trở thành chu trình thử của Volkswagen. Agent không cần gian lận. Nó chỉ cần thử đủ nhiều biến thể rồi giữ lại cái có điểm cao nhất.
+Bản ở quy mô nhỏ hơn đang xảy ra mỗi ngày. Hai báo cáo năm 2025 ghi nhận agent lập trình viết code xử lý riêng cho các ca test (trả thẳng giá trị test chờ đợi), hoặc sửa chính test hay code chấm điểm, để điểm lên mà bài toán không được giải: system card của Claude 3.7 Sonnet (Anthropic, 2/2025) mô tả hành vi "special-casing" test trong môi trường lập trình agent; bài *Recent Frontier Models Are Reward Hacking* của METR (6/2025) mô tả mô hình sửa test/scoring code và lục call stack để lấy đáp án mà bộ chấm đã tính sẵn [chuẩn]. Bạn đã có pipeline agent tự chạy, tự test, tự sửa, tự deploy. Khi bạn nối pipeline đó vào CI đánh giá của khóa này, CI trở thành chu trình thử của Volkswagen. Agent không cần gian lận. Nó chỉ cần thử đủ nhiều biến thể rồi giữ lại cái có điểm cao nhất.
 
 ### 2. Mô hình tư duy
 
@@ -283,7 +283,7 @@ Tỉ lệ R = 20 lần của bạn sẽ tản: với tỉ lệ thật 80%, 20 l�
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
 | Volkswagen: EPA 18/9/2015; NOx ngoài đường ~40 lần giới hạn; phát hiện bằng đo ngoài chu trình | [chuẩn] | EPA Notice of Violation (9/2015); báo cáo ICCT/WVU (2014) |
-| Agent lập trình viết code riêng cho test hoặc sửa test | [chuẩn] | Claude 3.7 Sonnet system card (Anthropic, 2025); METR (2025). Kiểm câu chữ trong nguồn |
+| Agent lập trình viết code riêng cho test hoặc sửa test/scoring code | [chuẩn] | Claude 3.7 Sonnet system card (Anthropic, 2/2025); METR, *Recent Frontier Models Are Reward Hacking* (metr.org, 5/6/2025). Reviewer đã tra web xác nhận cả hai |
 | 5 lần nhìn ở 5% danh nghĩa → α tổng ~14%; ImageNetV2 giảm ~11–14 điểm | [chuẩn] | Armitage và cộng sự (1969); Recht và cộng sự (ICML 2019) |
 | Bảng tỉ lệ verdict, Goodhart; N ≈ 624 | [đã chạy] mô phỏng | `b18_verdict.py` (numpy 2.5, scipy 1.18), CI Newcombe như Bài 13; N từ công thức non-inferiority với z_β = 1.645, kiểm bằng mô phỏng |
 | Cú pháp GitHub Actions, giới hạn giờ runner | [tự đo] | Tài liệu GitHub Actions hiện hành |

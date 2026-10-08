@@ -124,7 +124,7 @@ Cập nhật `power/budget.csv` dòng `amp_audio` bằng số đo thật (C1.2 �
 | Ù đều 50/100 Hz chỉ khi cắm sạc hoặc màn hình | Vòng đất qua sạc/HDMI/USB của laptop | Rút từng cáp ngoài | Chỉ đo khi robot chạy pin; nếu bắt buộc cắm, cách ly |
 | ESP32 reset khi phát bass lớn lúc motor tăng tốc | Sụt áp nhánh chung (→ K3 Bài 6, F5.7) | `esp_reset_reason()`, log INA226 | Amp ăn từ pack qua FE, không từ buck 5 V; tụ bulk; không phát khi chạy |
 | Tiếng bụp khi bật/tắt robot | Amp lên nguồn trước khi DAC ổn định | Nghe lúc bật | Giữ /SD thấp tới khi ESP32 sẵn sàng |
-| Tiếng nhỏ dần khi pin cạn | Amp clip sớm hơn ở điện áp thấp | Phát sin ở 12 V và 16,8 V trên nguồn bàn | Trần âm lượng chọn ở 12 V |
+| Tiếng méo dần khi pin cạn | Amp clip sớm hơn ở điện áp thấp | Phát sin ở 12 V và 16,8 V trên nguồn bàn | Chọn lại trần âm lượng (C12.1) |
 | Loa lạch cạch khi phát | Cột/loa rung | Gõ khung | Đệm cao su, siết ốc khóa |
 
 ## 7. Lăng kính data infra
@@ -275,7 +275,7 @@ Trước khi chạy, đoán: đơn cực với 10 mΩ cho SNR so với giọng b
 
 ### 6. Làm
 
-**A — Amp trên bàn (lắp bước 1).** Nguồn bàn 12,0 V và 16,8 V, I_set 1 A. Phát sin 1 kHz số (→ K3 Bài 7: sin tạo bằng code) ở các mức −20, −12, −6 dBFS. Ghi dòng nguồn (màn hình nguồn bàn, chỉ trung bình) và nghe/nhìn clipping. Chọn **trần âm lượng** là mức lớn nhất không clip ở **12 V** (pack gần cạn). Đo SPL ở 1 m bằng app điện thoại (sai số lớn, chỉ để so tương đối `[tự đo]`); mục tiêu là nghe rõ ở 1–1,5 m, không to hơn giọng nói to.
+**A — Amp trên bàn (lắp bước 1).** Nguồn bàn 12,0 V và 16,8 V, I_set 1 A. Phát sin 1 kHz số (→ K3 Bài 7: sin tạo bằng code) ở các mức −20, −12, −6 dBFS. Ghi dòng nguồn (màn hình nguồn bàn, chỉ trung bình) và nghe/nhìn clipping ở **cả hai** điện áp. Chọn **trần âm lượng** theo câu 4 của dự đoán và kiểm nó ở cả hai đầu dải pack. Đo SPL ở 1 m bằng app điện thoại (sai số lớn, chỉ để so tương đối `[tự đo]`); mục tiêu là nghe rõ ở 1–1,5 m, không to hơn giọng nói to.
 
 **B — Nhánh FE trên robot (lắp bước 2).** Theo mục 4 của chặng. Định mức FE theo dòng đỉnh đo ở A và tiết diện dây (→ C1.3).
 
