@@ -167,3 +167,7 @@ Các agent soạn song song, không đọc được file của nhau lúc viết.
 - Đo dòng: INA226 + **shunt rời 50 A/75 mV** (module bán sẵn shunt 0,1 Ω chỉ tới ~0,8 A).
 - Cầu chì chính sát pin + cầu chì từng nhánh; cuộn relay E-stop lấy từ pack qua cầu chì 1 A.
 - Màu dây (C0.5): đỏ VBAT, cam 12 V, tím 5 V, đen GND, I2C theo Qwiic (đỏ 3,3 V của Qwiic dán nhãn "3V3").
+- Motor mặc định sau tính toán C2.1: **JGB37-520 tỉ số 1:56, bánh 85 mm** `[tự đo]` PPR/dòng. Driver: loại TB6612 (14,6 V > 13,5 V khuyến nghị, 1,2 A < dòng hãm), loại L298N.
+- Thuật ngữ: **dòng hãm** = stall current (rotor bị giữ đứng); **dòng phanh** = braking (H-bridge brake). Định nghĩa ở C3.1/C3.2; C4, C10 dùng đúng.
+- Lấy mẫu encoder: tiêu chí là chu kỳ lấy mẫu nhỏ hơn khe ngắn nhất giữa hai cạnh vài lần, không phải "trên Nyquist" (C3.3).
+- Giới hạn gia tốc phanh (chống lật, C2.2) lưu vào `decisions.md`, firmware C4.4 kẹp theo đó.

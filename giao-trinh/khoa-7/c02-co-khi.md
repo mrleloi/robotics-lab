@@ -277,7 +277,7 @@ slope  = np.radians(5)   # dốc nhẹ (ram dốc văn phòng)
 c_rr   = 0.03            # hệ số cản lăn: bánh cao su + caster trên sàn cứng/thảm mỏng
 r      = 0.085 / 2       # m: bán kính bánh 85 mm
 J_rot  = 1.5e-6          # kg·m²: quán tính rotor motor cỡ 520 [ước lượng: ~30 g, bán kính ~1 cm]
-V_min, V_rated = 12.0, 12.0   # V: áp pack thấp nhất (C1.1) / áp danh định motor
+V_min, V_rated = 12.0, 12.0   # V: áp pack thấp còn dùng (4S LiFePO4, C1.1) / áp danh định motor
 headroom = 1.25          # dư 25% tốc độ cho vòng PID (C4.2)
 # --- Ứng viên: (tên, N, rpm không tải @V_rated ở trục ra, mô-men hãm kg·cm, I0 A, I_stall A) ---
 # Số VÍ DỤ kiểu trang người bán JGB37-520; thay bằng số của lô bạn mua, rồi đo lại ở C3
@@ -341,7 +341,7 @@ Vì sao "≤50% mô-men hãm" cho đỉnh: ở đó motor cho công suất cơ l
 4. Dòng đỉnh mỗi motor ở tỉ số bạn chọn.
 5. Nếu bạn đổi sang bánh 65 mm, kết luận ở câu 2 đổi thế nào? (đoán hướng trước, rồi sửa `r` trong code)
 
-**Tham số cần tra:** trang người bán (hoặc datasheet nếu có) của đúng mã JGB37-520 bạn định mua: điện áp danh định, rpm không tải ở trục ra, dòng không tải, mô-men hãm, dòng hãm, mô-men định mức, mô-men cho phép của hộp số; ghi rõ **listing nào** (link, ngày). Áp pack thấp nhất: lấy từ C1.1 khi đã chọn hóa học pin; chưa có thì dùng 12 V. C_rr: chưa đo thì 0,03 `[ước lượng]`, sẽ đo ở bước 6 phần Làm.
+**Tham số cần tra:** trang người bán (hoặc datasheet nếu có) của đúng mã JGB37-520 bạn định mua: điện áp danh định, rpm không tải ở trục ra, dòng không tải, mô-men hãm, dòng hãm, mô-men định mức, mô-men cho phép của hộp số; ghi rõ **listing nào** (link, ngày). Áp pack: C1 chốt mặc định **4S LiFePO4** (~12,8 V danh định, 14,6 V đầy, cắt ~10–11 V) và động lực motor đi thẳng từ pack qua E-stop (→ K7 C1.1). LiFePO4 giữ áp gần phẳng quanh 13 V phần lớn dung lượng rồi tụt nhanh ở cuối `[chuẩn]`; bài này lấy `V_min = 12,0 V` (đầu gối cuối đường xả `[ước lượng]`) để tính tốc độ, và 14,6 V để tính trường hợp nhanh nhất/dòng lớn nhất. Pin khác thì thay số. C_rr: chưa đo thì 0,03 `[ước lượng]`, sẽ đo ở bước 6 phần Làm.
 
 **Công thức:** `F = m·a + m·g·sinθ + C_rr·m·g·cosθ`; `τ_bánh = F·r/2`; `rpm = v/(2πr)·60`; `m_rotor_tđ = 2·J·N²/r²`; `I = I0 + (I_hãm − I0)·τ/τ_hãm`.
 
@@ -350,7 +350,7 @@ Vì sao "≤50% mô-men hãm" cho đỉnh: ở đó motor cho công suất cơ l
 commit: <hash>  ngày: <yyyy-mm-dd>
 ## Đầu vào (nguồn từng dòng)
 - m = 6.0 kg (mục tiêu 5 kg + 20%)   v_max = 0.5 m/s   a = 0.5 m/s²   θ = 5°   C_rr = 0.03 (ước lượng)
-- Bánh D = ... mm (đo thước kẹp)   V_min pack = ... V (nguồn: C1.1 / tạm 12 V)
+- Bánh D = ... mm (đo thước kẹp)   V_min pack = ... V (nguồn: C1.1, mặc định 4S LiFePO4 → 12,0 V)
 - Listing motor: <link, ngày> — rpm0 = ..., τ_hãm = ... kg·cm, I0 = ... A, I_hãm = ... A
 ## Tính tay
 | Đại lượng | Giá trị | Cách tính |
@@ -370,7 +370,7 @@ commit: <hash>  ngày: <yyyy-mm-dd>
 
 1. Commit `prediction.md`.
 2. Chạy script với số mặc định; so với tính tay của bạn (lệch >5% → tìm lỗi đơn vị, thường là kg·cm ↔ N·m hoặc đường kính ↔ bán kính).
-3. Thay `cands` bằng số của **listing thật** bạn định mua (ít nhất 3 tỉ số). Thay `V_min` bằng số của C1.1 nếu đã có.
+3. Thay `cands` bằng số của **listing thật** bạn định mua (ít nhất 3 tỉ số). Kiểm `V_min` với C1.1. Chạy thêm một lần với `V_min = V_rated = 14.6` (pin đầy): tốc độ không tải cao hơn ~22%, dòng đỉnh khi kẹt cũng cao hơn ~22% — ghi cả hai vào `motor_sizing.md`.
 4. **Độ nhạy (→ F6.6, dạng tối thiểu):** chạy lại với `c_rr` = 0,015 và 0,06; `J_rot` gấp đôi và một nửa; `m` = 5 và 7 kg. Ghi bảng: tham số nào làm đổi **quyết định** (tỉ số nào thắng), tham số nào chỉ đổi con số. Quyết định không đổi qua cả dải → yên tâm mua.
 5. Ghi `hw/motor_sizing.md`: đầu vào, bảng kết quả, bảng độ nhạy, quyết định (tỉ số, bánh), dòng đỉnh và dòng chạy đều **mỗi motor** để chuyển cho C1.2 và C3. Ghi một dòng vào `decisions.md`. Rồi mới mua.
 6. **Sau Lắp bước 6 (khung đã có khối lượng thật):** đo C_rr. Buộc cân hành lý vào khung ở độ cao trục bánh, kéo robot **thật chậm và đều** trên sàn văn phòng (và một lần trên thảm nếu có), đọc lực khi đã lăn đều (không đọc lúc giật ra). Lặp 5 lần mỗi mặt sàn, lấy trung vị. `C_rr ≈ F/(m·g)`. Sai số: cân hành lý phân giải 10 g ≈ 0,1 N `[spec — loại bạn mua]`, so với lực cỡ 1–3 N là 3–10%; tay kéo không đều là sai số lớn hơn — đó là lý do lấy trung vị. Lưu ý: motor chưa nối điện vẫn quay theo qua hộp số, nên số đo **gồm** ma sát hộp số và motor bị kéo ngược — đúng cái bạn cần cho chạy thật? Ghi câu trả lời của bạn vào `motor_sizing.md` (gợi ý ở câu hỏi ngược 4).
@@ -656,6 +656,13 @@ Coast: gia tốc nhỏ (chỉ ma sát), không lật, nhưng quãng dừng dài.
 <details><summary>Hướng nghĩ</summary>
 
 Pin trượt trong gá khi phanh; cột camera rung/uốn; người đặt đồ lên robot. Gá pin bằng đai + chặn cơ khí chính là để trọng tâm không di chuyển.
+
+</details>
+
+4. **[Vì sao không]** Vì sao không đặt luôn pin sát sàn, thấp nhất có thể?
+<details><summary>Hướng nghĩ</summary>
+
+Khoảng sáng gầm (ngưỡng cửa, dây trên sàn), vị trí ngang (tải trên bánh kéo), tiếp cận để tháo pin khi sự cố (C1.6). Thấp là một trong nhiều ràng buộc, không phải mục tiêu duy nhất.
 
 </details>
 
