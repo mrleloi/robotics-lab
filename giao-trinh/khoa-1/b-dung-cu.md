@@ -414,3 +414,203 @@ Các bước (giữ bản gốc, thêm cột sai số):
   </details>
 
 ---
+
+## Bài 6 — Breadboard: nó nối với nhau như thế nào, và kiểm nó trước khi tin (1h)
+
+> **Vị trí:** Bài 5 → **Bài 6** → Bài 7 · **Cần trước:** Bài 2 (mạch kín), Bài 5 (chế độ thông mạch) · **Sau bài này bạn quyết định được:** một mạch cắm đúng sơ đồ mà không chạy thì lỗi nằm ở board/dây hay ở thiết kế; và một kết nối nào được phép đi qua breadboard (tín hiệu chậm, dòng nhỏ), kết nối nào không (dòng lớn, tín hiệu nhanh).
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Chữ "breadboard" là nghĩa đen: dân chơi radio thập niên 1920 đóng đinh lên tấm thớt gỗ cắt bánh mì rồi quấn dây linh kiện quanh đinh để thử mạch [chuẩn]. Breadboard cắm không cần hàn như bạn dùng (hàng lỗ có lá đồng đàn hồi bên dưới) xuất hiện khoảng đầu thập niên 1970 [chuẩn]. Nó giải quyết đúng một nỗi khổ: thử một ý tưởng mà không phải hàn rồi tháo.
+
+Cái giá của sự tiện lợi là **mọi kết nối là một tiếp xúc cơ khí**: lá đồng rão dần, lỗ bị nong rộng bởi chân linh kiện to, dây jumper đứt ngầm bên trong lớp nhựa. Người mới mất hàng giờ debug code cho một mạch mà lỗi thật là một lỗ breadboard không ăn. Năm phút kiểm board trước khi dùng tiết kiệm những giờ đó.
+
+### 2. Mô hình tư duy
+
+```
+  ┌─────────────────────────────────────────┐
+  │ + + + + + + + + + +   + + + + + + + + + │ ← rail nguồn, nối DỌC theo chiều dài
+  │ − − − − − − − − − −   − − − − − − − − − │ ← rail GND   (nhiều board ĐỨT ở giữa: chỗ hở ↑)
+  │                                         │
+  │ a b c d e   │khe giữa│   f g h i j      │
+  │ ●─●─●─●─●   │        │   ●─●─●─●─●      │ ← mỗi hàng 5 lỗ nối NGANG
+  │ ●─●─●─●─●   │        │   ●─●─●─●─●      │
+  │ ●─●─●─●─●   │        │   ●─●─●─●─●      │
+  │                                         │
+  │ + + + + + + + + + + + + + + + + + + + + │
+  │ − − − − − − − − − − − − − − − − − − − − │
+  └─────────────────────────────────────────┘
+```
+
+Ba luật (giữ bản gốc):
+1. **Hàng 5 lỗ nối ngang với nhau.** Hai chân cắm cùng hàng = chúng nối nhau.
+2. **Khe giữa cắt đứt.** Lỗ `e` và lỗ `f` cùng hàng **không** nối nhau. Khe này để cắm chip DIP, mỗi bên một dãy chân.
+3. **Rail nguồn nối dọc, nhưng nhiều board có chỗ đứt ở giữa** — thường có một khoảng hở trên vạch màu. Nếu có, phải nối hai nửa bằng dây.
+
+Breadboard không phải "dây lý tưởng có lỗ". Nó có ba thông số ký sinh bạn nên biết bậc độ lớn:
+
+| Thông số | Bậc độ lớn | Hệ quả |
+|---|---|---|
+| Điện trở mỗi tiếp xúc | vài chục mΩ, tăng khi rão [ước lượng] | Không sao với tín hiệu; đáng kể với dòng amp/motor (Bài 2) |
+| Điện dung giữa hai hàng kề nhau | vài pF [ước lượng] | Không sao với I2C 100 kHz; bắt đầu làm tròn cạnh ở vài MHz trở lên |
+| Dòng tối đa mỗi tiếp xúc | cỡ 1 A [ước lượng, tùy hãng] | Không cấp nguồn motor/servo qua breadboard |
+
+**Phép kiểm thông mạch là một bộ phân loại có ngưỡng.** Đồng hồ không trả lời "có nối không"; nó trả lời "điện trở giữa hai que có dưới ngưỡng `R_th` không" (với UT33D+, `R_th` vài chục Ω, bạn sẽ tự xác định).
+
+```mermaid
+flowchart LR
+    X["Điện trở thật giữa hai điểm"] --> C{"R < R_th ?"}
+    C -->|"có"| B["BÍP"]
+    C -->|"không"| N["im lặng"]
+    B -.-> FP["Dương tính giả với 'nối tốt':<br/>điện trở nhỏ, mối hàn tồi vài Ω, tiếp xúc rão"]
+    N -.-> FN["Âm tính giả với 'nối':<br/>que chưa chạm, linh kiện bán dẫn chặn chiều đo"]
+```
+
+Bốn câu bản chất:
+1. Breadboard là **hạ tầng dùng chung** của mọi thí nghiệm sau; hạ tầng phải được kiểm trước khi tin kết quả chạy trên nó.
+2. Lỗi breadboard có hình dạng của **flaky**: chạy, rồi không chạy khi chạm vào, rồi lại chạy.
+3. Bíp là một **ngưỡng**, không phải một chứng nhận chất lượng.
+4. Sơ đồ đúng chưa đủ: sơ đồ nói *cái gì nối với cái gì*; breadboard quyết định *có thật sự nối không*.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Smoke test môi trường staging trước khi chạy test suite | Kiểm board bằng thông mạch trước khi cắm mạch | Hạ tầng phần mềm hỏng thường hỏng hẳn. Breadboard **xuống cấp dần** và hỏng **theo vị trí** (một hàng rão, hàng bên cạnh vẫn tốt) | Kiểm một lần lúc mua rồi tin mãi; ba tháng sau một hàng rão gây lỗi chập chờn |
+| Health check TCP: cổng mở = service sống | Bíp = nối | Cổng mở không nói gì về latency hay lỗi ứng dụng. Bíp không nói gì về điện trở thật dưới ngưỡng (0.1 Ω hay 25 Ω đều kêu) | Coi một điện trở 10 Ω hoặc một mối hàn tồi là "nối tốt" |
+| Flaky test do hạ tầng | Lỗ breadboard rão, jumper đứt ngầm | Flaky phần mềm thường do thời gian/thứ tự. Flaky breadboard do **cơ học**: lực ép, rung, nhiệt. Chạm tay vào là thay đổi điều kiện | Đi tìm race condition trong firmware cho một lỗi tiếp xúc (→ F2.3: đo tỉ lệ flaky trước khi đoán nguyên nhân) |
+| Shared bus / shared network segment | Rail nguồn chung cho cả board | Rail chung truyền **sụt áp** của tải này sang tải khác (Bài 2), không chỉ "chia băng thông" | Cấp ESP32 và servo chung rail; ESP32 reset khi servo quay |
+
+**Chấm mô hình:**
+- *"Kêu bíp nghĩa là nối tốt"* — **ĐÚNG MỘT PHẦN.** Đúng khi câu hỏi là "dây có đứt hẳn không". Phản ví dụ: một điện trở 10 Ω kêu bíp y như một sợi dây; một mối hàn nguội có điện trở vài Ω, kêu bíp, rồi hở khi rung (Bài 8).
+- *"Cắm đúng sơ đồ thì mạch phải chạy"* — **SAI.** Sơ đồ là đặc tả; breadboard là triển khai. Phản ví dụ: điện trở cắm vào `e12` và `f12` đúng "hàng 12" trên sơ đồ nhưng nằm hai bên khe giữa, nên không nối gì cả.
+- *"Rail + chạy suốt chiều dài board"* — **ĐÚNG MỘT PHẦN.** Tùy board; nhiều board 830 lỗ đứt rail ở giữa. Phản ví dụ: cấp nguồn ở đầu trái, cắm module ở nửa phải, module không có điện.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Hàng 5 lỗ, khe giữa, rail | Ba vùng nối khác nhau của breadboard | Mọi lỗ gần nhau đều nối |
+| 🟢 | Continuity test | Bíp khi R dưới ngưỡng | Kiểm chất lượng kết nối |
+| 🟢 | Dây đứt ngầm | Lõi đứt bên trong vỏ nhựa còn nguyên | "Dây mới thì tốt" |
+| 🟡 | Điện trở tiếp xúc | Điện trở tại chỗ hai kim loại ép vào nhau | Bằng 0 |
+| 🟡 | Điện dung ký sinh | Tụ "vô tình" giữa hai dây/hàng kề nhau | Chỉ có trong tụ điện |
+| 🔴 | Thiết kế mạch tần số cao trên breadboard | Kỹ thuật giảm ký sinh | Cần ở khóa này |
+
+### 5. Dự đoán
+
+Tạo `lab/00-dung-cu/bai06-prediction.md`. Tra trước: ngưỡng thông mạch của UT33D+ trong manual (mục Continuity); nhìn board của bạn xem vạch màu rail có khoảng hở ở giữa không.
+
+1. Với mỗi phép thử ở phần 6 (bước 2, 3, 4), dự đoán: bíp hay không?
+2. Ngưỡng thông mạch của đồng hồ bạn: ghi số từ manual. Với các điện trở 10 Ω, 22 Ω (hoặc 33 Ω), 47 Ω, 100 Ω trong kit: con nào sẽ kêu?
+3. Một LED đỏ đặt vào hai que ở chế độ thông mạch, chiều thuận và chiều ngược: kêu không, sáng không? (Tra trong manual hoặc đoán: điện áp hở mạch của chế độ thông mạch khoảng bao nhiêu, so với V_f của LED.)
+4. Bạn sẽ dùng breadboard này cho tín hiệu nào trong Khóa 1 (I2C 100–400 kHz, I2S BCK ~0.5–3 MHz)? Đoán xem điện dung ký sinh vài pF có đáng lo cho tín hiệu nào không.
+
+```markdown
+# Bài 6 — dự đoán
+Ngưỡng thông mạch (manual): ... Ω. Rail có khoảng hở nhìn thấy: có / không
+| Phép thử | Dự đoán (bíp / im) | Lý do |
+|----------|--------------------|-------|
+| Cùng hàng 5 lỗ | | |
+| e và f cùng hàng | | |
+| Rail đầu trái ↔ đầu phải | | |
+| R 10 Ω / 22 Ω / 47 Ω / 100 Ω | | |
+| LED thuận / ngược | kêu? sáng? | |
+| Ký sinh đáng lo cho tín hiệu nào | | |
+```
+
+### 6. Làm — kiểm tra board trước khi tin nó
+
+Giữ bốn bước của bản gốc, thêm hai bước:
+
+1. Xoay đồng hồ về chế độ thông mạch (`)))`). Chập hai que: phải kêu. (Đây là kiểm chính dụng cụ trước, giống canary.)
+2. Cắm hai đầu một dây jumper vào hai lỗ **cùng hàng 5 lỗ**. Chạm que vào hai đầu dây (đầu còn lại của mỗi dây, hoặc dùng hai dây). Ghi kết quả.
+3. Cắm một đầu bên `e`, một đầu bên `f` cùng hàng. Ghi kết quả.
+4. Cắm hai đầu vào rail `+`, một ở đầu trái, một ở đầu phải. Không kêu → rail đứt giữa. Ghi lại, và nối cầu hai nửa bằng một dây ngắn ngay bây giờ. Làm tương tự cho rail `−` và cả hai cặp rail.
+5. **Đo ngưỡng của chính đồng hồ:** đặt lần lượt các điện trở 10 Ω, 22/33 Ω, 47 Ω, 100 Ω giữa hai que ở chế độ thông mạch. Ghi con nào kêu. Ước lượng `R_th` nằm giữa hai giá trị nào. Thử LED hai chiều.
+6. **Kiểm từng dây jumper** của bộ dây (ít nhất 20 dây): mỗi dây chạm hai đầu, vừa chạm vừa uốn nhẹ thân dây. Dây nào kêu ngắt quãng khi uốn: bỏ đi, không để lại "dùng tạm".
+
+Ghi vào `bai06-analysis.md`: board có đứt rail không, `R_th` ước lượng, số dây hỏng / tổng số dây (một tỉ lệ hỏng của lô dây, có thể kèm khoảng tin cậy nếu bạn đã đọc → F1.4).
+
+Sai số dụng cụ: chế độ thông mạch không cho số, chỉ cho 0/1 với ngưỡng chưa biết chính xác; vì vậy bước 5 đo ngưỡng trước khi dùng phán quyết của nó.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+| Phép thử | Kết quả đúng | Ghi chú |
+|---|---|---|
+| Cùng hàng 5 lỗ | **Kêu** | Không kêu = lỗ rão hoặc dây đứt |
+| `e` ↔ `f` cùng hàng | **Không kêu** | Kêu = board lỗi (hiếm) |
+| Rail trái ↔ phải | Tùy board; **không kêu** với board có khoảng hở ở giữa | Nhiều board 830 lỗ đứt ở giữa |
+| 10 Ω | Kêu (dưới ngưỡng) | Dương tính giả với câu hỏi "có phải dây không" |
+| 22–33 Ω | Có thể kêu hoặc không, tùy ngưỡng thật | Review độc lập đo ngưỡng UT33D+ khoảng 31 Ω; nhà phân phối ghi 10–50 Ω `[tự đo]` |
+| 47 Ω, 100 Ω | Thường không kêu | |
+| LED thuận | Thường không kêu; LED có thể **sáng mờ** nếu điện áp hở mạch của chế độ thông mạch (~2 V theo review) vượt V_f | Đồng hồ đang "cấp nguồn" cho linh kiện |
+| LED ngược | Không kêu, không sáng | |
+| Ký sinh | Không đáng lo cho I2C 100–400 kHz hay I2S vài MHz trong khóa này với dây ngắn; trở thành vấn đề ở hàng chục MHz | Bậc độ lớn, không phải ngưỡng cứng |
+
+Tỉ lệ jumper hỏng trong một bộ dây rẻ: không có con số chuẩn; dữ liệu của bạn là con số đầu tiên. Ghi lại để lần sau mua bộ khác so sánh.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Không kêu ở bước 2 | Lỗ rão (board rẻ), hoặc dây jumper đứt bên trong | Đổi hàng khác; đổi dây khác; kiểm dây riêng | Đánh dấu hàng hỏng bằng bút, bỏ dây hỏng |
+| Kêu ở bước 3 | Board lỗi (hiếm) | Thử hàng khác | Trả lại |
+| **Mọi thứ đều kêu** | Que chạm vào nhau, hoặc hai đầu dây vô tình cắm cùng hàng/cùng rail, hoặc board đã có linh kiện nối các hàng | Rút hết, thử lại trên board trống; nhìn kỹ điểm chạm | Thử từng điểm trên board trống. (Bản gốc ghi "đồng hồ ở chế độ Ω thang thấp" — ở chế độ Ω đồng hồ không kêu, nên đó không phải nguyên nhân) |
+| Không gì kêu, kể cả khi chập que | Núm không ở chế độ thông mạch; que sai lỗ; pin yếu | Chập que | Xoay lại núm; que đỏ ở VΩmA |
+| Kêu ngắt quãng khi chạm tay | Tiếp xúc rão hoặc dây đứt ngầm | Uốn nhẹ dây khi đang chạm que | Bỏ dây/hàng đó |
+
+### 9. Câu hỏi ngược
+
+1. **[Nếu…thì]** Nếu ngưỡng thông mạch là 50 Ω thay vì 30 Ω, phép kiểm dây của bạn có tốt hơn không? Ngưỡng tốt nhất cho câu hỏi "dây có đứt không" là bao nhiêu?
+   <details><summary>Hướng nghĩ</summary>Dây tốt dưới 1 Ω, dây đứt là vô cùng; khoảng giữa rất rộng nên ngưỡng nào hợp lý cũng phân loại đúng. Ngưỡng chỉ quan trọng khi bạn dùng bíp cho câu hỏi khác (mối hàn, chập giữa hai đường có điện trở). Một test tốt cho câu hỏi này có thể tồi cho câu hỏi kia (→ F2.1).</details>
+2. **[Vì sao không]** Vì sao không hàn luôn mọi mạch lên board đục lỗ cho chắc, bỏ breadboard?
+   <details><summary>Hướng nghĩ</summary>Chi phí sửa. Ở giai đoạn thử, tốc độ thay đổi quan trọng hơn độ bền. Giống chọn script nhanh vs hạ tầng production: chuyển sang hàn khi thiết kế ổn định và bắt đầu cần chạy lâu (Khóa 3, soak test 72 h).</details>
+3. **[Quy mô]** Một lab có 20 bàn thí nghiệm, mỗi bàn một breadboard dùng hằng ngày trong 6 tháng. Lỗi nào sẽ trở thành "nhiễu nền" trong dữ liệu của lab, và bạn sẽ đặt quy trình gì (giống CI) để nó không làm hỏng kết luận thí nghiệm?
+   <details><summary>Hướng nghĩ</summary>Rão theo thời gian và theo vị trí hay dùng. Kiểm định kỳ, dán nhãn ngày kiểm, loại bỏ theo tiêu chí. Ở quy mô, "hạ tầng đo" cũng cần vòng đời và observability như service.</details>
+4. **[Failure mode]** Một hàng breadboard rão chỉ mất tiếp xúc khi nhiệt độ phòng tăng buổi chiều. Dữ liệu thí nghiệm của bạn trông thế nào, và làm sao bạn phát hiện ra nguyên nhân?
+   <details><summary>Hướng nghĩ</summary>Lỗi tương quan với giờ trong ngày, dễ bị đọc nhầm là "nhiệt ảnh hưởng cảm biến". Cần log điều kiện môi trường cùng dữ liệu và có phép kiểm đối chứng (hàng khác, board khác). Tương quan ≠ nhân quả (→ F1.6).</details>
+5. **[Liên ngành]** Tổng đài điện thoại thời đầu dùng bảng cắm (patch panel) với jack và dây nối tay. Giống và khác breadboard thế nào?
+   <details><summary>Hướng nghĩ</summary>Giống: kết nối tạm thời bằng tiếp xúc cơ khí, cấu hình lại nhanh, xuống cấp theo số lần cắm. Khác: patch panel có quy ước và nhãn chặt chẽ vì nhiều người dùng chung; breadboard của bạn thường không có nhãn. Patch panel trong data center vẫn còn tồn tại.</details>
+
+### 10. Liên kết ra ngoài
+
+- **Data center (cáp quang, patch panel).** Mặt tiếp xúc đầu nối quang bẩn là một nguyên nhân kinh điển của lỗi liên kết chập chờn; vì vậy có quy trình "kiểm và lau trước khi cắm". Giống: lỗi tiếp xúc vật lý trông như lỗi phần mềm. Khác: ở đó có máy đo suy hao cho số cụ thể; bíp của bạn chỉ cho 0/1.
+- **Hàng không (bảo dưỡng đầu nối).** Đầu nối dây điện trên máy bay được kiểm định kỳ vì rung và ăn mòn làm tăng điện trở tiếp xúc theo thời gian. Giống: kết nối cơ khí là linh kiện có tuổi thọ. Khác: ở đó tần suất kiểm theo quy định và có hồ sơ; với bạn, `bai06-analysis.md` là hồ sơ đầu tiên.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| "Breadboard" từ tấm thớt bánh mì của dân chơi radio thập niên 1920 | [chuẩn] | Lịch sử điện tử nghiệp dư |
+| Breadboard cắm không hàn xuất hiện khoảng đầu thập niên 1970 | [chuẩn] | Lịch sử sản phẩm; năm chính xác không quan trọng cho bài |
+| Điện trở tiếp xúc vài chục mΩ; điện dung giữa hàng vài pF; dòng ~1 A | [ước lượng] | Tùy hãng; datasheet breadboard có hãng (nếu có) ghi các số này |
+| Ngưỡng thông mạch UT33D+ ~31 Ω (review), 10–50 Ω (nhà phân phối) | [spec] | Tự đo ở bước 5 `[tự đo]` |
+| Điện áp hở mạch chế độ thông mạch ~2 V | [tự đo] | Theo review độc lập; đo bằng đồng hồ thứ hai nếu có |
+
+**Đã sửa so với bản gốc:**
+- "Mọi thứ đều kêu → đồng hồ ở chế độ Ω thang thấp": sai, chế độ Ω không kêu. Thay bằng các nguyên nhân thật (que chạm nhau, cùng hàng, board đã có linh kiện).
+- Thêm bước kiểm chính đồng hồ (chập que) trước khi kiểm board, và bước đo ngưỡng thông mạch: bíp là một bộ phân loại có ngưỡng, không phải bằng chứng "nối tốt".
+- Thêm kiểm toàn bộ dây jumper (đứt ngầm là lỗi phổ biến, bản gốc chỉ nhắc trong bảng lỗi).
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** sách hướng dẫn UT33D+, mục Continuity (ngưỡng, điện áp hở mạch).
+- **Giải thích:** SparkFun Learn, "How to Use a Breadboard".
+- **Đào sâu (tùy chọn):** bất kỳ datasheet breadboard có hãng nào ghi điện trở tiếp xúc và điện dung giữa hàng — để có con số thật thay cho ước lượng.
+- **Tự kiểm tra:** (1) giải thích trong 5 câu cho một backend engineer khác vì sao bíp không phải là "health check xanh"; (2) vẽ lại sơ đồ breadboard từ trí nhớ, đánh dấu ba vùng nối; (3) hai câu dưới.
+
+  a. Bạn cắm ESP32 DevKit vắt ngang khe giữa. Vì sao người ta làm vậy?
+  b. Bạn đo bíp giữa SDA và GND trên một module I2C chưa cấp nguồn. Có phải chập không?
+
+  <details><summary>Đáp án</summary>
+
+  a. Để mỗi dãy chân nằm ở một bên khe: các chân đối diện không bị nối với nhau, và mỗi chân còn vài lỗ trống cùng hàng để cắm dây.
+  b. Chưa chắc. Bíp chỉ nói R dưới vài chục Ω. Có thể là chập thật, có thể là linh kiện trên module (diode bảo vệ, tụ đang nạp làm bíp thoáng qua). Đo bằng chế độ Ω để có con số, so với module thứ hai (Bài 4: mua 2).
+  </details>
+
+---

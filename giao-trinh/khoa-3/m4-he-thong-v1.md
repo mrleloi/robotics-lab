@@ -647,7 +647,7 @@ Cả ba đều dưới 1 s, nhưng chỉ L1/L2 đạt khi **daemon treo**. Tiêu
 
 - **Nguồn gốc:** Datasheet PCM5102A (Texas Instruments), mục soft mute/XSMT; datasheet MAX98357A, mục SD_MODE.
 - **Giải thích:** Nancy Leveson & Clark Turner, *An Investigation of the Therac-25 Accidents*, IEEE Computer, 1993.
-- **Đào sâu (tùy chọn):** Nancy Leveson, *Engineering a Safer World* (MIT Press, 2011), cho cách nhìn an toàn như một bài toán ràng buộc của cả hệ thống, không chỉ của từng thành phần.
+- **Đào sâu (tùy chọn):** Nancy Leveson, *Engineering a Safer World* (MIT Press), cho cách nhìn an toàn như một bài toán ràng buộc của cả hệ thống, không chỉ của từng thành phần.
 - **Tự kiểm tra:** (1) giải thích lại cho một backend engineer khác trong 5 câu vì sao `/kill` trong cùng tiến trình với vòng phát không phải là kill switch; (2) vẽ lại sơ đồ bốn tầng ở phần 2 và ghi phần âm thanh còn nằm dưới mỗi điểm cắt; (3) hai câu dưới.
 
   *a. Một đồng nghiệp đề xuất đi dây nút kill kiểu NO kéo GPIO xuống đất, "vì đơn giản hơn". Chỉ ra một failure mode mà kiểu NC phát hiện được còn kiểu NO thì không.*
@@ -1357,3 +1357,128 @@ Câu được phép viết vào README: *"72h, 0 can thiệp; 10 lần mất đi
   <details><summary>Đáp án</summary>File trên cùng máy chịu cùng lần mất điện và cùng ổ đĩa có thể nói dối, nên nó hỏng cùng kiểu với thứ nó đang kiểm và không phát hiện được chính lỗi đó. Đây là bài toán oracle (F2.1): bộ kiểm phải độc lập với chế độ hỏng mà nó kiểm.</details>
 
 ---
+
+## Gate Khóa 3 — Đối chiếu 7 tiêu chí M4 (6h) (khung rút gọn)
+
+> **Vị trí:** Bài 17 (soak 72h) → **Gate Khóa 3** → Khóa 4 (đo inference trên edge) · **Cần trước:** toàn bộ Bài 1–17; F1.7 (preregistration, báo cáo trung thực), F2.3 (phán quyết ba trạng thái) · **Sau gate này bạn quyết định được:** Khóa 3 PASS, hay cắt scope theo cam kết đã ghi từ đầu và sang Khóa 4.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Gate này không có câu chuyện kỹ thuật; nó có một câu chuyện về con người. Dự án cá nhân hiếm khi chết vì một lỗi kỹ thuật. Chúng chết vì "gần xong" kéo dài vô hạn: còn một tiêu chí nữa, còn một lần đo lại nữa, và Khóa 3 (Track C, chậm và tốn giờ nhất) lặng lẽ ăn hết năm đầu. Bản gốc chặn chuyện đó bằng một cam kết viết **trước** khi bắt đầu, ở đầu `decisions.md`: chạm 140h chưa PASS thì cắt scope, không gia hạn. Gate là lúc cam kết đó được thi hành, không phải lúc bàn lại nó.
+
+### 2. Mô hình tư duy
+
+Mỗi tiêu chí là một mệnh đề nhị phân, mỗi mệnh đề phải trỏ tới một **bằng chứng có thể mở ra được** (file, commit, đồ thị), không trỏ tới trí nhớ.
+
+```mermaid
+flowchart LR
+    C1[1. Không cloud TTS] --> E1[CI job + log egress]
+    C2[2. TN-1 BCK <1%] --> E2[prediction.md commit trước file .sr]
+    C3[3. TN-2 latency vs underrun] --> E3[CSV + đồ thị, 5 điểm × 2 tải × ≥10 phút]
+    C4[4. TN-3 nguồn] --> E4[bảng ≥3 cấu hình + reset reason]
+    C5[5. TN-4 F0 + SNR] --> E5[notebook: sin số + giọng thật]
+    C6[6. Latency budget] --> E6[bảng, mọi dòng trỏ tới lab/NN]
+    C7[7. TN-5 soak] --> E7[CSV monitor + nhân chứng seq + hợp đồng soak]
+    E1 & E2 & E3 & E4 & E5 & E6 & E7 --> G{7/7?}
+    G -->|có| P[PASS → Khóa 4]
+    G -->|không, chưa chạm 140h| F[Sửa đúng tiêu chí trượt]
+    G -->|không, đã chạm 140h| X[Cắt scope theo cam kết]
+```
+
+Ba câu về bản chất: gate là phép đo cuối của một khóa học, nên nó có cùng yêu cầu như mọi phép đo trong khóa (dự đoán commit trước, sai số ghi rõ). Một tiêu chí "gần đạt" là **trượt**, không có ô thứ ba trong gate này; ô "chưa rõ" (F2.3) chỉ dùng để ghi chú vì sao trượt. Và PASS gate chứng minh bạn đã **đo được** chuỗi audio, không chứng minh chuỗi đó tốt; đó là điều bạn được phép nói trong phỏng vấn.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Release gate trong CI (test xanh mới merge) | 7 tiêu chí M4 | CI chạy lại được bất cứ lúc nào; capture logic analyzer, soak 72h và lần rút điện thì không. Bằng chứng phải được **lưu** ngay lúc đo | Tới gate mới phát hiện thiếu file `.sr` hoặc CSV của một lần đo không lặp lại được |
+| Definition of Done của một ticket | Mỗi tiêu chí | DoD thường do người làm tự chấm. Ở đây thứ tự commit (`prediction.md` trước số đo) là một phần của bằng chứng | Viết dự đoán sau khi đã thấy số, rồi tin rằng mình dự đoán đúng |
+| Grep codebase tìm API bị cấm (lint rule) | Tiêu chí 1 | Grep tìm **chuỗi**, không tìm **lời gọi lúc chạy**: URL nằm trong biến môi trường, file config ngoài repo, hoặc một thư viện tự gọi cloud thì grep không thấy | CI xanh trong khi một thư viện fallback lên cloud mỗi khi model local lỗi |
+
+**Chấm mô hình:**
+
+- *"PASS 7/7 nghĩa là hệ V1 đáng tin."* **ĐÚNG MỘT PHẦN.** PASS nghĩa là mỗi phép đo đã được làm đúng quy trình và ra trong ngưỡng. Phản ví dụ: tiêu chí 7 PASS với 10 lần rút điện vẫn chỉ cho cận trên khoảng 26% cho xác suất mất dữ liệu mỗi lần (Bài 17). README phải nói bằng những con số đó, không bằng tính từ.
+- *"Gần 140h rồi, gia hạn thêm 10h để làm nốt tiêu chí 7 là hợp lý."* **SAI** theo đúng hợp đồng bạn đã ký với chính mình. Phản ví dụ chính là lý do hợp đồng tồn tại: "thêm 10h" lặp lại vài lần là lý do các dự án cá nhân không bao giờ đóng.
+
+### 6. Làm
+
+**Bước 1 (1h) — Gom bằng chứng.** Mỗi tiêu chí một dòng trong `GATE.md`: mệnh đề, đường dẫn bằng chứng, commit hash, PASS/FAIL. Không có đường dẫn thì là FAIL.
+
+**Bước 2 (3h) — Đối chiếu đúng 7 tiêu chí PASS của M4.** Nhị phân, không chấm bằng cảm giác. Tiêu chí giữ nguyên bản gốc; chỗ có chữ *(sửa)* là chỗ quy chuẩn bắt buộc sửa, lý do ở cuối mục này.
+
+```
+[ ] 1. Không còn lời gọi cloud TTS nào trong chuỗi
+       → grep repo, chứng minh bằng CI check
+       → (thêm, nên có) trong soak Bài 17, firewall chỉ cho phép ra Google Sheets/Apps Script
+         và log mọi kết nối ra ngoài bị chặn: 0 kết nối tới dịch vụ TTS
+
+[ ] 2. TN-1: BCK đo được sai <1% so với dự đoán, ở 2 sample rate khác nhau
+       → file .sr commit sau prediction.md, kèm bảng dự đoán vs đo
+       → tần số đo trên nhiều chu kỳ (ví dụ ≥1000), không đo một chu kỳ
+
+[ ] 3. TN-2: đường cong latency vs underrun ≥5 điểm dma_frame_num, ≥2 kịch bản tải,
+       mỗi điểm ≥10 phút chạy; latency GPIO→mic đo được với độ phân giải ≤1ms
+
+[ ] 4. TN-3: bảng ≥3 cấu hình nguồn, mỗi dòng có V_rail lúc nghỉ và lúc phát,
+       số brownout reset của ESP32, mô tả tiếng
+
+[ ] 5. TN-4: F0 giọng mình bằng số;                                              (sửa)
+       đồ thị SNR đo vs lý thuyết 6.02×bits+1.76 ở 4 mức bit depth (16/12/8/4),
+       sai lệch <3dB, đo trên SIN SỐ full-scale tạo bằng code (không qua mic);
+       với giọng thật qua mic: chỉ kiểm XU HƯỚNG ở 8 và 4 bit
+       (nhiễu lượng tử lấn nhiễu mic), không áp ngưỡng <3dB
+
+[ ] 6. Bảng latency budget: MỌI DÒNG là số đo, không dòng nào là ước tính,
+       nút thắt được chỉ tên
+       → kể cả dòng "Form → Sheet" (không kiểm soát được nhưng đo được)
+
+[ ] 7. TN-5 soak 72h: ≥20 confession phát đúng, 0 lần can thiệp tay,
+       log rotation đã chứng minh bằng cách cố tình làm đầy đĩa,               (sửa: "thẻ" → "đĩa")
+       ≥3 lần rút điện đúng lúc đang ghi DB mà dữ liệu còn nguyên
+       → "đúng lúc đang ghi" có bằng chứng (bão ghi + nhân chứng seq, Bài 17)
+       → README ghi cận trên 95% tương ứng, không ghi "bền với mất điện"
+```
+
+**Bước 3 (1h) — Kiểm thứ tự commit.** Với mỗi thí nghiệm TN-1…TN-5: `git log --format='%h %cI %s' -- lab/<NN>/prediction.md lab/<NN>/<file đo>` phải cho thấy `prediction.md` đứng trước. Thời gian commit của git có thể chỉnh tay, nên đây là kỷ luật với chính mình chứ không phải bằng chứng chống gian lận; muốn mạnh hơn thì push `prediction.md` lên remote trước khi đo.
+
+**Bước 4 (1h) — Viết phần README của M4** (bài về audio latency gộp vào đây theo lộ trình): bảng số có sai số, đồ thị TN-2, power budget đầu tiên (AC và DC), câu "được phép nói / không được phép nói" của Bài 17, và danh sách những gì chưa làm được.
+
+**FAIL → action (cam kết trước, không bàn lại lúc nản):** chạm **140h** chưa PASS → **cắt scope, không gia hạn**. Bỏ tiêu chí 5 và 7, chỉ giữ "phát được audio ổn định 24h", publish nguyên trạng kèm ghi chú rõ cái gì chưa làm được, sang Khóa 4. V1 không được phép ăn hết năm đầu. Giờ tính theo `hours.csv`, không theo cảm giác.
+
+**Nhắc từ bản gốc:** nếu Khóa 2 vẫn chưa xong khi bạn tới gate này, dừng Khóa 3 lại và đóng Khóa 2 trước. Khóa 3 là thứ khiến bạn không bị loại; Khóa 2 là thứ khiến bạn được gọi. Harness benchmark ở Bài 11 dùng lại được gần như nguyên vẹn cho Khóa 4, chỉ đổi payload từ TTS sang VLA.
+
+**Đã sửa so với bản gốc/Gemini:**
+- Tiêu chí 5 (lỗi đã biết, mục 7 quy chuẩn): công thức `6.02·bits + 1.76` giả định sin full-scale và nhiễu lượng tử phân bố đều. Kiểm nó trên giọng thật qua mic ở 16/12/8/4 bit là sai phương pháp, vì ở 16 và 12 bit nhiễu của mic và đường analog lớn hơn nhiễu lượng tử nhiều, và giọng nói không phải sin full-scale. Sửa: ngưỡng <3 dB áp cho sin số; giọng thật chỉ kiểm xu hướng ở 8 và 4 bit. Bản Gemini lặp lại nguyên lỗi này ở gate.
+- Tiêu chí 7: lộ trình tổng ghi "làm đầy thẻ" (di sản bản Pi/thẻ SD); với mini PC là đĩa SSD.
+- Tiêu chí 1: thêm kiểm ở mức mạng, vì grep không thấy lời gọi lúc chạy.
+- Tiêu chí 2: thêm "đo trên nhiều chu kỳ": logic analyzer 24 MHz có bước lấy mẫu khoảng 42 ns; với BCK 768 kHz (chu kỳ khoảng 1.3 µs), đo một chu kỳ có sai số lượng tử cỡ vài phần trăm, lớn hơn chính ngưỡng 1% [ước lượng: 42 ns / 1302 ns ≈ 3%]. Đo trên N chu kỳ thì sai số này chia cho N.
+- Tiêu chí 7: thêm yêu cầu bằng chứng "đúng lúc đang ghi" và báo cận trên, theo Bài 17.
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| BCK lệch 2–4% ở một sample rate | Đo trên một chu kỳ (lượng tử của logic analyzer), hoặc driver chọn clock nguồn khác giá trị xin | Đo tần số trên ≥1000 chu kỳ; đọc lại cấu hình thật từ ESP32 | Đo lại đúng cách; nếu vẫn lệch, đó là số thật, ghi lý do (bẫy số 7 của khóa) |
+| SNR của sin số lệch >3 dB ở 4 bit | Sin không full-scale, có dither, hoặc đo SNR gồm cả hài | Kiểm biên độ và cách tính (cửa sổ FFT, dải tích phân nhiễu) | Xem lại cách tính theo F5.5; không chỉnh ngưỡng |
+| Một dòng latency budget vẫn là "ước tính" | Chặng đó khó đo (Form → Sheet) | Dùng timestamp của Google vs thời điểm phát hiện, kèm offset NTP | Đo; nếu thật sự không đo được thì tiêu chí 6 FAIL, ghi lý do |
+| Không tìm được file `.sr` của TN-1 | Không lưu lúc đo | — | Đo lại (TN-1 lặp lại được); bài học cho các thí nghiệm không lặp lại được |
+| Soak có 1 lần can thiệp | Thiếu hành vi xác định cho một tình huống | Log Bài 17 | Sửa, chạy lại soak nếu còn giờ dưới 140h; không còn thì cắt scope |
+| Tổng giờ đã gần 140h, còn 2 tiêu chí | — | `hours.csv` | Thi hành FAIL action. Không đàm phán |
+
+### 9. Câu hỏi ngược
+
+1. **[Failure mode]** Tiêu chí 1 PASS bằng grep. Sáu tháng sau bạn nâng phiên bản thư viện TTS, và bản mới có tùy chọn mặc định "fallback lên API cloud khi model local lỗi". CI vẫn xanh. Gate nào, đặt ở đâu, bắt được chuyện này?
+   <details><summary>Hướng nghĩ</summary>Kiểm ở biên mạng (egress allowlist, log kết nối bị chặn) đo hành vi thật lúc chạy, không đo chuỗi trong code. Cũng nghĩ về việc khóa phiên bản (lockfile, F2.2) và đọc changelog khi nâng phụ thuộc.</details>
+2. **[Quy mô]** Nếu bạn phải PASS cùng 7 tiêu chí cho 100 bộ phần cứng (100 ESP32, 100 DAC, 100 mini PC), tiêu chí nào chạy tự động được trên dây chuyền, tiêu chí nào chỉ làm được trên mẫu, và cỡ mẫu nào là đủ?
+   <details><summary>Hướng nghĩ</summary>Tiêu chí 2, 4 tự động hóa được bằng jig đo; tiêu chí 7 thì không thể chạy 72h trên từng bộ. Đây là bài toán lấy mẫu nghiệm thu (acceptance sampling) và rule of three lại xuất hiện: 0 lỗi trên n mẫu cho cận trên ≈ 3/n cho tỉ lệ lỗi của lô.</details>
+3. **[Phản biện]** Có người cho rằng tiêu chí 5 (F0, SNR) không liên quan tới nghề robot data infra và nên bỏ ngay từ đầu chứ không đợi FAIL action. Lập luận tốt nhất cho việc giữ nó là gì?
+   <details><summary>Hướng nghĩ</summary>Nó là lần đầu tiên bạn so một công thức giáo khoa với số đo thật và phải giải thích phần lệch theo giả định của công thức. Đó đúng là kỹ năng "đánh giá đúng/sai/chưa rõ" mà bạn sẽ dùng với sensor và dữ liệu ở Khóa 5. Lập luận ngược cũng có lý: bản gốc đã cho phép bỏ nó khi chạm 140h.</details>
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** `khoa-3-chuoi-audio.md` (Gate Khóa 3) và `00-lo-trinh-tong.md` (mục M4) trong repo; `_QUY-CHUAN.md` mục 7 cho lỗi tiêu chí 5.
+- **Giải thích:** Ben Goldacre, *Bad Pharma* (2012), các chương về đăng ký trước thử nghiệm lâm sàng: vì sao viết dự đoán và tiêu chí trước khi thấy số là thứ phân biệt bằng chứng với kể chuyện.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao tiêu chí 5 đo trên sin số chứ không trên giọng thật; (2) vẽ lại sơ đồ tiêu chí → bằng chứng từ trí nhớ; (3) câu dưới.
+
+  *Bạn PASS 7/7. Viết một câu cho CV về Khóa 3 mà mọi từ trong câu đều có một con số hoặc một file đỡ lưng.*
+  <details><summary>Một đáp án mẫu</summary>Ví dụ: "Built a host→ESP32→I2S DAC audio chain and measured it end to end: wire-level I2S clocks within X% of prediction, GPIO-to-microphone latency vs underrun curve across 5 DMA sizes and 2 load scenarios, and a 72-hour unattended soak with 10 power cuts and no committed-data loss." Thay X và các số bằng số thật của bạn; không có tính từ nào không có số đi kèm.</details>
