@@ -26,7 +26,7 @@ flowchart LR
 
 **Knight Capital, 1/8/2012.** Knight triển khai code giao dịch mới lên tám máy chủ, nhưng một máy không nhận bản mới. Code mới dùng lại một **cờ cấu hình** trước đây bật một chức năng cũ tên Power Peg, đã ngừng dùng từ lâu mà code vẫn còn. Trên bảy máy, cờ đó bật logic mới. Trên máy thứ tám, nó bật Power Peg. Trong khoảng 45 phút, hệ thống gửi hàng triệu lệnh, và Knight lỗ khoảng 460 triệu USD [chuẩn: theo lệnh xử phạt của SEC, 10/2013]. Bài học cho bạn không nằm ở chuyện triển khai sai. Nó nằm ở chỗ: **cùng một giá trị cấu hình mang hai nghĩa tùy code nào đọc nó**, và không ai có một câu trả lời máy đọc được cho câu hỏi "máy nào đang chạy cấu hình nào với code nào".
 
-Eval robot tự chế mắc đúng bệnh đó ở quy mô nhỏ. Kịch bản nằm trong `run_eval.py`: một dòng `obj_pos = [0.1, 0.0, 0.82]`, một dòng `env.sim.model.opt.timestep = 0.002` ai đó thêm lúc debug. Ba tuần sau, bạn mở một biểu đồ cũ và không trả lời được bốn câu bản gốc nêu: kết quả này sinh bằng kịch bản nào, sinh biến thể thế nào, so với lần chạy hôm nay được không, người khác chạy lại được không. Câu hỏi của bài, *"tôi đã test cấu hình nào" có trả lời được không*, chỉ có câu trả lời "có" khi kịch bản là **dữ liệu**: có schema, có version, có hash, và là **đường duy nhất** để một tham số đi vào mô phỏng.
+Eval tự chế mắc đúng bệnh đó ở quy mô nhỏ: `obj_pos = [0.1, 0.0, 0.82]` nằm trong `run_eval.py`, `env.sim.model.opt.timestep = 0.002` ai đó thêm lúc debug. Ba tuần sau, không ai trả lời được bốn câu của bản gốc: kết quả sinh bằng kịch bản nào, biến thể sinh thế nào, so với hôm nay được không, người khác chạy lại được không. Câu hỏi *"tôi đã test cấu hình nào"* chỉ trả lời được khi kịch bản là **dữ liệu**: có schema, version, hash, và là **đường duy nhất** để tham số đi vào mô phỏng.
 
 ### 2. Mô hình tư duy
 
@@ -44,20 +44,19 @@ flowchart LR
   XML["MJCF/asset mặc định<br/>của thư viện"] --> L
 ```
 
-Bản chất: kịch bản là **đầu vào được đặt tên** của hàm mô phỏng. Muốn một đầu vào có danh tính, bạn cần ba thứ: một **dạng chuẩn** (canonical form) để hai cách viết cùng nghĩa cho cùng hash, một **cổng duy nhất** (loader) để không tham số nào đi vòng, và một **bằng chứng ở hạ nguồn** rằng thứ đã vào simulator đúng là thứ kịch bản nói. Có hai hash, và chúng trả lời hai câu khác nhau:
+Kịch bản là **đầu vào được đặt tên** của hàm mô phỏng. Muốn nó có danh tính cần ba thứ: **dạng chuẩn** (canonical form) để hai cách viết cùng nghĩa cho cùng hash, **cổng duy nhất** (loader) để không tham số nào đi vòng, và **bằng chứng ở hạ nguồn** rằng thứ vào simulator đúng là thứ kịch bản nói. Hai hash trả lời hai câu khác nhau:
 
 | Hash | Tính trên | Trả lời câu | Đổi khi |
 |---|---|---|---|
 | `scenario_hash` | cấu hình hiệu lực, JSON chuẩn hóa | "tôi **đã yêu cầu** chạy cái gì" | người viết đổi kịch bản, hoặc loader đổi giá trị mặc định |
 | `model_fingerprint` | mảng tham số của `mjModel` sau biên dịch (`opt`, `geom_friction`, `body_mass`…) | "simulator **đã thực sự nhận** cái gì" | kịch bản đổi, **hoặc** MJCF/asset của thư viện đổi, **hoặc** code ghi đè lén |
 
-Hai hash lệch nhau theo kiểu "scenario giống, fingerprint khác" là dấu hiệu có tham số đi vòng qua loader. Đó là thứ bước 2 của bản gốc ("không cho phép tham số nào đi vòng") cần để **kiểm được**, chứ không chỉ để hứa.
+"Scenario giống, fingerprint khác" là dấu hiệu có tham số đi vòng loader: nhờ nó, bước 2 của bản gốc ("không tham số nào đi vòng") **kiểm được** chứ không chỉ hứa.
 
 Đoạn code dưới cho thấy ba cái bẫy khi làm "hash chuẩn hóa" cho YAML. Đoán từng dòng in ra trước khi chạy (phần 5).
 
 ```python
 # [đã chạy] — Python 3.13, PyYAML 6.0
-# Ba cái bẫy của "hash chuẩn hóa" cho file kịch bản YAML.
 import hashlib, json, yaml
 
 def naive_hash(text):                      # hash thẳng bytes của file
@@ -90,7 +89,7 @@ print("   hash sau loader v1   :", canon_hash(v1_file))
 print("   hash sau loader v2   :", canon_hash(load_v2(v1_file)))
 ```
 
-Đoạn thứ hai đi vào simulator thật: một hộp đặt trên mặt bàn nghiêng 20°, sweep hệ số ma sát của **hộp**, bàn để `friction=1.0` như `TableArena` mặc định của robosuite (`table_friction=(1, 0.005, 0.0001)`) [spec: `robosuite/models/arenas/table_arena.py`, tag v1.4.0]. Đoạn này kiểm tiêu chí "đổi một trường thì kết quả đổi" của bản gốc.
+Đoạn thứ hai đi vào simulator thật: một hộp đặt trên mặt bàn nghiêng 20°, sweep hệ số ma sát của **hộp**, bàn để `friction=1.0` như `TableArena` mặc định của robosuite (`table_friction=(1, 0.005, 0.0001)`) [spec: `robosuite/models/arenas/table_arena.py`, tag v1.4.0].
 
 ```python
 # [đã chạy] — Python 3.13, mujoco 3.15.0 (pip install mujoco)
@@ -125,30 +124,29 @@ for table_f in (1.0, 0.05):
 
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
-| Config-as-code, 12-factor (config qua env/file, không hardcode) | Kịch bản là file có schema, đi qua một loader | Config backend thường **không đổi kết quả nghiệp vụ** (pool size, timeout). Ở đây mọi trường vật lý đều là đầu vào của phép tính; `timestep` sai là một thí nghiệm khác chứ không phải hệ chạy chậm hơn | Bạn để `timestep`, `iterations` ở "config hệ thống" chung cho mọi run, và kết quả hai tuần trước không biết chạy với giá trị nào |
+| Config-as-code, 12-factor | Kịch bản là file có schema, đi qua một loader | Config backend thường **không đổi kết quả nghiệp vụ** (pool size, timeout). Ở đây `timestep` sai là một thí nghiệm khác | Để `timestep`, `iterations` ở "config hệ thống" chung; kết quả cũ không biết chạy với giá trị nào |
 | Server mock tự tạo bộ test chuẩn của bạn | Kịch bản + init state cố định | Mock của bạn **là** nguồn sự thật cho response. Kịch bản thì chỉ là **một nửa**: nửa kia là MJCF/asset của thư viện mà loader trộn vào. Kịch bản không đổi mà asset đổi thì "bộ test chuẩn" đã đổi | Bạn tin `scenario_hash` giống là đủ, nâng LIBERO, mesh hoặc ma sát mặc định đổi, và không gì báo động (vì vậy cần `model_fingerprint`) |
 | Schema migration, Protobuf "trường mới phải có default" (K2 Bài 6) | Kịch bản v1 chạy bằng loader v2 | Ở Protobuf, reader mới điền default là **vô hại** vì default không đổi nghĩa message. Ở đây default **là một giá trị vật lý**: loader v2 điền `iterations=100` cho file v1 không ghi trường đó, trong khi loader v1 để simulator tự lấy giá trị từ MJCF (có thể là 50) | v1 chạy được bằng loader v2 (PASS tiêu chí gốc) nhưng ra kết quả khác, và bạn gọi đó là "backward compatible" |
-| Hash nội dung (ETag, Git object, Docker layer) | `scenario_hash` trên JSON chuẩn hóa | ETag hash **bytes**; ở đây muốn hash **nghĩa**. Ranh giới "cùng nghĩa" là một quyết định (comment? thứ tự? `1` vs `1.0`? đơn vị?) phải viết ra | Hai người dùng hai hàm chuẩn hóa, cùng kịch bản ra hai hash, join kết quả ở Bài 9 hụt một nửa |
+| Hash nội dung (ETag, Git object) | `scenario_hash` trên JSON chuẩn hóa | ETag hash **bytes**; ở đây cần hash **nghĩa**, và ranh giới "cùng nghĩa" (comment? thứ tự? đơn vị?) là quyết định phải viết ra | Hai hàm chuẩn hóa, cùng kịch bản hai hash, join ở Bài 9 hụt |
 
 **Chấm mô hình:**
 
-1. *"Kịch bản là một server mock: tôi đã làm cái này rồi."* (mô hình dễ tự xây từ vốn của bạn) — **ĐÚNG MỘT PHẦN.** Đúng ở phần cốt: cố định thế giới bên ngoài để hành vi của thứ được test là thứ duy nhất thay đổi. Gãy ở hai chỗ. (a) Mock trả về **giá trị**, còn kịch bản là **tham số của một phép tính có độ nhạy không đều**: cùng một độ lệch 0.05 ở ma sát có thể không đổi gì hoặc đổi hết, tùy vùng. (b) Mock là code của bạn; kịch bản chỉ ghi đè **một phần** model của người khác. Phản ví dụ: kịch bản đổi ma sát của bức tường phía sau bàn, thứ vật không bao giờ chạm. Trường được áp đúng, model đổi, quỹ đạo giống từng bit. Một mock không bao giờ có "giá trị trả về không ai đọc" theo kiểu này; kịch bản thì có rất nhiều, và đoạn code thứ hai ở phần 2 cho bạn tự tìm một trường hợp khó thấy hơn.
-2. *"Hash chuẩn hóa = `json.dumps(sort_keys=True)` rồi SHA-256."* (Gemini K6 lượt 5) — **ĐÚNG MỘT PHẦN.** Giải quyết đúng bẫy thứ tự trường. Không giải quyết: kiểu do YAML đoán (`1e-3` thành chuỗi, `012` thành 10), `1` khác `1.0`, NaN (`json.dumps` mặc định in `NaN`, không phải JSON hợp lệ), và câu hỏi lớn nhất: hash **trước hay sau** khi điền mặc định. Phản ví dụ: dòng 3 của đoạn code đầu, cùng một file v1, hai loader, hai hash. Cách đúng: hash cấu hình **hiệu lực** (sau validate, sau điền mặc định, đã ép kiểu bằng schema), kèm `schema_version`; và lưu riêng hash file nguồn để biết người viết có đổi gì không. Nếu cần chuẩn hóa liên ngôn ngữ, có chuẩn RFC 8785 (JSON Canonicalization Scheme) [spec: IETF RFC 8785].
-3. *"Đổi một trường liên quan thì kết quả đổi; đổi trường không liên quan thì kết quả giữ nguyên."* (bản gốc, Số phải ra) — **ĐÚNG MỘT PHẦN.** Vế hai đúng và rất nên giữ. Vế một sai khi hiểu "kết quả" là quỹ đạo hay tỉ lệ thành công: hệ vật lý có **vùng phẳng** (ma sát dưới ngưỡng của bề mặt kia, khối lượng trong dải mà controller bù hết). Phản ví dụ: tăng khối lượng vật 20% trong dải mà controller vị trí của Panda bù hết; quỹ đạo vật gần như trùng, tỉ lệ thành công không đổi trong mọi n bạn chạy nổi. Sửa: kiểm vế một ở tầng **model đã biên dịch** (`model_fingerprint` phải đổi), còn độ nhạy của quỹ đạo theo tham số là một **phép đo** (Bài 6, → F6.6), không phải test đúng/sai.
+1. *"Kịch bản là một server mock: tôi đã làm cái này rồi."* (mô hình dễ tự xây từ vốn của bạn) — **ĐÚNG MỘT PHẦN.** Đúng ở cốt: cố định thế giới bên ngoài để chỉ thứ được test thay đổi. Gãy ở hai chỗ: (a) mock trả **giá trị**, kịch bản là **tham số của một phép tính có độ nhạy không đều** (cùng lệch 0.05 ma sát, vùng này không đổi gì, vùng kia đổi hết); (b) mock là code của bạn, kịch bản chỉ ghi đè **một phần** model của người khác. Phản ví dụ: đổi ma sát bức tường sau bàn mà vật không bao giờ chạm: model đổi, quỹ đạo giống từng bit. Đoạn code thứ hai ở phần 2 cho bạn tự tìm một ca khó thấy hơn.
+2. *"Hash chuẩn hóa = `json.dumps(sort_keys=True)` rồi SHA-256."* (Gemini K6 lượt 5) — **ĐÚNG MỘT PHẦN.** Giải quyết đúng bẫy thứ tự trường. Không giải quyết: kiểu do YAML đoán, `1` vs `1.0`, NaN (`json.dumps` mặc định in `NaN`, không phải JSON hợp lệ), và câu lớn nhất: hash **trước hay sau** khi điền mặc định. Phản ví dụ: mục 2 và 3 của đoạn code đầu (tự chạy sau khi dự đoán). Cách đúng: hash cấu hình **hiệu lực** (sau validate, điền mặc định, ép kiểu bằng schema) kèm `schema_version`, và lưu riêng hash file nguồn. Chuẩn hóa liên ngôn ngữ: RFC 8785 (JSON Canonicalization Scheme) [spec].
+3. *"Đổi một trường liên quan thì kết quả đổi; đổi trường không liên quan thì kết quả giữ nguyên."* (bản gốc, Số phải ra) — **ĐÚNG MỘT PHẦN.** Vế hai đúng và rất nên giữ. Vế một sai khi hiểu "kết quả" là quỹ đạo hay tỉ lệ thành công: hệ vật lý có **vùng phẳng** (ma sát dưới ngưỡng của bề mặt kia, khối lượng trong dải mà controller bù hết). Phản ví dụ: tăng khối lượng vật 20% trong dải controller vị trí của Panda bù hết; tỉ lệ thành công không đổi ở mọi n bạn chạy nổi. Sửa: kiểm vế một ở tầng **model đã biên dịch** (`model_fingerprint` phải đổi), còn độ nhạy của quỹ đạo theo tham số là một **phép đo** (Bài 6, → F6.6), không phải test đúng/sai.
 
 ### 4. Thuật ngữ
 
 | Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
 |---|---|---|---|
-| 🟢 | Scenario / kịch bản | Bộ đầu vào được đặt tên của một episode: task, init state, vật lý, giới hạn, tiêu chí thành công, cách dẫn xuất seed | Script Python chạy eval |
+| 🟢 | Scenario / kịch bản | Bộ đầu vào được đặt tên của một episode (task, init state, vật lý, giới hạn, tiêu chí, seed) | Script Python chạy eval |
 | 🟢 | Canonical form / dạng chuẩn | Một cách biểu diễn duy nhất cho mọi cách viết cùng nghĩa | Format lại file cho đẹp |
 | 🟢 | Cấu hình hiệu lực (effective config) | Thứ loader thật sự dùng, sau khi điền mặc định và ép kiểu | File người viết |
 | 🟢 | Model fingerprint | Hash các mảng tham số của `mjModel` sau biên dịch | `scenario_hash` (khác: một bên là yêu cầu, một bên là thực tế) |
 | 🟢 | Schema version vs scenario version | Version của **định dạng** vs version của **nội dung** một kịch bản | Một con số dùng cho cả hai |
-| 🟡 | `MjSpec` | API chỉnh model MuJoCo trước khi biên dịch (thêm/sửa body, geom, option) rồi `compile()` | Sửa trực tiếp `model.opt` sau khi env dựng xong (được, nhưng không qua được một cổng) |
+| 🟡 | `MjSpec` | API chỉnh model MuJoCo trước khi `compile()` | Sửa thẳng `model.opt` sau khi dựng env |
 | 🟡 | Init state của LIBERO | Vector trạng thái MuJoCo phẳng, lưu trong file `.pruned_init`, nạp bằng `set_init_state` | Một tư thế vật `{x, y, z, yaw}` |
 | 🟡 | Luật trộn tham số tiếp xúc | Thông số của một tiếp xúc tính từ **hai** geom theo một luật của engine (tra ở phần 5), không thuộc riêng vật nào | "Ma sát của vật" |
-| 🔴 | Ngôn ngữ kịch bản (Scenic, OpenSCENARIO) | Ngôn ngữ riêng để mô tả và lấy mẫu kịch bản lái xe | Thứ cần cho khóa này |
 
 ### 5. Dự đoán
 
@@ -158,9 +156,9 @@ for table_f in (1.0, 0.05):
 3. Với ≥5 task LIBERO bạn sẽ chuyển: liệt kê **mọi** tham số ảnh hưởng kết quả, xếp mỗi cái vào một trong ba cột: kịch bản / code / môi trường. Dự đoán số hằng số hardcode mà `grep` sẽ tìm thấy trong code eval hiện có của bạn (K4 Bài 7).
 
 **Tham số cần tra:**
-- Luật trộn ma sát khi hai geom chạm nhau: MuJoCo docs, mục *Modeling → Contact parameters* (thuộc tính `priority`, `solmix`) và mục XML reference của `<geom friction>`. Đọc, đừng đoán.
+- Luật trộn ma sát hai geom: MuJoCo docs, *Modeling → Contact parameters* (`priority`, `solmix`), XML reference `<geom friction>`.
 - Góc trượt: hộp trên mặt nghiêng θ đứng yên nếu `μ ≥ tan θ` [chuẩn]; tính `tan 20°`.
-- Đặc tả YAML 1.1 về số thực (bắt buộc dấu chấm), số bát phân, số cơ số 60 (sexagesimal), và giá trị bool (`yes/no/on/off`). PyYAML theo YAML 1.1 [spec: tài liệu PyYAML].
+- Đặc tả YAML 1.1: cú pháp số thực, số bát phân, số cơ số 60 (sexagesimal), giá trị bool. PyYAML theo YAML 1.1 [spec: tài liệu PyYAML].
 - Giá trị mặc định của `<option>` trong MuJoCo: `timestep`, `iterations`, `solver`, `cone` (XML reference, mục `option`), và giá trị robosuite/LIBERO ghi đè (`robosuite/macros.py`, MJCF của arena).
 - LIBERO: task được định nghĩa bằng file BDDL; init state nạp từ `init_files/<suite>/<task>.pruned_init` qua `get_task_init_states` [spec: `libero/libero/benchmark/__init__.py`].
 
@@ -185,19 +183,19 @@ for table_f in (1.0, 0.05):
 
 ### 6. Làm
 
-1. **Thiết kế schema kịch bản** (bản gốc: JSON Schema hoặc Pydantic). Dùng mẫu YAML của bản gốc làm điểm xuất phát, nhưng sửa ba chỗ:
-   - `initial_state` cho task LIBERO: thay `object_pose` bằng `{init_states_file, init_states_sha256, index}`, vì LIBERO đặt vật bằng vector trạng thái đầy đủ chứ không bằng tư thế một vật. Giữ `object_pose` cho task robosuite tự viết.
-   - `physics.friction`: đổi từ một bộ ba toàn cục thành **danh sách ghi đè theo geom** (`{geom: "table_collision", friction: [1.0, 0.005, 0.0001]}`), vì MuJoCo không có "ma sát của cảnh".
-   - `solver_iterations` của bản gốc ánh xạ vào thuộc tính `iterations` của `<option>`; ghi rõ ánh xạ trong loader (tên trường schema là của bạn, tên MuJoCo là của MuJoCo). Đơn vị ghi trong tên trường hoặc schema (`timestep_s`, `hold_s`), theo `CONVENTIONS.md` (SI).
-   - Ràng buộc trong schema: kiểu chặt (Pydantic `strict=True` hoặc `StrictFloat` cho trường vật lý, để `"1e-3"` dạng chuỗi bị từ chối thay vì bị ép), khoảng hợp lệ (`timestep_s > 0`, ma sát ≥ 0), `schema_version` bắt buộc. Tách **validate theo schema** (kiểu, khoảng) khỏi **validate theo vật lý** (vật không lồng nhau lúc đầu, vật nằm trên bàn) (→ F3.7).
-2. **Viết loader**: đọc file → validate → cấu hình hiệu lực → dựng env (với LIBERO/robosuite: tham số khởi tạo env + chỉnh model qua `MjSpec` nếu bạn tự dựng MJCF, hoặc ghi vào `env.sim.model` sau `reset()` nếu đi qua wrapper; kiểm theo phiên bản bạn cài [tự đo]). **Không** cho phép tham số nào đi vòng qua loader, và **chứng minh** điều đó: sau khi env dựng xong, loader đọc ngược các trường từ model đã biên dịch (`m.opt.timestep`, `m.opt.iterations`, `m.geom_friction[id]`…), so với cấu hình hiệu lực, raise nếu lệch; rồi ghi `model_fingerprint` (hash các mảng `opt`, `geom_friction`, `body_mass`, `geom_size`, `dof_damping` tối thiểu).
-3. **Chuyển ≥5 task LIBERO thành file kịch bản** (bản gốc). Chọn 5 task trải hai nhóm: ít nhất 2 task gắp-thả (LIBERO-Object) và ít nhất 2 task có tiếp xúc khớp (mở ngăn kéo, đóng tủ trong LIBERO-Goal hoặc LIBERO-10). Tên task lấy đúng từ `libero_suite_task_map.py` (ví dụ `pick_up_the_alphabet_soup_and_place_it_in_the_basket`, không phải tên rút gọn trong mẫu YAML của bản gốc).
+1. **Thiết kế schema kịch bản** (bản gốc: JSON Schema hoặc Pydantic), từ mẫu YAML của bản gốc, sửa:
+   - `initial_state` cho task LIBERO: `{init_states_file, init_states_sha256, index}` thay `object_pose` (LIBERO đặt vật bằng vector trạng thái đầy đủ). Giữ `object_pose` cho task robosuite tự viết.
+   - `physics.friction`: **danh sách ghi đè theo geom** (`{geom: "table_collision", friction: [1.0, 0.005, 0.0001]}`) thay bộ ba toàn cục; MuJoCo không có "ma sát của cảnh".
+   - `solver_iterations` ánh xạ vào `iterations` của `<option>`, ghi rõ trong loader. Đơn vị trong tên trường (`timestep_s`, `hold_s`), SI theo `CONVENTIONS.md`.
+   - Kiểu chặt (`StrictFloat` hoặc `strict=True`, để `"1e-3"` dạng chuỗi bị từ chối), khoảng hợp lệ, `schema_version` bắt buộc. Tách **validate theo schema** khỏi **validate theo vật lý** (vật không lồng nhau, nằm trên bàn) (→ F3.7).
+2. **Viết loader**: đọc → validate → cấu hình hiệu lực → dựng env (`MjSpec` nếu tự dựng MJCF, hoặc ghi `env.sim.model` sau `reset()` nếu qua wrapper [tự đo theo phiên bản]). **Không** tham số nào đi vòng, và **chứng minh**: sau khi dựng, đọc ngược từ model đã biên dịch (`m.opt.timestep`, `m.opt.iterations`, `m.geom_friction[id]`…), raise nếu lệch cấu hình hiệu lực; ghi `model_fingerprint` (tối thiểu hash `opt`, `geom_friction`, `body_mass`, `geom_size`, `dof_damping`).
+3. **Chuyển ≥5 task LIBERO thành file kịch bản** (bản gốc): ≥2 gắp-thả (LIBERO-Object), ≥2 có khớp (ngăn kéo, tủ; LIBERO-Goal/10). Tên task lấy đúng từ `libero_suite_task_map.py` (`pick_up_the_alphabet_soup_and_place_it_in_the_basket`, không phải tên rút gọn của bản gốc).
 4. **Test hash chuẩn hóa** (bản gốc): hai kịch bản cùng nội dung, khác thứ tự trường → cùng hash. Thêm ba ca từ phần 5: file có `1e-3` phải bị **từ chối** ở validate (không lặng lẽ thành chuỗi); `friction: 1` và `friction: 1.0` cho cùng hash **sau** ép kiểu schema; comment và trường `description` không vào hash.
-5. **Version schema từ v1, test backward compatibility** (bản gốc, như K2 Bài 6): loader v2 đọc file v1. Bổ sung quy tắc: mọi trường mới ở v2 phải có default **bằng đúng giá trị mà loader v1 đã ngầm dùng** (đọc từ model đã biên dịch ở v1, không đọc từ docs), và test "v1 qua loader v1" vs "v1 qua loader v2" so `model_fingerprint`, không chỉ so "không crash".
+5. **Version schema từ v1, test backward compatibility** (bản gốc, như K2 Bài 6): loader v2 đọc file v1. Default của trường mới ở v2 = **giá trị loader v1 đã ngầm dùng** (đọc từ model đã biên dịch, không từ docs); test so `model_fingerprint` của v1/v1 với v1/v2, không chỉ "không crash".
 6. **Grep hằng số hardcode** (bản gốc, Số phải ra): `grep -rnE "timestep|iterations|friction|0\.002|qpos\[|set_init_state" src/` ngoài thư mục loader. Mỗi kết quả: hoặc chuyển vào kịch bản, hoặc ghi vào `decisions.md` vì sao nó thuộc code (ví dụ hằng số toán học).
 7. **Chạy cặp test độ nhạy**: (a) đổi một trường vật lý → `model_fingerprint` phải đổi; (b) đổi trường mô tả → cả `scenario_hash` lẫn quỹ đạo không đổi (bit-exact theo cam kết Bài 1); (c) với 5 task, đổi từng trường vật lý một lượng nhỏ và ghi quỹ đạo có đổi không. Kết quả (c) là **bảng độ nhạy**, không phải PASS/FAIL.
 
-Sai số của dụng cụ đo: hash là phép đo nhị phân, không có sai số, nhưng có **độ phân giải** do bạn chọn. Hash quỹ đạo theo bit đúng ở tầng bit-exact (Bài 1); ở tầng "khác máy" phải so bằng dung sai đã cam kết, không so hash.
+Sai số dụng cụ đo: hash là phép đo nhị phân có **độ phân giải** do bạn chọn; hash quỹ đạo chỉ dùng ở tầng bit-exact (Bài 1), khác máy thì so bằng dung sai đã cam kết.
 
 ### 7. Số phải ra
 
@@ -211,7 +209,7 @@ Sai số của dụng cụ đo: hash là phép đo nhị phân, không có sai s
 | 2 | `1e-3` → `'1e-3'` (**str**); `1.0e-3` → `0.001` (float); `012` → `10` (int, **bát phân**); `1:30` → `90` (int, **cơ số 60**); `no` → `False`; `1` (int) và `1.0` (float) cho **hai hash khác** |
 | 3 | hash nguồn = hash sau loader v1; hash sau loader v2 **khác** |
 
-Mục 2 là lý do phải **validate kiểu chặt trước khi hash**: không có schema, `timestep: 1e-3` đi vào loader dưới dạng chuỗi, và tùy code, hoặc crash ở chỗ xa, hoặc bị `float()` cứu lặng lẽ, trong khi hash vẫn "ổn định". Mục 3 là lý do quyết định "hash trên cấu hình hiệu lực" phải đi kèm `schema_version` trong phần được hash: khi loader đổi mặc định, hash **nên** đổi, vì thứ simulator nhận đã đổi.
+Mục 2: phải **validate kiểu chặt trước khi hash**, nếu không `timestep: 1e-3` vào loader dưới dạng chuỗi, crash ở chỗ xa hoặc được `float()` cứu lặng lẽ, trong khi hash vẫn "ổn định". Mục 3: hash cấu hình hiệu lực phải kèm `schema_version`; loader đổi mặc định thì hash **nên** đổi, vì thứ simulator nhận đã đổi.
 
 **Đoạn code ma sát** (mujoco 3.15.0):
 
@@ -225,7 +223,7 @@ Mục 2 là lý do phải **validate kiểu chặt trước khi hash**: không c
 - x ≈ +0.002 m ở các dòng "đứng yên" là trượt rất chậm do tiếp xúc mềm của MuJoCo, không phải lỗi.
 - `tan 20° ≈ 0.364`: hộp 0.3 trên bàn 0.05 có max = 0.3 < 0.364 nên trượt; hộp 0.5 thì không.
 
-Hệ quả cho dự án: một sweep "ma sát của vật từ 0.1 đến 1.0" trên bàn robosuite mặc định là **sweep phẳng**. Nó cho đường cong success rate nằm ngang, và người đọc báo cáo sẽ kết luận "policy bền với ma sát". Tiêu chí gốc "đổi trường → kết quả đổi" sẽ báo FAIL ở đây, đúng ra phải là: fingerprint đổi (PASS), quỹ đạo không đổi (một **phát hiện** về độ nhạy, ghi lại).
+Hệ quả: sweep "ma sát của vật 0.1→1.0" trên bàn robosuite mặc định là **sweep phẳng**; đường success nằm ngang và người đọc kết luận nhầm "policy bền với ma sát". Tiêu chí gốc sẽ báo FAIL; đúng ra: fingerprint đổi (PASS), quỹ đạo không đổi (một **phát hiện** về độ nhạy).
 
 **Ngưỡng của bản gốc** (giữ, có làm rõ):
 
@@ -235,7 +233,7 @@ Hệ quả cho dự án: một sweep "ma sát của vật từ 0.1 đến 1.0" t
 | Đổi một trường trong kịch bản | Kết quả đổi. Đổi trường không liên quan → kết quả không đổi | Vế 1 kiểm ở `model_fingerprint`; độ nhạy quỹ đạo là bảng đo. Vế 2 kiểm bit-exact |
 | Kịch bản v1 chạy bằng loader v2 | Thành công | Thành công = **cùng `model_fingerprint`** với v1 qua loader v1, không chỉ "không crash" |
 
-**Số hằng số hardcode:** người làm eval lần đầu thường tìm thấy từ vài đến vài chục chỗ [ước lượng: từ kinh nghiệm code eval LIBERO/OpenVLA phổ biến: `max_steps` theo suite, số bước chờ vật rơi đầu episode, kích thước ảnh, `num_steps_wait`]. Không có con số đúng; con số **0 ở lần grep đầu** gần như chắc chắn là grep sai thư mục.
+**Số hằng số hardcode:** lần đầu thường vài đến vài chục chỗ (`max_steps` theo suite, `num_steps_wait`, kích thước ảnh) [ước lượng]. **0 ở lần grep đầu** gần như chắc chắn là grep sai thư mục.
 
 </details>
 
@@ -245,79 +243,71 @@ Hệ quả cho dự án: một sweep "ma sát của vật từ 0.1 đến 1.0" t
 |---|---|---|---|
 | Sửa tham số trong YAML, `model_fingerprint` không đổi | `reset()` của wrapper dựng lại model từ XML gốc sau khi loader đã ghi (Gemini nêu đúng nguyên nhân này) | In `m.opt.timestep` ngay sau loader và ngay sau `reset()` | Áp tham số **sau** `reset()` qua một hook duy nhất, hoặc dựng MJCF đã chỉnh trước khi env biên dịch; kiểm đọc ngược sau mỗi `reset()` |
 | `scenario_hash` giống, `model_fingerprint` khác giữa hai máy | Asset/MJCF của thư viện khác phiên bản, hoặc code ghi đè ngoài loader | Diff `spec.to_xml()` (hoặc `mujoco.mj_saveLastXML`) giữa hai máy | Ghim phiên bản thư viện trong image (Bài 2); thêm hash thư mục asset vào provenance (Bài 7) |
-| Hai file cùng giá trị nhưng hash khác | Hash trước khi ép kiểu (`1` vs `1.0`), YAML đoán kiểu, NaN | In JSON chuẩn hóa của cả hai, `diff` | Hash **sau** `model_dump()` của schema chặt; `allow_nan=False` |
 | Kịch bản v1 qua loader v2 chạy được nhưng kết quả lệch | Default của trường mới khác giá trị loader v1 ngầm dùng | So `model_fingerprint` v1/v1 với v1/v2 | Default của v2 = giá trị đọc từ model v1; ghi vào `decisions.md` |
 | Sweep một tham số cho đường cong phẳng tuyệt đối | Tham số không chạm tới vật lý (luật trộn tham số tiếp xúc, vật không tiếp xúc geom đó, controller bù hết) | `d.contact[i].friction` trong episode; hash quỹ đạo trùng nhau | Sweep tham số **của tiếp xúc** (cả hai geom, hoặc dùng `priority`), hoặc ghi rõ "sweep phẳng" là một kết quả |
 | `timestep: 1e-3` lọt qua validate | Schema không strict, Pydantic ép chuỗi thành float | Test riêng cho file có `1e-3` | `StrictFloat` hoặc `ConfigDict(strict=True)`; hoặc viết số có dấu chấm `1.0e-3` |
-| Init state LIBERO không nạp được với PyTorch mới | `torch.load` đổi mặc định `weights_only` ở các bản gần đây, file `.pruned_init` là pickle | Đọc thông báo lỗi; `torch.__version__` | Nạp bằng `weights_only=False` **chỉ** cho file đã kiểm hash; tốt hơn: chuyển một lần sang `.npy` và ghi hash [tự đo] |
+| Init state LIBERO không nạp được với PyTorch mới | `torch.load` đổi mặc định `weights_only`; `.pruned_init` là pickle | `torch.__version__` | `weights_only=False` **chỉ** cho file đã kiểm hash, hoặc chuyển một lần sang `.npy` có hash [tự đo] |
 
 ### 9. Câu hỏi ngược
 
 1. **[Phản biện]** Bản gốc muốn `success_criteria` là **biểu thức** trong kịch bản. Một hàm Python có tên và version cũng tái lập được. Biểu thức trong dữ liệu mua thêm được gì, và mất gì?
-   <details><summary>Hướng nghĩ</summary>Mua: nằm trong hash của kịch bản (đổi định nghĩa thì đổi danh tính), đọc được không cần mở code, so được giữa hai kịch bản. Mất: cần một trình thông dịch biểu thức (và trình thông dịch đó lại là code có version), khó diễn đạt điều kiện phức tạp. Bài 11 sẽ chọn dạng có kiểu (predicate có cấu trúc) thay vì chuỗi tự do. Hỏi tiếp: `eval()` một chuỗi trong YAML là gì về bảo mật?</details>
+   <details><summary>Hướng nghĩ</summary>Mua: nằm trong hash (đổi định nghĩa thì đổi danh tính), đọc được không cần mở code. Mất: cần trình thông dịch biểu thức (lại là code có version), khó diễn đạt điều kiện phức tạp. Bài 11 chọn predicate có cấu trúc. Hỏi tiếp: `eval()` một chuỗi trong YAML là gì về bảo mật?</details>
 2. **[Nếu…thì]** Nếu `scenario_hash` tính trên cấu hình hiệu lực, thì nâng loader (đổi một default) làm đổi hash của **mọi** kịch bản cũ. Bộ kết quả ba tháng của bạn có còn join được với bộ kịch bản không?
-   <details><summary>Hướng nghĩ</summary>Join theo `scenario_hash` sẽ hụt. Hai lối: giữ cả `source_hash` (file) và `effective_hash` (cấu hình hiệu lực), join lịch sử theo `source_hash` + `schema_version`; hoặc coi việc đổi default là một migration có bảng ánh xạ hash cũ → hash mới. Đây cũng là câu hỏi "đổi thước đo có làm đổi danh tính phép đo không" của Bài 11.</details>
+   <details><summary>Hướng nghĩ</summary>Join theo `scenario_hash` sẽ hụt. Lối ra: giữ cả `source_hash` và `effective_hash`, join lịch sử theo `source_hash` + `schema_version`; hoặc coi đổi default là migration có bảng ánh xạ hash cũ → mới.</details>
 3. **[Quy mô]** 50 task × 50 init state × 20 biến thể vật lý = 50.000 kịch bản. Lưu mỗi kịch bản một file YAML hay lưu "cơ sở + spec biến thiên" rồi sinh khi cần? Cái gì gãy trước ở mỗi cách?
-   <details><summary>Hướng nghĩ</summary>50.000 file: Git chậm, review không đọc nổi, nhưng mỗi kịch bản tự đứng được. Cơ sở + spec: gọn, nhưng danh tính phụ thuộc phiên bản generator (Bài 6). Thường người ta lưu spec + **manifest có hash từng kịch bản con**, sinh lại khi cần và kiểm hash. Gãy trước ở cách một: thao tác người; ở cách hai: tái lập generator.</details>
+   <details><summary>Hướng nghĩ</summary>50.000 file: Git chậm, không review nổi, nhưng mỗi kịch bản tự đứng được. Cơ sở + spec: gọn, nhưng danh tính phụ thuộc phiên bản generator (Bài 6). Thường lưu spec + **manifest có hash từng con**, sinh lại rồi kiểm hash.</details>
 4. **[Failure mode]** Loader của bạn hoàn hảo: không tham số nào đi vòng, đọc ngược khớp, hash ổn định. Kể hai cách kịch bản vẫn **nói dối** về thứ đã chạy.
-   <details><summary>Hướng nghĩ</summary>(a) Kịch bản đúng, model đúng, nhưng tham số không có hiệu lực vật lý (luật trộn, vật không chạm). (b) Asset tham chiếu bằng đường dẫn chứ không bằng hash: mesh đổi nội dung cùng tên. (c) Init state được "làm ổn định" bằng vài trăm bước chờ vật rơi trong code eval: trạng thái thật lúc policy bắt đầu không phải trạng thái trong kịch bản. Mỗi cái cần một oracle khác nhau.</details>
-5. **[Liên ngành]** Phòng thí nghiệm hóa sinh ghi *protocol* (quy trình) tách khỏi *lab notebook* (lần chạy). Kịch bản ở đây tương ứng cái nào, và ngành đó đã gặp vấn đề gì mà bạn sắp gặp?
-   <details><summary>Hướng nghĩ</summary>Kịch bản là protocol; run + provenance là notebook. Ngành đó khổ vì protocol viết bằng lời ("ủ ở nhiệt độ phòng"), và "nhiệt độ phòng" là một default ngầm khác nhau giữa các phòng thí nghiệm. Đó chính là default ngầm của MJCF.</details>
+   <details><summary>Hướng nghĩ</summary>(a) Tham số không có hiệu lực vật lý (luật trộn, vật không chạm). (b) Asset tham chiếu bằng đường dẫn, không bằng hash. (c) Code eval chờ vài trăm bước cho vật rơi ổn định: trạng thái lúc policy bắt đầu không phải trạng thái trong kịch bản.</details>
 
 ### 10. Liên kết ra ngoài
 
-- **Lái xe tự hành: ASAM OpenSCENARIO và Scenic.** Ngành xe tự hành đi đúng con đường này sớm hơn robot manipulation: OpenSCENARIO là chuẩn trao đổi kịch bản lái (tác nhân, quỹ đạo, điều kiện kích hoạt) giữa các simulator; Scenic (Fremont và cộng sự, PLDI 2019) là ngôn ngữ xác suất để mô tả **phân bố** kịch bản [chuẩn]. Giống: kịch bản là dữ liệu có schema, tách khỏi simulator. Khác: ở đó kịch bản chủ yếu là **hành vi tác nhân khác** (xe khác, người đi bộ); ở bạn là **tham số vật lý của tiếp xúc**, nơi độ nhạy rất không đều.
-- **Build system: Bazel / Nix.** Hai hệ này gọi một bước build bằng hash của **mọi** đầu vào khai báo, và từ chối đầu vào không khai báo (sandbox). Giống: `scenario_hash` + loader là cổng duy nhất. Khác: Bazel kiểm được bằng sandbox hệ điều hành rằng không có đầu vào ẩn; bạn không sandbox được MJCF bên trong thư viện, nên phải kiểm **ở hạ nguồn** bằng `model_fingerprint`.
-- **Hóa học tính toán.** Một phép tính lượng tử ghi "phương pháp/bộ cơ sở" (ví dụ B3LYP/6-31G*) như một phần của kết quả, vì cùng phân tử, khác bộ cơ sở là khác con số. Giống: `timestep`, `iterations`, `cone` là "bộ cơ sở" của bạn. Khác: ngành đó có danh mục tên chuẩn cho tổ hợp; bạn phải tự tạo danh tính bằng hash.
+- **Xe tự hành: ASAM OpenSCENARIO và Scenic.** OpenSCENARIO là chuẩn trao đổi kịch bản lái giữa các simulator; Scenic (Fremont và cộng sự, PLDI 2019) là ngôn ngữ xác suất mô tả **phân bố** kịch bản [chuẩn]. Giống: kịch bản là dữ liệu có schema, tách khỏi simulator. Khác: ở đó kịch bản chủ yếu là **hành vi tác nhân khác**; ở bạn là **tham số vật lý của tiếp xúc**, nơi độ nhạy rất không đều.
+- **Build system: Bazel / Nix.** Một bước build được gọi bằng hash của **mọi** đầu vào khai báo; đầu vào không khai báo bị sandbox chặn. Giống: `scenario_hash` + loader là cổng duy nhất. Khác: bạn không sandbox được MJCF bên trong thư viện, nên phải kiểm **ở hạ nguồn** bằng `model_fingerprint`.
 
 ### 11. Độ tin cậy và sửa lỗi
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| MuJoCo trộn ma sát hai geom cùng `priority` bằng max từng phần tử | [spec] + [đã chạy] | MuJoCo docs, Modeling → Contact parameters; đã thấy `d.contact.friction = [0.9 …]` khi sàn 0.3, hộp 0.9 (mujoco 3.15.0) |
-| Mặc định `<option>`: `timestep=0.002`, `iterations=100`, `solver=Newton`, `cone=pyramidal` | [spec] + [đã chạy] | Đọc từ `MjModel` rỗng trên mujoco 3.15.0; kiểm lại trên bản bạn cài |
-| `TableArena` robosuite mặc định `table_friction=(1, 0.005, 0.0001)` | [spec] | Source robosuite tag v1.4.0 |
-| LIBERO nạp init state từ `.pruned_init` bằng `torch.load` | [spec] | `libero/libero/benchmark/__init__.py`, nhánh master 10/2026 |
-| PyYAML (YAML 1.1): `1e-3` là chuỗi, `012` bát phân, `1:30` cơ số 60 | [đã chạy] | PyYAML 6.0.1 |
-| `MjSpec` có từ MuJoCo 3.2 | [tự đo] | Có trên 3.15.0 (đã chạy); mốc phiên bản xuất hiện kiểm trong changelog |
-| `torch.load` đổi mặc định `weights_only` | [tự đo] | Kiểm trên phiên bản PyTorch trong image của bạn |
-| Knight Capital: ~460 triệu USD, ~45 phút, cờ dùng lại kích hoạt Power Peg | [chuẩn] | Lệnh xử phạt SEC 10/2013 (Release No. 70694) |
+| MuJoCo trộn ma sát hai geom cùng `priority` bằng max từng phần tử | [spec] + [đã chạy] | Docs *Contact parameters*; `d.contact.friction` trên mujoco 3.15.0 |
+| Mặc định `<option>`: `timestep=0.002`, `iterations=100`, Newton, pyramidal | [spec] + [đã chạy] | `MjModel` rỗng, mujoco 3.15.0 |
+| `TableArena` robosuite `table_friction=(1, 0.005, 0.0001)` | [spec] | robosuite tag v1.4.0 |
+| LIBERO nạp `.pruned_init` bằng `torch.load`; `torch.load` đổi mặc định `weights_only` | [spec] / [tự đo] | `libero/libero/benchmark/__init__.py`; kiểm bản PyTorch trong image |
+| PyYAML (YAML 1.1) đoán kiểu ở mục 2 | [đã chạy] | PyYAML 6.0 |
+| `MjSpec` có từ MuJoCo 3.2 | [tự đo] | Có trên 3.15.0; mốc kiểm trong changelog |
+| Knight Capital: ~460 triệu USD, ~45 phút, cờ dùng lại kích hoạt Power Peg | [chuẩn] | SEC Release No. 70694 (10/2013) |
 
 **Đã sửa so với bản gốc/Gemini:**
-- Bản gốc: `physics.friction` là một bộ ba toàn cục. MuJoCo không có ma sát toàn cục; ma sát thuộc từng geom và được trộn theo cặp (max). Sửa thành danh sách ghi đè theo geom; Bài 6 phải sweep ma sát **của tiếp xúc**.
-- Bản gốc: "đổi một trường → kết quả đổi". Sai với hệ có vùng phẳng (đã chạy phản ví dụ). Sửa: kiểm ở `model_fingerprint`; độ nhạy quỹ đạo là bảng đo.
-- Bản gốc: "v1 chạy bằng loader v2 → thành công". Thêm điều kiện: cùng `model_fingerprint`, vì default của trường mới là giá trị vật lý.
-- Bản gốc và Gemini: `initial_state.object_pose` cho task LIBERO. LIBERO dùng vector trạng thái đầy đủ từ `.pruned_init`; sửa thành tham chiếu file + hash + chỉ số. Tên task trong mẫu (`pick_up_the_alphabet_soup`) là tên rút gọn; tên thật có đuôi `_and_place_it_in_the_basket`.
-- Gemini: hash chuẩn hóa bằng `json.dumps(sort_keys=True)` được trình bày như đủ. Thiếu: ép kiểu trước khi hash, NaN, và quyết định hash nguồn hay hiệu lực.
-- Gemini: code Pydantic dùng `Any` mà không import (`NameError` khi chạy). Gemini: "loader phải raise nếu code ghi đè `model.opt.timestep`": loader không thấy được ghi đè xảy ra sau nó; sửa thành đọc ngược và so sau mỗi `reset()`.
-- Gemini dùng `solver_type: "PGS"`, `cone: "elliptic"` trong mẫu mà không nói đó không phải mặc định (mặc định là Newton, pyramidal). Kịch bản ghi giá trị khác mặc định thì phải có lý do trong `decisions.md`.
+- Bản gốc: `physics.friction` toàn cục → ghi đè theo geom (ma sát thuộc từng geom, trộn theo cặp).
+- Bản gốc: "đổi một trường → kết quả đổi" sai với hệ có vùng phẳng (đã chạy phản ví dụ) → kiểm ở `model_fingerprint`; độ nhạy quỹ đạo là bảng đo.
+- Bản gốc: "v1 qua loader v2 → thành công" → thêm điều kiện cùng `model_fingerprint`.
+- Bản gốc/Gemini: `object_pose` cho LIBERO → tham chiếu `.pruned_init` + hash + chỉ số; tên task rút gọn → tên thật.
+- Gemini: `json.dumps(sort_keys=True)` là đủ → thiếu ép kiểu, NaN, quyết định nguồn/hiệu lực. Pydantic dùng `Any` không import (`NameError`). "Loader raise khi code ghi đè" → loader không thấy ghi đè sau nó; đọc ngược sau mỗi `reset()`.
+- Gemini dùng `solver_type: "PGS"`, `cone: "elliptic"` mà không nói đó không phải mặc định (Newton, pyramidal).
 
 ### 12. Đọc thêm và tự kiểm tra
 
 - **Nguồn gốc:** MuJoCo docs, mục *Modeling → Contact parameters* và *XML Reference → option, geom*; mục *Python bindings → MjSpec* (đọc bản khớp phiên bản cài).
 - **Giải thích:** RFC 8785, *JSON Canonicalization Scheme* (Rundgren, Jordan, Erdtman, 2020): đọc phần lý do, nó liệt kê đúng các bẫy số thực và thứ tự.
 - **Đào sâu (tùy chọn):** Fremont và cộng sự, *Scenic: A Language for Scenario Specification and Scene Generation*, PLDI 2019.
-- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao kịch bản cần **hai** hash; (2) vẽ lại sơ đồ phần 2, đánh dấu chỗ nào một tham số có thể đi vòng; (3) hai câu dưới.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao kịch bản cần **hai** hash; (2) vẽ lại sơ đồ phần 2, đánh dấu chỗ nào một tham số có thể đi vòng; (3) câu dưới.
 
 **Câu 1.** Đồng nghiệp sweep `friction` của vật từ 0.2 đến 1.2 trên bàn robosuite mặc định, success rate phẳng ở 78%. Họ viết: "policy bền với ma sát". Bạn hỏi gì?
 <details><summary>Đáp án</summary>Ma sát của tiếp xúc vật–bàn là max(vật, bàn) = max(f, 1.0), nên mọi điểm f ≤ 1.0 là cùng một bài toán; chỉ điểm 1.2 khác. Hỏi: ma sát bàn bao nhiêu, `priority` có đặt không, `d.contact.friction` thực tế trong episode là bao nhiêu. Còn tiếp xúc vật–ngón kẹp thì ma sát của ngón cũng tham gia max. Kết luận "bền" chưa có căn cứ.</details>
 
-**Câu 2.** Vì sao `scenario_hash` giống nhau chưa đủ để nói hai run đã chạy cùng thế giới?
-<details><summary>Đáp án</summary>Kịch bản chỉ ghi đè một phần model; phần còn lại đến từ MJCF/asset của thư viện và từ code. Hai máy có thư viện khác phiên bản, hoặc code ghi đè ngoài loader, cho model khác dù kịch bản giống. Cần `model_fingerprint` (hạ nguồn) và hash asset trong provenance (Bài 7).</details>
 
 ---
 
 ## Bài 6 — Sinh kịch bản có hệ thống (6h)
 
-> **Vị trí:** Bài 5 (kịch bản là artifact) → **Bài 6** → Bài 7 (provenance) · **Cần trước:** F6.6 (sensitivity analysis, Monte Carlo), F2.4 (property-based, metamorphic), F2.2 (seed), F3.8 (lineage, hash nội dung), F1.4 (khoảng tin cậy cho tỉ lệ); K6 Bài 1 (common random numbers), K6 Bài 3 (seed dẫn xuất bằng `SeedSequence`) · **Sau bài này bạn quyết định được:** với một câu hỏi cụ thể ("tham số này ảnh hưởng thế nào", "có tổ hợp nào làm hỏng không", "policy bền đến đâu khi triển khai"), dùng bộ sinh nào (lưới, pairwise, Latin hypercube, ngẫu nhiên theo phân bố), bao nhiêu điểm, seed dẫn xuất theo khóa gì, và artifact nào là nguồn sự thật: generator hay bộ kịch bản đã sinh.
+> **Vị trí:** Bài 5 (kịch bản là artifact) → **Bài 6** → Bài 7 (provenance) · **Cần trước:** F6.6 (sensitivity analysis, Monte Carlo), F2.4 (property-based, metamorphic), F2.2 (seed), F3.8 (lineage, hash nội dung), F1.4 (khoảng tin cậy cho tỉ lệ); K6 Bài 1 (common random numbers), K6 Bài 3 (seed dẫn xuất bằng `SeedSequence`) · **Sau bài này bạn quyết định được:** với một câu hỏi cụ thể, dùng bộ sinh nào (lưới, pairwise, Latin hypercube, ngẫu nhiên theo phân bố), bao nhiêu điểm, seed dẫn xuất theo khóa gì, và nguồn sự thật là generator hay bộ kịch bản đã sinh.
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
-**Los Alamos, cuối thập niên 1970.** Các mô hình máy tính về an toàn lò phản ứng có hàng chục tham số đầu vào bất định, mỗi lần chạy đắt. Lấy mẫu ngẫu nhiên thuần cần rất nhiều lần chạy mới phủ đều được từng tham số; lưới đầy đủ thì bùng nổ theo số chiều. McKay, Beckman và Conover (*Technometrics*, 1979) so ba cách chọn đầu vào và đề xuất **Latin hypercube sampling**: chia dải mỗi tham số thành N khoảng bằng xác suất, mỗi khoảng lấy đúng một lần, ghép các chiều theo hoán vị ngẫu nhiên [chuẩn]. Với cùng ngân sách N lần chạy, mỗi tham số được phủ đều trên toàn dải, và ước lượng trung bình của đầu ra thường có phương sai nhỏ hơn lấy mẫu ngẫu nhiên.
+**Los Alamos, cuối thập niên 1970.** Mô hình an toàn lò phản ứng có hàng chục tham số bất định, mỗi lần chạy đắt. Ngẫu nhiên thuần cần rất nhiều lần chạy mới phủ đều từng tham số; lưới đầy đủ bùng nổ theo số chiều. McKay, Beckman và Conover (*Technometrics*, 1979) đề xuất **Latin hypercube sampling**: chia dải mỗi tham số thành N khoảng bằng xác suất, mỗi khoảng lấy đúng một lần, ghép các chiều bằng hoán vị ngẫu nhiên [chuẩn]. Cùng N lần chạy, mỗi tham số được phủ đều trên toàn dải.
 
-**NIST, 2004.** Kuhn, Wallace và Gallo (*IEEE TSE*, 2004) xem lại báo cáo lỗi của nhiều loại phần mềm (thiết bị y tế, trình duyệt, máy chủ) và đếm mỗi lỗi cần **bao nhiêu điều kiện đồng thời** để xuất hiện. Phần lớn lỗi do một hoặc hai tham số gây ra, số lỗi cần ba, bốn, năm tham số giảm dần, và trong dữ liệu của họ không lỗi nào cần quá sáu [chuẩn: NIST, *Combinatorial Methods in Testing*]. Hệ quả: phủ **mọi cặp** giá trị (pairwise) với vài chục test bắt được phần lớn lỗi mà phủ toàn tổ hợp cần hàng trăm hay hàng nghìn test.
+**NIST, 2004.** Kuhn, Wallace và Gallo (*IEEE TSE*, 2004) đếm mỗi lỗi trong báo cáo lỗi của nhiều loại phần mềm cần **bao nhiêu điều kiện đồng thời** để xuất hiện: phần lớn do một hoặc hai tham số, số lỗi giảm dần đến ba–sáu, không lỗi nào trong dữ liệu của họ cần quá sáu [chuẩn: NIST, *Combinatorial Methods in Testing*]. Hệ quả: phủ **mọi cặp** giá trị (pairwise) bằng vài chục test bắt phần lớn lỗi mà toàn tổ hợp cần hàng nghìn test.
 
-Hai câu chuyện trả lời hai câu khác nhau, và đó là chỗ bản gốc nói đúng nhất: "đừng trộn". Khi bạn có 500 kịch bản, câu hỏi không còn là "viết tay hay sinh tự động" mà là **chọn 500 điểm nào trong không gian vô hạn**, và cách chọn quyết định con số cuối cùng có nghĩa gì.
+Hai câu chuyện trả lời hai câu khác nhau, và đó là chỗ bản gốc nói đúng nhất: "đừng trộn". Với 500 kịch bản, câu hỏi là **chọn 500 điểm nào trong không gian vô hạn**, và cách chọn quyết định con số cuối có nghĩa gì.
 
 ### 2. Mô hình tư duy
 
@@ -331,10 +321,10 @@ Hai câu chuyện trả lời hai câu khác nhau, và đó là chỗ bản gố
 | "Policy có bền khi triển khai không?" | `E[thành công]` dưới **phân bố triển khai** | **Ngẫu nhiên theo phân bố đó**, có seed | Theo power analysis (Bài 12) | Một tỉ lệ có khoảng tin cậy |
 
 Bốn ý bản chất:
-1. **Sweep và randomization khác nhau ở estimand, không ở chuyện "có ngẫu nhiên hay không".** Trung bình trên một lưới cho mọi điểm trọng số bằng nhau, kể cả các góc hiếm khi gặp ngoài đời. Nó không phải ước lượng của tỉ lệ thành công khi triển khai.
-2. **Ngẫu nhiên thuần phủ kém hơn bạn nghĩ ở chiều thấp.** 25 điểm ngẫu nhiên trong 4 chiều để trống nhiều ô trong mỗi mặt chiếu hai chiều. Lỗi tương tác ("ma sát thấp **và** vật nặng") nằm đúng trong những ô đó.
-3. **Generator là công thức, bộ kịch bản đã sinh là sản phẩm.** Giống Dockerfile và image digest ở Bài 2: sinh lại từ công thức chỉ ra cùng bộ khi mọi thứ trong công thức được ghim (phiên bản numpy/scipy, thuật toán). Nguồn sự thật là **manifest có hash từng kịch bản con**.
-4. **Seed là một phần của thiết kế thí nghiệm.** Seed dẫn xuất theo **vị trí** trong danh sách vỡ khi chèn một điểm; seed dẫn xuất theo **danh tính** thì ổn định. Seed **dùng chung dọc trục sweep** (common random numbers, Bài 1) làm đường cong mượt hơn với cùng n.
+1. **Sweep và randomization khác nhau ở estimand**, không ở chuyện "có ngẫu nhiên không". Trung bình trên lưới cho mọi điểm trọng số bằng nhau, kể cả góc hiếm gặp ngoài đời; nó không ước lượng tỉ lệ thành công khi triển khai.
+2. **Ngẫu nhiên thuần phủ kém ở ngân sách nhỏ**: 25 điểm trong 4 chiều để trống nhiều ô của mỗi mặt chiếu 2-D, đúng nơi lỗi tương tác ("ma sát thấp **và** vật nặng") nằm.
+3. **Generator là công thức, bộ kịch bản là sản phẩm** (như Dockerfile và image digest, Bài 2). Nguồn sự thật là **manifest có hash từng kịch bản con**.
+4. **Seed là một phần của thiết kế.** Dẫn xuất theo **vị trí** vỡ khi chèn điểm; theo **danh tính** thì ổn định. Seed **chung dọc trục sweep** (CRN, Bài 1) làm đường cong mượt hơn ở cùng n.
 
 ```mermaid
 flowchart LR
@@ -474,17 +464,16 @@ print("cộng dồn 0.1:", drift[2], "| từ chỉ số:", old[2], "| linspace:"
 
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
-| Server mock sinh bộ test chuẩn của bạn (fixture + data generator) | Generator kịch bản | Bộ test backend hỏi "có lỗi không" (tồn tại). Bộ kịch bản ở đây thường hỏi "tỉ lệ bao nhiêu" (ước lượng). Bộ sinh tốt cho câu thứ nhất (pairwise, nhắm góc khó) **làm méo** câu thứ hai | Bạn lấy bộ kịch bản "khó" dùng để săn lỗi rồi báo success rate của nó như thể là độ bền khi triển khai |
-| Pairwise / all-pairs testing cho ma trận trình duyệt × OS × ngôn ngữ | Covering array cho vật × ma sát × ánh sáng | Ở web, một tổ hợp hoặc lỗi hoặc không (tất định). Ở đây mỗi tổ hợp cho một **tỉ lệ**; một ô pairwise chạy 1 episode không nói được tổ hợp đó hỏng hay chỉ xui | Một tổ hợp thất bại 1/1 bị gắn nhãn "lỗi tương tác", thật ra tỉ lệ thành công ở đó là 70% |
-| Grid search vs random search siêu tham số (Bergstra & Bengio 2012) | Lưới vs LHS/ngẫu nhiên cho tham số vật lý | Tìm siêu tham số hỏi **điểm tốt nhất**; eval hỏi **phủ và ước lượng**. Lập luận "random thắng grid vì ít chiều quan trọng" vẫn đúng, nhưng mục tiêu khác | Bạn tối ưu kịch bản theo kiểu tìm điểm (adaptive), rồi dùng các điểm đó để ước lượng tỉ lệ: ước lượng lệch |
-| ID tự tăng / offset Kafka làm khóa | Seed dẫn xuất theo chỉ số episode | Offset ổn định vì log chỉ **nối thêm**. Danh sách kịch bản thì bị **chèn giữa** (thêm một điểm sweep) | Chèn một điểm, mọi seed sau nó đổi, so sánh theo cặp với run cũ (Bài 13) mất ghép cặp |
-| Lockfile cho dependency | Manifest của bộ kịch bản (`set_hash`) | Lockfile ghim **tên + phiên bản**, nội dung lấy từ registry. Manifest phải ghim **nội dung** (hash từng con), vì không có registry nào giữ kịch bản của bạn | Bạn lưu spec + seed và tin "sinh lại là ra", nâng numpy, `Generator` đổi thuật toán một phân bố, bộ kịch bản đổi im lặng |
+| Server mock sinh bộ test chuẩn của bạn | Generator kịch bản | Test backend hỏi "có lỗi không" (tồn tại); bộ kịch bản thường hỏi "tỉ lệ bao nhiêu" (ước lượng). Bộ sinh tốt cho câu một (nhắm góc khó) **làm méo** câu hai | Báo success rate của bộ "săn lỗi" như độ bền khi triển khai |
+| Pairwise testing ma trận trình duyệt × OS | Covering array cho vật × ma sát × ánh sáng | Ở web một tổ hợp lỗi hay không (tất định); ở đây mỗi tổ hợp là một **tỉ lệ**, 1 episode không phân biệt hỏng với xui | Tổ hợp thất bại 1/1 bị gắn "lỗi tương tác" trong khi tỉ lệ thật là 70% |
+| ID tự tăng / offset Kafka làm khóa | Seed dẫn xuất theo chỉ số | Offset ổn định vì log chỉ **nối thêm**; danh sách kịch bản bị **chèn giữa** | Chèn một điểm, mọi seed sau nó đổi, mất ghép cặp với run cũ (Bài 13) |
+| Lockfile cho dependency | Manifest bộ kịch bản (`set_hash`) | Lockfile ghim **tên + phiên bản**, nội dung lấy từ registry; không registry nào giữ kịch bản của bạn, nên manifest phải ghim **nội dung** | Lưu spec + seed, nâng numpy, bộ kịch bản đổi im lặng |
 
 **Chấm mô hình:**
 
-1. *"Tuyệt đối không được trộn sweep và randomization: nếu vừa đổi ma sát ngẫu nhiên vừa đổi vị trí ngẫu nhiên, khi tỉ lệ giảm bạn bất lực trong việc xác định nguyên nhân."* (Gemini K6 lượt 6) — **ĐÚNG MỘT PHẦN.** Đúng là đừng trộn **estimand**: đừng báo trung bình của bộ sweep như độ bền triển khai, và ngược lại. Sai ở lý do: nếu mỗi kịch bản con ghi `variation_params` (lineage, chính bước 2 của bài), thì từ một bộ ngẫu nhiên nhiều chiều bạn **vẫn** tách được ảnh hưởng từng tham số bằng hồi quy logistic hay chỉ số độ nhạy; đó chính là cách phân tích độ nhạy toàn cục làm (→ F6.6). Phản ví dụ: 200 kịch bản ngẫu nhiên đồng thời ma sát và vị trí, ghi tham số; hồi quy thành công theo hai tham số cho hệ số của ma sát rõ ràng và hệ số vị trí gần 0. Chỗ thật sự "bất lực" là khi tham số **không được ghi**, hoặc hai tham số **tương quan** trong thiết kế (ví dụ vật nặng luôn đi với ma sát thấp).
-2. *"Sweep: lưới hoặc Latin hypercube."* (bản gốc, bảng Khái niệm; Gemini xếp LHS vào "quét xác định") — **ĐÚNG MỘT PHẦN.** LHS phủ đều **từng chiều một** và có thể thay lưới khi số chiều lớn. Nhưng LHS là thiết kế **ngẫu nhiên** (có seed, mỗi lần sinh khác nhau), và LHS thường (strength 1) **không** đảm bảo phủ các ô hai chiều. Phản ví dụ: mô phỏng 1, so dòng LHS strength 1 với dòng strength 2 (phần 7).
-3. *"Muốn phủ thì random cho nhiều là được."* — **SAI ở ngân sách thật.** Với N nhỏ (vài chục kịch bản, vì mỗi kịch bản cần n episode, Bài 12), ngẫu nhiên thuần để trống ô một cách có hệ thống. Phản ví dụ: xác suất 25 điểm ngẫu nhiên **không** điểm nào rơi vào một ô chiếm 4% không gian là `(1 − 0.04)²⁵`; tính ra rồi so với cột "P(chạm góc lỗi)".
+1. *"Tuyệt đối không trộn sweep và randomization: vừa đổi ma sát vừa đổi vị trí ngẫu nhiên thì khi tỉ lệ giảm bạn bất lực trong việc xác định nguyên nhân."* (Gemini K6 lượt 6) — **ĐÚNG MỘT PHẦN.** Đúng: đừng trộn **estimand** (đừng báo trung bình bộ sweep như độ bền triển khai). Sai lý do: nếu mỗi kịch bản con ghi `variation_params` (bước 2), từ bộ ngẫu nhiên nhiều chiều vẫn tách được ảnh hưởng từng tham số bằng hồi quy logistic hay chỉ số độ nhạy (→ F6.6). Phản ví dụ: 200 kịch bản ngẫu nhiên đồng thời ma sát và vị trí, có ghi tham số; hồi quy cho hệ số ma sát rõ, hệ số vị trí gần 0. "Bất lực" thật chỉ khi tham số **không được ghi** hoặc **tương quan** trong thiết kế.
+2. *"Sweep: lưới hoặc Latin hypercube."* (bản gốc; Gemini xếp LHS vào "quét xác định") — **ĐÚNG MỘT PHẦN.** LHS phủ đều **từng chiều**, nhưng là thiết kế **ngẫu nhiên** (có seed), và LHS strength 1 **không** bảo đảm phủ ô hai chiều. Phản ví dụ: mô phỏng 1, dòng strength 1 so với strength 2.
+3. *"Muốn phủ thì random cho nhiều là được."* — **SAI ở ngân sách thật** (vài chục kịch bản, vì mỗi kịch bản cần n episode). Phản ví dụ: xác suất 25 điểm ngẫu nhiên **trượt hết** một ô chiếm 4% không gian là `(1 − 0.04)²⁵`; tính rồi so với mô phỏng 1.
 
 ### 4. Thuật ngữ
 
@@ -499,25 +488,19 @@ print("cộng dồn 0.1:", drift[2], "| từ chỉ số:", old[2], "| linspace:"
 | 🟡 | Latin hypercube (LHS), strength 2 | Mỗi chiều chia N khoảng, mỗi khoảng một điểm; strength 2 thêm: mỗi ô của mọi mặt chiếu 2-D một điểm (dựa trên orthogonal array) | Lưới đều |
 | 🟡 | Discrepancy | Độ lệch của phân bố điểm so với phân bố đều; nhỏ hơn = phủ đều hơn | Phương sai |
 | 🟡 | Seed theo danh tính vs theo vị trí | Khóa dẫn xuất seed là hash/khóa ổn định vs chỉ số trong danh sách | Hai cách viết cùng một thứ |
-| 🔴 | Chỉ số Sobol, Morris screening | Phương pháp độ nhạy toàn cục chuẩn | Thứ phải cài ở khóa này (→ F6.6 nếu muốn) |
-| 🔴 | Falsification / adaptive stress testing | Tìm kịch bản lỗi bằng tối ưu hóa | Thay thế cho thiết kế cố định |
 
 ### 5. Dự đoán
 
 **Đề:**
-1. Mô phỏng 1: điền bảng 4 dòng × 3 cột (P chạm góc lỗi, số ô 2-D trống trên 150, xếp hạng discrepancy) **trước khi chạy**.
-2. Mô phỏng 2: full factorial bao nhiêu kịch bản; pairwise tham lam ra bao nhiêu (và cận dưới lý thuyết là bao nhiêu); tỉ lệ bắt lỗi bậc 2 và bậc 3 của pairwise và của ngẫu nhiên cùng cỡ.
+1. Mô phỏng 1: điền bảng 4 dòng × 3 cột (P chạm góc lỗi, số ô 2-D trống /150, hạng discrepancy) **trước khi chạy**.
+2. Mô phỏng 2: số kịch bản full factorial, pairwise tham lam, cận dưới lý thuyết; tỉ lệ bắt lỗi bậc 2, bậc 3 của pairwise và của ngẫu nhiên cùng cỡ.
 3. Mô phỏng 3: chèn 0.35 vào sweep 10 điểm, bao nhiêu kịch bản cũ đổi seed dưới mỗi cách; ba giá trị ở dòng cuối.
-4. Dự án thật: sweep ma sát 10 điểm (bản gốc) trên task gắp đầu tiên của bạn. Dự đoán dạng đường cong (phẳng / bậc thang / dốc dần) và **vì sao**, dựa trên kết quả Bài 5.
-5. Bộ randomization 100 mẫu: khai báo phân bố cho từng tham số (dải, dạng phân bố) và **căn cứ** của dải đó (đo, datasheet, hay đoán).
+4. Dự án thật: sweep ma sát 10 điểm (bản gốc) trên task gắp đầu tiên. Dạng đường cong (phẳng / bậc thang / dốc dần) và **vì sao**, dựa trên Bài 5.
+5. Bộ randomization 100 mẫu: dải, dạng phân bố từng tham số, và **căn cứ** (đo, datasheet, hay đoán).
 
-**Tham số cần tra:**
-- Ô góc lỗi chiếm `0.2 × 0.2 = 4%` mặt chiếu (ma sát, khối lượng). Xác suất N điểm ngẫu nhiên độc lập trượt hết: `(1 − p)ᴺ`.
-- Cận dưới của pairwise: tổ hợp hai tham số có nhiều mức nhất phải xuất hiện đủ, nên số test ≥ `v₁ · v₂` (hai số mức lớn nhất). Không bộ pairwise nào nhỏ hơn được.
-- scipy docs, `scipy.stats.qmc.LatinHypercube`, tham số `strength` (strength 2 yêu cầu N = p² với p nguyên tố, và d ≤ p + 1) [spec: scipy docs; kiểm theo phiên bản cài].
-- NumPy NEP 19 (*Random number generator policy*): `Generator` có được hứa ra cùng chuỗi số qua các phiên bản không.
+**Tham số cần tra:** ô góc lỗi chiếm `0.2 × 0.2 = 4%` mặt chiếu; xác suất N điểm độc lập trượt hết là `(1 − p)ᴺ`. Cận dưới pairwise: số test ≥ `v₁ · v₂` (hai số mức lớn nhất). scipy docs `qmc.LatinHypercube`, tham số `strength` (strength 2 cần N = p², p nguyên tố, d ≤ p + 1) [spec; kiểm theo phiên bản]. NumPy NEP 19: `Generator` có hứa cùng chuỗi số qua các phiên bản không.
 
-**Phương pháp:** câu 1, tính tay dòng "ngẫu nhiên đều" bằng `1 − (1 − p)ᴺ`; dòng "lưới (x,y)" nghĩ xem ma sát và khối lượng nằm đâu; hai dòng LHS lập luận từ định nghĩa strength. Câu 4: ma sát của tiếp xúc nào đang được sweep (vật–bàn hay vật–ngón kẹp), và luật trộn ở Bài 5.
+**Phương pháp:** câu 1, dòng "ngẫu nhiên" tính tay; dòng "lưới (x,y)" nghĩ xem ma sát và khối lượng nằm đâu; hai dòng LHS lập luận từ định nghĩa strength. Câu 4: tiếp xúc nào đang được sweep (vật–bàn hay vật–ngón) và luật trộn ở Bài 5.
 
 ```markdown
 # prediction.md — K6 Bài 6
@@ -536,19 +519,19 @@ print("cộng dồn 0.1:", drift[2], "| từ chỉ số:", old[2], "| linspace:"
 
 ### 6. Làm
 
-1. **Viết generator** (bản gốc): kịch bản cơ sở + spec biến thiên → N kịch bản con. Spec biến thiên khai báo: `method` (`grid` | `pairwise` | `lhs` | `random`), từng tham số với dải/mức và (nếu random) phân bố, `n`, `seed_root`. Giá trị lưới sinh **từ chỉ số nguyên** (`lo + i·(hi − lo)/(n − 1)`, rồi làm tròn thập phân về độ phân giải khai báo), không cộng dồn float. Cố định thứ tự duyệt tham số theo khóa đã sắp xếp. Ghi `generator_version` và phiên bản numpy/scipy vào manifest.
-2. **Lineage** (bản gốc): mỗi kịch bản con có `parent_scenario_id` và `variation_params`. Bổ sung: `parent_scenario_hash`, `spec_hash`, và `variation_params` ghi **giá trị tuyệt đối sau khi áp** (không ghi "+10%"), để kịch bản con tự đứng được khi cha đổi. Kiểm lineage bằng một **property test**: áp `variation_params` lên cha phải ra đúng con (cùng `scenario_hash`).
+1. **Viết generator** (bản gốc): kịch bản cơ sở + spec biến thiên → N kịch bản con. Spec khai `method` (`grid` | `pairwise` | `lhs` | `random`), dải/mức (và phân bố nếu random), `n`, `seed_root`. Giá trị lưới sinh **từ chỉ số nguyên** (`lo + i·(hi − lo)/(n − 1)`, làm tròn về độ phân giải khai báo), không cộng dồn float; duyệt tham số theo khóa đã sắp xếp; ghi `generator_version` và phiên bản numpy/scipy vào manifest.
+2. **Lineage** (bản gốc: `parent_scenario_id`, `variation_params`). Thêm `parent_scenario_hash`, `spec_hash`; `variation_params` ghi **giá trị tuyệt đối sau khi áp** (không "+10%"). Property test: áp `variation_params` lên cha ra đúng con (cùng `scenario_hash`).
 3. **Sinh 3 bộ** (bản gốc), có sửa:
-   - **Sweep ma sát 10 điểm.** Sweep ma sát **của tiếp xúc** mà bạn quan tâm (vật–bàn: đặt cả hai geom, hoặc dùng `priority` để một geom quyết định; vật–ngón kẹp: ghi rõ). Trước khi chạy, kiểm `d.contact[i].friction` ở một bước có tiếp xúc cho điểm đầu và điểm cuối: phải khác nhau. **Seed ghép cặp dọc trục**: mọi điểm sweep dùng cùng bộ seed episode (khóa dẫn xuất = `parent_scenario_hash` + chỉ số episode, **không** gồm giá trị ma sát), để đường cong là so sánh theo cặp (CRN, Bài 1).
-   - **Sweep vị trí 5×5.** Lưới trên mặt bàn, dải lấy từ vùng đặt vật của task (BDDL của LIBERO khai báo vùng). Kiểm điều kiện vật lý ở Bài 5 cho từng điểm (vật nằm trên bàn, không lồng vào vật khác) **trước** khi tính là kịch bản hợp lệ; điểm bị loại phải được ghi lại, không biến mất im lặng.
-   - **Randomization 100 mẫu.** Phân bố khai báo trong spec, căn cứ ghi ở `decisions.md` (câu 5 phần Dự đoán). Seed theo danh tính: `default_rng([seed_root, H(parent_scenario_hash), sample_index])` cho việc lấy mẫu tham số; seed episode dẫn xuất riêng.
-4. **Lưu bộ kịch bản thành artifact có hash** (bản gốc): manifest = danh sách `scenario_hash` đã sắp xếp + `spec_hash` + `generator_version` + phiên bản numpy/scipy → `set_hash`. Lưu **cả** các file kịch bản con (hoặc giá trị của chúng), không chỉ spec: generator là công thức, manifest là sản phẩm. Kết quả ở Module 3–4 tham chiếu `set_hash`.
-5. **(Thêm, 1–1.5h) So sánh bộ sinh trên dự án thật.** Với 2 tham số liên tục thật (ma sát tiếp xúc, khối lượng vật) và 25 kịch bản: chạy lưới 5×5, LHS strength 1, LHS strength 2, mỗi kịch bản cùng số episode nhỏ (ví dụ 4) với policy rẻ. Vẽ ba bản đồ thành công. Bộ nào cho bạn nhìn ra vùng lỗi rõ nhất với cùng ngân sách?
-6. **(Thêm) Property-based và metamorphic test cho generator và kịch bản** (→ F2.4):
-   - Property: mọi con qua schema và ràng buộc vật lý; mọi giá trị trong dải; không trùng `scenario_hash`; sinh lại → cùng `set_hash`; đổi thứ tự khóa trong spec → cùng `set_hash`; **thêm một điểm** vào sweep → hash các con cũ không đổi, seed các con cũ không đổi. Thư viện Hypothesis sinh spec ngẫu nhiên để thử các tính chất này [tự đo: cài `hypothesis` theo phiên bản của bạn]; vòng lặp tay với 200 spec ngẫu nhiên cũng đủ.
-   - Metamorphic cho **kịch bản** (không biết đáp án đúng, nhưng biết quan hệ): tịnh tiến **cả** vật và robot cùng một vector trên mặt bàn phẳng → tỉ lệ thành công không đổi ngoài nhiễu thống kê (không đòi bit-exact); hoán đổi ma sát hai geom cùng `priority` → quỹ đạo giống từng bit (do luật trộn ở Bài 5). Quan hệ thứ nhất vỡ là dấu hiệu policy dùng tọa độ tuyệt đối hoặc camera cố định thấy cảnh khác; đó là một phát hiện, không phải lỗi test.
+   - **Sweep ma sát 10 điểm**, ma sát **của tiếp xúc** bạn quan tâm (vật–bàn: đặt cả hai geom hoặc dùng `priority`; vật–ngón: ghi rõ). Kiểm `d.contact[i].friction` ở điểm đầu và cuối phải khác nhau. **Seed ghép cặp dọc trục**: khóa dẫn xuất = `parent_scenario_hash` + chỉ số episode, **không** gồm giá trị ma sát (CRN, Bài 1).
+   - **Sweep vị trí 5×5** trong vùng đặt vật của task (BDDL). Kiểm điều kiện vật lý (Bài 5) **trước** khi tính là hợp lệ; điểm bị loại phải được ghi lại.
+   - **Randomization 100 mẫu**, phân bố trong spec, căn cứ trong `decisions.md`. Seed lấy mẫu theo danh tính: `default_rng([seed_root, H(parent_scenario_hash), sample_index])`; seed episode dẫn xuất riêng.
+4. **Lưu bộ kịch bản thành artifact có hash** (bản gốc): manifest = `scenario_hash` đã sắp xếp + `spec_hash` + `generator_version` + phiên bản thư viện → `set_hash`. Lưu **cả** kịch bản con, không chỉ spec. Module 3–4 tham chiếu `set_hash`.
+5. **(Thêm, 1–1.5h) So bộ sinh trên dự án thật.** 2 tham số liên tục (ma sát tiếp xúc, khối lượng), 25 kịch bản: lưới 5×5, LHS strength 1, LHS strength 2, mỗi kịch bản 4 episode với policy rẻ. Vẽ ba bản đồ thành công: bộ nào lộ vùng lỗi rõ nhất?
+6. **(Thêm) Property-based và metamorphic test** (→ F2.4):
+   - Property: mọi con qua schema và ràng buộc vật lý; giá trị trong dải; không trùng `scenario_hash`; sinh lại hoặc đổi thứ tự khóa spec → cùng `set_hash`; **thêm một điểm** → hash và seed các con cũ không đổi. Hypothesis [tự đo theo phiên bản] hoặc vòng lặp tay 200 spec ngẫu nhiên.
+   - Metamorphic cho kịch bản: tịnh tiến **cả** vật và robot cùng vector trên bàn phẳng → tỉ lệ thành công không đổi ngoài nhiễu; hoán đổi ma sát hai geom cùng `priority` → quỹ đạo giống từng bit. Quan hệ thứ nhất vỡ là phát hiện (policy dùng tọa độ tuyệt đối, camera thấy cảnh khác), không phải lỗi test.
 
-Sai số của dụng cụ đo: ở bước 5, mỗi ô 4 episode cho tỉ lệ có khoảng tin cậy rất rộng (→ F1.4: 2/4 có CI 95% Wilson cỡ 0.15–0.85). Bản đồ thành công ở bước này dùng để **nhìn vùng**, không để đọc số từng ô.
+Sai số dụng cụ đo: ở bước 5, 4 episode mỗi ô cho CI rất rộng (2/4: Wilson 95% ≈ 0.15–0.85, → F1.4); bản đồ dùng để **nhìn vùng**, không đọc số từng ô.
 
 ### 7. Số phải ra
 
@@ -563,10 +546,9 @@ Sai số của dụng cụ đo: ở bước 5, mỗi ô 4 episode cho tỉ lệ 
 | LHS strength 1 | ≈ 0.70 | ≈ 44 | 0.010 |
 | LHS strength 2 | **1.00** | **0** | 0.006 |
 
-- Lưới vị trí (đúng bộ 2 của bản gốc) **không bao giờ** chạm lỗi ma sát–khối lượng: nó không đi trên hai trục đó. Không sai, nhưng nó trả lời câu "vị trí ảnh hưởng thế nào", và chỉ câu đó.
-- Ngẫu nhiên: `1 − 0.96²⁵ ≈ 0.64`. Một phần ba số lần, 25 kịch bản ngẫu nhiên bỏ sót hoàn toàn góc lỗi.
-- LHS strength 1 cải thiện ít: nó phủ đều **từng trục**, không phủ **ô hai chiều**.
-- LHS strength 2 (dựng từ orthogonal array, N = 25 = 5², d = 4 ≤ 6) đặt đúng một điểm vào mỗi ô 5×5 của **mọi** cặp trục, nên chạm mọi góc tương tác bậc 2 có kích thước một ô. Đây là bản liên tục của pairwise.
+- Lưới vị trí (bộ 2 của bản gốc) **không bao giờ** chạm lỗi ma sát–khối lượng: nó chỉ trả lời "vị trí ảnh hưởng thế nào".
+- Ngẫu nhiên: `1 − 0.96²⁵ ≈ 0.64`; một phần ba số lần bỏ sót hoàn toàn góc lỗi. LHS strength 1 cải thiện ít: phủ đều **từng trục**, không phủ **ô hai chiều**.
+- LHS strength 2 (orthogonal array, N = 25 = 5², d = 4 ≤ 6) đặt đúng một điểm vào mỗi ô 5×5 của **mọi** cặp trục: bản liên tục của pairwise.
 
 **Mô phỏng 2:**
 
@@ -576,18 +558,18 @@ Sai số của dụng cụ đo: ở bước 5, mỗi ô 4 episode cho tỉ lệ 
 | Pairwise tham lam | **20** (bằng cận dưới 5 × 4) | **100%** | ≈ 42% |
 | Ngẫu nhiên, 20 kịch bản | 20 | ≈ 78% | ≈ 37% |
 
-Pairwise mua được đúng thứ nó hứa (mọi cặp) với 27 lần ít kịch bản hơn, và gần như không hơn ngẫu nhiên ở bậc 3. Muốn bậc 3 phải dùng covering array t = 3 (công cụ như PICT của Microsoft hay ACTS của NIST sinh được), cỡ lớn hơn nhiều. Nhớ: mỗi dòng ở đây là **một kịch bản**, mỗi kịch bản cần nhiều episode để nói "hỏng" hay "xui".
+Pairwise mua đúng thứ nó hứa (mọi cặp) với ít hơn 27 lần kịch bản, và gần như không hơn ngẫu nhiên ở bậc 3; muốn bậc 3 cần covering array t = 3 (PICT, ACTS của NIST), lớn hơn nhiều. Mỗi dòng là **một kịch bản**, vẫn cần nhiều episode để phân biệt "hỏng" với "xui".
 
-**Mô phỏng 3:** seed theo vị trí: 7/10 kịch bản cũ đổi seed (mọi kịch bản sau điểm chèn); theo danh tính: 0/10. Dòng cuối: cộng dồn → `0.30000000000000004`; từ chỉ số + làm tròn → `0.3`; `np.linspace` → `0.30000000000000004`. Hai cách đầu và ba khác nhau ở bit cuối, đủ để `scenario_hash` khác. Không cách nào "sai"; sai là để generator dùng cách này hôm nay, cách khác ngày mai.
+**Mô phỏng 3:** theo vị trí 7/10 kịch bản cũ đổi seed (mọi kịch bản sau điểm chèn); theo danh tính 0/10. Dòng cuối: cộng dồn → `0.30000000000000004`; từ chỉ số + làm tròn → `0.3`; `np.linspace` → `0.30000000000000004`. Khác ở bit cuối là đủ làm `scenario_hash` khác; sai là để generator dùng cách này hôm nay, cách khác ngày mai.
 
 **Ngưỡng của bản gốc** (giữ, có làm rõ):
 
 | Kiểm tra | Kết quả đúng | Làm rõ |
 |---|---|---|
-| Sinh lại cùng spec | Ra **đúng cùng bộ kịch bản**, hash giống hệt | Trong **cùng** image (numpy/scipy ghim). Khác phiên bản numpy: NEP 19 không hứa `Generator` giữ nguyên chuỗi số cho mọi phân bố qua các phiên bản [spec: NumPy NEP 19], nên lấy manifest làm nguồn sự thật, sinh lại chỉ để **kiểm** |
-| Mỗi kịch bản con | Truy ngược được về cha và về spec biến thiên | Kiểm bằng property test "áp `variation_params` lên cha ra đúng con" |
+| Sinh lại cùng spec | Ra **đúng cùng bộ kịch bản**, hash giống hệt | Trong **cùng** image; NEP 19 không hứa `Generator` giữ chuỗi số mọi phân bố qua phiên bản [spec], nên manifest là nguồn sự thật, sinh lại chỉ để **kiểm** |
+| Mỗi kịch bản con | Truy ngược được về cha và spec | Property test "áp `variation_params` lên cha ra đúng con" |
 
-**Sweep ma sát thật (câu 4):** nếu bạn sweep ma sát của vật trên bàn robosuite/LIBERO mà không đổi bàn, đường cong vật–bàn phẳng (Bài 5). Đường cong còn lại phản ánh tiếp xúc **vật–ngón kẹp**, nơi ma sát ngón cũng tham gia luật trộn; thường thấy dạng bậc thang: dưới một ngưỡng vật tuột khỏi tay, trên ngưỡng gần như không đổi [ước lượng: dạng phổ biến với kẹp song song; vị trí ngưỡng phụ thuộc lực kẹp và khối lượng, phải đo].
+**Sweep ma sát thật (câu 4):** sweep ma sát vật trên bàn robosuite/LIBERO mà không đổi bàn thì phần vật–bàn phẳng (Bài 5). Phần còn lại phản ánh tiếp xúc **vật–ngón kẹp**; thường dạng bậc thang: dưới ngưỡng vật tuột, trên ngưỡng gần như không đổi [ước lượng; vị trí ngưỡng phụ thuộc lực kẹp và khối lượng, phải đo].
 
 </details>
 
@@ -595,66 +577,55 @@ Pairwise mua được đúng thứ nó hứa (mọi cặp) với 27 lần ít k�
 
 | Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
 |---|---|---|---|
-| Sinh lại ra `set_hash` khác, cùng máy | Duyệt `set`/`dict` không sắp xếp, cộng dồn float, `default_rng()` không seed ở đâu đó trong generator | Diff hai manifest; tìm con khác đầu tiên | Sắp xếp khóa; sinh từ chỉ số; mọi RNG nhận seed tường minh |
-| Sinh lại khác **chỉ** trên máy CI | numpy/scipy khác phiên bản | So phiên bản trong manifest | Generator chạy trong image ghim; manifest là nguồn sự thật |
-| Sweep ma sát cho đường cong phẳng tuyệt đối | Sweep sai tiếp xúc (luật trộn) | `d.contact[i].friction` ở điểm đầu/cuối | Sweep tham số của tiếp xúc; ghi rõ tiếp xúc nào |
-| Đường cong sweep răng cưa dù n lớn | Mỗi điểm sweep dùng seed độc lập (mất CRN) | Kiểm khóa dẫn xuất seed có chứa giá trị tham số không | Seed episode dẫn xuất từ cha + chỉ số episode, chung cho mọi điểm |
-| Pairwise báo một tổ hợp "lỗi" nhưng chạy lại thì qua | Một episode cho mỗi kịch bản; đó là nhiễu | Chạy lại tổ hợp đó với n = 20 | Pairwise để **tìm ứng viên**; xác nhận bằng n đủ (Bài 12) |
-| Sweep vị trí có ít hơn 25 kịch bản trong kết quả | Điểm bị loại vì vật lý (vật ngoài bàn, lồng nhau) mà không ghi lại | Đếm trong manifest vs trong kết quả | Ghi điểm bị loại kèm lý do; báo cáo "22/25 hợp lệ" |
-| LHS strength 2 báo lỗi | N không phải bình phương số nguyên tố, hoặc d > p + 1 | Đọc thông báo lỗi scipy | Chọn N = 25, 49, 121…; hoặc dùng strength 1 / Sobol |
-| Hai kịch bản con trùng `scenario_hash` | Hai điểm làm tròn về cùng giá trị | Đếm trùng | Tăng độ phân giải làm tròn hoặc giảm số điểm; trùng là lỗi generator, không gộp im lặng |
+| Sinh lại ra `set_hash` khác | Cùng máy: duyệt `set`/`dict` không sắp xếp, cộng dồn float, RNG không seed. Chỉ trên CI: numpy/scipy khác phiên bản | Diff hai manifest; so phiên bản ghi trong manifest | Sắp xếp khóa; sinh từ chỉ số; seed tường minh; generator chạy trong image ghim |
+| Sweep ma sát phẳng tuyệt đối | Sweep sai tiếp xúc (luật trộn) | `d.contact[i].friction` ở điểm đầu/cuối | Sweep tham số của tiếp xúc; ghi rõ tiếp xúc nào |
+| Đường cong sweep răng cưa dù n lớn | Mỗi điểm dùng seed độc lập (mất CRN) | Khóa dẫn xuất seed có chứa giá trị tham số không | Seed episode từ cha + chỉ số episode, chung mọi điểm |
+| Pairwise báo tổ hợp "lỗi", chạy lại thì qua | 1 episode mỗi kịch bản: nhiễu | Chạy lại tổ hợp đó với n = 20 | Pairwise để **tìm ứng viên**, xác nhận bằng n đủ (Bài 12) |
+| Sweep vị trí có ít hơn 25 kết quả | Điểm bị loại vì vật lý mà không ghi lại | Đếm manifest vs kết quả | Ghi điểm bị loại kèm lý do: "22/25 hợp lệ" |
+| LHS strength 2 báo lỗi | N không phải bình phương số nguyên tố, hoặc d > p + 1 | Đọc lỗi scipy | N = 25, 49, 121…; hoặc strength 1 / Sobol |
 
 ### 9. Câu hỏi ngược
 
-1. **[Phản biện]** Một bộ kịch bản tốt để **tìm lỗi** (dồn vào góc khó) và một bộ tốt để **ước lượng tỉ lệ thành công khi triển khai** có thể là cùng một bộ không? Nếu bạn chỉ được chạy một bộ cho release, chọn gì?
-   <details><summary>Hướng nghĩ</summary>Không, vì trọng số khác nhau: bộ săn lỗi phóng đại góc hiếm. Có cách nối: importance sampling (lấy mẫu dồn vào góc khó rồi gắn trọng số theo tỉ lệ xác suất triển khai / xác suất lấy mẫu) cho ước lượng không lệch, đổi lại phương sai. Hỏi tiếp: bạn biết phân bố triển khai đến đâu? Nếu không biết, "tỉ lệ thành công khi triển khai" có nghĩa gì?</details>
-2. **[Quy mô]** 10 tham số rời rạc, mỗi cái 5 mức. Full factorial, pairwise, 3-way cỡ bao nhiêu? Mỗi kịch bản cần 50 episode × 12 s CPU. Bộ nào chạy được trên N100 trong một đêm, bộ nào cần thuê máy (dùng số đo throughput ở Bài 8)?
-   <details><summary>Hướng nghĩ</summary>Full: 5¹⁰ ≈ 9,8 triệu. Pairwise: cỡ vài chục (cận dưới 25; công cụ tốt thường cho vài chục [ước lượng], chạy PICT để biết). 3-way: cỡ vài trăm. Nhân 50 × 12 s rồi chia cho throughput thật của máy bạn. Gãy trước là số episode mỗi kịch bản, không phải số kịch bản.</details>
-3. **[Failure mode]** Generator, manifest, seed đều hoàn hảo. Kể một cách bộ randomization 100 mẫu vẫn cho bạn cảm giác an toàn giả.
-   <details><summary>Hướng nghĩ</summary>Phân bố khai báo không khớp thế giới (dải ma sát đoán, không đo). Hoặc dải quá hẹp nên mọi mẫu nằm trong vùng dễ. Hoặc tham số được randomize không phải tham số gây lỗi thật (ánh sáng, độ trễ camera chưa có trong spec). Bài 14 (domain randomization) và Bài 17 (bảng miền hiệu lực) đối diện chuyện này.</details>
-4. **[Nếu…thì]** Nếu bạn đổi seed episode từ "theo danh tính kịch bản" sang "chung dọc trục sweep", số episode cần để phát hiện một bậc thang trong đường cong ma sát tăng hay giảm? Khi nào lợi thế đó biến mất?
-   <details><summary>Hướng nghĩ</summary>Giảm, vì hai điểm kề nhau thành so sánh theo cặp (Bài 1, McNemar). Lợi thế mất khi đổi ma sát làm quỹ đạo phân kỳ sớm (hỗn loạn tiếp xúc): seed chung không còn giữ hai episode "dính" nhau. Đo được bằng tương quan thành công giữa hai điểm kề trên cùng seed.</details>
-5. **[Liên ngành]** Kỹ nghệ chất lượng sản xuất (Taguchi) dùng orthogonal array để tìm thiết lập máy ít nhạy với nhiễu, từ thập niên 1950–1980. Bài toán của họ giống và khác bạn ở đâu?
-   <details><summary>Hướng nghĩ</summary>Giống: ít thí nghiệm, nhiều yếu tố, mảng trực giao phủ đều cặp. Khác: họ **chọn** thiết lập để tối ưu (thiết kế bền), còn bạn **đo** một policy cố định; và mỗi lần chạy của họ đắt bằng tiền nguyên vật liệu, của bạn rẻ nhưng nhiễu thống kê lớn hơn (tỉ lệ nhị phân).</details>
+1. **[Phản biện]** Bộ tốt để **tìm lỗi** (dồn vào góc khó) và bộ tốt để **ước lượng tỉ lệ thành công khi triển khai** có thể là một không? Chỉ được chạy một bộ cho release thì chọn gì?
+   <details><summary>Hướng nghĩ</summary>Không, vì trọng số khác: bộ săn lỗi phóng đại góc hiếm. Nối được bằng importance sampling (trọng số = xác suất triển khai / xác suất lấy mẫu), đổi lại phương sai. Hỏi tiếp: bạn biết phân bố triển khai đến đâu?</details>
+2. **[Quy mô]** 10 tham số rời rạc, mỗi cái 5 mức. Full factorial, pairwise, 3-way cỡ bao nhiêu? Mỗi kịch bản 50 episode × 12 s CPU: bộ nào chạy được trên N100 trong một đêm (throughput Bài 8)?
+   <details><summary>Hướng nghĩ</summary>Full: 5¹⁰ ≈ 9,8 triệu. Pairwise: cận dưới 25, công cụ tốt cho vài chục [ước lượng, chạy PICT để biết]. 3-way: vài trăm. Gãy trước là số episode mỗi kịch bản, không phải số kịch bản.</details>
+3. **[Failure mode]** Generator, manifest, seed hoàn hảo. Kể một cách bộ randomization 100 mẫu vẫn cho cảm giác an toàn giả.
+   <details><summary>Hướng nghĩ</summary>Dải đoán, không đo; dải quá hẹp nên mọi mẫu dễ; tham số gây lỗi thật (ánh sáng, trễ camera) không có trong spec. Bài 14 và Bài 17 đối diện chuyện này.</details>
+4. **[Nếu…thì]** Đổi seed episode từ "theo danh tính kịch bản" sang "chung dọc trục sweep": số episode cần để thấy một bậc thang trong đường cong ma sát tăng hay giảm? Khi nào lợi thế biến mất?
+   <details><summary>Hướng nghĩ</summary>Giảm, vì hai điểm kề thành so sánh theo cặp (McNemar). Mất khi đổi ma sát làm quỹ đạo phân kỳ sớm (hỗn loạn tiếp xúc). Đo bằng tương quan thành công giữa hai điểm kề cùng seed.</details>
 
 ### 10. Liên kết ra ngoài
 
 - **Tìm siêu tham số: Bergstra & Bengio, *Random Search for Hyper-Parameter Optimization* (JMLR, 2012).** Lập luận: khi chỉ vài chiều thật sự quan trọng, lưới lãng phí vì nhiều điểm trùng nhau trên chiều quan trọng; ngẫu nhiên cho mỗi điểm một giá trị mới trên mọi chiều [chuẩn]. Giống: đúng lý do LHS thắng lưới ở mô phỏng 1. Khác: họ cần **điểm tốt nhất**, bạn cần **bản đồ và ước lượng**; một thuật toán tìm điểm tốt (Bayesian optimization) cho bộ điểm lệch, không dùng để ước lượng tỉ lệ được.
 - **Xe tự hành: thử nghiệm theo kịch bản và falsification.** Các công cụ như VerifAI (Berkeley) dùng Scenic để sinh kịch bản rồi tìm phản ví dụ bằng tối ưu hóa [chuẩn]. Giống: kịch bản là dữ liệu, sinh có hệ thống. Khác: họ chủ động săn lỗi (adaptive); bạn ở bài này giữ thiết kế **cố định trước khi chạy**, vì nó đi vào so sánh thống kê ở Module 4 (thiết kế đổi theo kết quả là một dạng nhìn trộm, → F1.5).
-- **Tài chính: kiểm tra sức chịu đựng (stress test) ngân hàng.** Cơ quan quản lý đưa ra vài **kịch bản** vĩ mô cố định (suy thoái nặng, lãi suất tăng), không lấy mẫu ngẫu nhiên. Giống: kịch bản là tham số đầu vào được đặt tên, công bố trước. Khác: ở đó vài kịch bản được chọn bằng phán đoán chuyên gia và không ai coi kết quả là "tỉ lệ"; đó chính là phân biệt sweep (kịch bản chọn) và randomization (phân bố) của bài này.
 
 ### 11. Độ tin cậy và sửa lỗi
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| LHS do McKay, Beckman, Conover đề xuất (Technometrics 1979) cho mô hình máy tính đắt | [chuẩn] | Tên bài: *A Comparison of Three Methods for Selecting Values of Input Variables in the Analysis of Output from a Computer Code* |
-| Kuhn, Wallace, Gallo 2004: lỗi phần lớn do 1–2 tham số, giảm dần đến 6 | [chuẩn] | IEEE TSE 30(6), 2004; NIST trang *Combinatorial Methods in Testing*. Không trích tỉ lệ phần trăm cụ thể vì chưa đọc bản gốc số liệu |
-| `qmc.LatinHypercube(strength=2)` cần N = p², d ≤ p + 1 | [spec] + [đã chạy] | scipy 1.18; kiểm theo phiên bản bạn cài |
-| Kết quả ba mô phỏng | [đã chạy] | Mô phỏng đồ chơi; không phải số của robot thật |
-| NEP 19: `Generator` không hứa giữ nguyên chuỗi số qua phiên bản cho mọi phân bố | [spec] | NumPy NEP 19; `RandomState` là API giữ chuỗi cũ |
-| Dạng bậc thang của đường cong ma sát vật–ngón | [ước lượng] | Phải đo trên task của bạn |
+| LHS: McKay, Beckman, Conover, *Technometrics* 1979 | [chuẩn] | *A Comparison of Three Methods for Selecting Values of Input Variables in the Analysis of Output from a Computer Code* |
+| Kuhn, Wallace, Gallo 2004: lỗi phần lớn do 1–2 tham số, giảm dần đến 6 | [chuẩn] | IEEE TSE 30(6); NIST *Combinatorial Methods in Testing*. Không trích % cụ thể |
+| `qmc.LatinHypercube(strength=2)` cần N = p², d ≤ p + 1 | [spec] + [đã chạy] | scipy 1.18 |
+| NEP 19: `Generator` không hứa giữ chuỗi số qua phiên bản | [spec] | `RandomState` là API giữ chuỗi cũ |
+| Kết quả ba mô phỏng; dạng bậc thang vật–ngón | [đã chạy] / [ước lượng] | Đồ chơi, không phải số robot thật; bậc thang phải đo |
 
 **Đã sửa so với bản gốc/Gemini:**
-- Bản gốc: "Sweep: lưới, hoặc Latin hypercube". LHS là thiết kế ngẫu nhiên phủ đều từng chiều, không phải sweep một-tham-số; đã tách thành hàng riêng (space-filling) và phân biệt strength 1/2.
-- Bản gốc: `seed_policy: derive_from(seed_root, episode_index)`. Dẫn xuất theo vị trí làm seed đổi khi chèn kịch bản (đã chạy: 7/10). Sửa: theo danh tính, và chung dọc trục sweep cho CRN.
-- Bản gốc: "sinh lại cùng spec → hash giống hệt" không nói điều kiện. Thêm: cùng image; manifest là nguồn sự thật (NEP 19).
-- Bản gốc: sweep ma sát mà không nói ma sát của tiếp xúc nào; với luật trộn max, sweep ma sát vật trên bàn mặc định có thể phẳng (Bài 5).
-- Gemini: "tuyệt đối không trộn, vì bất lực xác định nguyên nhân". Sai lý do: có lineage thì tách được bằng hồi quy/độ nhạy; cái không được trộn là estimand.
-- Gemini, Tự kiểm tra câu 1: "Randomization chỉ cho một con số chung chung". Sai nếu tham số được ghi theo kịch bản. Gemini, Nếu ra khác: sửa `0.30000000000000004` bằng `round()`; tốt hơn là sinh từ chỉ số nguyên và cố định một quy tắc làm tròn, vì `round()` sau cộng dồn vẫn phụ thuộc thứ tự cộng.
-- Gemini: `collection_hash` ghép hash các con sắp theo `scenario_id`. Đủ dùng, nhưng thiếu `spec_hash`, `generator_version` và phiên bản thư viện trong phần được hash; thêm vào manifest.
+- Bản gốc: "Sweep: lưới, hoặc Latin hypercube" → LHS là thiết kế ngẫu nhiên phủ đều từng chiều; tách thành space-filling, phân biệt strength 1/2.
+- Bản gốc: `derive_from(seed_root, episode_index)` → seed đổi khi chèn kịch bản (đã chạy: 7/10); dùng danh tính, chung dọc trục sweep.
+- Bản gốc: "sinh lại → hash giống hệt" thiếu điều kiện cùng image; sweep ma sát không nói tiếp xúc nào.
+- Gemini: "tuyệt đối không trộn vì bất lực xác định nguyên nhân" → sai lý do; "randomization chỉ cho một con số chung chung" → sai nếu ghi tham số; sửa `0.30000000000000004` bằng `round()` → sinh từ chỉ số nguyên; `collection_hash` thiếu `spec_hash`, `generator_version`, phiên bản thư viện.
 
 ### 12. Đọc thêm và tự kiểm tra
 
 - **Nguồn gốc:** McKay, Beckman, Conover, *Technometrics* 21(2), 1979; Kuhn, Wallace, Gallo, *IEEE TSE* 30(6), 2004.
 - **Giải thích:** NIST, *Combinatorial Methods in Testing* (trang dự án ACTS); scipy docs, `scipy.stats.qmc`.
 - **Đào sâu (tùy chọn):** Saltelli và cộng sự, *Global Sensitivity Analysis: The Primer* (Wiley, 2008), chương về Morris và Sobol (→ F6.6).
-- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao "random 25 kịch bản" và "LHS 25 kịch bản" cho bạn hai mức tin khác nhau về việc không có góc lỗi; (2) vẽ lại bảng "câu hỏi → estimand → bộ sinh" từ trí nhớ; (3) hai câu dưới.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao "random 25 kịch bản" và "LHS 25 kịch bản" cho bạn hai mức tin khác nhau về việc không có góc lỗi; (2) vẽ lại bảng "câu hỏi → estimand → bộ sinh" từ trí nhớ; (3) câu dưới.
 
 **Câu 1.** Muốn biết robot gắp được vật từ 2 cm đến 10 cm không (câu tự kiểm tra của Gemini), dùng gì, và con số báo cáo là gì?
 <details><summary>Đáp án</summary>Sweep một chiều theo kích thước (ví dụ 9 điểm, mỗi điểm n episode, seed chung dọc trục), báo **đường cong** thành công theo kích thước có dải tin cậy, và ngưỡng nơi nó gãy. Không báo trung bình của 9 điểm. Gemini đúng ở lựa chọn này; chỗ thiếu là: randomization có ghi kích thước cũng vẽ được đường cong (bằng hồi quy), chỉ kém hiệu quả hơn khi câu hỏi đúng là một chiều.</details>
 
-**Câu 2.** Đồng nghiệp lưu spec + `seed_root`, không lưu kịch bản con, nói "sinh lại là ra". Nêu hai cách bộ kịch bản âm thầm đổi.
-<details><summary>Đáp án</summary>(a) Nâng numpy/scipy: thuật toán lấy mẫu của một phân bố hoặc của LHS đổi (NEP 19 cho phép). (b) Sửa generator (đổi thứ tự duyệt tham số, đổi cách làm tròn) mà không đổi `generator_version`. Thêm (c): cha đổi nội dung cùng `scenario_id`, và `variation_params` ghi tương đối. Manifest có hash từng con bắt được cả ba.</details>
 
 ---
 

@@ -300,9 +300,9 @@ for name, s in METHODS.items():
 
 **Chấm mô hình:**
 
-1. *"Encoder vài nghìn count mỗi vòng là rất mịn, nên odometry chính xác."* **SAI.** Nhầm độ phân giải với độ chính xác (→ F1.1). Độ phân giải chặn sai số **dưới**; tham số sai đặt sai số **trên** không phụ thuộc độ phân giải. **Phản ví dụ:** mô phỏng 2 dùng phân giải hoàn hảo (không lượng tử) mà vẫn cho dải dự đoán lệch ngang rộng cỡ mét, chỉ vì đường kính hai bánh đo bằng thước cặp.
+1. *"Encoder vài nghìn count mỗi vòng là rất mịn, nên odometry chính xác."* **SAI.** Nhầm độ phân giải với độ chính xác (→ F1.1). Độ phân giải chặn sai số **dưới**; tham số sai đặt sai số **trên** không phụ thuộc độ phân giải. **Phản ví dụ:** mô phỏng 2 giả định phân giải hoàn hảo (không lượng tử); chạy nó và xem dải dự đoán lệch ngang còn rộng thế nào chỉ vì đường kính đo bằng thước cặp.
 2. *"Tăng tần số odometry từ 50 lên 200 Hz sẽ làm vị trí chính xác hơn."* **ĐÚNG MỘT PHẦN.** Đúng cho sai số tích phân (~1/f²), nhưng ở 50 Hz nó đã nhỏ hơn sai số tham số nhiều bậc. **Phản ví dụ:** nhân bốn tần số không đổi một milimét nào của độ lệch do hai lốp chênh 0,1 mm; Δcount mỗi bước nhỏ đi nên nhiễu lượng tử của vận tốc còn **tăng**.
-3. *"Đo kỹ bằng thước cặp thì ít nhất cũng biết robot lệch về bên nào."* **SAI** với lốp cao su. **Phản ví dụ:** mô phỏng 2, dòng thước cặp: khoảng 95 % chứa cả hai dấu. Phép **lăn bánh** đo đúng thứ odometry dùng (chu vi lăn có tải), và sai số chia cho số vòng lăn.
+3. *"Đo kỹ bằng thước cặp thì ít nhất cũng biết robot lệch về bên nào."* **SAI** với lốp cao su. **Phản ví dụ:** chạy mô phỏng 2 và đọc cột `P(sai hướng)` của dòng thước cặp. Phép **lăn bánh** đo đúng thứ odometry dùng (chu vi lăn có tải), và sai số chia cho số vòng lăn.
 
 ### 4. Thuật ngữ
 
@@ -440,7 +440,7 @@ Thước cặp không cho bạn biết chắc cả **dấu**. Phép lăn cho d�
 
 **Kiểm nhanh:**
 - Thẳng 2 m: lỗi chiều dài thường **vài phần trăm** với bán kính danh định, **< 1 %** với bán kính lăn `[ước lượng]`. Nếu > 5 %: nghi đơn vị (đường kính nạp vào ô bán kính) hoặc CPR sai.
-- Quay 360° với `B` = mép ngoài: robot **quay quá** (controller tưởng B lớn hơn nên bắt bánh đi xa hơn). Cỡ lỗi = `B_cấu hình/B_thật − 1` nhân 360°; với bánh rộng 25–30 mm trên B ~250 mm là cỡ 10 % → hàng chục độ `[ước lượng]`. Dùng tâm vết bánh, lỗi còn vài độ, và lỗi đó đổi theo sàn (lốp chà khi quay tại chỗ, điểm tiếp xúc hiệu dụng dịch).
+- Quay 360° với `B` = mép ngoài: robot **quay quá** (controller tưởng B lớn hơn nên bắt bánh đi xa hơn). Cỡ lỗi = `B_cấu hình/B_thật − 1` nhân 360°; mép ngoài lớn hơn tâm vết một bề rộng lốp (25–30 mm trên B ~250 mm) → ~5–6 % → ~20° `[ước lượng]`. Dùng tâm vết bánh, lỗi còn vài độ, và lỗi đó đổi theo sàn (lốp chà khi quay tại chỗ, điểm tiếp xúc hiệu dụng dịch).
 - Golden replay: offline và `/odom` khớp tới mm sau 10 m nếu cùng tham số và cùng công thức.
 
 </details>
@@ -640,7 +640,7 @@ plt.xlabel("x lệch (m)"); plt.ylabel("y lệch (m)"); plt.savefig("c62_umbmark
 
 1. *"Hiệu chuẩn UMBmark xong thì odometry đúng."* **ĐÚNG MỘT PHẦN.** Nó xóa phần lớn sai số hệ thống **trên sàn đã hiệu chuẩn, ở tốc độ và gia tốc đã hiệu chuẩn**. Phần ngẫu nhiên vẫn lớn lên theo quãng đường; trượt và va chạm vẫn nguyên (C6.3). **Phản ví dụ:** cùng hệ số, chạy trên thảm (Phần D).
 2. *"Đặt robot vào đồ gá lệch 1° là phá hỏng UMBmark."* **ĐÚNG MỘT PHẦN.** Lệch hướng ban đầu xoay **cả** quỹ đạo quanh điểm xuất phát; điểm dừng nằm gần gốc nên bị dịch ít. Với phép **thẳng 10 m**, cùng 1° là một sai số lớn ở điểm cuối. **Phản ví dụ:** trong mô phỏng, đổi `HEAD` từ 0 lên 1° gần như không đổi `E_max,syst`; tự tính `10 m × tan 1°` cho phép thẳng.
-3. *"Mỗi chiều chạy 5 lần là đủ, như paper."* **ĐÚNG MỘT PHẦN.** 5 lần là thiết kế của paper cho robot và sàn của họ. Đủ hay không phụ thuộc tỉ số giữa độ tản trong cụm và khoảng cách hai tâm cụm (→ F1.4, F1.5). **Phản ví dụ:** đổi `seed` trong mô phỏng: với trượt 0,2 % mỗi bước, `E_max` "sau" dao động gần gấp rưỡi giữa các seed. Nếu độ tản cụm của bạn cỡ khoảng cách hai tâm, cần thêm lần chạy.
+3. *"Mỗi chiều chạy 5 lần là đủ, như paper."* **ĐÚNG MỘT PHẦN.** 5 lần là thiết kế của paper cho robot và sàn của họ. Đủ hay không phụ thuộc tỉ số giữa độ tản trong cụm và khoảng cách hai tâm cụm (→ F1.4, F1.5). **Phản ví dụ:** đổi `seed` trong mô phỏng và so `E_max` "sau" giữa các seed. Nếu độ tản cụm của bạn cỡ khoảng cách hai tâm, cần thêm lần chạy.
 
 ### 4. Thuật ngữ
 
@@ -958,8 +958,8 @@ plt.savefig("c63_truot.png")                      # trong bài: plt.show()
 **Chấm mô hình:**
 
 1. *"Khi đo chưa cover đủ flag/khóa thì lúc runtime không thể đảm bảo; càng nhiều flag đo realtime thì càng kiểm soát được"* (mô hình của bạn ở K3 lượt 21). **ĐÚNG MỘT PHẦN.** Đúng: thứ không đo thì không điều khiển được. Gãy: ngầm định thêm flag trên **cùng một kênh** sẽ bắt được mọi tình huống. **Phản ví dụ:** robot đâm tường, bánh trượt tại chỗ, encoder đếm đều, vận tốc bánh đúng đặt, PID hài lòng; không flag nào tính từ encoder phân biệt "đang chạy" với "đang trượt tại chỗ". Trạng thái đó **không quan sát được** từ kênh này. Số lượng flag không thay được tính độc lập của nguồn đo.
-2. *"Hệ vật lý có số tác nhân biết trước, thu đủ dữ liệu lâu thì mọi công thức gần như hằng số, model dự đoán được mọi biến số"* (mô hình của bạn ở K3 lượt 12). **ĐÚNG MỘT PHẦN.** Đúng trong miền đã thấy: hệ số UMBmark ổn định trên cùng sàn, cùng tải. Gãy ở cạnh dốc: trượt, va chạm, sàn mới là **đổi chế độ**, không phải nhiễu quanh một hằng số; một model học từ encoder không thấy chúng vì đầu vào không chứa thông tin đó. **Phản ví dụ:** mô phỏng trên: dữ liệu encoder trong va chạm giống hệt dữ liệu đi thẳng.
-3. *"Covariance trong `/odom` cho biết odometry đang sai bao nhiêu."* **SAI.** Nó là giả định của người cấu hình (hằng số trong `diff_drive_controller`) hoặc của mô hình nhiễu. **Phản ví dụ:** mô phỏng: sai số thật cuối chặng vượt 1σ tự báo hơn 10 lần.
+2. *"trong một system vật lý có số tác nhân tham gia là biết trước, được thu thập dữ liệu đầy đủ trong một khoảng thời gian dài, thì mọi công thức vật lý gần như là hằng số. nên mọi biến số có thể được tầng ai model biểu diễn và dự đoán được"* (mô hình của bạn ở K3 lượt 12). **ĐÚNG MỘT PHẦN.** Đúng trong miền đã thấy: hệ số UMBmark ổn định trên cùng sàn, cùng tải. Gãy ở cạnh dốc: trượt, va chạm, sàn mới là **đổi chế độ**, không phải nhiễu quanh một hằng số; một model học từ encoder không thấy chúng vì đầu vào không chứa thông tin đó. **Phản ví dụ:** mô phỏng trên: dữ liệu encoder trong va chạm giống hệt dữ liệu đi thẳng.
+3. *"Covariance trong `/odom` cho biết odometry đang sai bao nhiêu."* **SAI.** Nó là giả định của người cấu hình (hằng số trong `diff_drive_controller`) hoặc của mô hình nhiễu. **Phản ví dụ:** chạy mô phỏng ở mục 2 và so sai số thật cuối chặng với 1σ tự báo.
 
 ### 4. Thuật ngữ
 

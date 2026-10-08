@@ -48,7 +48,7 @@ Khối mới: IMU (qua ESP32), camera (thẳng vào mini PC), sidecar ghi dữ l
 
 ## 1. An toàn của chặng
 
-**Rủi ro của C7:** khoan/vít gần pin và dây nguồn khi gá cảm biến; chập 3,3 V khi đi dây IMU lúc ESP32 đang có điện; camera và cáp USB vướng vào bánh; chạy robot nhiều giờ để thu dữ liệu (pin xả sâu, motor nóng); lần đầu robot chạy mà bạn **nhìn màn hình Foxglove** thay vì nhìn robot. Và một rủi ro không vật lý: camera ghi hình người trong văn phòng.
+**Rủi ro của C7:** khoan gần pin và dây nguồn; chập 3,3 V khi đi dây lúc ESP32 có điện; cáp vướng bánh; chạy nhiều giờ để thu dữ liệu; nhìn Foxglove thay vì nhìn robot; camera ghi hình người trong văn phòng.
 
 **Quy tắc cứng:**
 - KHÔNG khoan, bắt vít trên khung khi pin còn cắm. Rút XT60 pin trước, che dây nguồn bằng bìa.
@@ -67,7 +67,7 @@ Giá `[ước lượng 10/2026]`, kiểm lại ở cửa hàng.
 
 | Món | Thông số phải chọn | Vì sao (bằng số) | Giá | Kiểm khi nhận hàng | Thay thế được bằng |
 |---|---|---|---|---|---|
-| **IMU** ICM-42688-P (module breakout), hoặc dùng lại module đã mua ở K5 M0 | I2C/SPI, chân INT ra header, 3,3 V; có lọc chống aliasing (AAF) cấu hình được và FIFO | Nhiễu gyro ~2,8 mdps/√Hz, accel ~70 µg/√Hz `[spec — TDK DS ICM-42688-P, kiểm]`; AAF cho phép chặn rung motor trước khi hạ tần số (Bài C7.1) | 150–250k | `WHO_AM_I` = 0x47 (K5 Bài 3) | MPU-6050: rẻ, nhiều tài liệu, nhiễu cao hơn nhiều lần (gyro ~0,005 °/s/√Hz, accel ~400 µg/√Hz `[spec — PS-MPU-6000A-00, kiểm]`), DLPF thô hơn; nhiều nguồn ghi đã ngừng sản xuất `[kiểm trang TDK]`, hàng nhái nhiều (K5 Bài 3). Bosch BMI088 (quảng cáo chịu rung cho drone `[spec — Bosch, kiểm]`) nếu rung quá lớn |
+| **IMU** ICM-42688-P (module breakout), hoặc dùng lại module đã mua ở K5 M0 | I2C/SPI, chân INT ra header, 3,3 V; có lọc chống aliasing (AAF) cấu hình được và FIFO | Nhiễu gyro ~2,8 mdps/√Hz, accel ~70 µg/√Hz `[spec — TDK DS ICM-42688-P, kiểm]`; AAF cho phép chặn rung motor trước khi hạ tần số (Bài C7.1) | 150–250k | `WHO_AM_I` = 0x47 (K5 Bài 3) | MPU-6050: rẻ, nhiều tài liệu, nhưng nhiễu cao hơn nhiều lần (gyro ~0,005 °/s/√Hz, accel ~400 µg/√Hz `[spec — PS-MPU-6000A-00, kiểm]`), chỉ có DLPF cố định, hàng nhái nhiều, trạng thái sản xuất `[kiểm trang TDK]`. Bosch BMI088 nếu rung quá lớn `[spec — kiểm]` |
 | Đế giảm rung | Băng keo xốp hai mặt dày 1–3 mm; hoặc grommet cao su M3; tấm gel silicone | Thử ba kiểu ở C7.1, chọn bằng phổ rung đo được | 30–100k | — | Miếng cao su xe đạp |
 | Dây I2C + INT | 5 sợi 24–26 AWG: SDA xanh dương, SCL vàng (C0.5), 3V3 trắng "3V3", GND đen, INT màu riêng có nhãn; dài ≤ 30 cm, đầu JST-XH | I2C 400 kHz không chịu dây dài, tụ ký sinh làm cạnh lên chậm `[chuẩn]` | 20–50k | Thông mạch từng sợi | Cáp Qwiic có sẵn (JST-SH) + adapter |
 | **Camera USB** | UVC (không cần driver riêng), **MJPEG** 1280×720 @30 fps, **lấy nét cố định**, FOV ghi rõ, gá ren 1/4" hoặc lỗ vít | MJPEG vừa băng thông USB 2.0 (Bài C7.1); nét cố định để hiệu chuẩn ở C8.2 còn đúng (autofocus đổi tiêu cự) | 300–900k | `v4l2-ctl --list-formats-ext` liệt kê MJPEG 720p30 | Camera global shutter USB (đắt hơn, ít rolling shutter khi rung `[ước lượng]`) |
@@ -120,13 +120,9 @@ Giá `[ước lượng 10/2026]`, kiểm lại ở cửa hàng.
    - ✅ Checkpoint: robot đứng yên, `/imu/data_raw` trong `imu_link` biến đổi sang `base_link` cho gia tốc ≈ +g theo `z` (rule `gravity_up`, Bài C7.4).
 6. **Lắp bước 5 — Camera trên hệ thống**: udev rule cho tên thiết bị cố định (theo serial/đường cổng), đưa vào container (C5.2), chạy driver camera.
    - ✅ Checkpoint: `ros2 topic hz` của ảnh nén đạt fps đặt ±5 % trong 5 phút khi `ros2_control` cũng đang chạy.
-7. **Làm Bài C7.1** mục 6 (đo rung, chọn đế và lọc; đo băng thông USB).
-8. **Học và làm Bài C7.2** (timestamp).
-9. **Học và làm Bài C7.3** (sidecar, upload, audit, Foxglove).
-10. **Học và làm Bài C7.4** (data contract; chạy lại bước va chạm của C6.3 với gyro).
-11. **Gate chặng 7.**
+7. **Làm Bài C7.1** mục 6, rồi **Bài C7.2, C7.3, C7.4** theo thứ tự (C7.4 gồm chạy lại va chạm C6.3 với gyro), rồi **Gate chặng 7**.
 
-Robot vẫn chạy được ở phạm vi nhỏ hơn suốt chặng: teleop và odometry C5–C6 không phụ thuộc IMU, camera hay sidecar. Sidecar chết thì robot vẫn chạy (và Bài C7.3 kiểm đúng điều đó).
+Teleop và odometry C5–C6 không phụ thuộc IMU, camera hay sidecar: sidecar chết thì robot vẫn chạy (C7.3 kiểm đúng điều đó).
 
 ## 6. Lỗi người mới hay gặp
 
@@ -162,9 +158,7 @@ Metadata theo `CONVENTIONS.md` mục 4 (`metadata_version`, `calibration_id`, `c
 - `kill -9` sidecar và rút Wi-Fi giữa phiên (Bài C7.3): file vẫn cứu được, upload tiếp tục, không trùng. Ở C11.2 thành kịch bản fault injection chạy định kỳ.
 - Rule `gravity_up` chặn mọi file có TF/đơn vị IMU sai: một cấu hình URDF sai không bao giờ lọt vào dataset.
 
-**SLI/SLO đề xuất (→ F7.4):** tỉ lệ file niêm phong qua contract; độ trễ ghi → có trên object store (p95); tỉ lệ mẫu IMU mất theo `seq`; số byte chờ upload trên robot; tuổi của file cũ nhất chưa upload.
-
-**Vai trò nghề:** Data Platform (ingest, niêm phong, upload, index, contract) và Test & Validation (rule vật lý có tiền điều kiện, fault injection lên pipeline). Đây là phần giống nhất với công việc bạn nhắm tới.
+**SLI đề xuất (→ F7.4):** tỉ lệ file qua contract; độ trễ ghi → object store (p95); tỉ lệ mẫu IMU mất theo `seq`; tuổi file cũ nhất chưa upload. **Vai trò nghề:** Data Platform và Test & Validation, gần nhất với công việc bạn nhắm tới.
 
 ## 8. Nhật ký build
 
@@ -195,7 +189,7 @@ Copy vào `build-log/c07.md`, một mục mỗi buổi:
 
 Cộng đồng autopilot mã nguồn mở cho drone (ArduPilot, PX4) học bài này bằng máy bay rơi: rung của cánh quạt đi qua khung vào accelerometer, bị lấy mẫu thành tín hiệu tần số thấp giả, bộ ước lượng tin đó là chuyển động thật, và máy bay mất độ cao hoặc tự trôi. Tài liệu ArduPilot có hẳn trang "Measuring Vibration": firmware ghi mức rung (log `VIBE`) và hướng dẫn coi mức rung vượt ngưỡng là lỗi phải sửa bằng đế giảm rung **trước** khi chỉnh bất kỳ tham số điều khiển nào `[chuẩn — ArduPilot docs, kiểm ngưỡng cụ thể]`.
 
-Robot của bạn chậm hơn drone nhiều, nhưng có motor DC giảm tốc quay nhanh ngay cạnh IMU, gắn trên cùng tấm khung. Lỗi gá ở chặng này không làm robot rơi; nó làm **dữ liệu** sai theo cách trông rất hợp lý, và mọi thứ dùng dữ liệu đó (bộ hợp nhất C8.3, dataset C11.5) thừa hưởng lỗi.
+Robot của bạn có motor giảm tốc quay nhanh ngay cạnh IMU, trên cùng tấm khung. Lỗi gá không làm robot rơi; nó làm **dữ liệu** sai theo cách trông hợp lý, và C8.3, C11.5 thừa hưởng lỗi.
 
 ### 2. Mô hình tư duy
 
@@ -277,9 +271,9 @@ Accelerometer đo **lực riêng** (specific force), không đo gia tốc: đứ
 
 **Chấm mô hình:**
 
-1. *"IMU 200 Hz thì thấy đúng mọi chuyển động tới 100 Hz, phần trên 100 Hz chỉ bị mất."* **SAI.** Phần trên Nyquist không mất; nó **gập xuống** dưới 100 Hz và cộng vào tín hiệu thật. **Phản ví dụ:** mô phỏng 1: rung 170 Hz xuất hiện ở 30 Hz với nguyên biên độ.
+1. *"IMU 200 Hz thì thấy đúng mọi chuyển động tới 100 Hz, phần trên 100 Hz chỉ bị mất."* **SAI.** Phần trên Nyquist không mất; nó **gập xuống** dưới 100 Hz và cộng vào tín hiệu thật. **Phản ví dụ:** mô phỏng 1: xem biên độ ở 30 Hz (nơi không có chuyển động thật nào) của chuỗi không lọc.
 2. *"Data đi qua dây data; cách đọc/ghi, schema phải dùng các dây khác như clock để phối hợp"* (mô hình của bạn ở K3 lượt 2), áp vào chuyện gá IMU: "dây I2C đúng, WHO_AM_I đúng thì dữ liệu đúng". **ĐÚNG MỘT PHẦN.** Đúng cho tầng truyền. Gãy ở chỗ ý nghĩa của ba con số accel (trục nào của **robot**) không nằm trên dây nào, cũng không nằm trong datasheet: nó nằm trong cách bạn vặn con chip vào khung, và chỉ được ghi lại trong URDF. **Phản ví dụ:** cùng chip, cùng dây, xoay 90° trên khung: mọi byte hợp lệ, `x` của chip thành `y` của robot.
-3. *"Đế càng mềm càng tốt cho IMU."* **ĐÚNG MỘT PHẦN.** Mềm hơn cắt rung tần số cao tốt hơn, nhưng hạ tần số cộng hưởng của đế xuống; nếu nó rơi vào dải chuyển động thật hoặc dải rung khác (bánh lăn qua mạch gạch), đế khuếch đại. **Phản ví dụ:** IMU trên miếng xốp dày lắc lư khi robot tăng tốc, gyro thấy "nghiêng" không có thật.
+3. *"Đế càng mềm càng tốt cho IMU."* **ĐÚNG MỘT PHẦN.** Mềm hơn cắt rung cao tần tốt hơn nhưng hạ tần số cộng hưởng của đế vào dải chuyển động thật. **Phản ví dụ:** IMU trên xốp dày lắc khi robot tăng tốc, gyro thấy "nghiêng" không có thật.
 
 ### 4. Thuật ngữ
 
@@ -394,7 +388,6 @@ Hai camera YUYV VGA@30 trên một controller: tổng 36,8 MB/s < 48 MB/s nên *
 |---|---|---|---|
 | Phổ có đỉnh ở mọi tốc độ cùng một tần số | Cộng hưởng khung/đế, không phải motor | Gõ nhẹ khung khi motor tắt, xem phổ | Đổi đế; thêm điểm bắt vít cho tấm gá |
 | Đỉnh dịch theo tốc độ, tỉ lệ đúng với `f_motor` | Rung motor/hộp số | — | Đế + lọc; kiểm motor có lệch tâm, bánh có đảo |
-| Gyro đứng yên trên robot khác trên bàn | Nhiệt (gần driver/mini PC), ứng suất cơ khi siết vít | Đo bias theo nhiệt độ chip | Gá xa nguồn nhiệt; không siết vít ép module |
 | `ω_z` âm khi quay trái | Trục z chip ngược, TF chưa ghi | Bước 8 | Sửa rpy URDF (hoặc hoán trục firmware, chỉ một nơi) |
 
 ### 9. Câu hỏi ngược
@@ -420,6 +413,13 @@ TF tĩnh trong URDF là của **thiết kế**, không của **từng con**: l�
 
 </details>
 
+4. **[Liên ngành]** Kỹ sư cầu đo rung bằng accelerometer gắn trên dầm. Họ chọn tần số lấy mẫu và lọc theo gì, và vì sao câu hỏi của họ ngược với của bạn?
+<details><summary>Hướng nghĩ</summary>
+
+Họ muốn **thấy** rung (tần số riêng của kết cấu là tín hiệu); bạn muốn **loại** rung khỏi chuyển động thân. Cùng một phổ, hai định nghĩa "nhiễu". Chọn lọc là chọn câu hỏi.
+
+</details>
+
 ### 10. Liên kết ra ngoài
 
 - **Âm thanh số: lọc chống aliasing trước ADC.** Mọi ADC âm thanh có lọc tương tự (hoặc oversampling + lọc số) trước khi hạ xuống 44,1/48 kHz; K3 đã gặp phía phát. Giống hệt nguyên lý. Khác: âm thanh biết trước dải quan tâm (20 Hz–20 kHz), robot phải **đo** dải rung của chính nó.
@@ -434,8 +434,6 @@ TF tĩnh trong URDF là của **thiết kế**, không của **từng con**: l�
 | USB 2.0 HS: 3 × 1024 B/vi khung/endpoint isochronous, ≤ 80 % cho truyền định kỳ | [spec] | USB 2.0 Specification mục 5.6–5.7 |
 | USB 3 gây nhiễu băng 2,4 GHz | [chuẩn] | Intel, *USB 3.0 Radio Frequency Interference Impact on 2.4 GHz Wireless Devices* (2012) |
 | rpy optical `(−π/2, 0, −π/2)` | [chuẩn] + [đã chạy] | Mô phỏng 2 |
-| ArduPilot đo rung và coi rung cao là lỗi | [chuẩn — kiểm ngưỡng] | ArduPilot docs, "Measuring Vibration" |
-| Tên lệnh `v4l2-ctl`, `tf2_echo`, tham số driver camera | [tự đo] | Theo bản cài |
 
 **Đã thêm so với bản gốc:** bản gốc Bài 5 liệt kê luồng IMU 200 Hz và camera 10–30 fps mà không nói gá, rung, TF hay băng thông. Thêm toàn bộ bài này; chọn IMU có AAF và giải thích; kiểm TF bằng vật lý thay vì tin URDF.
 
@@ -462,7 +460,7 @@ TF tĩnh trong URDF là của **thiết kế**, không của **từng con**: l�
 
 25/2/1991, Dhahran, Ả Rập Xê Út: một tổ hợp Patriot không đánh chặn được tên lửa Scud; 28 lính Mỹ chết. Báo cáo của GAO (IMTEC-92-26) chỉ ra nguyên nhân: đồng hồ hệ thống đếm thời gian theo phần mười giây và đổi ra giây bằng số dấu phẩy tĩnh 24 bit; 0,1 không biểu diễn chính xác được trong nhị phân, sai số nhỏ đó tích lũy, và sau khoảng 100 giờ chạy liên tục thời gian lệch ~0,34 s. Với mục tiêu bay ~1.676 m/s, cổng theo dõi lệch hơn nửa ki-lô-mét `[chuẩn — GAO/IMTEC-92-26, 1992]`.
 
-Bài học không phải "dùng float 64 bit". Bài học là **sai số thời gian nhân với vận tốc thành sai số không gian**. Trên robot của bạn: gyro quay 2 rad/s, timestamp lệch 20 ms là 0,04 rad (hơn 2°) sai lệch hướng khi ghép với ảnh; một camera chạy 0,3 m/s với stamp lệch 50 ms là 1,5 cm pose marker đặt sai chỗ.
+Bài học: **sai số thời gian nhân với vận tốc thành sai số không gian**. Trên robot: gyro 2 rad/s, stamp lệch 20 ms là hơn 2° sai hướng khi ghép với ảnh.
 
 ### 2. Mô hình tư duy
 
@@ -540,9 +538,8 @@ print(f"skew ước lượng {a*1e6:.2f} ppm (thật {SKEW*1e6:.0f}); offset th�
 
 **Chấm mô hình:**
 
-1. *"`header.stamp` là thời điểm phép đo xảy ra."* **SAI** như một mặc định. Nó là bất kỳ giá trị nào code publish gán vào; nhiều driver gán `now()` lúc nhận. **Phản ví dụ:** mô phỏng: stamp lúc nhận lệch tới hàng chục ms ở p99 dù trường tên là `stamp`.
-2. *"Ngay từ đầu người ta tạo ra buffer để đỡ thời gian trồi sụt; mọi thiết bị có clock riêng, phải có buffer để các giao thức hoạt động ổn định"* (mô hình của bạn ở K3 lượt 7). **ĐÚNG MỘT PHẦN.** Đúng: hai miền clock khác nhau gặp nhau qua hàng đợi, và hàng đợi hấp thụ jitter. Gãy: buffer hấp thụ jitter của **luồng**, nhưng **phá** thông tin thời điểm: sau hàng đợi TX, thời điểm byte tới không còn nói gì về thời điểm mẫu được lấy. **Phản ví dụ:** cột `dt` của stamp lúc nhận: hàng đợi xả 6 gói một lúc, `dt ≈ 0` sáu lần liên tiếp. Thông tin thời gian phải được **đóng dấu trước** buffer (ISR) và mang theo trong payload.
-3. *"Chuyển hết sang CLOCK_MONOTONIC là hết lỗi timestamp."* **ĐÚNG MỘT PHẦN** (F4.3 đã chấm bản Gemini của câu này). Monotonic không nhảy lùi, nhưng vẫn là đồng hồ của **host lúc nhận**, vẫn mang toàn bộ trễ đường đi, và không so được giữa hai lần boot. **Phản ví dụ:** mô phỏng dùng đúng một đồng hồ host đơn điệu cho `t_rx` mà p99 vẫn lớn.
+1. *"`header.stamp` là thời điểm phép đo xảy ra."* **SAI** như một mặc định. Nó là bất kỳ giá trị nào code publish gán vào; nhiều driver gán `now()` lúc nhận. **Phản ví dụ:** mô phỏng ở mục 2: so cột p99 của stamp lúc nhận với chu kỳ 5 ms, dù trường tên là `stamp`.
+2. *"các thành phần … nếu chỉ trực tiếp gọi tới các thành phần khác mà không qua buffer thì sẽ nhanh hơn nhưng rất loạn, mỗi cái một clock channel khác nhau. nên phải có buffer"* (mô hình của bạn ở K3 lượt 7). **ĐÚNG MỘT PHẦN.** Đúng: hai miền clock khác nhau gặp nhau qua hàng đợi, và hàng đợi hấp thụ jitter. Gãy: buffer hấp thụ jitter của **luồng**, nhưng **phá** thông tin thời điểm: sau hàng đợi TX, thời điểm byte tới không còn nói gì về thời điểm mẫu được lấy. **Phản ví dụ:** cột `dt` p1 của stamp lúc nhận trong mô phỏng: hàng đợi xả nhiều gói một lúc, `dt` gần 0 nhiều lần liên tiếp. Thông tin thời gian phải được **đóng dấu trước** buffer (ISR) và mang theo trong payload.
 
 ### 4. Thuật ngữ
 
@@ -588,7 +585,7 @@ commit: <hash>
 1. **Firmware: đóng dấu ở ISR.** Trong ISR data-ready (C4.1), ghi `t_src = esp_timer_get_time()` (int64, µs `[spec — ESP-IDF]`) và tăng `seq`; task đọc I2C sau đó, gói `{seq, t_src, raw[14]}` vào frame của giao thức C4.3. Không đọc I2C trong ISR. Đo bằng logic analyzer: cạnh INT tới cạnh chân đánh dấu trong ISR (nếu C4.2 có chân đánh dấu) phải ở mức µs.
 2. **Ping hai chiều.** Thêm vào giao thức C4.3 một cặp lệnh ping/pong: host gửi `t1` (host), ESP32 trả `t2 = t3` (`esp_timer`), host ghi `t4`. Mỗi 1 s. Đây là bước 7 của K5 Bài 9, chuyển lên robot. Publish mỗi pong thành `/esp32/time_reference` (`header.stamp` = `t4`, `time_ref` = `t2`, `source = "esp32-01"`), cộng RTT trong `/diagnostics`.
 3. **Ánh xạ trên host.** Node nhận IMU (hardware interface hoặc node riêng, xem quyết định dưới) giữ cửa sổ 5 phút các pong, mỗi 30 s chọn pong RTT nhỏ nhất, fit tuyến tính offset theo thời gian, ánh xạ `t_src` → `header.stamp`. Ghi tham số ánh xạ (`a`, `b`, RTT nhỏ nhất, cửa sổ) mỗi lần cập nhật vào `/diagnostics` để niêm phong (C7.3) đưa vào Metadata record. Khi ESP32 reset (`t_src` nhảy về gần 0, `seq` về 0): bỏ cửa sổ cũ, đánh dấu sự kiện, chờ đủ pong mới.
-   - **Quyết định cần ghi `decisions.md`:** IMU đi qua `ros2_control` (`imu_sensor_broadcaster` của `ros2_controllers` publish `sensor_msgs/Imu`, stamp theo thời điểm cập nhật của controller manager `[tự đo theo phiên bản]`) hay qua node riêng publish stamp đã ánh xạ. Bắt đầu bằng cách nào đơn giản với kiến trúc C5 của bạn, **nhưng** luôn ghi `/esp32/time_reference` và `seq` để ánh xạ lại được offline; chuyển sang node riêng nếu bước 4 cho thấy stamp theo controller vượt ngân sách.
+   - **Quyết định (`decisions.md`):** IMU qua `ros2_control` (`imu_sensor_broadcaster`, stamp theo chu kỳ controller manager `[tự đo]`) hay node riêng publish stamp đã ánh xạ. Bắt đầu bằng cách đơn giản với C5, **luôn** ghi `/esp32/time_reference` và `seq` để ánh xạ lại offline; đổi sang node riêng nếu bước 4 cho thấy vượt ngân sách.
 4. **Đo trong 30 phút rảnh + 30 phút tải.** Tải: chạy Nav2 rỗng hoặc `stress-ng --cpu 4` `[tự đo]` cộng nén ảnh camera. Từ bag: phân bố `t_rx − t_map` (p50/p99/max), `dt` giữa mẫu IMU theo `t_rx` và theo `t_map`, skew ước lượng theo thời gian (có đổi khi robot ấm lên không?), số `seq` bị nhảy (mất mẫu).
 5. **Camera ↔ IMU.** Đặt robot trước một cảnh nhiều chi tiết (giá sách). Xoay robot qua lại bằng teleop (hoặc nhấc tay xoay nhẹ khi motor tắt) 10–20 lần trong 30 s. Tính tốc độ dịch ảnh giữa hai frame (ví dụ tương quan pha của ảnh xám) và `|ω_z|` của gyro; tương quan chéo hai chuỗi → trễ camera − IMU (→ F4.6). Lặp ba lần; trễ phải ổn định trong vài ms. Ghi vào calibration của camera (`calibration_id` mới), kèm exposure, độ phân giải, fps.
 6. **Đồng hồ host.** Ghi `timedatectl` / trạng thái chrony: host đồng bộ NTP không; NTP có được phép **nhảy** (step) giữa phiên không `[tự đo cấu hình]`. Ghi `boot_id` (`/proc/sys/kernel/random/boot_id`) vào metadata mỗi file. Đây là điều kiện để `clock_source = host_unsynced` có nghĩa.
@@ -622,7 +619,6 @@ Skew ước lượng 25,01 ppm; trôi thô ~45 ms sau 30 phút. Sai số còn l�
 | Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
 |---|---|---|---|
 | Skew ước lượng nhảy giữa các cửa sổ | ESP32 reset (gốc đổi); RTT tối thiểu không đủ nhỏ | `seq` về 0? RTT min theo thời gian | Xử lý reset; cửa sổ dài hơn; ping dày hơn |
-| Skew trôi chậm theo giờ chạy | Nhiệt độ ESP32/thạch anh đổi (→ F4.1) | Ghi nhiệt độ chip cạnh skew | Cửa sổ fit ngắn hơn; ghi skew theo thời gian vào metadata |
 | Mất mẫu (`seq` nhảy) chỉ khi tải nặng | Hàng đợi RX host tràn; ESP32 bỏ gói khi TX đầy | Đếm theo tải | Tăng buffer, giảm ODR nếu cần, nhưng **đếm** mất (→ F3.9) |
 
 ### 9. Câu hỏi ngược
@@ -648,9 +644,16 @@ Dấu skew sai làm sai số lớn dần tuyến tính: 2 × skew × thời gian
 
 </details>
 
+4. **[Nếu…thì]** Nếu bạn tăng ODR IMU từ 200 lên 1.000 Hz, sai số stamp lúc nhận đổi thế nào? Sai số sau ánh xạ thì sao?
+<details><summary>Hướng nghĩ</summary>
+
+Gói nhỏ và dày hơn: hàng đợi TX dễ đầy hơn khi host kẹt, đuôi lúc nhận dày hơn. Sai số sau ánh xạ gần như không đổi: nó phụ thuộc ping và bất đối xứng, không phụ thuộc ODR.
+
+</details>
+
 ### 10. Liên kết ra ngoài
 
-- **Hàng không: flight data recorder.** Dữ liệu từ nhiều hệ con được ghi với khung thời gian của recorder; khi điều tra, nhóm phân tích phải căn lại độ trễ riêng của từng tham số. Giống: ghi thô kèm nguồn thời gian, căn chỉnh sau. Khác: FDR có chuẩn về tần số và trễ cho từng tham số; robot của bạn phải tự đo.
+- **Hàng không: flight data recorder.** Tham số từ nhiều hệ con có trễ riêng; khi điều tra phải căn lại. Giống: ghi thô kèm nguồn thời gian, căn sau. Khác: FDR có chuẩn trễ cho từng tham số; robot phải tự đo.
 
 ### 11. Độ tin cậy và sửa lỗi
 
@@ -765,7 +768,7 @@ if __name__ == "__main__":                                            # thử tr
     print("manifest:", {k: m[k] for k in ("sha256", "messages")})
 ```
 
-Đã chạy: metadata kênh (`calibration_id` cho `/odom`, `/imu/data_raw`) và Metadata record `robot` đọc lại đúng; đếm 1000/250 message. Giới hạn đã biết: hàm chỉ chép message và metadata (attachment của file nguồn bị bỏ: kiểm rosbag2 của bạn có ghi attachment không `[tự đo]`); băm đọc cả file vào RAM, file lớn thì băm theo khối như `sha256()` của K5 Bài 14. Chép lại tốn I/O bằng kích thước file; phương án rẻ hơn là để metadata trong manifest JSON đi kèm (mất tính tự mô tả của MCAP). Chọn một, ghi `decisions.md`.
+Giới hạn: không chép attachment `[tự đo xem rosbag2 có ghi không]`; băm cả file trong RAM (file lớn: băm theo khối như `sha256()` của K5 Bài 14); chép lại tốn I/O bằng kích thước file. Phương án rẻ hơn: metadata chỉ trong manifest JSON (mất tính tự mô tả). Chọn một, ghi `decisions.md`.
 
 ### 3. Cầu nối từ backend
 
@@ -788,8 +791,6 @@ if __name__ == "__main__":                                            # thử tr
 | 🟢 | Niêm phong (seal) | Kiểm + gắn metadata + băm; từ đây file bất biến | Đóng file |
 | 🟢 | Manifest | JSON đi kèm file: hash, đếm, metadata, nguồn | Index (index là ở server, K5 Bài 15) |
 | 🟢 | Quarantine | Nơi giữ file FAIL contract: không upload, không xóa | Thùng rác |
-| 🟡 | Storage preset/zstd của rosbag2 MCAP | Cấu hình nén và chunk của plugin MCAP `[tự đo]` | — |
-| 🟡 | Layout Foxglove | File JSON mô tả panel; commit trong repo | Cấu hình cá nhân, không cần lưu |
 
 ### 5. Dự đoán
 
@@ -892,10 +893,17 @@ Nhân số của bạn: hàng TB/ngày nếu ghi camera liên tục. Wi-Fi văn 
 
 </details>
 
-3. **[Vì sao không]** Vì sao không ghi thẳng lên object store qua Wi-Fi (streaming), bỏ đĩa robot?
+3. **[Vì sao không]** Vì sao không ghi thẳng lên object store qua Wi-Fi, bỏ đĩa robot?
 <details><summary>Hướng nghĩ</summary>
 
-Wi-Fi văn phòng mất kết nối là chuyện thường; streaming biến mỗi lần mất mạng thành mất dữ liệu, hoặc biến bộ nhớ RAM thành hàng đợi không giới hạn. Đĩa robot là buffer có thể tính bằng giờ. Streaming hợp cho một luồng nhẹ để giám sát trực tiếp (dashboard), không cho bản ghi chuẩn.
+Wi-Fi mất là chuyện thường; streaming biến mỗi lần mất mạng thành mất dữ liệu hoặc thành hàng đợi RAM không giới hạn. Đĩa là buffer tính bằng giờ. Streaming hợp cho luồng giám sát nhẹ, không cho bản ghi chuẩn.
+
+</details>
+
+4. **[Phản biện]** "Ghi tất cả, lọc sau, lưu trữ rẻ." Đồng ý tới đâu với robot chạy pin trên Wi-Fi văn phòng?
+<details><summary>Hướng nghĩ</summary>
+
+Rẻ ở object store, không rẻ ở uplink, đĩa robot và Wh. Và "lọc sau" cần metadata đủ để biết lọc gì. Thường đúng cho luồng nhẹ, sai cho ảnh liên tục.
 
 </details>
 
@@ -911,7 +919,6 @@ Wi-Fi văn phòng mất kết nối là chuyện thường; streaming biến m�
 | Cờ `ros2 bag record` (`-s mcap`, split, preset, QoS override) | [tự đo] | Theo bản Jazzy cài |
 | Kích thước CDR `Imu` ~324 B | [ước lượng] | Tính từ định nghĩa message + căn lề CDR; kiểm bằng `ros2 bag info` (byte/message) |
 | Ảnh MJPEG 720p 50–150 KB | [ước lượng] | Đo ở C7.1 |
-| Kill -9 mất ~một chunk | [chuẩn] | K5 Bài 13 đã đo với writer Python; rosbag2 `[tự đo]` |
 | `lerobot-audit` không đọc MCAP, cần adapter | [chuẩn] | K2 M2 viết cho định dạng LeRobot |
 
 **Đã sửa so với bản gốc/Gemini:**
@@ -1079,10 +1086,17 @@ Rule bị vô hiệu (đọc nhầm topic, tiền điều kiện không bao gi�
 
 </details>
 
-3. **[Phản biện]** "Contract nên tự sửa dữ liệu khi được (ví dụ đảo dấu trục z nếu phát hiện úp ngược) thay vì chặn." Đồng ý tới đâu?
+3. **[Phản biện]** "Contract nên tự sửa dữ liệu khi được (đảo dấu trục z nếu thấy úp ngược) thay vì chặn." Đồng ý tới đâu?
 <details><summary>Hướng nghĩ</summary>
 
-Sửa tự động biến bộ kiểm thành một phần của pipeline biến đổi, không ai kiểm nó nữa, và che nguyên nhân (URDF sai vẫn sai cho dữ liệu trực tiếp). Cho phép **biến đổi có phiên bản** ở tầng sau (file gốc giữ nguyên, bản sửa có lineage), không ở tầng kiểm.
+Sửa tự động biến bộ kiểm thành bộ biến đổi không ai kiểm, và che nguyên nhân (URDF vẫn sai cho dữ liệu trực tiếp). Cho phép biến đổi **có phiên bản** ở tầng sau, file gốc giữ nguyên.
+
+</details>
+
+4. **[Liên ngành]** Phòng xét nghiệm y khoa chạy mẫu kiểm chuẩn (control) mỗi ca trước khi tin kết quả bệnh nhân. Tương đương trong contract của bạn là gì?
+<details><summary>Hướng nghĩ</summary>
+
+Bộ file tiêm lỗi cố định chạy mỗi tuần (bước 4) và 5 s đứng yên đầu mỗi phiên: một mẫu "đã biết đáp án" đi qua đúng đường đo trước dữ liệu thật.
 
 </details>
 
@@ -1097,7 +1111,6 @@ Sửa tự động biến bộ kiểm thành một phần của pipeline biến 
 | Rule tần số trung bình không bắt khoảng hở 0,5 s | [đã chạy] | Mô phỏng |
 | `gravity_up` bắt IMU úp ngược | [đã chạy] mô phỏng / [tự đo] robot | Bước 4 |
 | `yaw_agree` không thấy va chạm thẳng không xoay | [ước lượng] | Bước 5 đo |
-| Mars Climate Orbiter, đơn vị | [chuẩn] | Mishap Investigation Board 1999 |
 
 **Đã thêm so với bản gốc:** bản gốc không có bài contract riêng cho robot (C7.4 là bài mới theo `_KE-HOACH-K7.md`); hẹn của C6.3 (chạy lại va chạm với IMU) thực hiện ở bước 5.
 
