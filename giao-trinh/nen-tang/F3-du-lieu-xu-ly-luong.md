@@ -17,7 +17,7 @@ Thiếu F3, bạn sẽ hụt ở đúng những chỗ này:
 
 - **K2 Bài 4, 7** — đọc MCAP như "Kafka segment trong một file" rồi ngạc nhiên khi file bị `kill -9` không có index nào.
 - **K2 Bài 6, 8b** — thêm trường proto3 "an toàn hai chiều" và nhận `0.0 °C` cho toàn bộ dữ liệu cũ.
-- **K5 Bài 13** — ghép camera 30 Hz với IMU 200 Hz theo `log_time` và nhúng jitter USB vào dữ liệu fusion; hoặc resample về 30 Hz và biến rung motor 40 Hz thành dao động 10 Hz không có thật.
+- **K5 Bài 13** — ghép camera 30 Hz với IMU 200 Hz theo `log_time` và nhúng jitter USB vào dữ liệu fusion; hoặc resample về 30 Hz và biến rung motor thành một dao động không có thật.
 - **K5 Bài 14** — xóa file local sau `200 OK` của một file đang ghi dở.
 - **K5 Bài 16** — tin rằng "schema bắt được sai đơn vị" (bản gốc viết đúng câu này).
 - **K5 Bài 17, K3 Bài 16** — chọn "block producer" vì nghe an toàn, thực ra dời chỗ mất dữ liệu sang driver USB, nơi không ai đếm.
@@ -128,7 +128,7 @@ Câu then chốt: **trong một log, crash-safety và random access kéo về ha
 
 **Chấm mô hình:**
 
-- *"Append-only nghĩa là crash không bao giờ làm hỏng file."* — **ĐÚNG MỘT PHẦN.** Append-only giới hạn chỗ hỏng ở **đuôi**: không bản ghi cũ nào bị ghi đè dở. Gãy: (a) đuôi đó có thể là cả chunk đang mở, tức vài giây dữ liệu; (b) reader dùng index sẽ coi cả file là hỏng vì footer/summary không có; (c) một bản ghi bị cắt giữa chừng mà không có độ dài + CRC thì reader không biết dừng ở đâu. Phản ví dụ: bài tập mục 5 — file bị kill có 100% chunk đã flush còn nguyên, nhưng reader theo index đọc được 0 message.
+- *"Append-only nghĩa là crash không bao giờ làm hỏng file."* — **ĐÚNG MỘT PHẦN.** Append-only giới hạn chỗ hỏng ở **đuôi**: không bản ghi cũ nào bị ghi đè dở. Gãy: (a) đuôi đó có thể là cả chunk đang mở, tức vài giây dữ liệu; (b) reader dùng index sẽ coi cả file là hỏng vì footer/summary không có; (c) một bản ghi bị cắt giữa chừng mà không có độ dài + CRC thì reader không biết dừng ở đâu. Phản ví dụ: bài tập mục 5 — so số message reader theo index và reader quét lấy lại được từ cùng một file bị kill.
 - *Mô hình của bạn ở K3 lượt 6: "luôn phải có buffer để ổn định… đánh đổi bằng RAM".* — Đã chấm **ĐÚNG MỘT PHẦN** ở K5 Bài 13. Thêm một góc ở đây: chunk của log chính là buffer đó, và nó có *ba* giá, không phải một: RAM, độ trễ trước khi dữ liệu xuống đĩa, và lượng dữ liệu mất khi chết. Kích thước chunk chọn bằng cả ba.
 
 **Tên chuẩn của thứ bạn đã làm:** khi bạn replay một topic Kafka từ offset 0 để dựng lại một service sau khi sửa bug, đó là **event sourcing / kappa architecture**: trạng thái là hàm của log. Với robot, "sửa bug extractor rồi chạy lại trên toàn bộ MCAP" là cùng mẫu. Còn thiếu: log của bạn ở backend được giữ bởi retention có chủ đích; log robot phải được giữ *vĩnh viễn* và có hash (→ F3.8), vì không có upstream nào phát lại.
@@ -304,7 +304,7 @@ Checklist khi đọc một khẳng định hay một kết quả về log/MCAP:
 | Summary và Summary Offset là phần tùy chọn của MCAP; `sequence` là bộ đếm tùy chọn | `[spec]` | MCAP Specification, mục File structure và Message record |
 | MCAP là storage mặc định của rosbag2 từ Iron | `[spec]` | Release notes ROS 2 Iron; kiểm `ros2 bag record --help` trên Jazzy |
 | Kafka dựng lại index khi broker khởi động sau crash | `[chuẩn]` | Tài liệu Kafka, log recovery |
-| Mất trung bình ≈ chunk/2 khi kill ngẫu nhiên | `[đã chạy]` | Mô phỏng mục 5 |
+| Số message mất khi kill ngẫu nhiên, tỉ lệ nén theo chunk | `[đã chạy]` | Mô phỏng mục 5 |
 | Chi phí fsync trên ổ của robot | `[tự đo]` | `fio --fsync=1` trên đúng ổ |
 
 ### 11. Đọc thêm và tự kiểm tra
@@ -361,13 +361,13 @@ Hệ quả thực hành cho ROS 2: vì CDR không có câu chuyện tiến hóa,
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
 | Kafka + Confluent: message mang **schema ID** 5 byte, schema ở registry | MCAP mang **cả schema** trong file | Registry là dịch vụ phải sống; 10 năm sau có thể không còn. File tự mô tả sống độc lập nhưng không có ai chặn schema sai lúc ghi | Ghi schema ID thay vì schema vào file robot "cho gọn" → file mồ côi khi registry đổi |
-| Protobuf trong gRPC: kích thước message ít quan trọng | Protobuf ghi 200 Hz × nhiều giờ | Kích thước **phụ thuộc giá trị**: trục bằng 0.0 đúng thì biến mất, `sequence` lớn tốn thêm byte | Tính dung lượng từ một message mẫu "đẹp" (nhiều số 0) → thiếu |
-| Thêm giá trị enum mới vào API | Thêm trường enum vào message cảm biến | proto3: reader mới đọc dữ liệu cũ thấy **giá trị số 0** của enum. Nếu số 0 mang nghĩa thật, dữ liệu cũ bị gán nghĩa đó | Toàn bộ file cũ hiện là `clock_source = ESP32_TIMER` (bài tập mục 5) |
+| Protobuf trong gRPC: kích thước message ít quan trọng | Protobuf ghi 200 Hz × nhiều giờ | Kích thước **phụ thuộc giá trị** (varint, trường mang giá trị mặc định) — mục 5 đo bao nhiêu | Tính dung lượng từ một message mẫu "đẹp" → lệch so với dữ liệu thật |
+| Thêm giá trị enum mới vào API | Thêm trường enum vào message cảm biến | proto3: reader mới đọc dữ liệu cũ thấy **giá trị số 0** của enum. Nếu số 0 mang nghĩa thật, dữ liệu cũ bị gán nghĩa đó | Toàn bộ file cũ bị gán một nguồn đồng hồ mà chúng không hề khai (dự đoán ở mục 5) |
 | JSON schema linh hoạt, thêm field tùy ý | CDR của ROS 2 | CDR không có tag; reader dùng schema khác writer đọc ra rác có hình dạng hợp lệ | Sửa `sensor_msgs/Imu` cục bộ "thêm 1 trường" → Foxglove/rosbag2 của người khác đọc lệch |
 
 **Chấm mô hình:**
 
-- *"Protobuf luôn nhỏ hơn CDR."* — **ĐÚNG MỘT PHẦN.** Với `ImuSample` của repo, một mẫu đầy đủ ~190 B so với 324 B của `sensor_msgs/Imu` CDR — nhưng hai message không mang cùng thông tin (`sensor_msgs/Imu` có quaternion và ba ma trận covariance). So sánh đúng phải cùng nội dung. Phản ví dụ: một message toàn `double` khác 0 và không có trường rỗng thì Protobuf tốn thêm 1 byte tag mỗi trường so với CDR.
+- *"Protobuf luôn nhỏ hơn CDR."* — **ĐÚNG MỘT PHẦN.** Với `ImuSample` của repo, một mẫu đầy đủ nhỏ hơn 324 B của `sensor_msgs/Imu` CDR (mục 5 đo bao nhiêu) — nhưng hai message không mang cùng thông tin (`sensor_msgs/Imu` có quaternion và ba ma trận covariance). So sánh đúng phải cùng nội dung. Phản ví dụ: một message toàn `double` khác 0 và không có trường rỗng thì Protobuf tốn thêm 1 byte tag mỗi trường so với CDR.
 - *"Schema nhúng trong file nên đọc được mãi mãi."* — **ĐÚNG MỘT PHẦN.** Bytes giải mã được nếu còn thư viện cho encoding đó. Gãy: schema `ros2msg` cần đủ định nghĩa phụ thuộc (MCAP nối chúng vào một chuỗi); nghĩa (đơn vị, frame, giá trị 0) không nằm trong schema; và code đọc theo tên trường vỡ khi tên đổi. Phản ví dụ: file năm 2026 có `clock_source` enum mà số 0 là "ESP32"; reader năm 2031 đọc đúng bytes, gán sai nghĩa cho mọi file trước khi trường đó tồn tại.
 
 **Tên chuẩn của thứ bạn đã làm:** khi bạn chọn Avro + registry với chế độ `BACKWARD_TRANSITIVE` để consumer mới đọc được mọi bản cũ, bạn đang làm **schema evolution có kiểm ở thời điểm ghi**. Ở robot, cổng kiểm đó dời sang **CI của repo schema** (`buf breaking` cho `.proto`) và **ingest** (từ chối hoặc gắn cờ file mang schema chưa đăng ký). Còn thiếu: test tương thích *ngữ nghĩa* bằng golden file (K2 Bài 6) — không công cụ breaking-check nào làm thay.
@@ -530,7 +530,7 @@ Checklist khi đọc một thay đổi schema hay một con số kích thước:
 |---|---|---|
 | Knight Capital: cờ dùng lại, một server không cập nhật, ~460 triệu USD, ~45 phút | `[chuẩn]` | SEC Administrative Proceeding 34-70694 (2013) |
 | Không dùng lại số hiệu trường, dùng `reserved` | `[spec]` | protobuf.dev, "Updating A Message Type" |
-| Kích thước 190/172/188–192 byte; enum vắng → 0; unknown field được giữ | `[đã chạy]` | Mục 5, protobuf Python 7.36 |
+| Kích thước message, giá trị enum khi vắng, số phận unknown field | `[đã chạy]` | Mục 5, protobuf Python 7.36 |
 | `sensor_msgs/Imu` CDR = 324 B | `[đã chạy ở K5 Bài 13]` | `len(m.data)` trên MCAP thật |
 | rosbag2 không có migration rule như rosbag1 | `[tự đo]` | Tài liệu rosbag2 bản Jazzy |
 
@@ -558,7 +558,7 @@ Checklist khi đọc một thay đổi schema hay một con số kích thước:
 
 Tyler Akidau và nhóm ở Google viết *Streaming 101* (2015) và *The Dataflow Model* (VLDB 2015) sau nhiều năm vận hành MillWheel và FlumeJava. Ví dụ họ dùng: điểm số của một trò chơi di động. Người chơi trên máy bay, điện thoại offline, điểm được gửi lên khi hạ cánh vài giờ sau. Nếu bạn cộng điểm theo **giờ server nhận** (processing time), bảng xếp hạng của giờ 14:00 chứa điểm chơi lúc 9:00. Nếu cộng theo **giờ chơi** (event time), bạn phải trả lời câu khó: *khi nào thì chắc đã nhận đủ điểm của 9:00?* Câu trả lời của họ là **watermark** — một ước lượng (không phải bảo đảm) rằng "dữ liệu có event time trước T có lẽ đã tới hết" — cộng với **allowed lateness** và cơ chế phát lại kết quả khi dữ liệu muộn vẫn tới `[chuẩn]`.
 
-Robot thêm một tầng mà điện thoại không có. Điện thoại đóng dấu bằng đồng hồ đã đồng bộ NTP. ESP32 đóng dấu bằng timer đếm µs từ lúc boot, chạy bằng thạch anh lệch vài chục ppm (→ F4.1). *Kịch bản:* một phiên ghi 3 giờ, host quy đổi `esp_timer` sang giờ host bằng offset đo lúc khởi động và không bù drift. Pipeline đóng cửa sổ 1 s theo đồng hồ host với dung sai 50 ms. Giờ đầu không có gì lạ. Từ phút thứ 20, tỉ lệ "dữ liệu muộn" tăng đều, không có sự cố mạng nào. Không ai đổi code. Đồng hồ trôi đã âm thầm biến thành độ muộn. Bài tập mục 5 dựng lại đúng kịch bản này.
+Robot thêm một tầng mà điện thoại không có. Điện thoại đóng dấu bằng đồng hồ đã đồng bộ NTP. ESP32 đóng dấu bằng timer đếm µs từ lúc boot, chạy bằng thạch anh lệch vài chục ppm (→ F4.1). *Kịch bản:* một phiên ghi 3 giờ, host quy đổi `esp_timer` sang giờ host bằng offset đo lúc khởi động và không bù drift. Pipeline đóng cửa sổ 1 s theo đồng hồ host với dung sai 50 ms. Lúc đầu không có gì lạ. Sau một lúc, tỉ lệ "dữ liệu muộn" bắt đầu tăng, không có sự cố mạng nào. Không ai đổi code. Đồng hồ trôi đã âm thầm biến thành độ muộn. Bài tập mục 5 dựng lại đúng kịch bản này.
 
 ### 2. Mô hình tư duy
 
@@ -606,7 +606,7 @@ Ba điều khác backend, mỗi cái là một quyết định:
 
 **Chấm mô hình:**
 
-- *Mô hình của bạn ở K3 lượt 7: "mỗi thiết bị có khái niệm về clock, về thời gian của chúng … dù giới hạn tốc độ lại nhưng mọi thứ vẫn lệch clock nhau … nên phải có buffer, để các giao thức có nguồn để hoạt động."* — **ĐÚNG MỘT PHẦN.** Đúng: mỗi thiết bị có thời gian riêng, và chúng lệch nhau. Gãy: buffer hấp thụ **lệch tốc độ tức thời** (burst, jitter), không sửa **lệch đồng hồ**. Lệch đồng hồ cần một *mô hình* (offset + drift, ước lượng liên tục, → F4.4–F4.6) và một trường ghi lại mô hình nào đã dùng (`clock_source`). Phản ví dụ: mục 5 — buffer/dung sai 150 ms che được drift 40 ppm trong một giờ (144 ms) nhưng sang giờ thứ hai thì không; tăng buffer chỉ dời thời điểm hỏng.
+- *Mô hình của bạn ở K3 lượt 7: "mỗi thiết bị có khái niệm về clock, về thời gian của chúng … dù giới hạn tốc độ lại nhưng mọi thứ vẫn lệch clock nhau … nên phải có buffer, để các giao thức có nguồn để hoạt động."* — **ĐÚNG MỘT PHẦN.** Đúng: mỗi thiết bị có thời gian riêng, và chúng lệch nhau. Gãy: buffer hấp thụ **lệch tốc độ tức thời** (burst, jitter), không sửa **lệch đồng hồ**. Lệch đồng hồ cần một *mô hình* (offset + drift, ước lượng liên tục, → F4.4–F4.6) và một trường ghi lại mô hình nào đã dùng (`clock_source`). Phản ví dụ: mục 5 câu 5 — tính xem một dung sai cố định che được drift 40 ppm trong bao lâu; tăng buffer chỉ dời thời điểm hỏng.
 - *"Sort theo timestamp là xong thứ tự."* — Đã chấm **SAI** ở K5 Bài 13 (hai đồng hồ khác gốc, khác tốc độ). Thêm: ngay cả trong một nguồn, sau reboot thứ tự theo `stamp` khác thứ tự thật.
 
 **Tên chuẩn của thứ bạn đã làm:** khi bạn tính SLA "độ tươi dữ liệu" bằng `now − event_timestamp` trên dashboard, bạn đang đo **event-time skew** (Akidau gọi là *skew* giữa event time và processing time). Còn thiếu ở robot: tách skew thành phần truyền (đuôi, ổn định) và phần đồng hồ (trôi đều). Phần sau là tín hiệu để **sửa đồng hồ**, không phải để tăng L.
@@ -763,7 +763,7 @@ Checklist khi gặp một timestamp, một cửa sổ, hay một con số "dữ 
 |---|---|---|
 | Định nghĩa `log_time`, `publish_time` | `[spec]` | MCAP Specification, Message record |
 | Watermark là heuristic; event time vs processing time | `[chuẩn]` | Akidau, Streaming 101/102; Dataflow Model, VLDB 2015 |
-| Tỉ lệ muộn tăng theo phiên khi drift không bù; số trong bảng | `[đã chạy]` | Mục 5, mô hình đồ chơi |
+| Tỉ lệ muộn theo L và theo thời gian phiên | `[đã chạy]` | Mục 5, mô hình đồ chơi |
 | Thạch anh ESP32 ±10 ppm | `[spec — kiểm datasheet module bạn mua]` | Đo thật ở K5 |
 | MiFID II 100 µs cho HFT | `[chuẩn — kiểm RTS 25]` | Không ảnh hưởng nội dung chính |
 
@@ -826,12 +826,12 @@ K5 Bài 13 đã có mô phỏng cho thấy khi δ vượt cỡ một chu kỳ IM
 |---|---|---|---|
 | Stream–stream join theo khóa (Flink interval join, Kafka Streams `JoinWindows`) | Ghép theo **thời gian**, không có khóa | Join backend ghép sự kiện rời rạc; không ai nội suy giữa hai đơn hàng. Tín hiệu vật lý liên tục nên nội suy được — chỉ cho đại lượng liên tục (không cho cờ trạng thái, ảnh; quaternion phải slerp) | Nội suy cờ `range_status` ra 0,5; trung bình hai ảnh |
 | SQL `ASOF JOIN` (DuckDB, kdb+ `aj`, `pd.merge_asof`) | Đúng công cụ | Mặc định không có giới hạn tuổi mẫu; chiều mặc định là *backward* (nhân quả). Phải đặt tolerance theo chu kỳ luồng nhanh | Lỗ hổng biến thành mẫu cũ hợp lệ |
-| Downsample metrics (avg mỗi phút) cho dashboard | Downsample tín hiệu cảm biến | Metric backend hiếm khi có tần số tuần hoàn cao; rung cơ khí có. Lấy mẫu thưa không lọc = aliasing, trung bình theo khối là một bộ lọc thô có búp phụ | Thấy "dao động 10 Hz" trong dataset, đi tìm nguồn không tồn tại |
+| Downsample metrics (avg mỗi phút) cho dashboard | Downsample tín hiệu cảm biến | Metric backend hiếm khi có tần số tuần hoàn cao; rung cơ khí có. Lấy mẫu thưa không lọc = aliasing, trung bình theo khối là một bộ lọc thô có búp phụ | Thấy một dao động tần số thấp trong dataset, đi tìm nguồn không tồn tại |
 | Clock skew giữa hai service: chấp nhận vài ms | Lệch vài ms giữa camera và IMU | Ở 2 rad/s, 5 ms lệch = 0,01 rad ≈ 0,6° mỗi lần ghép `[ước lượng]`; với hiệu chuẩn camera–IMU hay fusion, đó là sai số hệ thống | Mô hình học được độ trễ cố định như một đặc trưng của robot |
 
 **Chấm mô hình:**
 
-- *"Cứ resample mọi luồng về một lưới chung 30 Hz rồi join theo chỉ số, đơn giản nhất."* — **SAI** cho luồng có thành phần trên 15 Hz. Phản ví dụ: bài tập mục 5 — rung 40 Hz biên độ 0,4 rad/s hiện thành đỉnh phổ ở 10 Hz trong chuỗi 30 Hz. Đúng khi: đã lọc thông thấp trước (và chấp nhận mất thông tin rung), hoặc tín hiệu vốn chậm (nhiệt độ, pin).
+- *"Cứ resample mọi luồng về một lưới chung 30 Hz rồi join theo chỉ số, đơn giản nhất."* — **SAI** cho luồng có thành phần trên 15 Hz. Phản ví dụ: bài tập mục 5 Bẫy 1 — tính trước rung 40 Hz sẽ hiện ở đâu trong chuỗi 30 Hz. Đúng khi: đã lọc thông thấp trước (và chấp nhận mất thông tin rung), hoặc tín hiệu vốn chậm (nhiệt độ, pin).
 - *"`merge_asof` là as-of join, dùng là xong."* — **ĐÚNG MỘT PHẦN.** Đúng thuật toán. Thiếu ba tham số quyết định nghĩa: `direction` (backward = nhân quả, cho dữ liệu huấn luyện policy chạy online; nearest/forward = nhìn trước tương lai), `tolerance` (tuổi mẫu tối đa), và cả hai bảng phải **sort theo cùng một thời gian event đã quy đổi**. Phản ví dụ: mục 5 Bẫy 3.
 
 **Tên chuẩn của thứ bạn đã làm:** khi bạn ghép log request với metric hạ tầng "theo phút gần nhất" để debug, bạn đang làm **as-of join với zero-order hold**. Còn thiếu ở robot: ghi **tuổi mẫu** (khoảng cách thời gian giữa hai bên ghép) thành một cột của bảng kết quả, để mọi người dùng sau biết sai số căn chỉnh của từng dòng — giống cách K5 Bài 15 biến sai số sync thành một trường dữ liệu.
@@ -981,7 +981,7 @@ Checklist khi gặp một bảng/dataset "đã đồng bộ" hay một con số 
 |---|---|---|
 | Lee & Ready 1991, quy tắc 5 giây | `[chuẩn]` | Journal of Finance 46(2), 1991 |
 | Sai số nội suy tuyến tính ≤ h²/8·max\|x''\| | `[chuẩn]` | Giải tích số |
-| Alias 40 → 10 Hz, 8 frame, 243 ms, 8 NaN | `[đã chạy]` | Mục 5; pandas 3.0, numpy |
+| Kết quả ba bẫy ở mục 5 | `[đã chạy]` | pandas 3.0, numpy |
 | `merge_asof` mặc định `direction="backward"`, không tolerance | `[spec]` | Tài liệu pandas `merge_asof`; kiểm bản bạn cài |
 | 0,6° sai lệch ở 2 rad/s, 5 ms | `[ước lượng]` | 2 × 0,005 = 0,01 rad |
 
@@ -1225,3 +1225,914 @@ Checklist cho một thiết kế upload/ingest:
   </details>
 
 ---
+
+## F3.6 — Lưu trữ phân tích: columnar (Parquet), partition, index, catalog, DuckDB (4h)
+
+> **Dùng cho:** K2 Bài 9 · K5 Bài 15 · K6 Bài 9 · **Cần trước:** F3.1, F3.5 · **Sau viên nang này bạn đánh giá được:** một câu truy vấn trên dữ liệu cảm biến sẽ đọc bao nhiêu byte và vì sao; một bảng tóm tắt/index có trả lời được câu hỏi người ta định hỏi không; và một khẳng định "Parquet nhỏ/nhanh" đúng trong điều kiện nào.
+
+### 1. Câu chuyện
+
+Năm 2010 Google công bố Dremel: truy vấn tương tác trên hàng nghìn tỉ dòng bằng cách lưu **theo cột** và chỉ đọc cột câu hỏi cần. Twitter và Cloudera dựng Parquet (2013) theo ý tưởng đó cho hệ Hadoop `[chuẩn]`. Mười năm sau, DuckDB (Raasveldt & Mühleisen, từ 2019) đưa cùng kiểu engine vào **trong process**, đọc thẳng file Parquet trên laptop hay object store, không cần server `[chuẩn]`. Với một người học có một mini PC và vài trăm GB dữ liệu, đây là thay đổi lớn: câu hỏi "ClickHouse hay TimescaleDB" của bản gốc K5 Bài 15 có thêm một lựa chọn không phải vận hành gì.
+
+Nhưng câu hỏi khó của K5 Bài 15 không nằm ở engine. Nó là: *"cho tôi mọi lúc gia tốc vượt 2g trong tuần qua"* — câu trả lời đúng phụ thuộc vào việc bảng tóm tắt giữ **max** hay **mean**, theo **giây** hay theo **phiên**, sort theo **thời gian** hay không. Engine nhanh nhất cũng không cứu được một bảng tóm tắt đã vứt đi thông tin cần.
+
+### 2. Mô hình tư duy
+
+```
+ Parquet file
+ ┌──────────────── row group 0 (≈100k dòng) ───────────────┐┌── row group 1 ──┐ ... ┌─ footer ─────────────────┐
+ │ column chunk t_ns │ column chunk ax │ ay │ az            ││                 │     │ schema                    │
+ │  [page][page]...  │  [page]...      │    │               ││                 │     │ mỗi row group × mỗi cột:  │
+ └───────────────────────────────────────────────────────────┘└─────────────────┘     │  offset, size, min, max,  │
+                                                                                      │  null_count, encoding     │
+ Truy vấn WHERE t_ns BETWEEN a AND b:                                                  └───────────────────────────┘
+   1. đọc footer → 2. bỏ row group có [min,max] không giao [a,b] (zone map) → 3. chỉ đọc cột cần
+```
+
+Ba nút vặn quyết định byte phải đọc:
+
+| Nút | Làm gì | Chỉ có tác dụng khi |
+|---|---|---|
+| **Partition** (thư mục `date=…/device=…`) | Bỏ cả file theo tên | Truy vấn lọc theo đúng khóa partition; partition không quá nhỏ (hàng nghìn file bé = chậm) |
+| **Sort key trong file** | Làm min/max của row group *hẹp* → zone map loại được | Dữ liệu được ghi theo thứ tự khóa (thời gian cho cảm biến) |
+| **Chọn cột** | Không đọc cột không cần | Luôn có tác dụng — lợi thế cốt lõi của columnar |
+
+Và một tầng nằm trên: **bảng tóm tắt** (index) là view dẫn xuất từ raw (F3.1), chọn **thống kê bảo toàn câu hỏi**. Câu hỏi "có vượt ngưỡng không" cần max (và min); "có thiếu dữ liệu không" cần count; "phân bố dt" cần histogram, không cần mean. Mean là thống kê làm mất đúng thứ người ta hay tìm: sự kiện hiếm.
+
+**Catalog** (Hive metastore, Apache Iceberg, Delta Lake) 🟡: bảng các file thuộc về một "bảng logic", có snapshot và schema. Ở quy mô một robot, một file manifest + quy ước thư mục là đủ; ở 100 robot thì catalog bắt đầu đáng giá (xóa an toàn, time travel, tránh đọc file đang ghi).
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| ClickHouse `ORDER BY` + sparse primary index, partition by month | Parquet sort + row group stats, partition thư mục | Cùng ý tưởng (zone map). Khác: Parquet là **file bất biến**; muốn "insert" là ghi file mới; sort chỉ có nếu writer sort trước khi ghi | Append từng lô nhỏ không sort → hàng nghìn file nhỏ, zone map vô dụng |
+| Index B-tree cho tra cứu điểm | Không có trong Parquet | Columnar tối ưu quét nhiều dòng ít cột; tra một dòng theo khóa vẫn phải đọc cả page | Dùng Parquet làm kho key-value cho metadata phiên |
+| Time-series DB nén tốt (Gorilla, delta-of-delta) | Parquet với float cảm biến có nhiễu | Mã hóa mặc định (dictionary + snappy) **không** hợp float nhiễu; cần chọn encoding (delta cho timestamp, byte-stream-split cho float) | Kỳ vọng nén 10× từ kinh nghiệm metrics, nhận file to hơn raw (mục 5) |
+| Materialized view / rollup theo phút | Bảng tóm tắt theo giây | Rollup backend thường là sum/count/avg cho dashboard; ở đây câu hỏi là sự kiện hiếm → max/min/count, và phải giữ con trỏ về raw | Rollup bằng avg, mất toàn bộ cú va |
+
+**Chấm mô hình:**
+
+- *"Parquet là định dạng nén, nên dữ liệu cảm biến sẽ nhỏ đi nhiều."* — **ĐÚNG MỘT PHẦN.** Parquet nén tốt dữ liệu lặp và có thứ tự (timestamp đều, cờ trạng thái, ID). Float nhiễu gần như không nén được bằng thuật toán không mất mát. Phản ví dụ: mục 5 câu 1 — so byte/dòng của cấu hình mặc định với float32 thô.
+- Đã chấm ở K5 Bài 15, không lặp: *"Không nhét raw 200 Hz vào ClickHouse vì DB sẽ phình"* — **ĐÚNG MỘT PHẦN** (lý do thật là một nguồn sự thật + video không vào DB + chi phí ở quy mô đội).
+
+**Tên chuẩn của thứ bạn đã làm:** khi bạn tách log ứng dụng thô (S3) khỏi bảng metric tổng hợp (Prometheus/ClickHouse) và dashboard chỉ đọc bảng tổng hợp, đó là kiến trúc **lakehouse/medallion** thô sơ: bronze (raw) → silver (đã làm sạch, chuẩn hóa) → gold (tóm tắt cho câu hỏi). Còn thiếu ở robot: tầng gold phải giữ **con trỏ về raw** (sha256 file + khoảng thời gian), vì mọi câu trả lời cuối cùng đều được kiểm bằng cách mở MCAP trong Foxglove.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Columnar storage | Lưu cùng cột liền nhau | Chỉ để nén |
+| 🟢 | Row group, column chunk, page, footer | Các tầng của file Parquet | — |
+| 🟢 | Zone map / min-max statistics, predicate pushdown | Bỏ khối mà min/max không giao điều kiện | Index như B-tree |
+| 🟢 | Partition (Hive-style) | Chia file theo giá trị khóa vào thư mục | Càng nhiều càng tốt |
+| 🟢 | Bảng tóm tắt, thống kê bảo toàn câu hỏi | View dẫn xuất giữ đúng thống kê cần | Mean là đủ |
+| 🟡 | Encoding: dictionary, delta, byte-stream-split | Cách biến cột thành bytes trước nén | Nén |
+| 🟡 | Catalog: Iceberg, Delta Lake, Hive metastore | Danh sách file + snapshot của một bảng logic | Cần ngay |
+| 🔴 | Bloom filter trong Parquet | Cho tra cứu điểm; ít dùng cho cảm biến | — |
+
+### 5. Bài tập dự đoán
+
+6 giờ IMU 200 Hz (4,32 triệu dòng: `t_ns` int64, `ax, ay, az` float32, nhiễu 0,05 m/s²), có 30 "cú va" một mẫu với |a| ≈ 25 m/s². Ghi hai file Parquet, row group 100 000 dòng: một file **sort theo thời gian**, một file **xáo trộn**. Script cần `pip install duckdb pyarrow` và ghi ~230 MB ra thư mục hiện tại.
+
+**Dự đoán:**
+
+1. Byte/dòng của Parquet mặc định (pyarrow: dictionary + snappy) so với float32 thô (8 + 3×4 = 20 byte)?
+2. Truy vấn cửa sổ 10 s giữa phiên: file sort phải đọc bao nhiêu row group trong 44? File xáo trộn? Thời gian chênh bao nhiêu lần?
+3. Bảng tóm tắt theo giây (21 600 dòng): bao nhiêu giây có **max**|a| > 2g? Bao nhiêu giây có **mean**|a| > 2g?
+
+```python
+# [đã chạy] Parquet + DuckDB: thống kê min/max mỗi row group quyết định đọc bao nhiêu
+import numpy as np, pyarrow as pa, pyarrow.parquet as pq, duckdb, time, os
+rng = np.random.default_rng(2)
+N = 200 * 3600 * 6                                    # 6 giờ IMU 200 Hz
+t = np.arange(N, dtype=np.int64) * 5_000_000          # ns
+a = rng.normal([0, 0, 9.787], 0.05, (N, 3)).astype(np.float32)
+hits = rng.choice(N, 30, replace=False)               # 30 cú va: một mẫu |a| ≈ 25 m/s²
+a[hits, 0] += 23.0
+tbl = pa.table({"t_ns": t, "ax": a[:, 0], "ay": a[:, 1], "az": a[:, 2]})
+pq.write_table(tbl, "sorted.parquet", row_group_size=100_000)
+pq.write_table(tbl.take(rng.permutation(N)), "shuffled.parquet", row_group_size=100_000)
+print("byte/dòng: sorted %.1f | shuffled %.1f | float32 thô 20.0" % (
+    os.path.getsize("sorted.parquet") / N, os.path.getsize("shuffled.parquet") / N))
+
+lo, hi = 3 * 3600 * 10**9, (3 * 3600 + 10) * 10**9    # cửa sổ 10 s giữa phiên
+for f in ("sorted.parquet", "shuffled.parquet"):
+    md = pq.ParquetFile(f).metadata
+    touch = sum(1 for i in range(md.num_row_groups)
+                if (s := md.row_group(i).column(0).statistics).max >= lo and s.min < hi)
+    t0 = time.perf_counter()
+    n = duckdb.sql(f"SELECT count(*) FROM '{f}' WHERE t_ns >= {lo} AND t_ns < {hi}").fetchone()[0]
+    print(f"{f:17s} row group phải đọc {touch:3d}/{md.num_row_groups} | {n} dòng | {1e3*(time.perf_counter()-t0):.1f} ms")
+
+# index tóm tắt mỗi giây: dùng max hay mean để tìm cú va?
+duckdb.sql("""CREATE TABLE s AS SELECT t_ns // 1000000000 AS sec,
+              max(sqrt(ax*ax+ay*ay+az*az)) AS amax, avg(sqrt(ax*ax+ay*ay+az*az)) AS amean,
+              count(*) AS n FROM 'sorted.parquet' GROUP BY sec""")
+g2 = 2 * 9.80665
+print("giây có max|a| > 2g :", duckdb.sql(f"SELECT count(*) FROM s WHERE amax  > {g2}").fetchone()[0])
+print("giây có mean|a| > 2g:", duckdb.sql(f"SELECT count(*) FROM s WHERE amean > {g2}").fetchone()[0])
+print("dòng trong bảng tóm tắt:", duckdb.sql("SELECT count(*) FROM s").fetchone()[0])
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Chạy với pyarrow 25.0, duckdb 1.5 trên máy sandbox (thời gian của bạn sẽ khác; tỉ lệ mới đáng so):
+
+| Câu | Kết quả |
+|---|---|
+| 1 | sort **25,4** B/dòng, xáo trộn 26,6 B/dòng — **lớn hơn** 20 B thô |
+| 2 | sort: **1/44** row group, ~7 ms; xáo trộn: **44/44**, ~27 ms (≈4×; trên object store qua mạng chênh lệch lớn hơn nhiều vì mỗi row group là một lần đọc từ xa) |
+| 3 | max: **30** giây; mean: **0** giây; tóm tắt 21 600 dòng |
+
+Vì sao câu 1 ngược kỳ vọng: dictionary encoding thử trên float nhiễu thất bại (gần như mọi giá trị khác nhau) rồi rơi về plain, snappy không nén được nhiễu, `t_ns` int64 lưu plain. Đổi cấu hình (đã chạy cùng dữ liệu): zstd + tắt dictionary → 16,0 B/dòng; + `DELTA_BINARY_PACKED` cho `t_ns` → 10,4; + `BYTE_STREAM_SPLIT` cho float → **9,8 B/dòng**. Encoding đúng quan trọng hơn thuật toán nén.
+
+Câu 3: một mẫu 25 m/s² trong 200 mẫu ~9,8 nâng mean thêm ~0,08 m/s². Bảng tóm tắt bằng mean không bao giờ tìm thấy cú va; bằng max thì tìm thấy tất cả, và trỏ đúng giây để mở raw.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi đọc thiết kế index/kho phân tích hoặc một con số "truy vấn mất X giây":
+
+1. Câu hỏi được viết ra **trước** chưa (K5 Bài 15 bắt 5 câu)? Mỗi câu cần **thống kê nào** và **độ mịn thời gian nào**?
+2. Bảng tóm tắt giữ max/min/count/histogram hay chỉ mean? Có con trỏ về raw (file hash + khoảng thời gian)?
+3. Dữ liệu có **sort** theo khóa lọc chính trong file không? Row group bao nhiêu dòng? Bao nhiêu file nhỏ?
+4. Partition theo khóa mà truy vấn thật sự lọc?
+5. Con số thời gian truy vấn: cache nóng hay lạnh, local hay object store, bao nhiêu dữ liệu (→ F1.3)?
+6. "Nén tốt" đo trên dữ liệu nào, encoding nào?
+
+**Khẳng định mẫu để tự chấm:**
+
+- (a) Gemini, K5 Bài 15: bảng `robot_telemetry_index` mỗi **phiên** một dòng với `max_accel_magnitude`, và tuyên bố hệ thống trả lời được *"mọi thời điểm |a| > 2g trong khoảng thời gian X"*.
+- (b) Gemini, K5 Bài 15: *"|a| > 2g (|a| > 19.57 m/s² tại Hà Nội)"*.
+- (c) *"Parquet + DuckDB trên một máy đủ cho 7 ngày dữ liệu một robot; không cần DB server."*
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+- (a) **ĐÚNG MỘT PHẦN.** Bảng theo phiên trả lời được "phiên nào có cú va", không trả lời "mọi lúc": độ mịn thời gian bị vứt. Cần thêm bảng tóm tắt theo giây (hoặc bảng sự kiện vượt ngưỡng do extractor ghi), mỗi dòng có con trỏ về file + thời điểm.
+- (b) **ĐÚNG MỘT PHẦN.** Số học đúng với g địa phương 9,787. Nhưng "2g" trong datasheet và trong hầu hết ngưỡng va chạm dùng **g chuẩn** g_n = 9,80665 m/s² (2g = 19,61). Chênh 0,04 m/s² không đáng kể so với nhiễu, nhưng định nghĩa ngưỡng phải ghi trong data contract (F3.7); hai team dùng hai định nghĩa sẽ đếm khác nhau ở biên.
+- (c) **ĐÚNG** với quy mô đó, có điều kiện. 7 ngày × 200 Hz ≈ 121 triệu dòng IMU `[ước lượng]` — mục 5 quét 4,3 triệu dòng trong vài chục ms; tóm tắt theo giây còn ~600 000 dòng. Điều kiện: file được sort theo thời gian, encoding hợp lý, không hàng nghìn file nhỏ. Kiểm bằng cách đo đúng tiêu chí "dưới 2 giây" của K5 Bài 15 (tiêu chí gốc, không đổi). Gãy khi nhiều người/dịch vụ cùng ghi và đọc đồng thời — lúc đó cần catalog hoặc server.
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot × 1 năm. Partition theo `date/device` cho bao nhiêu thư mục, mỗi thư mục bao nhiêu file nếu mỗi file MCAP sinh một file Parquet? Cái gì gãy trước?
+   <details><summary>Hướng nghĩ</summary>
+
+   36 500 thư mục, mỗi cái hàng chục file → hàng triệu file nhỏ; LIST trên object store và mở footer từng file thành nút thắt. Gom (compaction) file theo ngày, hoặc catalog (Iceberg) giữ danh sách file thay vì LIST.
+
+   </details>
+2. **[Failure mode]** Extractor có bug tính |a| bằng g thay vì m/s² trong hai tuần. Bảng tóm tắt sai, raw đúng. Sửa thế nào và làm sao biết những báo cáo nào đã dùng bảng sai?
+   <details><summary>Hướng nghĩ</summary>
+
+   Raw là nguồn sự thật → chạy lại extractor (idempotent, đặt tên theo sha256 nguồn + version extractor). Biết báo cáo nào bị ảnh hưởng = lineage (F3.8): báo cáo ghi version extractor/hash bảng nó đọc.
+
+   </details>
+3. **[Vì sao không]** Vì sao không lưu ảnh camera vào Parquet như một cột `binary`?
+   <details><summary>Hướng nghĩ</summary>
+
+   Được (một số dataset LeRobot dạng ảnh lưu PNG trong cột Parquet `[tự đo — kiểm dataset cụ thể]`), nhưng: ảnh JPEG không nén thêm, row group lớn, đọc metadata ảnh phải lướt qua byte ảnh. LeRobot v3 tách video MP4 + Parquet cho state/action (K2 Bài 9). Cột dữ liệu lớn và cột nhỏ có kiểu truy cập khác nhau.
+
+   </details>
+4. **[Liên ngành]** Thiên văn (LSST/Rubin) xử lý hàng chục TB/đêm và phát cảnh báo "có gì đó thay đổi" trong vài phút. Họ lưu ảnh thô và bảng nguồn sáng tách biệt. Giống kiến trúc MCAP + Parquet ở đâu?
+   <details><summary>Hướng nghĩ</summary>
+
+   Giống hệt: raw bất biến + catalog nguồn (bảng) cho truy vấn + con trỏ về ảnh. Khác: họ có pipeline chuẩn hóa toàn cộng đồng và dữ liệu công khai theo chu kỳ phát hành có version.
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Data warehouse (Snowflake, BigQuery):** micro-partition + min/max metadata là cùng zone map; giá tính theo byte quét, nên sort/cluster key là quyết định tài chính. Giống: byte đọc là chi phí. Khác: dữ liệu robot có một trục thống trị (thời gian), nên quyết định sort gần như hiển nhiên.
+- **Kiểm toán tài chính:** báo cáo tổng hợp luôn truy được về chứng từ gốc (audit trail). Giống yêu cầu con trỏ về raw. Khác: kế toán cộng tiền (sum có nghĩa), cảm biến tìm cực trị.
+
+### 9. Áp vào khóa chính
+
+- **K2 Bài 9:** đọc Parquet của LeRobot bằng `pyarrow.parquet.ParquetFile(...).metadata` trước khi đọc dữ liệu: row group, thống kê, encoding — biết tool sẽ đọc bao nhiêu.
+- **K5 Bài 15:** DuckDB + Parquet là lựa chọn mặc định một máy; bảng tóm tắt theo giây với max/min/count, partition `date/device`, sort theo thời gian; đo tiêu chí <2 s lạnh và nóng.
+- **K6 Bài 9:** kết quả 10 000 episode vào một bảng Parquet (một dòng mỗi episode, cột metric + hash artifact), không 10 000 file JSON.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Dremel 2010, Parquet 2013, DuckDB 2019 | `[chuẩn]` | Melnik et al., VLDB 2010; Raasveldt & Mühleisen, SIGMOD 2019 (demo) |
+| Byte/dòng theo encoding, row group bị đọc, max vs mean | `[đã chạy]` | Mục 5, pyarrow 25.0, duckdb 1.5 |
+| g chuẩn 9,80665 m/s² | `[chuẩn]` | Định nghĩa CGPM 1901 |
+| 7 ngày ≈ 121 triệu dòng | `[ước lượng]` | 200 × 86 400 × 7 |
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Apache Parquet format specification (parquet.apache.org, mục File Format và Encodings).
+- **Giải thích:** Kleppmann, *DDIA* chương 3, mục "Column-Oriented Storage".
+- **Đào sâu:** tài liệu DuckDB, mục "Parquet" (đọc phần filter pushdown và `parquet_metadata()`).
+- **Tự kiểm tra:** (1) giải thích cho backend engineer trong 5 câu vì sao file sort và file xáo trộn cùng nội dung lại khác 44 lần số row group phải đọc; (2) vẽ lại cấu trúc Parquet và ba bước truy vấn; (3) câu hỏi:
+
+  Truy vấn "các giây IMU thiếu mẫu" trên bảng tóm tắt cần cột nào, và vì sao không dùng được bảng chỉ có max/mean?
+  <details><summary>Đáp án</summary>
+
+  Cần `count` (so với 200) — tốt hơn nữa là count theo `sequence` kỳ vọng. Max/mean của các mẫu *có mặt* không nói gì về mẫu vắng mặt.
+
+  </details>
+
+---
+
+## F3.7 — Chất lượng dữ liệu và data contract: validate theo schema vs theo vật lý (5h)
+
+> **Dùng cho:** K1 Bài 11 (lướt), 12 · K2 Bài 6, 10, 11 · K4 Bài 15 · K5 Bài 16 · K6 Bài 5, 17 · K7 C7.4 · **Cần trước:** F3.2, F3.4; F2.1 (test là phép đo có FP/FN) · **Sau viên nang này bạn đánh giá được:** một bộ kiểm tra dữ liệu bắt được lớp lỗi nào và mù với lớp nào; một rule vật lý có tiền điều kiện gì và tỉ lệ báo động giả bao nhiêu; một "data contract" có nói gì về nghĩa hay chỉ về kiểu.
+
+### 1. Câu chuyện
+
+4/6/1996, Ariane 5 chuyến bay 501 tự hủy 37 giây sau khi phóng. Báo cáo của ủy ban điều tra (Lions report) chỉ ra: phần mềm hệ dẫn đường quán tính dùng lại từ Ariane 4 chuyển một giá trị liên quan đến vận tốc ngang (horizontal bias) từ số thực 64 bit sang số nguyên có dấu 16 bit. Trên Ariane 4, quỹ đạo bảo đảm giá trị đó không bao giờ vượt dải 16 bit, nên phép chuyển không được bảo vệ. Ariane 5 tăng tốc ngang nhanh hơn; giá trị vượt dải, ngoại lệ không được xử lý, cả hai máy tính dẫn đường (cùng phần mềm) dừng `[chuẩn: Ariane 501 Inquiry Board report, 1996]`.
+
+Không ai vi phạm kiểu dữ liệu. Thứ bị vi phạm là một **hợp đồng ngầm về vật lý**: "giá trị này nằm trong dải mà quỹ đạo của chúng ta cho phép". Hợp đồng đó chưa từng được viết ra, nên khi bên sinh dữ liệu (quỹ đạo tên lửa) đổi, bên dùng (phần mềm cũ) không biết. Mars Climate Orbiter (K2 Bài 3, Bài 6) là phiên bản đơn vị của cùng câu chuyện. Data contract tồn tại để viết những giả định này ra, và validator theo vật lý tồn tại để kiểm chúng trên dữ liệu thật.
+
+### 2. Mô hình tư duy
+
+Bốn tầng kiểm, mỗi tầng cần một loại kiến thức khác và bắt một lớp lỗi khác:
+
+| Tầng | Kiểm cái gì | Cần biết gì | Bắt được | Mù với |
+|---|---|---|---|---|
+| **1. Cú pháp / schema** | Giải mã được, đủ trường, đúng kiểu, không NaN | Schema | file hỏng, trường thiếu | mọi lỗi nghĩa |
+| **2. Ngữ nghĩa tĩnh** | Dải đo của chip, `frame_id` hợp lệ, đơn vị theo quy ước (REP-103) | Datasheet, `CONVENTIONS.md` | giá trị bất khả (âm cho ToF, vượt full-scale) | sai đơn vị nằm trong dải, đảo trục |
+| **3. Vật lý theo trạng thái** | \|a\| ≈ g *khi đứng yên*; trọng lực hướng +z của `imu_link` *khi robot nằm ngang*; nhiệt độ đổi chậm; gyro có nhiễu | Vật lý + trạng thái hiện tại + TF | sai scale, lắp ngược, kênh đơ | lỗi khi tiền điều kiện không thỏa |
+| **4. Chéo cảm biến / thời gian** | va chạm thấy trên cả IMU và camera; `dt ≈ 1/ODR`; stamp đơn điệu trong một epoch; odometry và IMU cùng chiều quay | Hai nguồn độc lập | lệch đồng bộ, một nguồn sai | cả hai cùng sai một cách |
+
+Hai điều làm tầng 3–4 khác hẳn validate backend:
+
+1. **Mỗi rule vật lý có tiền điều kiện.** "|a| ≈ g" chỉ đúng khi đứng yên. Rule không kiểm tiền điều kiện sẽ báo động mỗi khi robot chạy (mục 5). Tiền điều kiện thường cần *một cảm biến khác* (gyro ≈ 0, lệnh vận tốc = 0) — tức rule tầng 3 đã ngầm là rule tầng 4.
+2. **Mỗi rule là một detector có FP/FN** (→ F2.1). Ngưỡng lấy từ phân bố trên dữ liệu lành (nhiễu đo được ở K5 Bài 4), không từ cảm giác; tỉ lệ báo động giả phải đo và ghi (tiêu chí của K5 Bài 16).
+
+**Data contract** = schema (tầng 1) + ngữ nghĩa (đơn vị, frame, dải, tần số, `clock_source`, nghĩa của giá trị "không biết") + cam kết vận hành (độ đầy đủ, độ tươi). Hành động khi vi phạm phải được định sẵn: **chặn** (không vào dataset), **cách ly** (quarantine, chờ người), hay **gắn cờ** (vào dataset với cột chất lượng).
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| JSON Schema / Pydantic validate request | Tầng 1–2 | Request sai → trả 400, client gửi lại. Phép đo sai → không ai gửi lại; chặn = mất dữ liệu, nên phải chọn chặn/cách ly/gắn cờ | Reject cả phiên vì 0,1% mẫu vượt dải |
+| Great Expectations / dbt tests (`not_null`, `accepted_values`, `between`) | Tầng 2 | Kiểm từng dòng độc lập. Rule vật lý kiểm **cửa sổ** (phương sai, đạo hàm) và **trạng thái** (đứng yên), và giữa **nhiều luồng** | Viết `between(-160, 160)` cho gia tốc và tưởng đã validate vật lý |
+| Contract test giữa service (Pact) | Data contract giữa firmware/driver và dataset | Pact kiểm hình dạng response; contract cảm biến phải kiểm **nghĩa** bằng dữ liệu tham chiếu (golden file, phép đo tĩnh đã biết đáp án) | Contract xanh trong khi driver mới xuất g thay vì m/s² |
+| Anomaly detection trên metric (3σ) | Phát hiện bất thường cảm biến | Metric backend hiếm khi có định luật; cảm biến có (trọng lực, bảo toàn). Rule từ định luật có FP thấp hơn nhiều và giải thích được | Dùng 3σ thống kê cho thứ có thể kiểm bằng vật lý, nhận hàng trăm cảnh báo không ai đọc |
+
+**Chấm mô hình:**
+
+- *"Schema chặt là đủ để đảm bảo dữ liệu đúng."* — Đã chấm **SAI** ở K2 Bài 6 (phản ví dụ: `z = 1.0` vì driver xuất g; `lerobotpusht` lưu pixel). Không lặp.
+- *"Rule |a| = g bắt được mọi lỗi lắp đặt IMU."* — **SAI.** Gợi ý: chuẩn của một vectơ thay đổi thế nào khi bạn quay hoặc lật hệ trục? Phản ví dụ: mục 5 câu 2. Bộ kiểm lắp đặt cần thêm thông tin hình học (TF tĩnh).
+
+**Tên chuẩn của thứ bạn đã làm:** script chấm pass/fail/inconclusive của bạn chính là một **data quality gate** có ba hành động; "inconclusive" ở đây là **quarantine**. Còn thiếu: đo chính cái gate — tỉ lệ báo động giả trên dữ liệu lành và tỉ lệ bắt trên lỗi tiêm có độ lớn biết trước (K2 Bài 12 làm đúng điều này cho detector; → F2.5).
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Data contract | Schema + nghĩa + cam kết vận hành giữa bên sinh và bên dùng | Schema |
+| 🟢 | Validate theo vật lý | Kiểm dữ liệu bằng định luật và trạng thái | Kiểm dải giá trị |
+| 🟢 | Tiền điều kiện của rule | Trạng thái mà rule mới đúng (đứng yên, nằm ngang) | Không cần ghi |
+| 🟢 | Quarantine / flag / block | Ba hành động khi vi phạm | Chỉ có reject |
+| 🟢 | Tỉ lệ báo động giả của rule | P(báo \| dữ liệu lành) | Bằng 0 nếu rule "đúng vật lý" |
+| 🟡 | Kiểm tra chéo cảm biến | Dùng nguồn độc lập làm oracle | — |
+| 🟡 | Golden reference / phép đo tĩnh | Bộ dữ liệu biết đáp án để kiểm contract | — |
+| 🔴 | Công cụ data-quality thương mại | Biết tên là đủ | — |
+
+### 5. Bài tập dự đoán
+
+IMU đứng yên 10 s (200 Hz, nhiễu acc 0,02 m/s², gyro 0,002 rad/s), g địa phương 9,787. Sáu biến thể: lành; driver xuất **g** thay vì m/s²; IMU **lắp ngược** mà TF không đổi; **đảo trục** x↔z; gyro y **đơ** từ giây thứ 3; timestamp **lùi 12 ms** giữa phiên; và một biến thể **lành nhưng robot đang chạy** (tăng tốc 0,4 m/s² + rung 35 Hz biên độ 1,5 m/s² trên trục x).
+
+Năm bộ kiểm: schema (hữu hạn, trong ±16 g và ±2000 dps); |a| ≈ g (dung sai 0,05); hướng trọng lực theo +z; kênh "sống" (độ lệch chuẩn cửa sổ 1 s > 0); timestamp đơn điệu.
+
+**Dự đoán:** điền bảng 7 × 5, ô nào "BẮT". Đặc biệt: (1) schema bắt được gì? (2) |a| ≈ g bắt được lắp ngược và đảo trục không? (3) với robot đang chạy, rule nào báo động, và đó là TP hay FP? (Tính tay: |a| ≈ g + ⟨(0,4 + 1,5·sin)²⟩ / 2g.)
+
+```python
+# [đã chạy] Validate theo schema vs theo vật lý: IMU 10 s, năm kiểu lỗi + một đoạn robot đang chạy
+import numpy as np
+rng = np.random.default_rng(4)
+G = 9.787                                             # g địa phương (Hà Nội), m/s²
+def clean(n=2000):
+    t = np.arange(n) * 0.005
+    acc = rng.normal([0, 0, G], 0.02, (n, 3)); gyr = rng.normal(0, 0.002, (n, 3))
+    return t, acc, gyr
+faults = {}
+t, a, g = clean(); faults["lành"] = (t, a, g)
+t, a, g = clean(); faults["đơn vị g thay m/s²"] = (t, a / G, g)
+t, a, g = clean(); a[:, 2] *= -1; faults["IMU lắp ngược, TF không đổi"] = (t, a, g)
+t, a, g = clean(); a[:, [0, 2]] = a[:, [2, 0]]; faults["đảo trục x↔z"] = (t, a, g)
+t, a, g = clean(); g[600:, 1] = g[599, 1]; faults["gyro y đơ"] = (t, a, g)
+t, a, g = clean(); t[1000:] -= 0.012; faults["timestamp lùi 12 ms"] = (t, a, g)
+t, a, g = clean(); a[:, 0] += 0.4 + 1.5 * np.sin(2*np.pi*35*t); faults["lành, robot đang chạy"] = (t, a, g)
+
+def schema_ok(t, a, g):        # kiểu đúng, không NaN, trong dải đo ±16 g, ±2000 dps
+    return bool(np.isfinite(a).all() and np.isfinite(g).all()
+                and (np.abs(a) <= 16 * 9.80665).all() and (np.abs(g) <= np.radians(2000)).all())
+def r_norm(t, a, g):    return abs(np.linalg.norm(a, axis=1).mean() - G) < 0.05      # |a| ≈ g khi đứng yên
+def r_dir(t, a, g):     return a[:, 2].mean() > 0.9 * G                                # trọng lực theo +z của imu_link
+def r_alive(t, a, g):   return (np.lib.stride_tricks.sliding_window_view(g, 200, axis=0).std(axis=-1) > 1e-6).all()
+def r_mono(t, a, g):    return (np.diff(t) > 0).all()
+
+print(f"{'lỗi':30s} schema |a|=g hướng sống đơn_điệu")
+for name, (t, a, g) in faults.items():
+    res = [schema_ok(t, a, g)] + [r(t, a, g) for r in (r_norm, r_dir, r_alive, r_mono)]
+    print(f"{name:30s} " + "  ".join("ok " if x else "BẮT" for x in res))
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+| Biến thể | schema | \|a\|=g | hướng | sống | đơn điệu |
+|---|---|---|---|---|---|
+| lành | ok | ok | ok | ok | ok |
+| đơn vị g thay m/s² | ok | **BẮT** | **BẮT** | ok | ok |
+| lắp ngược, TF không đổi | ok | ok | **BẮT** | ok | ok |
+| đảo trục x↔z | ok | ok | **BẮT** | ok | ok |
+| gyro y đơ | ok | ok | ok | **BẮT** | ok |
+| timestamp lùi 12 ms | ok | ok | ok | ok | **BẮT** |
+| lành, robot đang chạy | ok | **BẮT (FP)** | ok | ok | ok |
+
+1. Schema **không bắt lỗi nào**: mọi biến thể đều hữu hạn, đúng kiểu, trong dải đo.
+2. |a| ≈ g **mù** với lắp ngược và đảo trục (chuẩn bất biến khi quay).
+3. Robot đang chạy: |a| tăng ≈ (0,16 + 1,125)/19,57 ≈ 0,066 m/s² > dung sai 0,05 → **báo động giả**. Rule cần tiền điều kiện "đứng yên" (gyro ≈ 0 và lệnh vận tốc = 0 trong cửa sổ). Nới dung sai để hết FP thì mất khả năng bắt lỗi scale nhỏ: đó là đánh đổi TPR/FPR của F2.1.
+
+Mỗi lỗi được đúng một (hoặc hai) rule bắt; không rule nào bắt hết. Một bộ validator là một *danh mục* rule có ma trận "lỗi × rule" như trên, được duy trì như test suite.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi đọc một bộ validate, một data contract, hay một tuyên bố "dữ liệu sạch":
+
+1. Mỗi kiểm thuộc **tầng nào** (cú pháp / ngữ nghĩa tĩnh / vật lý theo trạng thái / chéo)? Tầng 3–4 có không?
+2. Mỗi rule vật lý có ghi **tiền điều kiện** và cách kiểm tiền điều kiện không?
+3. Ngưỡng lấy từ đâu: nhiễu đo được (số, nguồn) hay cảm giác? **FPR trên dữ liệu lành** đã đo chưa, với khoảng tin cậy (→ F1.4)?
+4. Có **ma trận lỗi × rule** không: lỗi tiêm nào được rule nào bắt? Lớp lỗi nào **không** rule nào bắt?
+5. Hành động khi vi phạm: chặn, cách ly, gắn cờ? Có ghi vào dữ liệu (cột chất lượng) không?
+6. Contract có ghi nghĩa của giá trị "không biết" (covariance 0, enum 0, NaN) và định nghĩa ngưỡng (g chuẩn hay địa phương)?
+
+**Khẳng định mẫu để tự chấm:**
+
+- (a) Bản gốc K5 Bài 16, Khái niệm: *"Schema validation bắt được: thiếu trường, sai kiểu, sai đơn vị đo."*
+- (b) Bản gốc K5 Bài 16, Số phải ra: *"Rule |a| = g — Phát hiện được sai scale factor ngay lập tức."*
+- (c) Bản gốc K5 Bài 16, bảng rule: *"Gyro có phương sai > 0 — mọi cảm biến thật đều có nhiễu — σ = 0 trong >1 s = kênh đơ."*
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+- (a) **SAI ở vế cuối.** Schema bắt thiếu trường và sai kiểu; nó **không** bắt sai đơn vị — `double` mang m/s² và `double` mang g giống hệt nhau với parser. Chính đoạn sau của bài gốc ("sai scale factor tạo ra dữ liệu hoàn toàn hợp lệ về cấu trúc") mâu thuẫn với câu này. Sửa: "Schema bắt thiếu trường, sai kiểu; sai đơn vị chỉ bắt được khi đơn vị được *kiểm* bằng vật lý (|a| khi đứng yên) hoặc dải bất khả."
+- (b) **ĐÚNG MỘT PHẦN.** Đúng khi có đoạn đứng yên và sai scale đủ lớn so với dung sai (g thay m/s² lệch ~90%: bắt ngay). Gãy: "ngay lập tức" chỉ đúng *trong đoạn đứng yên*; sai scale 0,3% (≈0,03 m/s²) nằm dưới dung sai 0,05 thì không bắt; và rule mù với lắp ngược/đảo trục (mục 5).
+- (c) **ĐÚNG MỘT PHẦN.** Ý tưởng đúng: kênh thật luôn có nhiễu. Hai chỗ gãy: (1) nếu host đọc thanh ghi **nhanh hơn ODR** của chip, nó đọc lại cùng một mẫu nhiều lần → các giá trị liên tiếp giống hệt nhau mà kênh không đơ (phải so theo bộ đếm mẫu/data-ready, không theo lần đọc); (2) nếu nhiễu nhỏ hơn một LSB ở thang đo thô, chuỗi có thể đứng yên trên một mã số trong thời gian dài. Kiểm σ của *mẫu mới* (theo data-ready hoặc `sequence`) và so với nhiễu kỳ vọng tính từ datasheet + LSB (→ F5.5).
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Failure mode]** Rule nào của bạn sẽ im lặng khi **cả** IMU và odometry cùng sai một cách (ví dụ cả hai đọc qua một ESP32 có đồng hồ bị nhảy)?
+   <details><summary>Hướng nghĩ</summary>
+
+   Rule chéo chỉ mạnh khi hai nguồn độc lập. Chung MCU, chung đồng hồ, chung nguồn điện = chế độ hỏng chung (common-mode). Cần một nguồn thật sự độc lập: camera qua đường USB khác, đồng hồ khác.
+
+   </details>
+2. **[Quy mô]** 20 rule × 6 luồng × 100 robot, mỗi rule FPR 0,1% mỗi phút. Mỗi ngày bao nhiêu cảnh báo giả? Ai đọc?
+   <details><summary>Hướng nghĩ</summary>
+
+   20 × 6 × 100 × 1 440 × 0,001 ≈ 17 000 cảnh báo/ngày `[ước lượng]`. Gom theo phiên, chỉ báo khi rule vượt ngưỡng theo tỉ lệ trong phiên, đưa vào cột chất lượng thay vì alert. Đây là bài toán bội so sánh (→ F1.5) mặc áo vận hành.
+
+   </details>
+3. **[Vì sao không]** Vì sao không để một mô hình ML học "dữ liệu bình thường" rồi báo bất thường, thay vì viết rule tay?
+   <details><summary>Hướng nghĩ</summary>
+
+   Được làm lớp bổ sung. Nhưng: rule vật lý giải thích được, không cần dữ liệu lỗi để học, và bắt được lỗi *có hệ thống từ ngày đầu* (sai đơn vị trên mọi file) — thứ mô hình học "bình thường" từ chính dữ liệu đó sẽ coi là bình thường.
+
+   </details>
+4. **[Liên ngành]** Trạm khí tượng (WMO) kiểm chất lượng quan trắc bằng kiểm dải, kiểm tốc độ thay đổi, kiểm nhất quán giữa các biến và giữa các trạm lân cận. So với bốn tầng ở mục 2?
+   <details><summary>Hướng nghĩ</summary>
+
+   Gần như trùng khớp: range check, step/persistence check (= kênh đơ), internal consistency, spatial consistency (= chéo). Khác: họ có hàng chục năm dữ liệu khí hậu để đặt ngưỡng; bạn có vài phiên.
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Hàng không, giám sát cảm biến dư (sensor voting):** máy bay có ba bộ ADIRU, so chéo và loại bộ lệch. Giống tầng 4. Khác: phần cứng dư thật sự độc lập; robot của bạn thường không có dư, nên dùng *đại lượng* khác (odometry vs IMU) làm phép so.
+- **Y sinh, xử lý tín hiệu ECG:** thuật toán phát hiện điện cực tuột (lead-off) — tín hiệu phẳng hoặc bão hòa — là "kênh đơ" của y khoa; thiết bị gắn cờ vào bản ghi thay vì xóa. Giống chính sách gắn cờ.
+
+### 9. Áp vào khóa chính
+
+- **K1 Bài 12:** ACK trên I2C là tầng 1 của "dữ liệu từ chip"; WHO_AM_I đúng không nói gì về giá trị đúng.
+- **K2 Bài 10, 11:** mỗi lớp lỗi trong bảy lớp gắn với một tầng ở mục 2 và một oracle; ghi lớp nào ngoài tầm mọi detector.
+- **K5 Bài 16:** dùng ma trận lỗi × rule mục 5 làm khung; mỗi rule ghi tiền điều kiện; giữ tiêu chí PASS gốc (≥1 rule bắt lỗi thật) và đo FPR như bản gốc yêu cầu.
+- **K6 Bài 17:** "giới hạn hiệu lực" của sim là tiền điều kiện của một mô hình — cùng tư duy với tiền điều kiện của rule.
+- **K7 C7.4:** viết data contract cho robot của chính bạn: schema hash, đơn vị, frame, dải, ODR, `clock_source`, nghĩa giá trị "không biết", rule + tiền điều kiện + hành động.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Ariane 501: chuyển 64-bit float → 16-bit int của horizontal bias, phần mềm từ Ariane 4 | `[chuẩn]` | Ariane 501 Inquiry Board report (J. L. Lions, 1996) |
+| Ma trận bắt/mù trong mục 5 | `[đã chạy]` | Dữ liệu tổng hợp; với IMU thật phải đo lại |
+| Đọc nhanh hơn ODR cho giá trị lặp | `[spec — kiểm datasheet chip: thanh ghi data-ready]` | Đo ở K5 Bài 4 |
+| WMO quality control: range/step/persistence/consistency | `[chuẩn]` | WMO Guide to Instruments and Methods of Observation |
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** *Ariane 5 Flight 501 Failure — Report by the Inquiry Board* (1996).
+- **Giải thích:** Andrew Jones, *Driving Data Quality with Data Contracts* (Packt, 2023) — phần định nghĩa contract; đọc với con mắt "nghĩa vật lý ở đâu".
+- **Đào sâu:** `sensor_msgs/msg/Imu.msg` (comment về covariance và giá trị "không biết") và REP-103 — hai chỗ cộng đồng ROS viết hợp đồng ngữ nghĩa thành văn.
+- **Tự kiểm tra:** (1) giải thích cho backend engineer trong 5 câu vì sao |a| = g không bắt được IMU lắp ngược; (2) vẽ lại bảng bốn tầng; (3) câu hỏi:
+
+  Viết tiền điều kiện cho rule "|a| ≈ g" bằng các tín hiệu robot có sẵn, và một cách đo FPR của nó.
+  <details><summary>Đáp án</summary>
+
+  Ví dụ: trong cửa sổ 1 s, |ω| < 0,02 rad/s (gyro), lệnh `cmd_vel` = 0, encoder không đổi. FPR: chạy rule trên các phiên đã kiểm tay là lành (đứng yên thật), đếm cửa sổ báo động / tổng cửa sổ thỏa tiền điều kiện, báo kèm khoảng Wilson (→ F1.4).
+
+  </details>
+
+---
+
+## F3.8 — Lineage và provenance: hash nội dung, DAG, tái tạo mọi kết quả (4h)
+
+> **Dùng cho:** K2 Bài 9 · K3 Bài 6 · K4 Bài 8, 14 · K5 Bài 15 · K6 Bài 6, 7, 9, 10 · K7 C11.5 · **Cần trước:** F3.1, F3.5; F2.2 (hermetic, nguồn phi tất định) nên đọc cùng · **Sau viên nang này bạn đánh giá được:** một con số trong báo cáo có truy ngược được tới bytes đầu vào, code và tham số không; một cơ chế cache/"idempotent" có chạy lại đúng những gì cần chạy lại không; và một phép so hash có so đúng thứ cần so không.
+
+### 1. Câu chuyện
+
+Năm 2006–2007, nhóm của Anil Potti ở Duke công bố các "chữ ký gen" dự đoán bệnh nhân ung thư nào đáp ứng hóa trị nào; ba thử nghiệm lâm sàng dùng chúng để chọn thuốc cho bệnh nhân. Hai nhà thống kê ở MD Anderson, Keith Baggerly và Kevin Coombes, cố tái tạo kết quả từ dữ liệu công bố và tìm thấy: nhãn mẫu bị lệch một dòng, nhãn "nhạy/kháng" bị đảo, mẫu bị lặp. Họ gọi công việc này là *forensic bioinformatics* (Annals of Applied Statistics, 2009). Các thử nghiệm bị dừng năm 2010, hàng loạt bài báo bị rút `[chuẩn]`. Mất ba năm, không phải vì lỗi khó, mà vì **không có đường đi được ghi lại** từ file dữ liệu gốc tới con số trong bài báo.
+
+Pipeline dữ liệu robot của bạn có đúng hình dạng đó: MCAP → recover → calibrate → ghép luồng → tóm tắt → split train/test → train → eval → báo cáo. Mỗi mũi tên là một chỗ có thể lệch một dòng. Câu hỏi của viên nang: khi một con số trong báo cáo K6 hay bài viết K4 sai, bạn mất ba phút hay ba năm để tìm ra vì sao?
+
+### 2. Mô hình tư duy
+
+```mermaid
+flowchart LR
+  R["raw.mcap<br/>sha256:9f2c…"] --> C["calibrated<br/>key=H(raw, calib, cal@a1)"]
+  K["calib.yaml<br/>sha256:41ab…"] --> C
+  C --> S["summary.parquet<br/>key=H(calibrated, sum@b2)"]
+  C --> D["train_set<br/>key=H(calibrated, split, ds@c3)"]
+  P["split.json<br/>sha256:77e0…"] --> D
+  D --> M["metric = 0.742<br/>key=H(train_set, summary, eval@d4)"]
+  S --> M
+```
+
+Ba ý tưởng:
+
+1. **Danh tính của một artifact = hash của mọi thứ quyết định nó**: nội dung đầu vào (không phải tên, không phải mtime), version code của bước, tham số, và môi trường (→ F2.2). Hai artifact cùng danh tính thì thay được nhau; khác danh tính thì không.
+2. **DAG là provenance có thể chạy được.** Ghi lại đồ thị (bước nào đọc gì, sinh gì, với khóa nào) thì vừa trả lời được "con số này từ đâu" (đi ngược), vừa trả lời "đổi calib thì cái gì phải tính lại" (đi xuôi).
+3. **Hai loại hash, hai câu hỏi.** *Hash bytes* (sha256 file) trả lời "có phải đúng file này không" — dùng cho raw và cho upload (F3.5). *Hash nội dung chuẩn hóa* (canonical: dữ liệu đã sort, không kèm metadata của writer) trả lời "dữ liệu có giống không" — dùng khi so output giữa hai lần chạy, vì bytes của Parquet chứa cả version thư viện (`created_by: parquet-cpp-arrow version 25.0.1` trong footer, `[đã chạy]`).
+
+**Early cutoff** 🟡: nếu một bước chạy lại nhưng output có cùng hash nội dung như lần trước, các bước phía sau không cần chạy lại. Hệ build Bazel và Shake làm đúng điều này; pipeline dữ liệu ít khi làm, nên thường chạy lại quá nhiều.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| `make` / cache build theo mtime | Pipeline xử lý MCAP | mtime đổi khi `touch`, copy, giải nén; *không* đổi khi `rsync -t`, `git checkout` đặt mtime cũ, hay khi sửa nội dung mà giữ mtime. Dữ liệu đi qua nhiều máy, mtime vô nghĩa | Chạy lại toàn bộ một năm dữ liệu vì một `touch`; hoặc tệ hơn, không chạy lại khi nội dung đã đổi (mục 5) |
+| Docker layer cache, Bazel remote cache (content-addressed) | Đúng mô hình cần | Build backend hash code; ở đây phải hash cả **dataset và calibration**, thứ không nằm trong repo | Cache hit trên kết quả tính bằng calib cũ |
+| Distributed tracing (trace ID qua các service) | Lineage | Trace sống vài ngày, cho một request. Lineage sống bằng tuổi của dataset (năm), cho một artifact | Ghi lineage vào hệ observability có retention 14 ngày |
+| Git commit hash trong log deploy | Version code của bước | Đã chấm ở K6 Bài 7 (dirty tree, dependency, digest giả) | — |
+
+**Chấm mô hình:**
+
+- *"Đặt tên output theo hash của input là idempotent, chạy lại an toàn."* — **ĐÚNG MỘT PHẦN.** Idempotent theo nghĩa không nhân bản. Gãy: nếu khóa **thiếu version code**, sau khi sửa bug extractor, output mới có cùng tên với output cũ; pipeline kiểu "đã có thì bỏ qua" sẽ **không chạy lại**, còn kiểu "ghi đè" thì làm mất bản cũ mà báo cáo cũ đang trỏ tới. Phản ví dụ: mục 5 thay đổi 3 — thử bỏ code version khỏi khóa và dự đoán lại.
+- Đã chấm ở K6 Bài 7, không lặp: *"Thiếu một trong sáu trụ cột thì không tái lập; đủ sáu là tái lập được"* (**ĐÚNG MỘT PHẦN**); hàm `collect_provenance` của Gemini với `local-dev` (**SAI**: fail mở).
+
+**Tên chuẩn của thứ bạn đã làm:** pipeline agent "chạy → test → sửa → deploy → báo cáo" của bạn có log; nếu mỗi bước ghi (input hash, code version, output hash) thì log đó là một **provenance graph** theo nghĩa W3C PROV (entity–activity–agent). Còn thiếu: dùng nó **ngược** — từ một con số sai, tự động liệt kê mọi báo cáo khác dùng cùng input bị nhiễm.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Provenance / lineage | Nguồn gốc và đường đi của một artifact | Log |
+| 🟢 | Content hash / content addressing | Danh tính = hash nội dung | Hash tên file |
+| 🟢 | Cache key | Hash của mọi thứ quyết định output | Hash input |
+| 🟢 | DAG pipeline | Bước và phụ thuộc thành đồ thị không chu trình | Script tuần tự |
+| 🟢 | Manifest | File liệt kê artifact + hash của một lần chạy | README |
+| 🟡 | Canonical hash | Hash sau chuẩn hóa (sort, bỏ metadata writer) | sha256 file |
+| 🟡 | Early cutoff | Dừng lan truyền khi output không đổi | — |
+| 🟡 | W3C PROV, OpenLineage | Chuẩn mô tả lineage | Cần ngay |
+| 🔴 | Hệ orchestrator cụ thể (Airflow, Dagster…) | Chọn khi có nhiều người | — |
+
+### 5. Bài tập dự đoán
+
+Một DAG bốn bước như hình mục 2. Mỗi bước có khóa cache = hash(tên bước, danh tính các đầu vào, code version). Hai chế độ danh tính đầu vào: **content** (hash nội dung) và **mtime** (hash tên + mtime). Chạy lần đầu (mọi bước chạy), rồi thử ba thay đổi:
+
+1. `touch calib.yaml` — nội dung không đổi, mtime đổi.
+2. Đổi nội dung `split.json` (seed 1 → 2) nhưng **giữ mtime** (như `rsync -t`, hoặc `git checkout` một bản cũ).
+3. Đổi code bước `summary` (`sum@b2` → `sum@b3`).
+
+**Dự đoán:** với mỗi chế độ × mỗi thay đổi, bước nào chạy lại? Thay đổi nào cho kết quả **sai** (không chạy lại khi phải chạy), thay đổi nào chỉ **phí** (chạy lại khi không cần)?
+
+```python
+# [đã chạy] DAG nhỏ với khóa cache = hash(nội dung đầu vào + code + tham số) vs khóa theo mtime
+import hashlib, json
+H = lambda *xs: hashlib.sha256(json.dumps(xs, sort_keys=True).encode()).hexdigest()[:12]
+
+# đầu vào: (nội dung, mtime). "code" của mỗi bước là một chuỗi phiên bản.
+inputs = {"raw.mcap": ("bytes-raw-v1", 100), "calib.yaml": ("bias=0.01", 100), "split.json": ("seed=1", 100)}
+dag = {   # bước: (danh sách đầu vào, code_version)
+    "calibrated": (["raw.mcap", "calib.yaml"], "cal@a1"),
+    "summary":    (["calibrated"],             "sum@b2"),
+    "train_set":  (["calibrated", "split.json"], "ds@c3"),
+    "metric":     (["train_set", "summary"],   "eval@d4"),
+}
+def run(inputs, dag, mode, cache):
+    out, reran = {}, []
+    for step, (deps, code) in dag.items():            # dict đã theo thứ tự topo
+        def ident(d):
+            if d in out: return out[d]
+            content, mtime = inputs[d]
+            return H(content) if mode == "content" else H(d, mtime)
+        key = H(step, [ident(d) for d in deps], code)
+        if key not in cache: reran.append(step); cache[key] = H("result", key)
+        out[step] = cache[key] if mode == "content" else key
+    return reran, out["metric"]
+
+for mode in ("content", "mtime"):
+    cache = {}
+    run(inputs, dag, mode, cache)                                     # lần đầu: chạy hết
+    a = dict(inputs); a["calib.yaml"] = ("bias=0.01", 200)            # 1) chỉ `touch` calib, nội dung y nguyên
+    b = dict(inputs); b["split.json"] = ("seed=2", 100)               # 2) đổi nội dung split, GIỮ mtime (rsync -t, git checkout)
+    c = dict(dag);    c["summary"] = (["calibrated"], "sum@b3")       # 3) đổi code bước summary
+    for label, (i, d) in {"touch calib": (a, dag), "đổi split giữ mtime": (b, dag), "đổi code summary": (inputs, c)}.items():
+        print(f"{mode:7s} | {label:20s} | chạy lại: {run(i, d, mode, cache)[0]}")
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+| Thay đổi | content | mtime |
+|---|---|---|
+| `touch calib` | không gì | **cả 4 bước** (phí) |
+| đổi split, giữ mtime | `train_set`, `metric` | **không gì** (sai: báo cáo dùng split cũ, không ai biết) |
+| đổi code summary | `summary`, `metric` | `summary`, `metric` |
+
+Chế độ mtime vừa phí vừa sai; chế độ content đúng cả ba. Lưu ý dòng 3: `metric` chạy lại vì danh tính output của `summary` trong mô phỏng sinh từ khóa. Nếu danh tính output là hash **nội dung output** và code mới cho ra summary giống hệt (ví dụ chỉ đổi comment), `metric` không cần chạy lại: đó là early cutoff — mô phỏng này không có, Bazel có.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi gặp một con số trong báo cáo, một dataset, hay một cơ chế cache:
+
+1. Từ con số này, đi ngược được tới **sha256 của mọi raw** không? Bằng tay hay bằng manifest máy đọc được?
+2. Khóa cache/danh tính có đủ: nội dung input, **version code**, tham số, môi trường, **calibration**?
+3. Danh tính dựa trên **nội dung** hay tên/mtime/đường dẫn?
+4. So hash để kiểm "tái lập": so **bytes** hay **nội dung chuẩn hóa**? Bytes khác vì version thư viện có bị đọc thành "không tái lập" không?
+5. Khi sửa một bug ở bước giữa, có liệt kê được mọi artifact và báo cáo phía sau bị ảnh hưởng không?
+6. Thiếu một trường provenance thì hệ **fail đóng** (từ chối/gắn nhãn thăm dò) hay **fail mở** (điền mặc định)?
+
+**Khẳng định mẫu để tự chấm:**
+
+- (a) `khoa-5/m3-data-stack.md`, K5 Bài 15 bước 3: *"Extractor phải idempotent: chạy lại trên cùng file cho ra cùng file Parquet (đặt tên theo sha256 của MCAP nguồn), để sửa bug extractor rồi chạy lại toàn bộ là an toàn."*
+- (b) *"Để kiểm pipeline tái lập, so sha256 của file Parquet output giữa hai lần chạy."*
+- (c) *"Raw đã có hash và nằm trên object store, nên provenance của dataset đã đủ."*
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+- (a) **ĐÚNG MỘT PHẦN.** Đúng hướng (danh tính theo nội dung nguồn, chạy lại không nhân bản). Gãy đúng ở mục đích được nêu: nếu tên chỉ gồm sha256 nguồn, output sau khi sửa bug **trùng tên** output lỗi. Bỏ qua-nếu-đã-có → bug fix không có hiệu lực; ghi đè → báo cáo cũ trỏ vào dữ liệu đã đổi. Sửa: tên = H(sha256 nguồn, version extractor, tham số), giữ cả hai bản, manifest chỉ bản nào là hiện hành. (Ghi chú cho người điều phối: đề nghị sửa câu này trong K5 Bài 15.)
+- (b) **ĐÚNG MỘT PHẦN.** Đủ điều kiện (cùng bytes ⇒ cùng dữ liệu), không cần điều kiện: footer Parquet ghi `created_by` với version thư viện, encoding/nén/kích thước row group đổi bytes mà không đổi dữ liệu. Nâng pyarrow sẽ làm phép so báo "không tái lập". So **hash nội dung chuẩn hóa** (đọc bảng, sort theo khóa, hash các cột) hoặc so có dung sai cho float (→ F2.2).
+- (c) **SAI.** Raw có hash chỉ là nút đầu của DAG. Dataset còn phụ thuộc calibration nào, phương pháp ghép nào (F3.4), version extractor, split và seed. Thiếu chúng, hai dataset "từ cùng raw" khác nhau mà không biết vì sao.
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Quy mô]** 1 000 giờ dữ liệu, 50 bước pipeline, 20 version calibration. Manifest lớn tới đâu, và truy vấn "báo cáo nào dùng calib v7" chạy trên cái gì?
+   <details><summary>Hướng nghĩ</summary>
+
+   Lineage là dữ liệu dạng đồ thị; ở quy mô này nó vào một bảng (Parquet/SQLite) các cạnh (input_hash, step, code, output_hash). Câu hỏi là một truy vấn bao đóng bắc cầu. Đây là lý do K5 Bài 15 có câu "dữ liệu nào được ghi với calibration_id cũ".
+
+   </details>
+2. **[Failure mode]** Hai lần chạy cùng khóa cache cho output khác nhau. Khóa của bạn thiếu gì?
+   <details><summary>Hướng nghĩ</summary>
+
+   Nguồn phi tất định chưa đưa vào khóa: seed, số thread, phiên bản thư viện ngoài lockfile, phần cứng (→ F2.2, K6 Bài 3). Cache hit trên bước phi tất định là che giấu biến thiên.
+
+   </details>
+3. **[Vì sao không]** Vì sao không lưu lại *mọi* artifact trung gian mãi mãi cho chắc?
+   <details><summary>Hướng nghĩ</summary>
+
+   Tính dung lượng: mỗi bước có thể nhân dữ liệu. Có DAG + code version + raw thì artifact trung gian **tái tạo được**, nên chỉ cần giữ raw + manifest + những artifact đắt tính lại. Provenance thay cho lưu trữ.
+
+   </details>
+4. **[Liên ngành]** Chuỗi lưu ký bằng chứng (chain of custody) trong pháp y: mỗi lần chuyển tay có chữ ký và niêm phong. Giống và khác lineage dữ liệu?
+   <details><summary>Hướng nghĩ</summary>
+
+   Giống: mỗi bước ghi ai, khi nào, trạng thái niêm phong (hash). Khác: bằng chứng vật lý không sao chép được, dữ liệu thì có — nên với dữ liệu, hash thay chữ ký, và câu hỏi là "bản này có đúng là bản đó không".
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Nix / Guix:** mỗi gói là hash của toàn bộ đầu vào build; hai máy cùng hash thì cùng kết quả (khi build tất định). Đây là mô hình mục 2 áp cho phần mềm. Khác: dữ liệu cảm biến không build lại được từ nguồn — raw là gốc rễ không có công thức.
+- **Sổ thí nghiệm điện tử (ELN) trong sinh học:** ghi lô thuốc thử, máy, người, giao thức cho mỗi thí nghiệm. Giống: calibration và thiết bị là đầu vào. Khác: ELN do người ghi; lineage dữ liệu phải do máy ghi, vì người quên.
+
+### 9. Áp vào khóa chính
+
+- **K2 Bài 9:** ghi phiên bản format và hash file của dataset LeRobot mà tool audit đọc; báo cáo audit trỏ về đúng hash đó.
+- **K4 Bài 14:** "người khác chạy lại được" = manifest có hash model, dataset eval, lockfile, script; người reproduce so **hash nội dung** output chứ không so bytes.
+- **K5 Bài 15:** khóa của extractor gồm version extractor (khẳng định (a)); bảng index có cột `source_sha256` và `extractor_version`.
+- **K6 Bài 6, 7, 9, 10:** kịch bản sinh ra có `parent_id` + tham số (lineage của kịch bản); manifest của 10 000 episode; báo cáo nêu hash của mọi thứ nó đọc.
+- **K7 C11.5:** vòng fine-tune: model mới phải truy được về dataset (hash) và từng phiên robot (hash MCAP) đã vào dataset đó.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Vụ Duke/Potti, Baggerly & Coombes 2009 | `[chuẩn]` | Annals of Applied Statistics 3(4), 2009 |
+| Reinhart–Rogoff, Herndon–Ash–Pollin 2013 | `[chuẩn]` | Cambridge Journal of Economics, 2014 (bản working paper 2013) |
+| Footer Parquet ghi `created_by` với version | `[đã chạy]` | `pq.ParquetFile(...).metadata.created_by` |
+| Bảng chạy lại trong mục 5 | `[đã chạy]` | Mô phỏng |
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Baggerly & Coombes, *Deriving chemosensitivity from cell lines: Forensic bioinformatics and reproducible research in high-throughput biology*, Annals of Applied Statistics (2009).
+- **Giải thích:** Mokhov, Mitchell, Peyton Jones, *Build Systems à la Carte* (ICFP 2018) — khung chung cho mtime vs content hash, early cutoff; đọc với con mắt pipeline dữ liệu.
+- **Đào sâu:** W3C PROV-Overview (2013) — từ vựng entity/activity/agent.
+- **Tự kiểm tra:** (1) giải thích cho backend engineer trong 5 câu vì sao mtime không phải danh tính của dữ liệu; (2) vẽ lại DAG mục 2 và đánh dấu bước nào chạy lại khi đổi calib; (3) câu hỏi:
+
+  Bạn phát hiện calib v7 sai dấu trục y. Liệt kê ba thứ manifest phải trả lời được để biết phạm vi thiệt hại.
+  <details><summary>Đáp án</summary>
+
+  (1) Mọi artifact có calib v7 trong khóa (đi xuôi DAG); (2) mọi báo cáo/model đọc các artifact đó; (3) raw nào bị ảnh hưởng (để chạy lại với calib v8) — và xác nhận raw vẫn còn trên store.
+
+  </details>
+
+---
+
+## F3.9 — Backpressure và drop policy: hàng đợi có giới hạn, load shedding, đếm cái đã drop (4h)
+
+> **Dùng cho:** K1 Bài 3, 7 (lướt) · K3 Bài 4, 10, 16 · K4 Bài 3 · K5 Bài 17 · K6 Bài 8 · K7 C7.3 · **Cần trước:** F3.1, F3.3; F7.1 (định luật Little) nên đọc mục 2 · **Sau viên nang này bạn đánh giá được:** một chính sách tràn hàng đợi mất dữ liệu ở đâu, có đếm được không, độ trễ tối đa bao nhiêu; và một tuyên bố "không mất mẫu nào" / "audit khớp bản ghi drop" có nghĩa gì.
+
+### 1. Câu chuyện
+
+Tháng 10/1986, đường mạng giữa Lawrence Berkeley Lab và UC Berkeley — cách nhau vài trăm mét — tụt thông lượng từ 32 kbit/s xuống 40 bit/s. Các máy gửi TCP thời đó gặp mất gói thì gửi lại ngay, làm hàng đợi router càng đầy, càng mất gói, càng gửi lại: *congestion collapse*. Van Jacobson và Mike Karels (1988) sửa bằng cách coi **gói bị drop là tín hiệu đo được** và giảm tốc khi thấy nó `[chuẩn: Jacobson, "Congestion Avoidance and Control", SIGCOMM 1988]`. Hai mươi năm sau, Jim Gettys đặt tên cho bệnh ngược lại: *bufferbloat* — router có buffer quá lớn, không bao giờ drop, nên độ trễ phình tới hàng giây và tín hiệu nghẽn đến quá muộn `[chuẩn]`.
+
+Hai bài học cho robot: buffer lớn không phải an toàn, nó chỉ đổi mất mát thành trễ; và drop chỉ có ích khi **ai đó thấy và đếm** nó. Khác Internet ở một điểm then chốt: TCP gửi lại được gói bị drop. Cảm biến thì không — mẫu IMU lúc 10:15:03.215 chỉ tồn tại một lần.
+
+### 2. Mô hình tư duy
+
+Mỗi mắt xích từ cảm biến tới đĩa là một hàng đợi có giới hạn. Câu hỏi cho từng mắt: **đầy thì làm gì, và ai đếm?**
+
+```
+ chip IMU      MCU ring      USB/serial      kernel/driver     node ROS 2        writer queue      đĩa
+ [FIFO 1 KB] → [buffer N] → [endpoint] → [tty/v4l2 buffers] → [QoS KEEP_LAST d] → [bounded queue] → [fsync]
+  overflow     drop-oldest?  NAK/retry     overrun counter     ghi đè cũ nhất      CHÍNH SÁCH CỦA BẠN
+  flag (spec)  bạn viết      (bulk)        (có thể có)         (đếm? [tự đo])      đếm 100%
+     │             │                           │                    │                  │
+     └── sequence trên MCU nhìn thấy lỗ phía sau nó ───────────────────────────────────┘
+         audit trên file nhìn thấy MỌI lỗ = tổng drop đã đếm + drop ở mắt không có bộ đếm
+```
+
+Sáu chính sách khi đầy, và cái giá:
+
+| Chính sách | Mất gì | Trễ | Đếm được không | Hợp với |
+|---|---|---|---|---|
+| **Block** (backpressure lên producer) | Không mất *ở đây* — mất ở mắt phía trước, nơi không ai chờ được | tăng tới khi phía trước tràn | Chỉ nếu mắt phía trước có bộ đếm | Producer có thể chờ (file, mạng); **không** hợp với cảm biến |
+| **Drop-newest** (tail drop) | Mẫu mới tới | trễ tối đa = cả hàng đợi | Có, nếu bạn đếm | Cần giữ liền mạch đoạn cũ |
+| **Drop-oldest** (head drop, ring buffer) | Mẫu cũ nhất | trễ thấp hơn, dữ liệu tươi | Có | Điều khiển online: cái mới quan trọng hơn |
+| **Ưu tiên** (shed luồng ít quan trọng trước) | Ảnh trước IMU | tùy luồng | Có, theo luồng | Ghi dataset nhiều luồng |
+| **Thưa ra** (decimate có chủ đích) | Một phần tần số | thấp | Có, là cấu hình | Luồng dư tần số (→ F3.4: lọc trước khi thưa) |
+| **Giảm chất lượng** (độ phân giải, quality JPEG) | Thông tin trong mỗi mẫu | thấp | Có, ghi vào metadata | Video |
+
+Định luật Little cho trễ: trễ trung bình qua hàng đợi = số phần tử trong hàng / tốc độ ra (L = λW, → F7.1). Hàng đợi có giới hạn là **giới hạn trễ** bạn chọn; hàng đợi không giới hạn là để OOM killer chọn hộ.
+
+Quy tắc của nghề, không thương lượng: **mỗi mắt có chính sách ghi ra giấy và một bộ đếm; bộ đếm được ghi vào chính file dữ liệu** (bản gốc K5 Bài 17 bước 3), vì file sống lâu hơn hệ monitoring.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Backpressure trong Reactive Streams / Kafka consumer pause | Block producer cảm biến | Upstream backend *chờ được* (client giữ request, Kafka giữ log). Cảm biến không chờ: FIFO 1 KB của chip tràn sau vài chục ms, ESP32 ring buffer tràn sau vài trăm ms | Chọn "block" vì "không mất gì", dời mất mát sang driver không có bộ đếm (mục 5) |
+| HTTP 429 + retry-after | Load shedding | 429 nói với client "gửi lại sau"; không có "sau" cho một phép đo | Thiết kế retry cho mẫu đã drop |
+| DLQ (dead letter queue) | Không có tương đương cho mẫu bị drop | DLQ giữ message để xử lý lại; mẫu bị drop không còn để giữ — chỉ còn **bản ghi về việc drop** | Tưởng "có DLQ" là không mất |
+| Metric `dropped_total` trên Prometheus | Bộ đếm drop | Prometheus retention vài tuần, tách khỏi dữ liệu. Người mở MCAP năm sau không thấy | Dataset có lỗ, bằng chứng về lỗ đã bị xóa theo retention |
+
+**Chấm mô hình:**
+
+- *"Block producer là chính sách an toàn nhất vì không có gì bị drop."* — **SAI** với nguồn là cảm biến. Block không xóa mất mát, nó đẩy mất mát lên mắt xích phía trước — thường là bộ đệm driver hoặc FIFO của chip, nơi không có bộ đếm nào của bạn. Phản ví dụ: mục 5 — so cột "mất không đếm" của block với các chính sách khác.
+- *Mô hình của bạn ở K3 lượt 6 ("luôn phải có buffer để ổn định")* — đã chấm **ĐÚNG MỘT PHẦN** ở K5 Bài 13. Góc của viên nang này: buffer không làm mất mát biến mất; nó chọn **khi nào** mất (sau bao lâu tràn) và **ở đâu** mất. Thiết kế đúng chọn chỗ mất là chỗ có bộ đếm.
+
+**Tên chuẩn của thứ bạn đã làm:** khi bạn đặt `max.poll.records`, giới hạn hàng đợi worker và trả 503 lúc quá tải, đó là **load shedding** ở tầng ứng dụng. Còn thiếu ở robot: **đối soát** (reconciliation) giữa số drop tự khai và số lỗ quan sát được — chênh lệch là bằng chứng của một mắt xích chưa có bộ đếm.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Bounded queue | Hàng đợi có trần | Tối ưu bộ nhớ |
+| 🟢 | Backpressure | Báo ngược để producer chậm lại | Không mất dữ liệu |
+| 🟢 | Drop-newest / drop-oldest | Bỏ cái mới tới / bỏ cái cũ nhất | Như nhau |
+| 🟢 | Load shedding theo ưu tiên | Bỏ luồng ít quan trọng trước | Ngẫu nhiên |
+| 🟢 | Drop record / bộ đếm drop | Bản ghi lúc nào, luồng nào, bao nhiêu, vì sao | Log debug |
+| 🟢 | Đối soát lỗ hổng | So số lỗ audit thấy với số drop đã khai | Phải bằng nhau |
+| 🟡 | ROS 2 QoS: history depth, reliability, "message lost" event | Cấu hình hàng đợi pub/sub | Có bộ đếm mặc định `[tự đo]` |
+| 🟡 | Bufferbloat, AQM (CoDel) | Buffer quá lớn; drop chủ động theo trễ | — |
+| 🔴 | Lý thuyết hàng đợi mạng chi tiết | → F7.1 đủ dùng | — |
+
+### 5. Bài tập dự đoán
+
+Một writer nhận IMU (200 Hz, 370 B/message — con số K5 Bài 13) và ảnh JPEG (30 fps, 60 kB). Đĩa ghi 3 MB/s nhưng mỗi 10 s kẹt 400 ms (fsync/flash). Hàng đợi trước writer tối đa 0,5 MB. Bốn chính sách: block (mô hình hóa: message không vào được hàng đợi bị mất ở driver, không ai đếm), drop-newest, drop-oldest, ưu tiên IMU (bỏ ảnh cũ nhất trước).
+
+**Dự đoán:**
+
+1. Tốc độ vào trung bình (MB/s)? Trong 400 ms kẹt, bao nhiêu MB dồn lại so với trần 0,5 MB? Có tràn không?
+2. Trong 60 s, mỗi chính sách: bao nhiêu IMU và ảnh bị drop **có đếm**? Bao nhiêu mất **không đếm**?
+3. Vì sao drop-newest lại bỏ nhiều IMU hơn ảnh, dù IMU nhỏ?
+4. Trễ tối đa qua hàng đợi của mỗi chính sách? Vì sao drop-oldest thấp hơn?
+
+```python
+# [đã chạy] Hàng đợi có giới hạn trước writer: chính sách drop và cái gì đếm được
+import numpy as np
+from collections import deque
+DT, T = 0.001, 60.0                                  # bước mô phỏng 1 ms, 60 s
+IMU_B, CAM_B = 370, 60_000                           # byte/message (IMU CDR+MCAP; ảnh JPEG ~60 kB)
+DISK = 3.0e6                                         # writer ghi 3 MB/s bình thường
+def disk_rate(t): return 0.0 if (t % 10) > 9.6 else DISK   # mỗi 10 s: fsync/flash kẹt 400 ms
+CAP = 0.5e6                                          # hàng đợi tối đa 0.5 MB trong RAM
+
+def sim(policy):
+    q, qbytes, credit = deque(), 0, 0.0
+    drops = {"imu": 0, "cam": 0}; maxlat = 0.0; usb_lost = 0
+    for k in range(int(T / DT)):
+        t = k * DT
+        new = [("imu", IMU_B, t)] * (k % 5 == 0) + [("cam", CAM_B, t)] * (k % 33 == 0)
+        for m in new:
+            if qbytes + m[1] <= CAP: q.append(m); qbytes += m[1]; continue
+            if policy == "block":                    # chặn producer: driver USB tự tràn, không ai đếm
+                usb_lost += 1
+            elif policy == "drop-newest":
+                drops[m[0]] += 1
+            elif policy == "drop-oldest":
+                while q and qbytes + m[1] > CAP:
+                    o = q.popleft(); qbytes -= o[1]; drops[o[0]] += 1
+                q.append(m); qbytes += m[1]
+            elif policy == "ưu tiên IMU":            # bỏ ảnh cũ nhất trước, IMU chỉ bỏ khi hết ảnh
+                cams = [x for x in q if x[0] == "cam"]
+                while cams and qbytes + m[1] > CAP:
+                    o = cams.pop(0); q.remove(o); qbytes -= o[1]; drops["cam"] += 1
+                if qbytes + m[1] <= CAP: q.append(m); qbytes += m[1]
+                else: drops[m[0]] += 1
+        credit += disk_rate(t) * DT
+        while q and credit >= q[0][1]:
+            m = q.popleft(); qbytes -= m[1]; credit -= m[1]; maxlat = max(maxlat, t - m[2])
+        if not q: credit = min(credit, CAM_B)
+    return drops, usb_lost, maxlat
+
+for p in ("block", "drop-newest", "drop-oldest", "ưu tiên IMU"):
+    d, u, L = sim(p)
+    print(f"{p:12s} | drop đếm được imu={d['imu']:4d} cam={d['cam']:3d} | mất không đếm={u:4d} | trễ max {L*1e3:5.0f} ms")
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+| Chính sách | Drop đếm được (IMU / ảnh) | Mất không đếm | Trễ max |
+|---|---|---|---|
+| block | 0 / 0 | **173** | 400 ms |
+| drop-newest | **146** / 27 | 0 | 400 ms |
+| drop-oldest | 57 / 27 | 0 | **265 ms** |
+| ưu tiên IMU | **0** / 30 | 0 | 395 ms |
+
+1. Vào ≈ 30,3 × 60 kB + 200 × 370 B ≈ **1,89 MB/s**; 400 ms kẹt dồn ≈ 0,76 MB > 0,5 MB → tràn mỗi chu kỳ 10 s.
+2. Bảng trên. Block: **cùng cỡ mất mát** như các chính sách khác nhưng **không một bộ đếm nào** thấy — dataset có lỗ mà file không biết.
+3. Khi hàng đợi gần đầy vì ảnh, khoảng trống còn lại thường < 60 kB nhưng vẫn ≥ 370 B lúc thì có lúc không; IMU tới **thường xuyên gấp 6,6 lần** ảnh nên gặp hàng đầy nhiều lần hơn. Drop-newest phạt luồng tới dày, bất kể nó nhỏ hay quan trọng.
+4. Drop-oldest đẩy ra phần cũ nhất, nên phần còn lại trong hàng luôn tươi: trễ ≈ (dung lượng hàng đợi còn giữ)/tốc độ xả nhỏ hơn. Ưu tiên IMU đổi 3 ảnh thêm lấy 0 IMU mất. Không chính sách nào "đúng" chung; đúng là chính sách **được chọn có chủ đích và có bộ đếm**.
+
+Mô hình đồ chơi bỏ qua bộ đệm driver thật (có thể giữ thêm vài trăm ms trước khi tràn); trên máy thật, đo ngưỡng tràn theo K5 Bài 17 bước 4.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi đọc một thiết kế ingest hay một tuyên bố về mất dữ liệu:
+
+1. Liệt kê **mọi mắt xích** từ cảm biến tới đĩa. Mắt nào có giới hạn, chính sách gì, **bộ đếm ở đâu**?
+2. Chính sách "block" ở mắt nào? Mất mát bị đẩy lên mắt nào, mắt đó có đếm không?
+3. Bộ đếm drop được ghi **vào file dữ liệu** hay chỉ vào monitoring?
+4. Trễ tối đa (Little) có chấp nhận được cho người dùng dữ liệu (điều khiển online vs ghi dataset)?
+5. Có **đối soát**: lỗ do audit thấy (từ `sequence`, `dt`) so với drop đã khai? Chênh lệch được giải thích?
+6. "Không mất mẫu nào" được chứng minh bằng `sequence` liên tục từ **nguồn**, hay chỉ bằng "writer không báo lỗi"?
+
+**Khẳng định mẫu để tự chấm:**
+
+- (a) Gemini, K5 Bài 17, bước 4: *"[Số lỗ hổng Audit Tool K2 quét được] và [tổng số mẫu daemon K5 tự khai báo drop] — hai con số này bắt buộc phải khớp nhau hoàn toàn."*
+- (b) Gemini, K5 Bài 17: *"Không bao giờ được drop ngẫu nhiên theo kiểu First-In-First-Out khi tràn hàng đợi"*, và bảng ưu tiên: IMU — *"Cấm drop."*
+- (c) Bản gốc K5 Bài 17: *"Được phép drop, nhưng phải ghi lại việc đã drop … Một dataset có lỗ hổng mà im lặng thì độc hại."*
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+- (a) **ĐÚNG MỘT PHẦN.** Khớp hoàn toàn chỉ khi mọi mắt xích có thể mất đều có bộ đếm. Quan hệ đúng là: lỗ audit thấy ≥ drop đã khai; **chênh lệch = mất ở mắt không có bộ đếm** (USB, driver, FIFO chip). Chính phần "Nếu kết quả ra khác" của Gemini thừa nhận điều này (USB controller tự drop frame, daemon không biết). Tiêu chí gốc của K5 Bài 17 ("tool phát hiện đúng những lỗ hổng đã được ghi nhận") giữ nguyên; cách đọc đúng: mọi lỗ đã khai phải được audit thấy, và mọi lỗ audit thấy mà không có bản ghi phải được truy ra mắt xích gây ra.
+- (b) **ĐÚNG MỘT PHẦN.** Ý đúng: có thứ bậc ưu tiên thay vì một hàng đợi chung (mục 5: ưu tiên IMU đưa drop IMU về 0). Gãy: "FIFO" ở đây trộn hai việc — thứ tự phục vụ (FIFO) và chính sách tràn (drop-newest/oldest) là hai trục độc lập; và "cấm drop" IMU là lời hứa không giữ được — khi đĩa kẹt đủ lâu, hàng IMU cũng tràn. Câu đúng: IMU có ngân sách riêng và bộ đếm riêng, drop cuối cùng, và việc drop IMU kích hoạt cảnh báo mức cao.
+- (c) **ĐÚNG.** Đây là mindset cốt lõi 4. Bổ sung một điều kiện để nó vận hành được: "ghi lại" phải là bản ghi máy đọc được, trong chính file, kèm đủ (thời điểm, luồng, số lượng, lý do, mắt xích), để audit đối soát được.
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot ghi cùng lúc lên một NAS qua Wi-Fi. Mắt xích nào thành điểm drop chung, và chính sách nào ở robot giúp hay hại toàn đội?
+   <details><summary>Hướng nghĩ</summary>
+
+   Ghi local trước, upload sau (F3.5) tách drop ghi khỏi mạng. Nếu robot ghi thẳng lên NAS, nghẽn mạng thành drop cảm biến trên cả 100 robot cùng lúc — chế độ hỏng chung. Upload cần backpressure thật (nó chờ được); ghi cảm biến thì không.
+
+   </details>
+2. **[Failure mode]** Bộ đếm drop của bạn là một biến `int` trong RAM, ghi vào file khi đóng file. Process bị `kill -9`. Còn gì?
+   <details><summary>Hướng nghĩ</summary>
+
+   Mất bộ đếm cùng chunk đang mở (F3.1). Ghi drop record như một message trên topic chẩn đoán ngay khi drop (đi cùng dữ liệu vào chunk), không chờ đóng file.
+
+   </details>
+3. **[Nếu…thì]** Nếu bạn tăng hàng đợi lên 50 MB để "không bao giờ drop", điều gì xảy ra với trễ và với bộ điều khiển đọc cùng luồng?
+   <details><summary>Hướng nghĩ</summary>
+
+   Bufferbloat: trễ có thể lên hàng chục giây (Little); bộ điều khiển nhận dữ liệu cũ. Tách đường ghi (được phép trễ) khỏi đường điều khiển (cần tươi, drop-oldest, hàng ngắn).
+
+   </details>
+4. **[Liên ngành]** Phòng cấp cứu dùng phân loại (triage) khi quá tải: ai được xử lý trước, ai chờ, và ghi lại quyết định. Giống chính sách ưu tiên ở đâu?
+   <details><summary>Hướng nghĩ</summary>
+
+   Giống: tiêu chí ưu tiên quyết định trước khi quá tải, mọi quyết định có hồ sơ. Khác: bệnh nhân chờ được (block), phép đo thì không — triage dữ liệu là chọn ai *bị bỏ*, không phải ai *chờ*.
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Router và AQM (CoDel, Nichols & Jacobson 2012):** drop chủ động dựa trên *thời gian một gói nằm trong hàng*, không dựa trên độ dài hàng. Giống: giới hạn trễ là mục tiêu, drop là công cụ. Khác: TCP phản ứng với drop bằng giảm tốc; cảm biến không phản ứng.
+- **Thu dữ liệu vật lý hạt (trigger system ở LHC):** va chạm xảy ra ~40 MHz, chỉ giữ được cỡ vài nghìn sự kiện/giây; hệ trigger quyết định giữ gì trong micro giây và ghi **chính xác** tỉ lệ đã bỏ (prescale, dead time) để tính lại tiết diện `[chuẩn — kiểm số theo thí nghiệm cụ thể]`. Đây là phiên bản cực đoan của "drop được, nhưng phải đếm".
+
+### 9. Áp vào khóa chính
+
+- **K3 Bài 4, 10:** ring buffer DMA là mắt xích có chính sách (underrun = phát số 0) — đếm underrun như đếm drop.
+- **K3 Bài 16:** watchdog và streamer daemon: hàng đợi giữa các tầng có trần và bộ đếm.
+- **K5 Bài 17:** vẽ chuỗi mắt xích mục 2 cho rig của bạn; mỗi mắt ghi chính sách + bộ đếm; drop record vào topic chẩn đoán trong MCAP; đối soát với audit K2 theo cách đọc ở khẳng định (a). Không đổi tiêu chí gốc.
+- **K6 Bài 8:** worker pool song song có hàng đợi có trần; episode bị bỏ vì timeout là drop phải đếm vào báo cáo (mẫu số của success rate).
+- **K7 C7.3:** trên robot thật, thêm bộ đếm ở ESP32 (`sequence`) và đọc bộ đếm overrun của driver nếu có `[tự đo]`.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Congestion collapse 1986, 32 kbit/s → 40 bit/s; Jacobson 1988 | `[chuẩn]` | Jacobson, SIGCOMM 1988, phần mở đầu |
+| Bufferbloat (Gettys), CoDel (Nichols & Jacobson, ACM Queue 2012) | `[chuẩn]` | |
+| ROS 2 QoS KEEP_LAST ghi đè mẫu cũ; sự kiện message lost tùy RMW | `[spec — kiểm tài liệu QoS ROS 2 Jazzy và RMW bạn dùng]` | |
+| Số trong bảng mục 5 | `[đã chạy]` | Mô hình đồ chơi, không có bộ đệm driver |
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Van Jacobson, *Congestion Avoidance and Control* (SIGCOMM 1988).
+- **Giải thích:** Kathleen Nichols & Van Jacobson, *Controlling Queue Delay* (ACM Queue, 2012).
+- **Đào sâu:** tài liệu ROS 2, mục "Quality of Service settings" (history, depth, reliability, deadline, các QoS event).
+- **Tự kiểm tra:** (1) giải thích cho backend engineer trong 5 câu vì sao "block" với cảm biến là drop không đếm; (2) vẽ lại chuỗi mắt xích của rig bạn và đánh dấu mắt chưa có bộ đếm; (3) câu hỏi:
+
+  Audit thấy 412 mẫu IMU thiếu trong một phiên; drop record trong file khai 380. Bước tiếp theo?
+  <details><summary>Đáp án</summary>
+
+  Xác định 32 mẫu còn lại mất ở đâu: so `sequence` của ESP32 (lỗ trước hay sau USB?), đọc bộ đếm overrun driver, đối chiếu thời điểm lỗ với thời điểm kẹt đĩa. Mắt xích tìm ra được thêm bộ đếm; không sửa audit cho "khớp".
+
+  </details>
+
+---
+
+## Tranh luận đang mở trong nghề
+
+**1. Nguồn sự thật nên là log (MCAP) hay bảng (Parquet/LeRobot)?**
+- *Phía log:* ghi trên robot cần append, chịu crash, nhiều luồng khác tần số, schema theo message; MCAP/rosbag2 làm đúng việc đó, và mọi định dạng huấn luyện là view dẫn xuất (F3.1, F3.8).
+- *Phía bảng:* thứ cuối cùng người ta đọc là bảng đã đồng bộ theo frame; giữ hai định dạng là hai nơi lệch nhau; LeRobot v3 (Parquet + MP4) và các nhóm làm học máy quy mô lớn đi thẳng vào định dạng huấn luyện.
+- *Điểm chưa ngã ngũ:* phép ghép (F3.4) nằm ở đâu — lúc ghi (đông cứng một phương pháp) hay lúc đọc (tốn tính toán, nhưng đổi được).
+
+**2. Schema-on-write hay schema-on-read cho dữ liệu cảm biến?**
+- *Chặt lúc ghi:* từ chối/cách ly mọi thứ vi phạm contract ngay ở ingest; dataset luôn sạch.
+- *Lỏng lúc ghi:* nhận tất cả, gắn cờ chất lượng, để người dùng chọn; vì dữ liệu "lỗi" (cảm biến đơ, va chạm bất thường) thường chính là dữ liệu đáng giá nhất cho test và cho học hành vi hiếm.
+- Hai phía đồng ý ở một điểm: không xóa raw.
+
+**3. Exactly-once có phải mục tiêu đáng theo đuổi?**
+- *Một phía:* hạ tầng nên cung cấp exactly-once (Kafka EOS, Flink checkpoint) để người viết pipeline khỏi nghĩ.
+- *Phía kia (lập luận end-to-end):* hiệu ứng ra ngoài hệ không bao giờ exactly-once; thiết kế đúng là at-least-once + idempotent + đối soát, và nói thẳng như vậy.
+
+**4. Đồng bộ phần cứng hay căn chỉnh bằng phần mềm?**
+- *Phần cứng:* trigger chung, PTP, đóng dấu tại nguồn — sai số nhỏ và biết trước (F4.5, K5 Bài 8–9).
+- *Phần mềm:* ước lượng độ lệch thời gian như một tham số hiệu chuẩn từ chính dữ liệu (cross-correlation, Kalibr) — rẻ, áp được cho dữ liệu cũ, nhưng giả định độ lệch ổn định trong phiên.
+- Nghề thực tế làm cả hai; tranh luận là ngân sách nên dồn vào đâu trước.
+
+## Bài kiểm tra cuối khóa nền — "Sổ dữ liệu của một phiên" (≈8–10h, ngoài giờ các viên nang)
+
+Gắn vào rig K5 (IMU qua ESP32 + webcam trên mini PC) hoặc, nếu chưa có phần cứng hay thư mục `data/`, một **bộ sinh dữ liệu tổng hợp** ghép từ các script mục 5: `f33` (đồng hồ trôi, kẹt USB), `f34` (rung 40 Hz, lỗ hổng), `f37` (lỗi cảm biến), `f39` (đĩa kẹt). Mục tiêu: một phiên 30 phút đi trọn vòng đời, và **mỗi lỗi bị một artifact có tên bắt được, hoặc được khai là chưa ai bắt**.
+
+**Làm:**
+
+1. **Chuỗi mắt xích** (F3.9): sơ đồ từ chip tới object store; mỗi mắt ghi giới hạn, chính sách khi đầy, bộ đếm ở đâu.
+2. **Log** (F3.1–F3.3): ghi phiên vào MCAP (hoặc log đồ chơi F3.1 nếu chưa cài `mcap`): `header.stamp` theo mô hình đồng hồ có version trong metadata `clock_source`; `sequence` từ nguồn; drop record trên topic chẩn đoán.
+3. **Contract** (F3.2, F3.7): một file YAML: hash schema, đơn vị, frame, dải, ODR, `clock_source`, nghĩa của "không biết", danh mục rule + tiền điều kiện + hành động.
+4. **Ghép** (F3.4): bảng camera ↔ IMU bằng as-of có tolerance, cột `imu_age_ms`; ngân sách sai số căn chỉnh bằng ms và rad/s.
+5. **Upload** (F3.5): trạng thái WRITING → SEALED → … → VERIFIED; key theo nội dung; điều kiện xóa local.
+6. **Index** (F3.6): Parquet tóm tắt theo giây (max/min/count), DuckDB trả lời 5 câu hỏi của K5 Bài 15.
+7. **Lineage** (F3.8): manifest với hash raw, calib, version từng bước; `make reproduce` dựng lại index từ raw và so **hash nội dung chuẩn hóa**.
+
+**Tiêm năm lỗi**, mỗi lỗi một lần chạy riêng, ghi trước vào `prediction.md` artifact nào sẽ bắt: (i) drift 40 ppm không bù; (ii) USB kẹt 300 ms; (iii) driver xuất g thay m/s²; (iv) `kill -9` writer giữa phiên; (v) upload lặp do mất response.
+
+**PASS khi:** mỗi lỗi có tên artifact đã bắt nó (rule, bộ đếm, đối soát, trạng thái upload), *hoặc* được khai "chưa bắt" kèm lý do và đề xuất; `reproduce` từ raw ra cùng hash nội dung; báo cáo một trang nêu rõ những gì phiên này **không** chứng minh.
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Dấu hiệu bài làm đúng hướng (không phải đáp án duy nhất):
+
+- (i) bắt bởi xu hướng tăng của `log_time − header.stamp` theo thời gian phiên và tỉ lệ muộn tăng dần (F3.3), **không** bởi rule giá trị nào.
+- (ii) bắt bởi lỗ trong `sequence` *hoặc* bởi khoảng `dt` lớn mà `sequence` liên tục (tùy mắt xích nào tràn) và bởi đối soát lỗ audit ↔ drop record (F3.9); cột `imu_age_ms` phình ở các frame trùng thời điểm (F3.4).
+- (iii) bắt bởi rule |a| ≈ g có tiền điều kiện đứng yên và rule hướng trọng lực (F3.7); schema xanh.
+- (iv) bắt bởi trạng thái RECOVER trong hàng đợi upload và số message mất ≈ nửa chunk (F3.1, F3.5).
+- (v) không sinh object trùng nếu key theo nội dung (F3.5); nếu bài làm dùng key theo tên mà vẫn đúng, phải chỉ ra điều kiện SEALED nào giữ cho nó đúng.
+
+Một bài làm có ít nhất một lỗi được khai thật thà là "chưa bắt được" thường đáng tin hơn bài làm báo bắt được cả năm.
+
+</details>

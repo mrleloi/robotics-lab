@@ -45,7 +45,7 @@ flowchart LR
 | Viên nang | Học trước bài chính | Giờ |
 |---|---|---|
 | F4.1 Đồng hồ vật lý | K1 Bài 3 (câu 9 hai thạch anh), K1 Bài 13 · K2 Bài 2 · K3 Bài 3 · K5 Bài 7, Bài 8, Bài 10 · K7 C7.2 | 5 |
-| F4.2 Allan deviation | K5 Bài 10 · K2 Bài 5 (mô hình nhiễu IMU tổng hợp, mục bias instability) · K5 Bài 4 (gyro: bias vs nhiễu trắng) | 4 |
+| F4.2 Allan deviation | K5 Bài 10 · K2 Bài 5 (mô hình nhiễu IMU tổng hợp, mục bias instability), Bài 8 (cửa sổ trung bình để thấy trôi gyro) · K5 Bài 4 (gyro: bias vs nhiễu trắng) | 4 |
 | F4.3 Đồng hồ trong máy tính | K2 Bài 2, Bài 11 · K3 Bài 14, Bài 17 (`boot_id`, monotonic qua reboot) · K5 Bài 1 (PHC, `ethtool -T`), Bài 9, Bài 13 · K6 Bài 3 (đồng hồ treo tường trong logic) · K7 C7.2 | 4 |
 | F4.4 NTP | K3 Bài 8, Bài 9 (RTT/2) · K5 Bài 6, Bài 9 | 3 |
 | F4.5 PTP | K5 Bài 1 (chỉ phần PHC và hardware timestamping), K5 Bài 9 | 6 |
@@ -76,7 +76,7 @@ Thứ tự tối thiểu nếu tuần crunch: F4.1 mục 2 + 6 trước K2 Bài 
 
 Dhahran, 25/2/1991. Khẩu đội Patriot đã chạy liên tục khoảng 100 giờ. Đồng hồ hệ thống đếm số tick 0,1 s bằng số nguyên; để đổi ra giây, phần mềm nhân với 0,1 lưu trong thanh ghi 24 bit. 0,1 không biểu diễn chính xác trong nhị phân, phần đuôi bị cắt, mỗi tick thiếu khoảng 9,5×10⁻⁸ s; sau 100 giờ, đồng hồ lệch khoảng 0,34 s [spec: R. Skeel, *Roundoff Error and the Patriot Missile*, SIAM News 25(4), 1992]. Với tốc độ của Scud, cổng theo dõi của radar dịch đi hơn nửa ki-lô-mét; hệ thống nhìn vào chỗ trống, kết luận báo động giả, và 28 lính Mỹ thiệt mạng [spec: GAO/IMTEC-92-26, 1992]. K5 Bài 7 đã kể câu chuyện này để dạy ngân sách sai số; ở đây hãy nhìn nó bằng đơn vị của viên nang: 9,5×10⁻⁸ s trên mỗi 0,1 s là sai tần số tương đối cỡ **1 ppm** [ước lượng: 9,5e−8 / 0,1]. Không có thạch anh nào hỏng. Một đồng hồ lệch 1 ppm, không ai đặt lại, và một hệ thống giả định thời gian của mình là đúng.
 
-Câu chuyện thứ hai giải thích vì sao gần như mọi đồng hồ bạn sẽ gặp là thạch anh. Năm 1927, Warren Marrison và J. W. Horton ở Bell Labs làm đồng hồ thạch anh đầu tiên: một lát tinh thể áp điện rung ở tần số do kích thước và góc cắt quyết định, ổn định hơn mọi con lắc cơ khí [chuẩn]. Năm 1969 Seiko bán đồng hồ đeo tay thạch anh đầu tiên (Astron) [chuẩn]. Tần số 32 768 Hz của đồng hồ đeo tay và của mọi RTC là 2¹⁵: chia đôi 15 lần bằng flip-flop là ra đúng 1 Hz, và thạch anh dạng âm thoa (tuning fork) ở tần số này nhỏ, rẻ, ăn rất ít điện [chuẩn]. Cái giá của sự nhỏ và rẻ đó là độ nhạy nhiệt: một chiếc đồng hồ đeo tay chạy đúng nhất khi ở cổ tay người (~25–30 °C) chính vì đỉnh parabol của nó được đặt ở đó.
+Vì sao gần như mọi đồng hồ bạn gặp là thạch anh: năm 1927 Warren Marrison và J. W. Horton ở Bell Labs làm đồng hồ thạch anh đầu tiên — một lát tinh thể áp điện rung ở tần số do kích thước và góc cắt quyết định, ổn định hơn mọi con lắc [chuẩn]. 32 768 Hz của mọi RTC là 2¹⁵: chia đôi 15 lần bằng flip-flop ra đúng 1 Hz, và thạch anh dạng âm thoa (tuning fork) ở tần số này nhỏ, rẻ, ít điện [chuẩn]. Cái giá là độ nhạy nhiệt — và đó là chỗ bản Gemini của K5 đã nhầm (mục 6).
 
 ### 2. Mô hình tư duy
 
@@ -163,14 +163,12 @@ Ba câu bản chất: (1) offset là tích phân của skew, nên sai số đồ
 |---|---|---|---|
 | Clock skew giữa server, "chạy NTP là xong" | Mỗi thạch anh có skew riêng, đổi theo nhiệt | Trên server, NTP chạy liên tục và che skew; ESP32 trên robot thường không có ai sửa nó, skew tích lũy thẳng vào dữ liệu | Ghép IMU (đồng hồ ESP32) với camera (đồng hồ host) theo timestamp; sau 1 giờ lệch hàng chục ms, không có exception nào |
 | Rate limiter / token bucket chạy theo đồng hồ máy | Producer và consumer chạy theo hai thạch anh khác nhau (I2S, UART, USB audio) | Backend xả hàng đợi khi tải giảm; ở đây chênh tốc độ do ppm là **vĩnh viễn, một chiều**, không có lúc "tải giảm" | Tăng buffer để chữa: chỉ hoãn ngày tràn/cạn; cách đúng là một bên theo clock của bên kia hoặc chuyển đổi tốc độ mẫu (ASRC) |
-| TTL / lease 30 s | Lease đúng khi skew giữa hai máy có cận | Backend coi 30 s là 30 s ở mọi máy; ở đây 30 s của ESP32 có thể là 30,0015 s của host (50 ppm) — nhỏ, nhưng lease dài và nhiều node thì cộng dồn | Hai node cùng tin mình giữ lock trong khoảng chồng lấn (nhỏ nhưng khác 0) |
 | Cấu hình đúng thì giá trị đúng (`sample_rate=48000`) | Tần số danh định ≠ tần số thật | Config là ý định; tần số thật = ý định × (1 + skew) | Tin rằng hai thiết bị "48 kHz" có cùng số mẫu sau 1 giờ (K1 Bài 3 câu 9) |
 
 **Chấm mô hình:**
 
 - *Mô hình của bạn ở K3 lượt 7:* "vì tốc độ truyền điện không thể bắt kịp... người ta nghĩ ra khái niệm tần số... mỗi thiết bị có khái niệm về clock, về thời gian của chúng... nếu không giới hạn thì thời gian ở mọi thiết bị sẽ lệch nhau... nên phải giới hạn lại, dù có thể chạy nhanh hơn 1000 lần". — **ĐÚNG MỘT PHẦN.** Đúng và quan trọng: *mỗi thiết bị có thời gian của riêng nó* — đó là tiền đề của cả khóa F4. Sai ở nguyên nhân: clock trong mạch số tồn tại để mọi flip-flop lấy mẫu cùng một nhịp sau khi tín hiệu đã ổn định (setup/hold), và tần số tối đa bị chặn bởi đường dẫn chậm nhất và công suất, không phải bị "cố tình giới hạn" (đã chấm ở K3). Và thời gian lệch nhau **không** vì chạy nhanh: hai đồng hồ chạy *chậm* vẫn lệch, vì mỗi miếng thạch anh rung ở tần số hơi khác danh định. Phản ví dụ: hai ESP32-S3 cùng thạch anh 40 MHz danh định, chạy chậm hơn trần của chip rất xa, vẫn lệch nhau vài đến vài chục ppm — K5 Bài 8 đo đúng điều này.
 - *"Datasheet ghi ±10 ppm nên đồng hồ của tôi lệch tối đa 10 ppm."* — **ĐÚNG MỘT PHẦN.** ±10 ppm thường là *tolerance ở 25 °C*; stability theo nhiệt và aging là các dòng khác, cộng thêm; tụ tải trên board kéo thêm. Và bạn so hai đồng hồ, nên hiệu có thể gấp đôi. Phản ví dụ: hai thạch anh ±10 ppm, một con +9, một con −9, ở 50 °C thêm vài ppm: hiệu > 18 ppm.
-- *"Đo skew một lần lúc khởi động rồi bù mãi là đủ."* — **SAI** cho robot có nhiệt độ thay đổi; **ĐÚNG** cho thiết bị trong phòng ổn nhiệt và phiên ngắn. Phản ví dụ: kết quả bài tập mục 5 (phần đã bù skew tĩnh).
 
 **Tên chuẩn của thứ bạn đã làm:** file `/var/lib/chrony/drift` (hoặc `ntp.drift`) trên server bạn quản lý chứa đúng một con số ppm: đó là ước lượng **skew** của thạch anh máy đó mà chrony lưu lại để lần khởi động sau không phải học lại từ đầu [spec: chrony.conf(5), `driftfile`]. Cái chrony gọi "drift file" là skew theo thuật ngữ khóa này; cái tên lệch nhau giữa các cộng đồng, nên luôn hỏi "đơn vị là gì": ppm là skew, ppm/°C hay ppm/ngày là drift. Thứ còn thiếu: bạn chưa từng phải hỏi con số đó đổi bao nhiêu khi máy nóng lên.
 
@@ -281,13 +279,7 @@ Checklist khi đọc một khẳng định về độ chính xác đồng hồ:
    Offset là tích phân của skew; nếu skew đi ra rồi quay về, offset không quay về 0 nhưng có thể nhỏ ở cuối. Hai điểm đo không đủ để thấy một đường cong. Nghĩ về đo offset liên tục bằng một sự kiện chung định kỳ.
 
    </details>
-4. **[Liên ngành]** Âm thanh chuyên nghiệp có "word clock" chung cho mọi thiết bị trong phòng thu. Đó là cách nào trong ba cách xử lý hai miền clock: đồng bộ, bù bằng phần mềm, hay chuyển đổi tốc độ?
-   <details><summary>Hướng nghĩ</summary>
-
-   Word clock = một nguồn tần số chung, các thiết bị khóa pha theo nó → không còn skew giữa chúng. Đó là "hardware trigger" liên tục. So với robot: tương đương camera nhận trigger từ cùng một chân GPIO.
-
-   </details>
-5. **[Phản biện]** "ppm nhỏ thế, robot chỉ chạy 30 phút một episode, bỏ qua được." Tính cho trường hợp nào thì đúng, trường hợp nào thì sai.
+4. **[Phản biện]** "ppm nhỏ thế, robot chỉ chạy 30 phút một episode, bỏ qua được." Tính cho trường hợp nào thì đúng, trường hợp nào thì sai.
    <details><summary>Hướng nghĩ</summary>
 
    So tích skew × thời lượng với dung sai thời gian của ứng dụng: log nhiệt độ 1 Hz vs ghép IMU 200 Hz vs VIO khi robot quay 3 rad/s (sai góc = ω × Δt). Cùng một ppm, kết luận đổi theo ứng dụng.
@@ -298,7 +290,6 @@ Checklist khi đọc một khẳng định về độ chính xác đồng hồ:
 
 - **GPS.** Đồng hồ nguyên tử trên vệ tinh chạy nhanh hơn trên mặt đất khoảng 38 µs/ngày do hiệu ứng tương đối, và được chỉnh tần số trước khi phóng [chuẩn]. 38 µs/ngày ≈ 4,4×10⁻¹⁰, tức 0,00044 ppm, nhưng nhân với tốc độ ánh sáng thì thành ~11 km/ngày sai vị trí. Giống: sai tần số nhỏ × thời gian dài × hệ số khuếch đại lớn. Khác: ở GPS nguyên nhân biết trước và bù chính xác; trên robot, drift theo nhiệt phải đo.
 - **Âm thanh / video streaming.** Bên phát và bên nhận chạy hai thạch anh; player phải phát hiện skew bằng mức đầy của buffer và co giãn nhẹ hoặc resample (adaptive playout). Giống K1 Bài 3 câu 9. Khác: ở đó chỉ cần không tràn; trong robot cần biết *thời điểm* chính xác.
-- **Thiên văn vô tuyến (VLBI).** Mỗi trạm dùng maser hydro (ổn định cỡ 10⁻¹⁵ ở 1000 s [chuẩn]) vì dữ liệu được ghép sau, và mọi sai pha không bù được là mất dữ liệu. Giống: dữ liệu ghi riêng, ghép sau, như MCAP nhiều luồng. Khác: họ chọn đồng hồ đắt trước để khỏi phải sửa sau; robot thì ngược lại, nên cần đo và ghi lại.
 
 ### 9. Áp vào khóa chính
 
@@ -535,18 +526,11 @@ Checklist khi đọc một khẳng định về độ ổn định (đồng hồ
    Giá là random walk → lợi nhuận là nhiễu trắng → √t. Gãy khi lợi nhuận có tương quan (mean reversion hoặc momentum) — đúng như đọc độ dốc khác ±1/2 trên đồ thị Allan.
 
    </details>
-5. **[Nếu…thì]** Nếu đồ thị Allan của offset hai ESP32 có một "gờ" nhô lên ở τ ≈ 600 s, bạn nghi gì đầu tiên?
-   <details><summary>Hướng nghĩ</summary>
-
-   Một dao động tuần hoàn cỡ 20 phút (chu kỳ điều hòa bật/tắt, quạt) cho đỉnh Allan quanh nửa chu kỳ. Kiểm bằng nhiệt độ ghi song song.
-
-   </details>
 
 ### 8. Liên kết ra ngoài
 
 - **Định vị quán tính (hàng không, tàu ngầm).** IEEE Std 952 dùng Allan variance để đặc tả con quay quang học; ARW và bias instability là hai con số đầu tiên người ta nhìn khi chọn IMU [chuẩn]. Giống hệt cách đọc ở đây (thay tần số bằng tốc độ góc). Khác: họ có bàn quay và buồng nhiệt để tách từng thành phần.
 - **Viễn thông.** Mạng đồng bộ (SDH, 5G fronthaul) đặc tả wander bằng TDEV và MTIE — họ hàng của Allan theo thời gian thay vì tần số (ITU-T G.810 và họ chuẩn G.82x) [chuẩn]. Giống: đặc tả theo thang thời gian. Khác: họ quan tâm sai số pha cực đại trong cửa sổ, không chỉ RMS.
-- **SRE.** Một metric "ổn định" ở cửa sổ 5 phút có thể trôi ở cửa sổ tuần (rò bộ nhớ, tăng trưởng dữ liệu). Giống: mọi khẳng định ổn định cần thang thời gian. Khác: hiếm ai vẽ phổ theo τ cho metric backend, dù làm được.
 
 ### 9. Áp vào khóa chính
 
@@ -796,17 +780,10 @@ Checklist khi đọc một timestamp, một trường thời gian trong schema, 
    Quy định (MiFID II, F4.7) yêu cầu truy vết về UTC với dung sai và độ phân giải cụ thể; jitter tầng app có đuôi không chặn được (p99,99 ở mục 5). Thứ không chặn được thì không cam kết được.
 
    </details>
-5. **[Nếu…thì]** Nếu `current_clocksource` của mini PC là `hpet` thay vì `tsc`, điều gì xảy ra với một node ROS 2 đọc đồng hồ 10 000 lần/giây?
-   <details><summary>Hướng nghĩ</summary>
-
-   Mỗi lần đọc thành syscall và truy cập thiết bị chậm, tốn µs thay vì chục ns; CPU tăng, jitter tăng. Kiểm dmesg xem kernel có loại TSC không và vì sao.
-
-   </details>
 
 ### 8. Liên kết ra ngoài
 
 - **Cơ sở dữ liệu.** `NOW()` trong PostgreSQL trả thời điểm bắt đầu transaction, không phải lúc gọi; `clock_timestamp()` mới là lúc gọi [spec: PostgreSQL docs, Date/Time Functions]. Giống: "timestamp nào" là câu hỏi ngữ nghĩa, không chỉ kỹ thuật. Khác: ở DB đồng hồ là của một máy; ở robot thì nhiều.
-- **Hàng không.** Bộ ghi dữ liệu chuyến bay đóng dấu theo đồng hồ của bộ ghi, và điều tra viên phải căn chỉnh nó với ghi âm buồng lái và radar mặt đất bằng các sự kiện chung (một cú bấm nút phát, một câu nói). Giống: dữ liệu nhiều đồng hồ, căn bằng sự kiện (F4.6). Khác: họ căn sau sự cố, một lần, bằng tay.
 
 ### 9. Áp vào khóa chính
 
@@ -1292,17 +1269,10 @@ Checklist khi đọc một hướng dẫn hoặc một kết quả PTP:
    Ở 50 Hz, chu kỳ 20 ms = 360°; 1 µs ≈ 0,018°. Nhỏ, nhưng chuẩn đo pha yêu cầu cỡ đó và ổn định góc pha giữa hai vùng là thứ họ ra quyết định dựa vào. Giống: thời gian thành đại lượng vật lý khác qua một hệ số. Khác: họ có GPS ở mọi trạm.
 
    </details>
-5. **[Nếu…thì]** Nếu đổi cáp Cat6 1 m thành 50 m trong K5 Bài 9, offset trọng tài đổi bao nhiêu?
-   <details><summary>Hướng nghĩ</summary>
-
-   Trễ cáp tăng (cỡ 5 ns/m) nhưng *đối xứng* hai chiều, nên PTP đo và trừ được; offset gần như không đổi. Nếu đổi thì nguồn là PHY/bất đối xứng, không phải chiều dài.
-
-   </details>
 
 ### 8. Liên kết ra ngoài
 
 - **Viễn thông 4G/5G.** Trạm phát TDD cần đồng bộ pha cỡ ±1,5 µs với nhau; nhà mạng dùng PTP profile viễn thông qua mạng có BC/TC ở mọi node, hoặc GPS ở trạm [chuẩn: ITU-T G.8271]. Giống: ngân sách sai số chia cho từng tầng mạng. Khác: họ kiểm soát toàn bộ thiết bị mạng.
-- **Spanner TrueTime và Meta fbclock.** Cả hai đều đồng bộ tốt (GPS + nguyên tử; PTP) nhưng trả về **khoảng**, không phải điểm (F4.8). Giống: độ chính xác tốt đến đâu thì vẫn phải công bố cận. Khác: robot của bạn hiếm khi cần commit-wait; bạn cần cận để chấp nhận hoặc loại một cặp mẫu khi ghép.
 
 ### 9. Áp vào khóa chính
 
@@ -1343,3 +1313,752 @@ Checklist khi đọc một hướng dẫn hoặc một kết quả PTP:
   </details>
 
 ---
+
+## F4.6 — Thời điểm của một phép đo cảm biến: source vs receive, giữa phơi sáng, rolling shutter, bù trễ, cross-correlation (5h)
+
+> **Dùng cho:** K1 Bài 7 · K2 Bài 2, Bài 11 · K3 Bài 9, Bài 13 · K5 Bài 6, Bài 11, Bài 13 · K6 Bài 15 · K7 C7.2 · **Cần trước:** F4.1, F4.3; F5.6 (cross-correlation) nên đọc song song · **Sau viên nang này bạn đánh giá được:** một timestamp cảm biến tương ứng với *khoảnh khắc vật lý nào* (đầu phơi sáng, giữa, cuối, lúc đọc, lúc nhận), một phương pháp đo rolling shutter/độ trễ bằng LED có đúng công thức không, và một offset ước lượng bằng cross-correlation tin được tới đâu.
+
+### 1. Câu chuyện
+
+Trong nghiên cứu visual-inertial odometry đầu thập niên 2010, các nhóm lần lượt phát hiện cùng một điều: camera và IMU trên cùng một thiết bị lệch nhau vài mili-giây đến vài chục mili-giây, lệch đó không được ai ghi lại, và nó đủ làm ước lượng chuyển động tệ đi rõ rệt khi thiết bị quay nhanh. Li và Mourikis (2014) đưa độ lệch thời gian camera–IMU thành một trạng thái để bộ lọc tự ước lượng trong lúc chạy [chuẩn: M. Li, A. Mourikis, *Online temporal calibration for camera–IMU systems: Theory and algorithms*, IJRR 33(7), 2014]; Furgale, Rehder và Siegwart (2013) đưa nó vào bài toán hiệu chuẩn offline thống nhất, thành công cụ Kalibr [chuẩn: IROS 2013]; VINS-Mono (2018) ước lượng nó online cho điện thoại [chuẩn: Qin & Shen, IROS 2018]. Cả ba tồn tại vì một lý do: **timestamp của cảm biến không nói lúc nào thế giới được đo**, chỉ nói lúc nào một phần mềm nào đó nhận được dữ liệu.
+
+Bản gốc K5 Bài 11 và bản Gemini của nó cùng đề xuất một cách đo rẻ và hay (LED ngắn + rolling shutter) với một công thức sai: số hàng sáng = thời gian xung / thời gian mỗi hàng. Công thức đó bỏ quên thời gian phơi sáng, và sai lệch không nhỏ (mục 5). Lỗi này nằm trong quy chuẩn mục 7.
+
+### 2. Mô hình tư duy
+
+**Một mẫu cảm biến có ít nhất năm "thời điểm"**, và mỗi trường timestamp chỉ chọn một:
+
+```
+ thế giới:     ─────────── chuyển động/ánh sáng thật ───────────────────────────────►
+ cảm biến:     [bắt đầu phơi/ lấy mẫu]──[giữa phơi]──[kết thúc]──[bộ lọc số: trễ nhóm]
+ đọc ra:                                                [readout / data-ready IRQ]
+ truyền:                                                         [USB/I2C/SPI, hàng đợi]
+ nhận:                                                                       [driver/app đóng dấu]
+                ▲ t_source lý tưởng          ▲ thường được dùng        ▲ t_receive (log_time)
+```
+
+- **IMU:** bộ lọc số trong chip (DLPF) làm trễ tín hiệu một khoảng phụ thuộc cấu hình, từ dưới 1 ms tới hàng chục ms; datasheet ghi trễ theo từng mức lọc [spec: ví dụ MPU-6000/6050 Register Map, thanh ghi CONFIG; tra đúng chip của bạn]. Timestamp lúc ngắt data-ready đã muộn hơn khoảnh khắc chuyển động một lượng bằng trễ đó.
+- **Camera global shutter:** mọi pixel phơi cùng khoảng; khoảnh khắc đại diện là **giữa phơi sáng** (mid-exposure) [chuẩn]. Exposure tự động đổi → timestamp "đầu frame" dịch theo.
+- **Camera rolling shutter:** hàng i bắt đầu phơi muộn hơn hàng 0 một lượng `i·t_row`; mỗi hàng có khoảnh khắc riêng. Ảnh của vật chuyển động bị nghiêng/méo.
+- **Driver:** V4L2 có cờ cho biết timestamp buffer là *start of exposure* hay *end of frame* (`V4L2_BUF_FLAG_TSTAMP_SRC_SOE` / `_EOF`), và đồng hồ là monotonic [spec: Linux Media Subsystem docs, *struct v4l2_buffer*]; driver UVC thực tế đặt gì thì phải tự kiểm [tự đo].
+
+**Rolling shutter và một xung LED ngắn — timing diagram:**
+
+```
+ hàng 0   |====phơi t_exp====|r
+ hàng 1     |====phơi t_exp====|r              r = đọc ra (readout)
+ hàng 2       |====phơi t_exp====|r            mỗi hàng lệch t_row
+   ...                ...
+ hàng k              |====phơi t_exp====|r
+ LED                    ▐█▌ (t_pulse)
+                        ↑ t_on
+ Hàng sáng = mọi hàng có cửa sổ phơi CHỒNG LÊN xung:
+   từ hàng có readout ≈ t_on  (cửa sổ vừa kịp chạm đầu xung)
+   tới hàng bắt đầu phơi ≈ t_on + t_pulse (cửa sổ vừa kịp chạm cuối xung)
+ ⇒ số hàng sáng ≈ (t_pulse + t_exp) / t_row
+```
+
+Hệ quả [chuẩn: hình học của timing diagram]: (1) với exposure dài, số hàng sáng gần như chỉ đo exposure; (2) muốn t_row, hoặc đặt exposure tối thiểu, hoặc dùng **hai độ dài xung** với cùng exposure và lấy hiệu: `t_row = (t_pulse2 − t_pulse1) / (n2 − n1)` — mọi thứ cố định (exposure, ngưỡng sáng của ảnh) triệt tiêu trong hiệu; (3) hàng **đầu tiên** sáng là hàng có *readout* trùng t_on, không phải hàng *bắt đầu phơi* lúc t_on — hai cái cách nhau đúng t_exp/t_row hàng. Công thức ánh xạ "hàng → thời điểm" phải nói rõ timestamp frame là của sự kiện nào.
+
+**Cross-correlation để ước lượng offset giữa hai luồng** (khi không có trigger chung): nếu hai cảm biến thấy cùng một chuyển động (gyro z và góc quay suy từ ảnh; cú gõ bàn trên IMU và trên video), độ trễ là vị trí đỉnh của tương quan chéo [chuẩn; chi tiết tín hiệu ở F5.6]. Ba điều kiện để tin: chuyển động phải đủ giàu tần số (một chuyển động tuần hoàn cho nhiều đỉnh), độ phân giải bị chặn bởi chu kỳ lấy mẫu thô hơn (nội suy quanh đỉnh cải thiện nhưng có bias theo hình dạng đỉnh), và offset phải gần như không đổi trong cửa sổ (nếu skew đáng kể, làm theo cửa sổ trượt và vẽ offset theo thời gian).
+
+```python
+# [đã chạy] F4.6 — (a) LED ngắn trên camera rolling shutter: đếm hàng sáng; (b) ước lượng trễ bằng cross-correlation
+import numpy as np
+rng = np.random.default_rng(0)
+
+# (a) Hàng i bắt đầu phơi sáng lúc i*t_row, phơi trong t_exp, rồi được đọc ra (readout) lúc i*t_row + t_exp.
+H, T_ROW = 480, 52e-6                       # số hàng, thời gian mỗi hàng (s) — điền số camera của bạn
+def lit_rows(t_on, t_pulse, t_exp):
+    start = np.arange(H) * T_ROW            # lúc mỗi hàng bắt đầu phơi sáng
+    end = start + t_exp
+    overlap = np.clip(np.minimum(end, t_on + t_pulse) - np.maximum(start, t_on), 0, None)
+    lit = overlap > 20e-6                   # hàng "sáng" nếu nhận ánh sáng > 20 µs (ngưỡng cố định của ảnh)
+    return lit.sum(), np.argmax(lit)
+
+for t_pulse, t_exp in ((200e-6, 100e-6), (200e-6, 2e-3), (2e-3, 2e-3)):
+    n, first = lit_rows(8e-3, t_pulse, t_exp)
+    print(f"xung {t_pulse*1e6:5.0f} µs, phơi {t_exp*1e6:5.0f} µs → {n:3d} hàng sáng"
+          f" | t_pulse/n = {t_pulse/n*1e6:6.1f} µs | (t_pulse+t_exp)/n = {(t_pulse+t_exp)/n*1e6:6.1f} µs"
+          f" | hàng đầu tiên sáng: {first}")
+n1, _ = lit_rows(8e-3, 200e-6, 2e-3); n2, _ = lit_rows(8e-3, 1200e-6, 2e-3)
+print(f"hai độ dài xung, cùng phơi sáng: t_row ≈ (1200−200) µs / ({n2}−{n1}) = {1000/(n2-n1):.1f} µs")
+
+# (b) Hai luồng thấy cùng chuyển động; luồng B trễ 37 ms và nhiễu hơn. Tìm trễ bằng cross-correlation.
+fs = 200.0
+t = np.arange(0, 60, 1 / fs)
+motion = np.convolve(rng.standard_normal(t.size), np.ones(8) / 8, mode="same")   # chuyển động băng hẹp
+a = motion + 0.05 * rng.standard_normal(t.size)
+b = np.interp(t - 0.037, t, motion) + 0.2 * rng.standard_normal(t.size)
+a0, b0 = a - a.mean(), b - b.mean()
+xc = np.correlate(b0, a0, mode="full")
+k = np.argmax(xc) - (t.size - 1)
+y0, y1, y2 = xc[np.argmax(xc) - 1: np.argmax(xc) + 2]
+frac = 0.5 * (y0 - y2) / (y0 - 2 * y1 + y2)                # nội suy parabol quanh đỉnh: dưới một mẫu
+print(f"trễ ước lượng: {k/fs*1e3:.1f} ms (nguyên mẫu), {(k+frac)/fs*1e3:.1f} ms (nội suy) — thật 37.0 ms")
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Event time vs processing time (Kafka, Flink) | Source time vs receive time | Backend: event time do client gán, đáng tin cỡ đồng hồ client. Ở đây "source" còn có nhiều tầng bên trong cảm biến (phơi sáng, bộ lọc) mà chính firmware cũng không biết nếu không tra datasheet | Gán `header.stamp` = lúc ngắt data-ready và tưởng đó là lúc chuyển động; lệch bằng trễ DLPF, ổn định nên không ai thấy |
+| Watermark / allowed lateness | Dung sai ghép luồng | Watermark xử lý *đến muộn*; ở đây vấn đề là *gán sai thời điểm* — đến đúng giờ nhưng nhãn sai | Join đẹp, không drop, dữ liệu vẫn lệch pha |
+| Correlation ID để nối log hai service | Sự kiện chung (LED, cú gõ, cạnh GPIO) để nối hai luồng | Correlation ID là *chính xác*; sự kiện vật lý cho một *ước lượng có sai số* (độ phân giải hàng, chu kỳ mẫu, ngưỡng phát hiện) | Báo offset camera–IMU tới µs từ một cú gõ ghi ở 30 fps |
+| Tìm lag giữa hai metric bằng cách nhìn đồ thị chồng | Cross-correlation | Mắt người làm được với tín hiệu sạch; cross-correlation cho con số và độ sắc của đỉnh cho độ tin | Chọn lag theo đỉnh của một chuyển động tuần hoàn → sai một chu kỳ |
+
+**Chấm mô hình:**
+
+- *"Timestamp phần cứng của cảm biến là thời điểm đo."* — **ĐÚNG MỘT PHẦN.** Tốt hơn timestamp lúc nhận nhiều bậc, nhưng vẫn là thời điểm của *một sự kiện trong chip* (bắt đầu phơi, data-ready), cách khoảnh khắc vật lý đại diện một khoảng hệ thống (nửa exposure, trễ bộ lọc). Phản ví dụ: IMU với DLPF mức lọc mạnh, ngắt data-ready đóng dấu chính xác tới µs, vẫn trễ hàng chục ms so với chuyển động.
+- *"Rolling shutter chỉ là chuyện méo ảnh, không ảnh hưởng timestamp."* — **SAI.** Trong một frame, hàng trên và hàng dưới cách nhau gần trọn thời gian readout (cỡ chục ms ở webcam [ước lượng]). Một điểm đặc trưng ở hàng 400 và một ở hàng 50 có timestamp thật khác nhau nhiều ms, dù chung `header.stamp`.
+
+**Tên chuẩn của thứ bạn đã làm:** khi bạn tiêm một request "đánh dấu" vào hệ thống để đo latency qua từng tầng (synthetic probe, canary request), đó là cùng ý với LED/GPIO marker: một **sự kiện đã biết thời điểm** đi qua hệ thống đo. Trong đo lường gọi là *stimulus–response* hay *reference event*. Thứ còn thiếu: tính sai số của chính việc phát hiện marker (độ phân giải hàng, ngưỡng sáng, chu kỳ mẫu) vào ngân sách (F4.7).
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Source time vs receive time | Lúc đo (ở cảm biến) vs lúc nhận (ở máy ghi) | Khác nhau đúng bằng latency đường truyền |
+| 🟢 | Mid-exposure | Giữa khoảng phơi sáng, thời điểm đại diện của một frame/hàng | Đầu frame |
+| 🟢 | Rolling vs global shutter | Phơi/đọc từng hàng lần lượt vs cùng lúc | Chỉ khác chất lượng ảnh |
+| 🟢 | t_row, readout time | Lệch thời gian giữa hai hàng liên tiếp; tổng thời gian đọc hết các hàng | Bằng 1/fps |
+| 🟢 | Hardware trigger | Một xung điện bắt nhiều cảm biến bắt đầu đo cùng lúc | Đồng bộ đồng hồ |
+| 🟡 | Trễ nhóm của bộ lọc (DLPF) | Tín hiệu ra muộn hơn vào một khoảng phụ thuộc cấu hình lọc | Không tồn tại trong cảm biến số |
+| 🟡 | Cross-correlation, nội suy đỉnh | Tìm độ trễ giữa hai tín hiệu; tinh hơn một mẫu bằng nội suy | Luôn ra đúng |
+| 🟡 | Temporal calibration (t_d) | Ước lượng offset camera–IMU như một tham số | Chỉ cần một lần |
+| 🔴 | Rolling-shutter-aware VIO, continuous-time trajectory (spline) | Mô hình hóa từng hàng có thời điểm riêng | Cần tự viết |
+
+### 5. Bài tập dự đoán
+
+**Đề.** Camera rolling shutter giả lập: 480 hàng, t_row = 52 µs; một hàng tính là sáng nếu nhận ánh sáng > 20 µs (ngưỡng cố định). LED bật lúc 8 ms tính từ lúc hàng 0 bắt đầu phơi. Dự đoán trước khi chạy:
+
+1. Số hàng sáng cho ba cấu hình (xung, phơi) = (200 µs, 100 µs), (200 µs, 2 ms), (2 ms, 2 ms).
+2. Nếu dùng công thức của bản gốc `t_row = t_pulse / số_hàng_sáng`, bạn được bao nhiêu µs ở mỗi cấu hình? Sai bao nhiêu lần?
+3. Phương pháp hai xung (200 µs và 1200 µs, cùng phơi 2 ms) cho t_row bao nhiêu? Vì sao ngưỡng 20 µs không làm hỏng nó?
+4. Hàng đầu tiên sáng khi phơi 100 µs và khi phơi 2 ms. Hiệu giữa hai số đó bằng gì?
+5. Cross-correlation (luồng B trễ 37 ms, lấy mẫu 200 Hz): ước lượng nguyên mẫu và sau nội suy.
+
+**Tham số cần tra:** với webcam thật ở K5 Bài 11: exposure hiện tại và có tắt được auto-exposure không (`v4l2-ctl -d /dev/video0 --list-ctrls`, tìm `exposure_time_absolute` hoặc tương đương, đơn vị thường là 100 µs [tự đo]); độ phân giải dọc thật của sensor (không phải độ phân giải đầu ra sau scale). **Phương pháp:** dùng timing diagram mục 2; số hàng sáng ≈ (t_pulse + t_exp − 2·ngưỡng)/t_row.
+
+```markdown
+# prediction.md — F4.6
+1. số hàng sáng: (200µs,100µs) ___ ; (200µs,2ms) ___ ; (2ms,2ms) ___
+2. t_pulse/n: ___ / ___ / ___ µs (sai ~___ lần ở cấu hình tệ nhất)
+3. hai xung: t_row ≈ ___ µs ; ngưỡng không ảnh hưởng vì ___
+4. hàng đầu tiên sáng: phơi 100µs → ___ ; phơi 2ms → ___ ; hiệu = ___
+5. xcorr: nguyên mẫu ___ ms ; nội suy ___ ms
+Độ tự tin (1–5): ___   Tôi sẽ ngạc nhiên nếu: ___
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Kết quả khi chạy:
+
+| Xung, phơi | Hàng sáng | t_pulse/n (công thức gốc) | (t_pulse+t_exp)/n | Hàng đầu tiên sáng |
+|---|---|---|---|---|
+| 200 µs, 100 µs | 5 | 40 µs | 60 µs | 153 |
+| 200 µs, 2 ms | 42 | **4,8 µs** | 52,4 µs | 116 |
+| 2 ms, 2 ms | 76 | 26,3 µs | 52,6 µs | 116 |
+
+- Công thức gốc sai **~11 lần** ở cấu hình webcam điển hình (exposure ms, xung 200 µs). Ngay cả khi exposure nhỏ hơn xung, nó vẫn lệch (40 vs 52 µs) vì ngưỡng và exposure không bằng 0.
+- Hai xung: (1200 − 200) µs / (61 − 42) = **52,6 µs**. Ngưỡng và exposure là hằng số cộng vào cả hai lần đếm, triệt tiêu trong hiệu. Đây là cùng nguyên tắc với "lỗi chung triệt tiêu trong phép hiệu" của K5 Bài 7.
+- Hàng đầu tiên sáng: 153 (phơi 100 µs) vs 116 (phơi 2 ms); hiệu 37 hàng × 52 µs ≈ 1,9 ms ≈ t_exp. Hàng đầu tiên sáng là hàng mà *readout* (kết thúc phơi) vừa chạm t_on. Nếu bạn quy hàng đó về "lúc hàng bắt đầu phơi", bạn sai đúng một exposure.
+- Cross-correlation: 35,0 ms nguyên mẫu (đúng tới một chu kỳ mẫu 5 ms), 36,6 ms sau nội suy parabol. Còn 0,4 ms bias vì đỉnh tương quan của chuyển động này không có dạng parabol; nội suy giảm sai số từ ~2 ms còn ~0,4 ms, không xuống 0. Kết quả không đổi khi đổi seed: bias là hệ thống, không phải nhiễu.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi đọc một timestamp cảm biến hoặc một phương pháp đo trễ/đồng bộ bằng sự kiện:
+
+1. Timestamp ứng với **sự kiện nào** của cảm biến (bắt đầu phơi, giữa, kết thúc, readout, data-ready, nhận)? Có ghi trong metadata không?
+2. Có trễ **bên trong cảm biến** (exposure, bộ lọc) chưa được tính không? Nó có đổi theo cấu hình (auto-exposure, DLPF) không?
+3. Với rolling shutter: công thức có tính exposure không? t_row đo bằng exposure tối thiểu hoặc hai độ dài xung?
+4. Sai số phát hiện sự kiện (độ phân giải hàng, chu kỳ mẫu, ngưỡng) có tách khỏi sai số của timestamp frame (USB, driver) không?
+5. Với cross-correlation: tín hiệu có đủ giàu tần số không, có nhiều đỉnh không, offset có ổn định trong cửa sổ không, đã nội suy và đã báo độ sắc của đỉnh chưa?
+
+**Khẳng định mẫu — tự chấm trước khi mở:**
+
+(a) Bản gốc K5 Bài 11, phần A: *"ESP32 nháy LED trong đúng 200 µs... Đếm số hàng sáng. `t_mỗi_hàng = 200µs / số_hàng_sáng`. Nhân với tổng số hàng → `t_đọc_frame`."*
+
+(b) Bản Gemini K5 Bài 12 (câu trả lời phỏng vấn mẫu): *"...đo bằng phương pháp Hardware Optical Trigger (chớp LED) kết hợp xung va chạm xung lực, với sai số của chính phép đo là 52 µs (độ phân giải một hàng rolling shutter)."*
+
+(c) `robotics-data-infra-roadmap.md` mục 3.1: *"Timestamp at source vs at receive — Khác nhau bằng đúng latency của đường truyền. Dataset không ghi rõ dùng cái nào = dataset không dùng được cho fusion."*
+
+<details><summary>🔒 Đáp án</summary>
+
+(a) **SAI** (lỗi đã biết, quy chuẩn mục 7). Số hàng sáng ≈ (t_pulse + t_exposure)/t_row, không phải t_pulse/t_row. Với exposure tự động cỡ ms, công thức gốc cho t_row nhỏ hơn thật cả chục lần, và t_đọc_frame suy ra sai theo. Sửa: khóa exposure ở mức tối thiểu, hoặc chạy hai độ dài xung với cùng exposure và lấy hiệu (mục 5). Bài chính K5 Bài 11 phải áp dụng sửa này.
+
+(b) **ĐÚNG MỘT PHẦN.** 52 µs là *độ phân giải* của phép đo vị trí xung trong frame (một hàng), là một nguồn loại B (đóng góp cỡ t_row/√12 nếu coi đều). Nó không phải *sai số của phép đo* offset camera–IMU, vì còn: sai số của chính t_row (đo được tới đâu), độ bất định của timestamp frame (driver/USB, cỡ ms nếu đóng dấu lúc nhận), quy ước hàng ↔ sự kiện (readout vs bắt đầu phơi, lệch một exposure), và phía IMU (trễ bộ lọc, chu kỳ mẫu 5 ms ở 200 Hz cho cú gõ). Ngân sách phải liệt kê từng thứ (F4.7); "52 µs" là sàn, không phải tổng.
+
+(c) **ĐÚNG MỘT PHẦN.** Vế sau đúng và quan trọng. Vế đầu thiếu: hiệu giữa source và receive gồm latency đường truyền **và** jitter của nó (không bù được bằng một hằng số) **và** mọi trễ trong cảm biến *trước* chỗ "source" được đóng dấu (exposure, bộ lọc). Ngay cả "source time" cũng phải nói là sự kiện nào của cảm biến.
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Vì sao không]** Vì sao không mua camera global shutter cho mọi robot và bỏ qua rolling shutter?
+   <details><summary>Hướng nghĩ</summary>
+
+   Global shutter đắt hơn, nhiễu hơn ở cùng giá, độ phân giải thấp hơn [ước lượng]; và nó chỉ xóa *một* nguồn (lệch giữa các hàng). Timestamp frame, exposure, USB vẫn còn. Quyết định theo ngân sách sai số: rolling shutter có phải số hạng lớn nhất không ở tốc độ quay của robot bạn?
+
+   </details>
+2. **[Quy mô]** 1000 giờ dữ liệu từ 100 robot, mỗi con một webcam với auto-exposure. Offset camera–IMU có phải một hằng số của đội không, của từng con không, hay của từng frame?
+   <details><summary>Hướng nghĩ</summary>
+
+   Auto-exposure làm mid-exposure dịch theo ánh sáng → offset đổi theo frame. Phải ghi exposure của từng frame vào dữ liệu, hoặc khóa exposure. Một hằng số hiệu chuẩn cho cả đội là sai cho mọi con.
+
+   </details>
+3. **[Failure mode]** Detector "lệch nội dung ảnh vs state" (K2 Bài 11) dùng cross-correlation giữa chuyển động trong ảnh và vận tốc khớp. Robot làm một động tác lặp lại tuần hoàn 0,5 s. Detector báo offset 0. Tin không?
+   <details><summary>Hướng nghĩ</summary>
+
+   Chuyển động tuần hoàn cho đỉnh tương quan lặp mỗi chu kỳ; lệch thật 0,5 s trông giống 0. Cần một đoạn không tuần hoàn (khởi động, dừng) hoặc kiểm độ trội của đỉnh chính so với đỉnh phụ; báo INCONCLUSIVE khi không phân biệt được.
+
+   </details>
+4. **[Nếu…thì]** Nếu webcam của bạn hóa ra đóng dấu frame lúc *nhận* qua USB (end of frame) thay vì start of exposure, mọi offset tính ở K5 Bài 11 lệch thế nào?
+   <details><summary>Hướng nghĩ</summary>
+
+   Lệch thêm một hằng (readout + truyền) cộng jitter USB. Phần hằng triệt tiêu nếu hai camera cùng loại và bạn chỉ so hai camera; không triệt tiêu khi so camera với IMU. Đo bằng LED để biết hằng đó.
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Điện ảnh và phát sóng.** Genlock: mọi camera trong trường quay nhận chung một tín hiệu đồng bộ để bắt đầu frame cùng lúc; timecode gắn vào từng frame [chuẩn]. Đây là hardware trigger + source timestamp, chuẩn hóa từ thời analog. Khác: họ cần frame khớp để cắt dựng, không cần biết thời điểm vật lý tới µs.
+- **Y sinh — EEG/EMG với video.** Nghiên cứu hành vi ghi EEG và video riêng, rồi căn bằng một xung TTL (đèn hoặc tín hiệu điện) chung lúc bắt đầu và kết thúc, và nội suy tuyến tính giữa hai mốc để bù skew [chuẩn]. Giống hệt LED của K5 Bài 11 cộng mô hình offset/skew của F4.1. Khác: họ thường chỉ có hai mốc, nên drift giữa chừng bị bỏ qua.
+
+### 9. Áp vào khóa chính
+
+- **K1 Bài 7, K3 Bài 9:** logic analyzer là trọng tài vì nó đóng dấu GPIO marker và tín hiệu đo trên cùng một đồng hồ; phần sai số còn lại là chu kỳ lấy mẫu và độ trễ phát hiện (ngưỡng mic).
+- **K2 Bài 2, Bài 11:** trường `header.stamp` cần metadata "stamp = sự kiện nào"; detector lớp "lệch nội dung" dùng cross-correlation phải có đầu ra INCONCLUSIVE.
+- **K5 Bài 6, Bài 13:** ESP32 đóng dấu ở ISR data-ready, ghi cấu hình DLPF để bù trễ bộ lọc; host chỉ ghi `log_time`.
+- **K5 Bài 11:** công thức số hàng sáng có exposure; t_row bằng hai độ dài xung; ghi exposure của từng frame; quy ước hàng ↔ readout.
+- **K6 Bài 15:** căn sim với thật bằng cạnh xung chung hoặc cross-correlation trước khi tính gap; báo sai số căn chỉnh cùng gap.
+- **K7 C7.2:** quyết định nơi đóng dấu IMU và camera trên robot, và ghi offset camera–IMU đo được vào calibration.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Số hàng sáng ≈ (t_pulse + t_exp)/t_row | [chuẩn] | Hình học timing diagram; quy chuẩn mục 7; mô phỏng mục 5 |
+| Li & Mourikis 2014 (IJRR), Furgale et al. 2013 (IROS, Kalibr), Qin & Shen 2018 (IROS) | [chuẩn] | — |
+| V4L2 có cờ SOE/EOF cho nguồn timestamp | [spec] | Linux Media docs, `struct v4l2_buffer`, buffer flags |
+| Driver UVC đặt cờ nào | [tự đo] | `v4l2-ctl --stream-mmap --verbose` hoặc đọc flags trong code |
+| Trễ DLPF của IMU đổi theo cấu hình, tới hàng chục ms | [spec] | Register map của chip bạn dùng (ví dụ MPU-6050, thanh ghi CONFIG) |
+| Đơn vị `exposure_time_absolute` là 100 µs | [tự đo] | `v4l2-ctl --list-ctrls` |
+| Kết quả mô phỏng | [đã chạy] | Mô hình ngưỡng 20 µs là giả định |
+
+Đã sửa so với bản gốc/Gemini: (K5 Bài 11 gốc và Gemini) `t_row = t_pulse / số_hàng_sáng` → `≈ (t_pulse + t_exp)/số_hàng_sáng`, đo t_row bằng exposure tối thiểu hoặc hiệu hai độ dài xung (quy chuẩn mục 7); (Gemini K5 Bài 12) "sai số phép đo = 52 µs (một hàng)" → đó là độ phân giải, một số hạng trong ngân sách, không phải tổng; (Gemini K5 Bài 11) công thức `t_bật_LED = t_đầu_frame + (y_start/H)·t_đọc_frame` → phải nói `t_đầu_frame` là sự kiện nào; hàng đầu tiên sáng ứng với readout, lệch một exposure so với bắt đầu phơi.
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Linux Media Subsystem documentation, phần *Buffers* (`struct v4l2_buffer`, timestamp flags).
+- **Giải thích:** M. Li, A. Mourikis, *Online temporal calibration for camera–IMU systems* (IJRR 2014) — đọc phần đặt vấn đề và mô hình t_d.
+- **Đào sâu (tùy chọn):** P. Furgale, J. Rehder, R. Siegwart, *Unified temporal and spatial calibration for multi-sensor systems* (IROS 2013) và tài liệu Kalibr.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao "đã đóng dấu ở nguồn" vẫn có thể lệch hàng chục ms; (2) vẽ lại timing diagram LED/rolling shutter; (3) câu hỏi:
+
+  Webcam 720 hàng, exposure khóa ở 1 ms. Xung 300 µs cho 32 hàng sáng; xung 1300 µs cho 51 hàng sáng. t_row và readout time (720 hàng)? Công thức gốc cho t_row bao nhiêu?
+  <details><summary>Đáp án</summary>
+
+  t_row ≈ (1300 − 300)/(51 − 32) = 1000/19 ≈ 52,6 µs → readout ≈ 720 × 52,6 µs ≈ 37,9 ms. Công thức gốc: 300/32 ≈ 9,4 µs — sai ~5,6 lần. Kiểm chéo: (300 + 1000)/52,6 ≈ 24,7 hàng theo lý thuyết không ngưỡng, nhưng đếm được 32: thừa ~7 hàng ở *cả hai* lần đếm (ảnh nhòe sáng, LED tắt chậm — một ngưỡng cao thì ngược lại làm đếm thiếu). Phần thừa cố định đó triệt tiêu trong hiệu hai xung.
+
+  </details>
+
+---
+
+## F4.7 — Ngân sách sai số thời gian và trọng tài đo (4h)
+
+> **Dùng cho:** K1 Bài 7 · K3 Bài 8, Bài 9 · K5 Bài 1, Bài 2, Bài 7, Bài 12 · **Cần trước:** F1.1 (GUM loại A/B), F4.1, F4.5, F4.6 · **Sau viên nang này bạn đánh giá được:** một bảng ngân sách sai số thời gian có cộng đúng không, một con số đồng bộ được đo bằng dụng cụ đủ tốt chưa, và câu "hai cảm biến lệch nhau không quá X µs" có được phép nói ra không.
+
+### 1. Câu chuyện
+
+Từ 1/2018, quy định MiFID II của EU (RTS 25) buộc các sàn và công ty giao dịch ghi timestamp mọi sự kiện giao dịch **truy vết được về UTC**, với độ lệch tối đa cho phép (100 µs với giao dịch tần suất cao, 1 ms hoặc hơn với loại khác) và độ phân giải timestamp tương ứng [spec: Commission Delegated Regulation (EU) 2017/574]. Điều làm ngành khổ không phải con số 100 µs — PTP đạt dễ dàng — mà là chữ "truy vết được": công ty phải **chứng minh** trước kiểm toán, bằng tài liệu, rằng từ nguồn UTC (GPS, phòng đo quốc gia) qua grandmaster, qua mạng, qua NIC, tới chỗ ứng dụng đóng dấu, tổng sai số nằm trong giới hạn, và phải giám sát liên tục. "ptp4l báo offset 20 ns" không phải bằng chứng; một bảng ngân sách có từng tầng, mỗi tầng đo bằng một dụng cụ độc lập, mới là bằng chứng.
+
+K5 Bài 7 kể Patriot để dạy cách *cộng* sai số. Viên nang này dạy nửa còn lại: **ai được quyền nói con số đó đúng**.
+
+### 2. Mô hình tư duy
+
+**Một ngân sách là một bảng, mỗi dòng một nguồn, mỗi nguồn được phân loại trước khi cộng:**
+
+| Loại | Ví dụ | Xử lý |
+|---|---|---|
+| Bias đã đo | Trễ cố định của USB, trễ DLPF, nửa exposure | **Bù** (trừ đi); dòng ngân sách chỉ còn độ bất định của phép đo bias |
+| Bias chưa đo, biết cận | Bất đối xứng PHY (≤ vài chục ns), độ phân giải 1 hàng | Loại B: cận a, phân bố đều → u = a/√3 |
+| Ngẫu nhiên | Jitter ISR, lượng tử, nhiễu timestamp | σ đo được (loại A) |
+| Tích lũy theo thời gian | Skew × thời gian từ lần sync, drift nhiệt | Giá trị **xấu nhất trước lần sync kế** |
+
+Rồi cộng [chuẩn: GUM; K5 Bài 7 có mô phỏng ba quy tắc]: các nguồn độc lập cộng bình phương; tương quan hoàn toàn cộng thẳng; nguồn chung của hai luồng triệt tiêu trong **hiệu**. Câu kết luận có dạng cố định:
+
+> *Hai mẫu từ A và B được gán cùng timestamp thực tế cách nhau không quá **X** (mức tin cậy **p**), trong điều kiện **C** (nhiệt độ, tải, thời gian từ lần sync), đo bằng **phương pháp M**, với độ bất định của chính phép đo là **U**.*
+
+**Trọng tài.** Con số X phải đến từ một phép đo không dùng chính cơ chế đang được đánh giá:
+
+```mermaid
+flowchart BT
+  C["Khẳng định: lệch A−B ≤ X"] --> S["Tự báo của hệ (ptp4l offset, chrony)<br/>KHÔNG phải bằng chứng: mù với bất đối xứng"]
+  C --> A1["Trọng tài 1: phép đo độc lập<br/>(PHC kẹp qua PCIe, logic analyzer, LED trên camera)<br/>độ bất định U₁"]
+  A1 --> A2["Trọng tài của trọng tài:<br/>U₁ đến từ đâu? (độ rộng kẹp, chu kỳ lấy mẫu,<br/>thạch anh của analyzer)"]
+  A2 --> R["Chuỗi truy vết tới chuẩn<br/>(trong lab: dừng ở mức đủ cho quyết định)"]
+```
+
+Ba quy tắc người trong nghề dùng [chuẩn]:
+
+1. **Tỉ số độ bất định (test uncertainty ratio).** Ngành đo lường thường đòi dụng cụ kiểm tốt hơn thứ được kiểm cỡ 4 lần trở lên [chuẩn: thông lệ hiệu chuẩn, ví dụ ANSI/NCSL Z540.3 dùng 4:1]. Kém hơn thì phép đo chủ yếu đo dụng cụ.
+2. **Độc lập về phương pháp.** Trọng tài phải có nguồn sai số khác: ptp4l đo bằng timestamp gói qua dây; trọng tài K5 Bài 9 đọc thanh ghi PHC qua PCIe. Cùng phương pháp thì cùng điểm mù.
+3. **Báo độ bất định của trọng tài cùng kết quả**, và chỉ khẳng định tới mức nó cho phép. Một trọng tài thô hơn thứ cần đo không bác bỏ được gì; nó chỉ đặt cận trên.
+
+Một vài trọng tài trong lộ trình và sai số đặc trưng của chúng: logic analyzer 24 MHz — hai kênh lấy mẫu cùng đồng hồ, lượng tử 41,7 ns mỗi kênh, hiệu hai kênh có σ = T/√6 ≈ 17 ns [chuẩn: hiệu hai phân bố đều độc lập là phân bố tam giác], còn thạch anh của analyzer làm sai *khoảng thời gian* cỡ ppm, không làm sai *offset* tức thời; PHC kẹp bằng `PTP_SYS_OFFSET_EXTENDED` — sai không quá nửa độ rộng kẹp, độ rộng kẹp phải tự đo [tự đo]; timestamp ISR trên ESP32 — jitter cỡ µs [tự đo, K5 Bài 8]; LED trên rolling shutter — độ phân giải một hàng cộng độ bất định của timestamp frame (F4.6).
+
+Mô phỏng: hai hệ có offset thật biết trước (σ = 150 ns và σ = 15 ns, cộng 40 ns bias do bất đối xứng), đo bằng bốn "trọng tài".
+
+```python
+# [đã chạy] F4.7 — trọng tài đo phải tốt hơn thứ được đo bao nhiêu?
+# Offset thật giữa hai đồng hồ có phân bố biết trước; đo bằng các trọng tài khác nhau; con số báo cáo lệch thế nào?
+import numpy as np
+rng = np.random.default_rng(11)
+N = 3600                                          # 1 giờ, 1 mẫu/giây
+
+def logic_analyzer(x, fs=24e6):                   # hai kênh lượng tử theo chu kỳ lấy mẫu, pha ngẫu nhiên
+    T = 1 / fs
+    a = np.floor(rng.uniform(0, T, x.size) / T) * T
+    b = np.floor((rng.uniform(0, T, x.size) + x) / T) * T
+    return b - a
+
+arbiters = {
+    "kẹp PHC (σ 20 ns) [giả định]":   lambda x: x + rng.normal(0, 20e-9, x.size),
+    "logic analyzer 24 MHz":          logic_analyzer,
+    "timestamp ISR (σ 1 µs) [giả định]": lambda x: x + rng.normal(0, 1e-6, x.size),
+    "tự báo (mù với bất đối xứng)":    lambda x: x - x.mean() + rng.normal(0, 20e-9, x.size),
+}
+for sigma in (150e-9, 15e-9):                     # hai hệ: PTP "thường" và PTP "rất tốt" [giả định]
+    true = rng.normal(0, sigma, N) + 40e-9        # 40 ns bias do bất đối xứng mà giao thức không thấy
+    p99_true = np.percentile(np.abs(true), 99)
+    print(f"--- thật: σ={sigma*1e9:.0f} ns, TB={true.mean()*1e9:+.0f} ns, p99|offset|={p99_true*1e9:.0f} ns")
+    for name, f in arbiters.items():
+        m = f(true)
+        p99 = np.percentile(np.abs(m), 99)
+        print(f"{name:36s} TB={m.mean()*1e9:+6.0f} ns  p99|offset|={p99*1e9:6.0f} ns  ({100*(p99/p99_true-1):+5.0f}%)")
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Latency budget (mỗi service X ms, tổng ≤ SLO) | Time-sync error budget | Latency cộng thẳng (thời gian nối tiếp); sai số độc lập cộng **bình phương**, bias chung triệt tiêu trong hiệu, drift lớn dần theo thời gian | Cộng thẳng mọi nguồn → ngân sách bi quan vô lý, mua PTP khi không cần; hoặc RSS cả bias tương quan → lạc quan |
+| Service tự báo health "OK" | ptp4l/chrony tự báo offset | Health check tự báo thì ai cũng biết phải có probe ngoài; với đồng hồ, con số tự báo trông như một *phép đo* nên dễ được tin | Báo cáo "đồng bộ 20 ns" từ log ptp4l |
+| Monitoring đo bằng chính hệ thống được đo (metric từ app) | Trọng tài phải độc lập về phương pháp | Bạn đã biết "blackbox probe" bổ sung cho "whitebox metric"; ở đây trọng tài là blackbox probe của thời gian | Trọng tài và hệ cùng điểm mù → xác nhận một lỗi |
+| Test tool có bug thì test PASS sai | Độ bất định của trọng tài | Bạn thường không lượng hóa tỉ lệ sai của chính tool kiểm; ở đây phải ghi U của trọng tài cạnh mọi con số | Trọng tài thô hơn hệ cần đo → "lệch 500%" mà tưởng hệ tệ |
+
+**Chấm mô hình:**
+
+- *"Có dụng cụ độc lập là đủ để tin."* — **ĐÚNG MỘT PHẦN.** Độc lập là điều kiện cần; còn phải đủ tốt (tỉ số độ bất định) và chính nó phải có ngân sách. Phản ví dụ: mục 5 — timestamp ISR độc lập hoàn toàn với PTP, nhưng thô hơn hệ cần đo hàng chục lần nên con số nó báo gần như toàn là sai số của nó.
+- *"Ngân sách sai số là bảng cộng các con số."* — **SAI.** Nó là bảng *phân loại* rồi mới cộng; cùng con số "100 µs" là bias đã bù (đóng góp ~0), cận loại B (đóng góp 58 µs), hay drift trước lần sync kế (đóng góp đầy đủ ở thời điểm xấu nhất) cho ba kết quả khác nhau.
+
+**Tên chuẩn của thứ bạn đã làm:** khi bạn chạy một request đã biết đáp án qua mock server để kiểm pipeline đo của mình, đó là **check standard** (F1.1). Trọng tài là bước kế: một hệ đo thứ hai *độc lập*, chạy song song, để bắt lỗi hệ thống của hệ đo thứ nhất. Trong SRE gọi là blackbox monitoring; trong đo lường gọi là kiểm tra chéo (cross-check) và chuỗi truy vết (traceability). Thứ còn thiếu: con số độ bất định của chính trọng tài, và quy tắc 4:1.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Error budget (thời gian) | Bảng nguồn sai số đã phân loại và cách cộng | Danh sách cộng thẳng |
+| 🟢 | Trọng tài (arbiter, reference measurement) | Phép đo độc lập dùng để kiểm hệ | "Một dụng cụ khác" bất kỳ |
+| 🟢 | Tự báo (self-reported) | Con số hệ đồng bộ tính từ dữ liệu của chính nó | Phép đo |
+| 🟢 | RSS / cộng thẳng / triệt tiêu | Độc lập / tương quan hoàn toàn / chung trong hiệu | Một quy tắc cho mọi trường hợp |
+| 🟡 | Test uncertainty ratio (TUR) | Tỉ số giữa dung sai cần kiểm và độ bất định của dụng cụ kiểm | Không tồn tại ngoài phòng hiệu chuẩn |
+| 🟡 | Traceability | Chuỗi so sánh có ghi độ bất định về một chuẩn | Có link tới nguồn |
+| 🟡 | Độ rộng kẹp (sandwich width) | Khoảng giữa hai lần đọc đồng hồ hệ thống quanh một lần đọc PHC | Độ trễ PCIe cố định |
+| 🔴 | MTIE, TDEV (viễn thông) | Chỉ tiêu sai số thời gian theo cửa sổ | Cần cho lộ trình |
+
+### 5. Bài tập dự đoán
+
+**Đề.** Mô phỏng mục 2. Hệ "thường": offset thật σ = 150 ns + bias 40 ns; hệ "rất tốt": σ = 15 ns + bias 40 ns. Bốn cách đo: kẹp PHC (σ 20 ns giả định), logic analyzer 24 MHz, timestamp ISR (σ 1 µs giả định), tự báo của ptp4l (mù với bias). Dự đoán:
+
+1. p99 |offset| *thật* của mỗi hệ (tính tay từ σ và bias).
+2. Với mỗi cách đo, p99 báo cáo lệch so với thật bao nhiêu phần trăm, cho mỗi hệ.
+3. Trung bình (bias) mà "tự báo" cho ra.
+4. Theo quy tắc 4:1, cách đo nào đủ tư cách làm trọng tài cho từng hệ?
+
+**Tham số cần tra:** với phần cứng thật: tần số lấy mẫu analyzer thực sự dùng được với số kênh bạn bật (fx2lafw, PulseView); độ rộng kẹp PHC thực tế (đo ở K5 Bài 9 bước 1). **Phương pháp:** p99 của |N(μ, σ)| khi μ nhỏ so với σ ≈ 2,6σ (nếu μ không nhỏ, cộng vào); với nhiễu trọng tài độc lập σ_a, σ đo = √(σ² + σ_a²); hiệu hai kênh lượng tử T có σ = T/√6.
+
+```markdown
+# prediction.md — F4.7
+1. p99 thật: hệ thường ___ ns ; hệ rất tốt ___ ns
+2. lệch p99 (%): kẹp PHC ___/___ ; LA ___/___ ; ISR ___/___ ; tự báo ___/___
+3. bias tự báo: ___ ns (thật 40 ns)
+4. đủ tư cách trọng tài: hệ thường ___ ; hệ rất tốt ___
+Độ tự tin (1–5): ___   Tôi sẽ ngạc nhiên nếu: ___
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Kết quả khi chạy (seed 11):
+
+| Cách đo | Hệ thường (p99 thật 408 ns) | Hệ rất tốt (p99 thật 75 ns) |
+|---|---|---|
+| Kẹp PHC (σ 20 ns) | 420 ns (+3%) | 96 ns (**+28%**) |
+| Logic analyzer 24 MHz | 417 ns (+2%) | 83 ns (+11%) |
+| Timestamp ISR (σ 1 µs) | 2559 ns (**+527%**) | 2529 ns (**+3268%**) |
+| Tự báo | 410 ns, TB **0 ns** | 64 ns (**−15%**), TB **−1 ns** |
+
+- Hệ thường: kẹp PHC và analyzer đều đủ (σ trọng tài ≤ 1/7 σ hệ). Timestamp ISR vô dụng: con số nó báo gần như chỉ là nó.
+- Hệ rất tốt: cùng trọng tài kẹp PHC giờ chỉ tốt ngang hệ (tỉ số ~0,75:1) và làm p99 phình 28%; analyzer khá hơn chút nhờ σ ≈ 17 ns nhưng vẫn dưới 4:1. Muốn khẳng định "p99 ≤ 75 ns" phải có trọng tài σ ≤ ~4 ns, hoặc trừ phương sai trọng tài đã biết khỏi phương sai đo (chỉ hợp lệ khi chắc chắn nó độc lập và biết rõ σ của nó).
+- Tự báo: trung bình ~0 trong khi bias thật 40 ns — đúng thứ giao thức không thấy (F4.4, F4.5). Ở hệ rất tốt, nó còn *đánh giá thấp* đuôi (−15%) vì bias chiếm phần lớn p99 thật. Không có trọng tài thì không có cách nào biết.
+- Câu 4: hệ thường — kẹp PHC, analyzer; hệ rất tốt — không cách nào trong bốn cách đạt 4:1.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi đọc một bảng ngân sách hoặc một khẳng định đồng bộ:
+
+1. Mỗi dòng đã **phân loại** (bias đã bù / cận loại B / ngẫu nhiên / tích lũy) chưa? Có ghi đơn vị và mức tin (σ hay cận) không?
+2. Cách cộng có khớp quan hệ giữa các nguồn (độc lập / tương quan / chung trong hiệu)?
+3. Dòng tích lũy (skew, drift) có ghi **thời gian kể từ lần sync** và điều kiện nhiệt không?
+4. Con số cuối cùng đến từ **trọng tài** hay tự báo? Trọng tài có độc lập về phương pháp không?
+5. Độ bất định của trọng tài là bao nhiêu, đo thế nào, và có tốt hơn khẳng định ~4 lần không?
+6. "Sai số phép đo" có bị nhầm với **độ phân giải** của một dụng cụ trong chuỗi không?
+7. Câu kết luận có đủ năm thành phần (X, p, điều kiện, phương pháp, U) không?
+
+**Khẳng định mẫu — tự chấm trước khi mở:**
+
+(a) Bản Gemini K5 Bài 12, bảng ngân sách, dòng TN-1: *"Clock drift thạch anh ESP32 (TN-1) | Dự đoán 20–50 ppm (72–180 ms/h) | Phương pháp: ngắt GPIO chung 1 Hz giữa 2 MCU | Sai số của phép đo: 41.7 ns (Logic Analyzer 24 MHz)."*
+
+(b) Bản Gemini K5 Bài 9, "Số phải ra": *"Độ rộng kẹp của trọng tài ≈ 1–2 µs [PASS] — Độ trễ bus PCIe khi đọc thanh ghi PHC từ CPU."*
+
+(c) Bản Gemini K5 Bài 9, phần trọng tài: *"Kernel Linux cung cấp cơ chế đọc PHC kẹp giữa hai lần đọc System Clock qua ioctl PTP_SYS_OFFSET_EXTENDED (thực thi bằng lệnh `phc_ctl <dev> cmp`). 1. Đọc PHC_A so với System Clock. 2. Đọc PHC_B so với cùng System Clock. 3. Hiệu số giữa hai kết quả cho ra Offset_A−B thực tế."*
+
+<details><summary>🔒 Đáp án</summary>
+
+(a) **SAI** ở cột sai số. (1) Phép đo ở TN-1 là timestamp esp_timer trong ISR trên hai ESP32; sai số của nó do jitter độ trễ ngắt (cỡ µs) và độ phân giải esp_timer, không do logic analyzer. 41,7 ns là chu kỳ lấy mẫu của analyzer — chỉ liên quan nếu analyzer là trọng tài, và khi đó sai số của hiệu hai kênh là σ ≈ 17 ns, không phải 41,7 ns. (2) Đại lượng đang đo là **skew (ppm)**, nên sai số phải ghi bằng ppm (sai số chuẩn của độ dốc, F4.2), không bằng ns. (3) "Dự đoán 20–50 ppm" là tolerance thạch anh rẻ nói chung, phải thay bằng số tra từ datasheet thạch anh trên module (F4.1).
+
+(b) **SAI** ở vai trò, **CHƯA RÕ** ở con số. Độ rộng kẹp là độ bất định của *trọng tài*, không phải tiêu chí PASS của hệ; gate của bản gốc là "phân bố offset trước/sau ≥ 1 giờ, có nêu phương pháp đo và sai số của phép đo", không đặt ngưỡng cho kẹp. Con số 1–2 µs và lời giải thích "độ trễ PCIe" chưa có nguồn; độ rộng kẹp gồm cả thời gian đọc đồng hồ hệ thống, có phân bố và đuôi (ngắt, SMI) — phải tự đo và báo phân bố, như K5 Bài 9 bước 4 yêu cầu.
+
+(c) **ĐÚNG MỘT PHẦN.** Ý tưởng (dùng đồng hồ hệ thống làm trung chuyển, giá trị của nó triệt tiêu trong hiệu) đúng. Cách làm bằng hai lệnh `phc_ctl` nối tiếp thì yếu: hai lần đọc cách nhau cỡ mili-giây (khởi động tiến trình), trong đó đồng hồ hệ thống chưa đồng bộ trôi chục ppm × ms = chục ns, và `phc_ctl cmp` không in độ rộng kẹp. Trọng tài đúng: một chương trình gọi `PTP_SYS_OFFSET_EXTENDED` liên tiếp A, B, A trong cùng tiến trình, nội suy A về thời điểm đọc B, và ghi độ rộng kẹp của từng lần (K5 Bài 9 có script).
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Vì sao không]** Vì sao không dùng GPS (PPS) làm trọng tài cho mọi thứ trong lab?
+   <details><summary>Hướng nghĩ</summary>
+
+   PPS của module GPS rẻ có jitter cỡ chục ns và cần ăng-ten thấy trời; nó cho một mốc chung, nhưng vẫn phải có cách *đo* hai thiết bị so với mốc đó (capture GPIO, analyzer). Trọng tài là cả chuỗi, không phải nguồn.
+
+   </details>
+2. **[Quy mô]** 100 robot, mỗi con cần cam kết "camera–IMU lệch ≤ 2 ms". Bạn không thể đặt logic analyzer lên từng con. Trọng tài ở quy mô đội trông thế nào?
+   <details><summary>Hướng nghĩ</summary>
+
+   Kiểm toàn bộ trên vài robot mẫu bằng trọng tài tốt; trên cả đội, dùng trọng tài rẻ nằm sẵn trong dữ liệu (cross-correlation chuyển động camera vs gyro, F4.6) như một detector chạy liên tục, với ngưỡng INCONCLUSIVE. Đây là sampling audit + continuous monitoring.
+
+   </details>
+3. **[Failure mode]** Ngân sách của bạn chuẩn bị ở 25 °C. Robot chạy trong kho 5 °C. Dòng nào trong bảng sai trước, và có ai phát hiện không?
+   <details><summary>Hướng nghĩ</summary>
+
+   Dòng drift nhiệt (F4.1) và có thể trễ bộ lọc/exposure (ánh sáng kho tối → exposure dài hơn, F4.6). Không ai phát hiện nếu điều kiện không nằm trong câu kết luận. Đó là lý do câu kết luận phải có "trong điều kiện C".
+
+   </details>
+4. **[Phản biện]** "Ngân sách sai số là hình thức, cứ đo end-to-end bằng trọng tài là đủ." Khi nào câu này đúng, khi nào nó làm bạn mất quyết định quan trọng?
+   <details><summary>Hướng nghĩ</summary>
+
+   Đo end-to-end cho biết *có đạt không* ở điều kiện đã đo. Ngân sách cho biết *vì sao* và *điều kiện nào sẽ làm vỡ* (nhiệt, tải, thời gian từ sync) — và tiền nên tiêu vào đâu. Không có ngân sách, khi end-to-end hỏng bạn bisect mù (K5 Bài 19).
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Hiệu chuẩn công nghiệp (metrology).** Mỗi dụng cụ đo trong nhà máy có giấy chứng nhận hiệu chuẩn ghi độ bất định và chuỗi truy vết về phòng đo quốc gia; quy tắc 4:1 quyết định dụng cụ nào được dùng để kiểm cái nào [chuẩn]. Giống hệt cấu trúc trọng tài ở đây. Khác: ở đó có tổ chức và pháp lý đứng sau; trong lab của bạn, lab notebook là giấy chứng nhận.
+- **Kiểm toán tài chính.** Báo cáo do công ty tự lập, kiểm toán viên độc lập lấy mẫu và kiểm bằng phương pháp riêng, và công bố mức đảm bảo (hợp lý, không tuyệt đối). Giống: tự báo + trọng tài + mức tin. Khác: kiểm toán lấy mẫu giao dịch, trọng tài đo lấy mẫu thời gian.
+
+### 9. Áp vào khóa chính
+
+- **K1 Bài 7:** ghi chu kỳ lấy mẫu và σ hiệu hai kênh của analyzer như U của mọi phép đo thời gian sau này.
+- **K3 Bài 8–9:** ngân sách độ trễ có hai cột: phần bù được (bias đã đo bằng trọng tài) và phần bất định; analyzer là trọng tài cho đường đo phần mềm.
+- **K5 Bài 1–2:** trước khi mua: trọng tài nào sẽ dùng cho từng khẳng định của Module 2, và nó có đủ 4:1 không — nếu không, khẳng định phải hạ xuống.
+- **K5 Bài 7, 12:** bảng ngân sách theo bốn loại ở mục 2; câu kết luận đủ năm thành phần; không dòng nào lấy số tự báo.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| MiFID II RTS 25 (EU 2017/574): truy vết UTC, 100 µs cho HFT, có giám sát | [spec] | Văn bản quy định, phụ lục bảng |
+| Quy tắc tỉ số độ bất định ~4:1 | [chuẩn] | Thông lệ hiệu chuẩn (ví dụ ANSI/NCSL Z540.3); mức cụ thể tùy lĩnh vực |
+| Hiệu hai kênh lượng tử T có σ = T/√6 | [chuẩn] | Phương sai phân bố đều T²/12, cộng hai kênh |
+| Độ rộng kẹp PHC và phân bố của nó | [tự đo] | K5 Bài 9 bước 1, 4 |
+| Jitter ISR ESP32 cỡ µs | [tự đo] | K5 Bài 8 |
+| Kết quả mô phỏng | [đã chạy] | σ các trọng tài là giả định |
+
+Đã sửa so với Gemini: (K5 Bài 12) sai số TN-1 = "41,7 ns (Logic Analyzer)" → sai số của phép đo skew phải tính từ jitter ISR, bằng ppm; (K5 Bài 9) độ rộng kẹp "≈ 1–2 µs" là tiêu chí PASS → đó là U của trọng tài, phải đo và báo phân bố; gate gốc không đổi; (K5 Bài 9) trọng tài bằng hai lệnh `phc_ctl` nối tiếp → một chương trình đọc A–B–A với `PTP_SYS_OFFSET_EXTENDED`.
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** JCGM 100:2008 (GUM) mục 5 (kết hợp độ bất định, tương quan) — đọc cùng F1.1.
+- **Giải thích:** văn bản RTS 25 (Commission Delegated Regulation (EU) 2017/574) — ngắn, đọc bảng yêu cầu để thấy một ngân sách thời gian được viết thành luật.
+- **Đào sâu (tùy chọn):** NIST Technical Note 1297 (Taylor & Kuyatt) về cách báo độ bất định.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao log ptp4l không phải bằng chứng; (2) vẽ lại sơ đồ chuỗi trọng tài; (3) câu hỏi:
+
+  Bạn muốn khẳng định "|offset| p99 ≤ 200 ns". Trọng tài có σ = 80 ns. Đủ chưa? Nếu không, bạn được phép khẳng định gì?
+  <details><summary>Đáp án</summary>
+
+  Theo 4:1 cần σ trọng tài ≲ 50 ns (cỡ 200/4, tính theo cùng loại đại lượng); 80 ns chưa đủ. Bạn được phép báo phân bố đo được kèm U của trọng tài, và một cận trên lỏng hơn (ví dụ p99 đo được, vốn đã gồm nhiễu trọng tài, là cận trên hợp lý nếu trọng tài không có bias); không được khẳng định 200 ns nếu p99 đo được lớn hơn, cũng không được "trừ" nhiễu trọng tài nếu chưa chứng minh nó độc lập và biết rõ σ.
+
+  </details>
+
+---
+
+## F4.8 — Thứ tự không cần đồng hồ chung: Lamport, vector clock, TrueTime (3h)
+
+> **Dùng cho:** K5 Bài 8–9 (đọc thêm, phần Liên kết) · K3 Bài 14 (thứ tự sự kiện của state machine) · trước khi thiết kế log sự kiện nhiều node ở K7 C7.3 · **Cần trước:** F4.3, F4.4 · **Sau viên nang này bạn đánh giá được:** một bài toán cần *thứ tự* hay cần *khoảng thời gian vật lý*, một cách sắp xếp sự kiện nhiều nguồn có giữ được quan hệ nhân quả không, và một hệ "dùng timestamp để đảm bảo nhất quán" dựa trên giả định gì về đồng hồ.
+
+### 1. Câu chuyện
+
+Giữa thập niên 1970, Leslie Lamport đọc một bài báo về cơ sở dữ liệu nhân bản dùng timestamp để quyết định thứ tự cập nhật, và nhận ra thuật toán đó có thể sắp một sự kiện *trước* chính nguyên nhân của nó khi đồng hồ các máy lệch nhau [chuẩn: Lamport, ghi chú trong danh mục bài viết của ông]. Bài báo năm 1978 của ông tách hai khái niệm mà kỹ sư hay trộn: **thứ tự nhân quả** (sự kiện này có thể đã ảnh hưởng tới sự kiện kia không) và **thời gian vật lý** [chuẩn: L. Lamport, *Time, Clocks, and the Ordering of Events in a Distributed System*, CACM 21(7), 1978]. Thứ tự nhân quả lấy được bằng một bộ đếm và luật cập nhật đơn giản, không cần đồng hồ nào đồng bộ. Đây là một trong những bài báo được trích dẫn nhiều nhất của ngành hệ phân tán.
+
+Ba mươi tư năm sau, Google làm điều ngược lại cho Spanner: họ *cần* thời gian vật lý (để giao dịch ở hai châu lục có thứ tự khớp với thời gian thật mà người dùng thấy), nên đầu tư GPS và đồng hồ nguyên tử ở mọi datacenter, và — chi tiết quyết định — API TrueTime trả về **khoảng** `[earliest, latest]`; giao dịch chờ cho tới khi chắc chắn thời điểm commit đã qua ở mọi nơi ("commit wait") [spec: J. Corbett et al., *Spanner: Google's Globally-Distributed Database*, OSDI 2012]. Độ rộng khoảng ε dao động dạng răng cưa cỡ 1–7 ms giữa hai lần hỏi nguồn thời gian, vì giữa hai lần đó hệ cộng thêm một tốc độ trôi giả định bi quan 200 µs/s [spec: cùng bài, mục 3]. Meta lặp lại đúng mẫu đó với PTP năm 2022 (F4.5). Hai câu chuyện là hai đầu của một trục: không cần đồng hồ (Lamport) ↔ cần đồng hồ, nhưng phải công bố độ sai (TrueTime).
+
+### 2. Mô hình tư duy
+
+**Quan hệ happens-before (→)** [chuẩn: Lamport 1978]: a → b nếu (1) a và b cùng một tiến trình và a trước b, hoặc (2) a là gửi một message và b là nhận chính message đó, hoặc (3) bắc cầu. Hai sự kiện không có quan hệ theo chiều nào là **đồng thời** (concurrent) — không phải "cùng lúc", mà là "không ai biết ai".
+
+```
+ P1:  a1 ──── a2(send m1) ───────────────── a3
+                    ╲
+ P2:  b1 ─────────── b2(recv m1) ── b3(send m2) ───
+                                          ╲
+ P3:  c1 ─────── c2 ───────────────────── c3(recv m2)
+
+ a2 → b2 → b3 → c3     (chuỗi nhân quả)
+ a3 ∥ b3, c1 ∥ a1 ...  (đồng thời: không message nào nối)
+```
+
+| Cơ chế | Luật | Đảm bảo | Không đảm bảo |
+|---|---|---|---|
+| **Lamport clock** (một số nguyên mỗi tiến trình) | Tăng 1 trước mỗi sự kiện; gửi kèm giá trị; nhận thì đặt `max(của mình, nhận) + 1` | a → b ⇒ L(a) < L(b) | L(a) < L(b) **không** suy ra a → b; không đo được khoảng thời gian |
+| **Vector clock** (một vector N số) | Mỗi tiến trình tăng ô của mình; nhận thì lấy max từng ô | a → b ⇔ V(a) < V(b); phát hiện được đồng thời | Kích thước tăng theo số tiến trình; vẫn không có thời gian vật lý |
+| **Hybrid logical clock** | Như Lamport nhưng bám sát đồng hồ vật lý | Nhân quả + gần với thời gian thật | Vẫn cần cận skew để có nghĩa vật lý |
+| **TrueTime / fbclock** | Đồng hồ vật lý trả khoảng [earliest, latest] | Nếu khoảng không chồng nhau thì thứ tự thật chắc chắn | Đắt (GPS, nguyên tử/PTP); phải chờ ε |
+
+**Đặt vào robot.** Hai câu hỏi khác nhau, hai công cụ khác nhau:
+
+- *"Lệnh dừng được gửi trước hay sau khi bumper chạm?"* — câu hỏi thứ tự/nhân quả. Nếu có message nối hai sự kiện (bumper → ESP32 → host → lệnh), số thứ tự và Lamport là đủ; đồng hồ lệch không làm sai câu trả lời.
+- *"Ảnh này chụp cùng lúc với mẫu IMU nào?"* — câu hỏi khoảng thời gian vật lý giữa hai sự kiện **đồng thời** (không message nào nối chúng). Logical clock vô dụng ở đây; cần đồng hồ đồng bộ, trigger chung, hoặc ước lượng offset (F4.4–F4.7).
+
+Một hệ quả ít người dùng: **mỗi cặp gửi–nhận là một bất đẳng thức về offset.** Nếu message rời A lúc t_A (đồng hồ A) và tới B lúc t_B (đồng hồ B), thì offset(B − A) ≤ t_B − t_A (trễ không âm). Nhiều cặp hai chiều kẹp offset vào một khoảng — chính là cận δ/2 của NTP (F4.4), suy ra từ nhân quả. Timestamp nhận *trước* gửi là bằng chứng chắc chắn hai đồng hồ lệch nhau ít nhất bằng ngần ấy.
+
+Mô phỏng: 3 node, 20 000 message, đồng hồ vật lý mỗi node lệch một offset ngẫu nhiên; đếm tỉ lệ message có timestamp nhận nhỏ hơn timestamp gửi (vi phạm nhân quả) khi sắp theo đồng hồ vật lý và theo Lamport.
+
+```python
+# [đã chạy] F4.8 — sắp thứ tự sự kiện bằng đồng hồ vật lý lệch nhau vs bằng Lamport clock
+# 3 node gửi message cho nhau. Đếm số message mà timestamp lúc NHẬN < timestamp lúc GỬI (vi phạm nhân quả).
+import numpy as np
+rng = np.random.default_rng(5)
+
+def simulate(offset_ms, latency_ms, n_msg=20_000, n_node=3):
+    off = rng.normal(0, offset_ms, n_node) * 1e-3           # offset đồng hồ mỗi node (s)
+    lam = np.zeros(n_node, dtype=np.int64)                  # Lamport clock mỗi node
+    t = 0.0
+    bad_phys = bad_lam = 0
+    for _ in range(n_msg):
+        t += rng.exponential(5e-3)                          # thời điểm thật lúc gửi
+        s, r = rng.choice(n_node, 2, replace=False)
+        lam[s] += 1; ts_send = lam[s]                       # luật 1: tăng trước mỗi sự kiện
+        phys_send = t + off[s]
+        t_recv = t + rng.exponential(latency_ms * 1e-3)     # trễ mạng
+        phys_recv = t_recv + off[r]
+        lam[r] = max(lam[r], ts_send) + 1                   # luật 2: nhận thì nhảy qua timestamp gửi
+        bad_phys += phys_recv < phys_send
+        bad_lam += lam[r] <= ts_send
+    return bad_phys / n_msg, bad_lam / n_msg
+
+for offset_ms, lat_ms in ((0.01, 1.0), (1.0, 1.0), (10.0, 1.0), (10.0, 50.0)):
+    p, l = simulate(offset_ms, lat_ms)
+    print(f"σ offset={offset_ms:5.2f} ms, trễ TB={lat_ms:4.1f} ms → vi phạm nhân quả: đồng hồ vật lý {100*p:5.1f}%"
+          f" | Lamport {100*l:.1f}%")
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Offset trong một partition Kafka | Total order do một sequencer cấp (log, F3.1); MCAP ghi bởi một recorder cũng vậy | Thứ tự `log_time` của recorder là thứ tự **đến**, không phải thứ tự **xảy ra**; hai cảm biến qua hai đường khác trễ thì đảo | Dùng thứ tự trong MCAP làm thứ tự vật lý khi ghép |
+| Trace ID + parent span ID | Quan hệ happens-before được ghi tường minh | Tracing ghi nhân quả *giữa các request*; cảm biến không gửi message cho nhau nên không có nhân quả để ghi — chúng **đồng thời** theo định nghĩa | Tưởng tracing tốt thì ghép cảm biến cũng tốt |
+| Optimistic concurrency với `updated_at` | "Last write wins" theo timestamp | Đồng hồ lệch làm write cũ thắng write mới; lỗi im lặng | Hai node cập nhật cùng trạng thái robot (ví dụ mode), node có đồng hồ nhanh luôn thắng |
+| Idempotency key + sequence number | `seq` mỗi nguồn + `boot_id` | Chính là Lamport đơn giản nhất cho một nguồn; đủ để phát hiện mất/đảo/trùng trong một luồng | Bỏ `seq` vì "đã có timestamp" → không phân biệt được mất mẫu với đồng hồ nhảy (K2 Bài 11) |
+
+**Chấm mô hình:**
+
+- *"Lamport timestamp cho biết sự kiện nào xảy ra trước."* — **ĐÚNG MỘT PHẦN.** Nếu a → b thì L(a) < L(b); điều ngược lại sai. Hai sự kiện đồng thời vẫn có L khác nhau, và thứ tự theo L giữa chúng là tùy ý (thường theo node id để phá hòa). Phản ví dụ: hai cảm biến trên hai node không trao đổi message — L của chúng không nói gì về cái nào đo trước.
+- *"Đồng hồ đủ tốt thì không cần logical clock."* — **ĐÚNG MỘT PHẦN.** Với PTP sub-µs và trễ message ≥ vài µs, vi phạm nhân quả do đồng hồ gần như không xảy ra (mô phỏng mục 5). Nhưng "đủ tốt" phải được chứng minh bằng cận (TrueTime/WOU), và hệ phải xử lý được lúc đồng hồ mất đồng bộ (holdover, reboot). Logical clock không bao giờ hỏng theo cách đó.
+
+**Tên chuẩn của thứ bạn đã làm:** `seq` tăng dần trong mỗi message và kiểm "không nhảy, không lùi" chính là **logical clock của một tiến trình**; trace context là **happens-before tường minh**; "last write wins" là **total order bằng đồng hồ vật lý** — kèm đủ rủi ro Lamport mô tả. Thứ còn thiếu: phân biệt rõ khi nào bạn đang hỏi thứ tự, khi nào hỏi khoảng thời gian, và biết rằng câu hỏi thứ hai không có lời giải logical.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Happens-before (→) | a có thể đã ảnh hưởng b qua chuỗi message/thứ tự tiến trình | "a có timestamp nhỏ hơn" |
+| 🟢 | Concurrent (∥) | Không có quan hệ → theo chiều nào | "Cùng lúc" |
+| 🟢 | Lamport clock | Bộ đếm giữ được a → b ⇒ L(a) < L(b) | Đồng hồ đo thời gian |
+| 🟢 | Sequence number per source | Lamport cho một nguồn | Thừa nếu có timestamp |
+| 🟡 | Vector clock | Vector bộ đếm, phát hiện được đồng thời | Dùng được với hàng nghìn node mà không trả giá |
+| 🟡 | TrueTime / interval time | Thời gian là khoảng có cận | Thời gian chính xác tuyệt đối của Google |
+| 🟡 | Commit wait | Chờ hết độ bất định trước khi công bố | Tối ưu hiệu năng |
+| 🟡 | Hybrid logical clock (HLC) | Logical clock bám đồng hồ vật lý | Thay được đồng bộ đồng hồ |
+| 🔴 | Total order broadcast, consensus | Mọi node đồng ý một thứ tự | Cần cho dữ liệu cảm biến |
+
+### 5. Bài tập dự đoán
+
+**Đề.** Mô phỏng mục 2: 3 node, message gửi theo quá trình Poisson (trung bình 5 ms), trễ mạng phân bố mũ. Offset mỗi node rút một lần từ N(0, σ). Dự đoán tỉ lệ message có timestamp nhận < timestamp gửi (theo đồng hồ vật lý), cho bốn cấu hình (σ offset, trễ TB) = (0,01 ms, 1 ms), (1 ms, 1 ms), (10 ms, 1 ms), (10 ms, 50 ms). Và tỉ lệ đó theo Lamport.
+
+**Tham số cần tra:** không. **Phương pháp:** vi phạm khi trễ < offset(gửi) − offset(nhận); với trễ mũ trung bình μ, P(trễ < d) = 1 − e^(−d/μ) cho d > 0. Lấy trung bình trên các cặp node (dấu và độ lớn offset từng cặp là ngẫu nhiên). Lamport: đọc lại luật 2.
+
+```markdown
+# prediction.md — F4.8
+vi phạm (đồng hồ vật lý): (0.01ms,1ms) ___% ; (1ms,1ms) ___% ; (10ms,1ms) ___% ; (10ms,50ms) ___%
+vi phạm (Lamport): ___%  vì ___
+Độ tự tin (1–5): ___   Tôi sẽ ngạc nhiên nếu: ___
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Kết quả khi chạy (seed 5):
+
+| σ offset | Trễ TB | Vi phạm (đồng hồ vật lý) | Vi phạm (Lamport) |
+|---|---|---|---|
+| 0,01 ms | 1 ms | 0,3% | 0% |
+| 1 ms | 1 ms | 37% | 0% |
+| 10 ms | 1 ms | 50% | 0% |
+| 10 ms | 50 ms | 2,1% | 0% |
+
+- Khi offset ≫ trễ, khoảng một nửa số message (những cặp gửi từ node có đồng hồ nhanh sang node có đồng hồ chậm) có timestamp nhận *trước* gửi — gần như mọi message theo một chiều. Khi offset cùng cỡ trễ, vẫn hơn một phần ba.
+- Trễ lớn che đồng hồ lệch (10 ms offset, 50 ms trễ → 2%). Đây là lý do backend qua Internet ít gặp chuyện này, còn hệ thống LAN/USB nhanh trên robot lại gặp nhiều: **mạng càng nhanh, đồng hồ càng phải tốt** để timestamp vật lý giữ được nhân quả.
+- Con số cụ thể phụ thuộc lần rút offset của 3 node (chỉ 3 giá trị); đổi seed thì số đổi, xu hướng không đổi.
+- Lamport 0% **theo cấu tạo**: luật 2 ép timestamp nhận lớn hơn timestamp gửi. Cái giá: số Lamport không cho biết hai sự kiện cách nhau bao lâu, và không nói gì về các sự kiện không có message nối.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi đọc một thiết kế hoặc một khẳng định về thứ tự sự kiện:
+
+1. Câu hỏi là **thứ tự nhân quả** hay **khoảng thời gian vật lý**? (Fusion cảm biến luôn là loại thứ hai.)
+2. Nếu sắp theo timestamp vật lý: cận skew giữa các nguồn là bao nhiêu, so với trễ nhỏ nhất giữa chúng?
+3. Có số thứ tự mỗi nguồn (`seq`) và `boot_id` để phát hiện mất/đảo/trùng độc lập với đồng hồ không?
+4. Thứ tự trong log/MCAP là thứ tự **xảy ra** hay thứ tự **đến recorder**?
+5. Hệ có dùng "last write wins" theo timestamp ở đâu không, và ai thắng khi đồng hồ lệch?
+6. Khi khẳng định dựa vào đồng hồ, độ bất định có được công bố như một khoảng (kiểu TrueTime) không?
+
+**Khẳng định mẫu — tự chấm trước khi mở:**
+
+(a) K5 Bài 8 (bài chính), phần Liên kết ra ngoài: *"Lamport chỉ ra rằng nhiều khi bạn chỉ cần thứ tự, không cần đồng hồ chung. Ở đây ngược lại: fusion cần khoảng cách thời gian giữa hai mẫu, thứ tự là không đủ."*
+
+(b) Bản Gemini K5 (bảng data contract, Module 3): *"Tính đơn điệu của thời gian — Thời gian vật lý trôi một chiều — t[k+1] − t[k] > 0 — [vi phạm khi] Đồng hồ hệ thống bị NTP kéo lùi giữa chừng."*
+
+(c) Câu thường gặp ở người làm backend (không trích từ tài liệu lộ trình): *"Gom log của ESP32, mini PC và camera vào một chỗ rồi sort theo timestamp là ra đúng trình tự sự kiện trên robot."*
+
+<details><summary>🔒 Đáp án</summary>
+
+(a) **ĐÚNG.** Phân biệt chính xác hai loại câu hỏi. Có thể thêm: với các sự kiện *có* nhân quả trên robot (lệnh → phản hồi), Lamport/seq vẫn hữu ích để kiểm tính nhất quán của log, và mỗi cặp nhân quả cho một bất đẳng thức về offset — dùng được làm kiểm tra chéo rẻ cho đồng bộ.
+
+(b) **ĐÚNG MỘT PHẦN.** Đúng như một luật cho **một kênh, một đồng hồ, một boot**. Ba chỗ thiếu: (1) không áp được *giữa* các kênh/nguồn khác đồng hồ — ở đó không có "thời gian vật lý trôi một chiều" chung, chỉ có các trục lệch nhau; (2) bất đẳng thức chặt `> 0` có thể báo sai khi hai message hợp lệ có cùng timestamp (độ phân giải thô, gộp batch); nên kiểm `≥` kèm `seq` tăng chặt; (3) nguyên nhân "NTP kéo lùi" chỉ là một trong nhiều (reboot đặt lại monotonic, ghép sai channel, hàng đợi đảo thứ tự) — luật phát hiện được vi phạm, không chẩn đoán được nguyên nhân.
+
+(c) **SAI** như một khẳng định chung. Sort theo timestamp cho thứ tự đúng chỉ khi skew giữa các nguồn nhỏ hơn khoảng cách giữa các sự kiện bạn muốn phân biệt (mục 5: offset 1 ms với trễ 1 ms đã đảo hơn một phần ba cặp nhân quả). Ba nguồn này dùng ba đồng hồ (esp_timer, CLOCK_REALTIME, timestamp driver camera), có thể đóng dấu ở ba tầng khác nhau (F4.3, F4.6). Cách đúng: đưa tất cả về một trục có cận sai số đã biết (F4.7), giữ `seq` + `boot_id` mỗi nguồn, và với cặp có nhân quả thì kiểm tính nhất quán.
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Vì sao không]** Vì sao không gắn vector clock vào mọi message trong ROS 2 của robot?
+   <details><summary>Hướng nghĩ</summary>
+
+   Vector tăng theo số node; message cảm biến tần số cao thêm overhead; và quan trọng hơn: phần lớn câu hỏi trên robot là "cùng lúc", không phải "ai trước". Vector clock trả lời câu hỏi bạn ít hỏi.
+
+   </details>
+2. **[Quy mô]** 100 robot đẩy sự kiện về một backend; hai robot cùng cập nhật trạng thái của một trạm sạc. Dùng timestamp robot để quyết định ai thắng thì sao?
+   <details><summary>Hướng nghĩ</summary>
+
+   Last write wins theo đồng hồ robot = robot có đồng hồ nhanh nhất luôn thắng. Dùng thứ tự do backend cấp (sequencer), hoặc thiết kế để không cần thứ tự (CRDT, khóa có lease với cận skew).
+
+   </details>
+3. **[Failure mode]** State machine ở K3 Bài 14 ghi chuyển trạng thái với `wall`. Sau một lần NTP step lùi 2 s, audit log có một chuyển trạng thái "trước" nguyên nhân của nó. Ai đọc log sẽ kết luận gì?
+   <details><summary>Hướng nghĩ</summary>
+
+   Kết luận sai về nhân quả trong điều tra sự cố. Sửa: thêm `seq` toàn cục của state machine (một tiến trình → một bộ đếm là đủ), sắp theo `seq`, dùng `wall` chỉ để người đọc.
+
+   </details>
+4. **[Phản biện]** "Spanner chứng minh rằng với đủ tiền, đồng hồ vật lý thay được logical clock." Phản biện bằng chính cơ chế commit wait.
+   <details><summary>Hướng nghĩ</summary>
+
+   Spanner không tin đồng hồ; nó tin *cận* của đồng hồ và trả giá bằng thời gian chờ ε cho mỗi commit. Khi cận vỡ (đồng hồ hỏng vượt giả định), đảm bảo vỡ. Nó là một hợp đồng về độ bất định, không phải một đồng hồ đúng.
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Cơ sở dữ liệu phân tán.** CockroachDB dùng hybrid logical clock và một cận skew tối đa cấu hình được; node phát hiện mình lệch quá cận sẽ tự dừng [chuẩn: tài liệu CockroachDB về clock synchronization]. Giống: nhân quả từ logical clock, nghĩa vật lý từ cận. Khác: dữ liệu robot cần nghĩa vật lý cho *mọi* mẫu, không chỉ cho giao dịch.
+
+### 9. Áp vào khóa chính
+
+- **K3 Bài 14:** `seq` của state machine là nguồn sự thật cho thứ tự; `wall` để người đọc; `mono_ns` + `boot_id` để đo khoảng.
+- **K5 Bài 8–9:** mỗi cặp nhân quả (lệnh host → phản hồi ESP32) cho một bất đẳng thức về offset; dùng nó như kiểm tra chéo rẻ của đồng bộ.
+- **K2 Bài 11:** detector "không đơn điệu" chạy theo từng (channel, đồng hồ, boot); detector thứ tự giữa các nguồn phải có ngưỡng bằng cận skew đã biết, ngoài ngưỡng thì INCONCLUSIVE.
+- **K7 C7.3:** log sự kiện nhiều node (ESP32 an toàn, host, dashboard) mang `source_id`, `seq`, `boot_id`, timestamp nguồn và đồng hồ của nó; không dựa vào thứ tự đến.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Lamport 1978, CACM 21(7); luật Lamport clock | [chuẩn] | — |
+| Vector clock (Fidge 1988, Mattern 1988) | [chuẩn] | — |
+| Spanner TrueTime: khoảng [earliest, latest], commit wait, ε răng cưa ~1–7 ms, giả định trôi 200 µs/s | [spec] | Corbett et al., OSDI 2012, mục 3 |
+| Meta fbclock trả `{earliest_ns, latest_ns}` | [chuẩn] | Meta Engineering blog 11/2022 |
+| HLC (Kulkarni et al. 2014); CockroachDB dùng HLC + cận skew | [chuẩn] | Tài liệu CockroachDB |
+| Kết quả mô phỏng | [đã chạy] | Phụ thuộc lần rút offset 3 node |
+
+Đã sửa so với Gemini: (K5, data contract) luật đơn điệu `t[k+1] − t[k] > 0` với nguyên nhân duy nhất là NTP → áp theo từng (kênh, đồng hồ, boot), dùng `≥` kèm `seq`, và không chẩn đoán nguyên nhân từ luật.
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** L. Lamport, *Time, Clocks, and the Ordering of Events in a Distributed System*, CACM 21(7), 1978 — 8 trang, đọc trọn.
+- **Giải thích:** J. Corbett et al., *Spanner: Google's Globally-Distributed Database*, OSDI 2012 — mục 3 (TrueTime) và mục 4 (phần commit wait).
+- **Đào sâu (tùy chọn):** M. Kleppmann, *Designing Data-Intensive Applications*, chương 8 (*The Trouble with Distributed Systems*, phần Unreliable Clocks).
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao Lamport clock không giúp ghép ảnh với IMU; (2) vẽ lại sơ đồ ba tiến trình và đánh dấu một cặp → và một cặp ∥; (3) câu hỏi:
+
+  ESP32 gửi message lúc 1 000 000 µs (đồng hồ ESP32), host nhận lúc 999 200 µs (đồng hồ host ánh xạ cùng đơn vị). Host trả lời lúc 999 300 µs, ESP32 nhận lúc 1 000 900 µs. Suy ra gì về offset (host − ESP32)?
+  <details><summary>Đáp án</summary>
+
+  Chiều đi: offset ≤ 999 200 − 1 000 000 = −800 µs (trễ ≥ 0). Chiều về: trễ ≥ 0 ⇒ 1 000 900 − (999 300 − offset) ≥ 0 ⇒ offset ≥ −1 600 µs. Vậy offset ∈ [−1 600; −800] µs — đúng cận ±δ/2 quanh ước lượng NTP −1 200 µs, với δ = (1 000 900 − 1 000 000) − (999 300 − 999 200) = 800 µs. Nhân quả tự nó đã kẹp offset.
+
+  </details>
+
+---
+
+## Tranh luận đang mở trong nghề
+
+**1. Đồng bộ lúc ghi hay căn chỉnh sau khi ghi?**
+*Phía "đồng bộ trước"* (người làm hệ thống, ô tô, công nghiệp): đầu tư hardware trigger, PTP/gPTP, cảm biến có đồng hồ đồng bộ được; dữ liệu đúng từ đầu, không phụ thuộc thuật toán hậu xử lý có thể sai. *Phía "ghi thô rồi căn"* (nhiều nhóm nghiên cứu, dữ liệu thu từ thiết bị rẻ): đóng dấu bằng đồng hồ cục bộ ổn định, ghi đủ thông tin (sự kiện chung, chuyển động), rồi ước lượng offset/skew offline (Kalibr, căn chỉnh liên tục theo thời gian) — rẻ hơn, áp được cho dữ liệu đã có. Điểm cãi nhau thật: ai chịu trách nhiệm khi ước lượng sau sai, và dữ liệu đã căn có ghi được độ bất định của phép căn không. Lộ trình của bạn đứng giữa: K5 làm cả hai và đo cái nào tốt hơn.
+
+**2. PTP có nên vào trong robot không?**
+*Ủng hộ:* robot nhiều máy tính, LiDAR/camera công nghiệp có PTP, xu hướng TSN (Ethernet thời gian thực) trong ô tô và robot công nghiệp; một trục thời gian chung cho mọi thứ. *Phản đối:* phần lớn cảm biến rẻ nối USB/I2C không có PHC; một robot một máy tính không cần; PTP thêm cấu hình và chế độ hỏng (BMCA đổi master, holdover). Câu hỏi đúng không phải "PTP hay không" mà "số hạng lớn nhất trong ngân sách nằm ở đâu" (F4.7).
+
+**3. Giây nhuận, smear hay TAI?**
+Hệ thống lớn (Google, Meta, AWS) "smear" giây nhuận — kéo giãn đồng hồ trong nhiều giờ — để tránh giây 23:59:60; nhưng smear làm đồng hồ lệch UTC chuẩn tới nửa giây trong lúc smear, và mỗi hãng smear một kiểu. Một phía muốn mọi dữ liệu kỹ thuật lưu theo TAI (không giây nhuận), một phía giữ UTC vì con người và luật pháp dùng UTC. CGPM 2022 quyết định bỏ giây nhuận chậm nhất 2035 nhưng chưa chốt cơ chế thay thế. Với dữ liệu robot: ghi rõ trục thời gian trong metadata là phần không còn phải tranh luận.
+
+**4. Có cần đồng hồ cho tính đúng không?**
+Trong cơ sở dữ liệu phân tán: Spanner dùng đồng hồ có cận (TrueTime), CockroachDB dùng HLC và cận skew mềm, các hệ tất định kiểu Calvin dùng một bộ sắp thứ tự trước và không cần đồng hồ cho tính đúng. Mỗi phía đổi một thứ: tiền phần cứng, độ trễ chờ, hay thông lượng. Bài học cho robot: phần *an toàn* (state machine, E-stop) nên đúng mà không cần đồng hồ đồng bộ; phần *dữ liệu* (fusion, học) không tránh được thời gian vật lý.
+
+## Bài kiểm tra cuối khóa nền
+
+**Đề: Ngân sách thời gian của rig K5 của chính bạn, trước khi đụng phần cứng (6–8h, làm trước K5 Bài 7; điền số đo dần trong K5 Bài 8–12).**
+
+Rig: mini PC N100 (hai cổng i225/i226), hai ESP32-S3 (một đọc IMU, một nháy LED), hai webcam USB rolling shutter, ghi MCAP trên mini PC. Ứng dụng mục tiêu: ghép IMU 200 Hz với ảnh 30 fps cho một bộ ước lượng chuyển động, robot quay tối đa 2 rad/s.
+
+1. **Sơ đồ chuỗi thời gian (F4.3, F4.6).** Với mỗi luồng (IMU, cam1, cam2, LED marker), vẽ mọi "thời điểm" từ sự kiện vật lý tới `log_time`: đồng hồ nào, tầng nào đóng dấu, trễ nào cố định, trễ nào ngẫu nhiên. Ghi trường `header.stamp` của bạn ứng với sự kiện nào.
+2. **Ngân sách dự đoán (F4.1, F4.2, F4.7).** Bảng theo bốn loại (bias đã đo / cận loại B / ngẫu nhiên / tích lũy), mỗi dòng có nguồn số (datasheet nào, mục nào, hay [tự đo]). Dòng thạch anh ghi rõ loại (AT-cut 40 MHz), dải nhiệt, chu kỳ sync. Dòng rolling shutter dùng công thức có exposure. Cộng đúng quy tắc; ghi câu kết luận năm thành phần ở dạng dự đoán.
+3. **Dịch sai số thời gian ra sai số ứng dụng.** Sai góc ≈ ω × Δt: với 2 rad/s, ngân sách của bạn cho sai góc bao nhiêu độ? Ở ngưỡng nào thì bộ ước lượng của K7 sẽ không chấp nhận được (ghi giả định)?
+4. **Kế hoạch trọng tài (F4.5, F4.7).** Với từng khẳng định, trọng tài nào, độ bất định của nó, đạt 4:1 không. Khẳng định nào phải hạ xuống vì không có trọng tài đủ tốt.
+5. **Mô phỏng trước (≤ 60 dòng Python, chạy được).** Tổng hợp các luồng với tham số ngân sách của bạn (offset, skew, drift nhiệt theo một kịch bản nhiệt, jitter, exposure), ghép theo timestamp, đo sai số ghép. So với bảng ở bước 2: bảng có đúng thứ tự độ lớn không? Nếu không có phần cứng, đây là sản phẩm cuối của bài.
+6. **Hai tranh luận.** Viết nửa trang: với rig này, bạn đứng ở đâu trong tranh luận 1 và 2, và con số nào ở bước 2 quyết định lập trường đó.
+
+**Nộp:** `lab/F4-final/prediction.md` (commit trước K5 Bài 8), `budget.md`, `sim_budget.py` (`# [đã chạy]`), và sau K5 Bài 12, cột "số đo" điền cạnh cột "dự đoán", mỗi chênh lệch lớn có một dòng giải thích.
+
+**Tự chấm (ĐÚNG / ĐÚNG MỘT PHẦN / SAI cho từng mục):** (a) không dòng nào lấy số tự báo của ptp4l/chrony làm kết quả; (b) không dòng nào áp hệ số tuning-fork cho thạch anh MHz; (c) công thức rolling shutter có exposure; (d) cách cộng khớp quan hệ giữa các nguồn, có ít nhất một nguồn triệt tiêu trong hiệu được nhận ra; (e) dòng tích lũy có "sau bao lâu" và "ở nhiệt độ nào"; (f) câu kết luận đủ năm thành phần; (g) mỗi khẳng định có trọng tài, hoặc được hạ xuống thành cận trên kèm lý do.
