@@ -1,6 +1,6 @@
 # F1 — Khoa học đo lường và thống kê thực nghiệm (31h)
 
-> Khóa nền, học **đúng lúc**: không đọc một mạch từ đầu, mà mở viên nang ngay trước bài chính cần nó (bảng dưới). Tổng 31h = F1.1 5h · F1.2 4h · F1.3 5h · F1.4 4h · F1.5 6h · F1.6 4h · F1.7 3h. Giờ này **đã nằm trong** ngân sách các bài chính trỏ tới nó chỉ một phần; phần còn lại cộng thêm vào tổng lộ trình (xem `00-lo-trinh-tong.md` và `khoa-7/_KE-HOACH-K7.md` mục 3 — tổng đã vượt 650h, không giấu).
+> Khóa nền, học **đúng lúc**: không đọc một mạch từ đầu, mà mở viên nang ngay trước bài chính cần nó (bảng dưới). Tổng 31h = F1.1 5h · F1.2 4h · F1.3 5h · F1.4 4h · F1.5 6h · F1.6 4h · F1.7 3h. 31h này **không** nằm trong 545h của K1–K6 (con số đó lấy từ giờ bài chính của bản gốc, khi chưa có khóa nền) — nó cộng thêm vào tổng lộ trình vốn đã vượt ngân sách 650h (xem `khoa-7/_KE-HOACH-K7.md` mục 3). Một phần trùng với giờ bài chính (ví dụ bài tập cuối F1 làm được trong giờ K4 Bài 13), nên chi phí thật thấp hơn 31h `[ước lượng]`.
 
 ## Vì sao khóa nền này tồn tại
 
@@ -375,7 +375,7 @@ Ba ý cốt lõi:
 
 - *"Jitter là phương sai của latency"* (`robotics-data-infra-roadmap.md`, mục 2.4). — **ĐÚNG MỘT PHẦN.** Đủ làm định nghĩa nhập môn. Gãy ở hai chỗ: (1) phương sai bị chi phối bởi vài outlier và không nói hình dạng — hai hệ cùng std có thể một hệ đều đặn, một hệ đa số hoàn hảo nhưng thỉnh thoảng trễ 5 ms; (2) jitter trong điều khiển và đồng hồ thường đo **sai lệch so với lịch lý tưởng** (period jitter, cycle-to-cycle jitter), không phải độ phân tán của latency end-to-end. Phản ví dụ: vòng lặp có latency hằng số nhưng chu kỳ trôi chậm (drift) — phương sai latency ≈ 0, mà lịch lệch ngày càng xa.
 - *"p99 = 1% số lần chậm, nên robot giật 1% thời gian."* — **SAI.** Lẫn phân bố theo lần với phân bố theo thời gian (ý 3 ở mục 2) và lẫn "chậm hơn p99" với "chậm hơn deadline". Phản ví dụ: mục 6 khẳng định (a).
-- *"Có 100 mẫu thì báo p99 được, chỉ là kém chính xác hơn."* — **SAI ở mức thực dụng.** Bài tập mục 5 cho thấy khoảng dao động của p99 từ 100 mẫu rộng đến mức con số không giúp ra quyết định nào. Nên báo max kèm n, hoặc p90/p95 kèm CI.
+- *"Có 100 mẫu thì báo p99 được, chỉ là kém chính xác hơn."* — **SAI ở mức thực dụng.** Số mẫu nằm sau p99 trung bình là một; xác suất lô không chứa mẫu nào vượt p99 thật là 0,99¹⁰⁰ ≈ 37%. Phản ví dụ: một hệ stall 2% có hơn một phần ba khả năng cho lô 100 mẫu không hề có stall — p99 của lô đó mô tả một hệ khác. Nên báo max kèm n, hoặc p90/p95 kèm CI; bài tập mục 5 đo độ rộng thật.
 
 **Tên chuẩn của thứ bạn đã làm:** hệ metrics của bạn với p50/p95/p99 là **mô tả phân bố bằng quantile (summary statistics)**; nếu bạn từng gộp histogram từ nhiều instance thay vì gộp percentile, đó đã là cách làm đúng của HDR/t-digest/DDSketch. Thứ còn thiếu: luôn đi kèm **n** và một khoảng tin cậy cho percentile, và chọn metric theo câu hỏi (tỉ lệ trễ hạn cho deadline).
 
@@ -400,7 +400,6 @@ Ba ý cốt lõi:
 1. p99 thật (từ 5 triệu mẫu) khoảng bao nhiêu? Lặp 2000 lần "đo 100 mẫu rồi tính p99": 90% kết quả nằm trong khoảng nào? Với 1000 và 10.000 mẫu?
 2. Một lô 10.000 mẫu: mean, p50, p99, max — mean gần p50 hay xa?
 3. 60 phút, số request mỗi phút khác nhau (50–2000), phút đông thì stall nhiều hơn. Trung bình của 60 giá trị p99-từng-phút lớn hơn hay nhỏ hơn p99 gộp?
-4. Fan-out 1, 10, 100 backend, mỗi cái chậm 1% số lần: xác suất ít nhất một cái chậm?
 
 **Phương pháp:** câu 1 dùng lập luận "n × 1% mẫu vượt p99", xác suất 0,99ⁿ không có mẫu nào vượt; câu 3 nghĩ xem phút nào chiếm nhiều trọng số trong gộp.
 
@@ -409,7 +408,6 @@ Ba ý cốt lõi:
 1. p99 thật ≈ ___ ms ; 90% của p99(n=100) ∈ [___, ___] ; n=1000: [___, ___] ; n=10000: [___, ___]
 2. mean=___ p50=___ p99=___ max=___
 3. trung bình p99 từng phút  (>, <, ≈)  p99 gộp, vì ___
-4. ___ / ___ / ___
 ```
 
 ```python
@@ -460,7 +458,7 @@ Kết quả (seed 2):
 | n = 10.000 | [150, 170] ms |
 | Lô 10.000: mean / p50 / p99 / max | 23,6 / 20,1 / 164 / 223 ms |
 | Trung bình p99 từng phút vs p99 gộp | 131 vs 177 ms |
-| Fan-out 1 / 10 / 100 | 0,01 / 0,10 / 0,63 |
+| Fan-out 1 / 10 / 100 (kiểm lại phép tính ở mục 1) | 0,01 / 0,10 / 0,63 |
 
 Đọc: với 100 mẫu, p99 có thể ra **33 ms** (lô không trúng mẫu stall nào — gần như chỉ là đỉnh của phần lognormal) hoặc 200 ms. Một con số trong khoảng đó không phân biệt được "hệ không có stall" với "hệ stall 2%". Đó là câu trả lời cho "vì sao p99 của 100 mẫu không đáng tin": nó được quyết định bởi khoảng một mẫu.
 
@@ -630,7 +628,7 @@ Vòng kín đo **service time** (hệ mất bao lâu cho request nó *đã nhậ
 **Chấm mô hình:**
 
 - *"Đo trên host yên tĩnh là đủ để tin kết quả"* (thứ bạn đã làm). — **ĐÚNG MỘT PHẦN.** Đúng hướng: loại bỏ nhiễu ngoài là bước một. Gãy: (1) nhiễu không chỉ từ tiến trình khác mà từ chính phần cứng (nhiệt, công suất, bố cục bộ nhớ — Mytkowicz 2009); (2) không có A/A thì bạn không biết sàn nhiễu còn lại là bao nhiêu. Phản ví dụ: N100 không chạy gì khác, nhưng phiên chạy sau 10 phút tải nặng có clock thấp hơn phiên đầu vì giới hạn công suất dài hạn `[tự đo — turbostat]`.
-- *"Chạy 1000 iteration trong một phiên thì khoảng tin cậy hẹp nên kết luận chắc."* — **SAI.** CI tính từ iteration chỉ phủ nhiễu *trong* phiên. Phản ví dụ: bài tập mục 5 — hai phiên *cùng cấu hình* bị t-test trên iteration báo "khác nhau có ý nghĩa" phần lớn số lần.
+- *"Chạy 1000 iteration trong một phiên thì khoảng tin cậy hẹp nên kết luận chắc."* — **SAI.** CI tính từ iteration chỉ phủ nhiễu *trong* phiên. Phản ví dụ: Mytkowicz 2009 — đổi kích thước biến môi trường (một yếu tố cố định trong suốt phiên) đủ đảo kết luận, dù mỗi phiên có hàng nghìn lần lặp và CI rất hẹp. Đề B ở mục 5 cho bạn đoán tỉ lệ báo sai.
 - Mô hình của bạn ở K3 lượt 21: *"nếu lúc đo chưa cover đủ flag/khóa thì lúc runtime thực tế không thể đảm bảo mọi tình huống."* — **ĐÚNG MỘT PHẦN.** Đúng: điều kiện benchmark phải đại diện cho chế độ vận hành (nhiệt, tải, input), nếu không số đo không chuyển được sang runtime. Gãy: "cover đủ" không đạt được bằng cách thêm flag — không gian tổ hợp nổ; thứ người trong nghề làm là (1) định nghĩa **operating envelope** đã đo và nói rõ ngoài đó không bảo đảm, (2) đo phân bố workload thật thay vì liệt kê, (3) giám sát lúc chạy để phát hiện khi ra khỏi envelope (→ F7.5). Phản ví dụ: benchmark đã cover mọi chế độ batch/streaming nhưng chỉ chạy 5 phút; soak 72h lộ rò bộ nhớ không flag nào bắt được (K3 Bài 17).
 
 **Tên chuẩn của thứ bạn đã làm:** host yên tĩnh = **noise isolation**; xem telemetry trong lúc chạy = **active benchmarking** (Brendan Gregg); chạy lại cùng cấu hình để xem lệch bao nhiêu = **A/A test** (từ thử nghiệm online, Kohavi và cộng sự). Thứ còn thiếu: chọn **phiên** làm đơn vị phân tích, và báo sàn nhiễu A/A cạnh mọi tuyên bố "nhanh hơn x%".
@@ -1086,7 +1084,7 @@ Bản Gemini K4 Bài 13 viết câu mà quy tắc này sinh ra để chặn: *"I
 | Kết luận "khác" | dương tính giả, xác suất **α** | đúng, xác suất **power = 1 − β** |
 | Kết luận "không khác" | đúng | âm tính giả, xác suất **β** |
 
-α bạn chọn (0,05). **Power phụ thuộc n, Δ và độ ồn** — và với n nhỏ nó rất thấp. "Không thấy khác" khi power 22% là kết quả mà 78% số lần bạn sẽ nhận được *dù khác biệt có thật*. Đó là lý do "không bác bỏ được" không phải bằng chứng của "bằng nhau".
+α bạn chọn (0,05). **Power phụ thuộc n, Δ và độ ồn** — và với n nhỏ nó rất thấp. "Không thấy khác" khi power là 30% (một con số minh họa) là kết quả mà 70% số lần bạn sẽ nhận được *dù khác biệt có thật*. Đó là lý do "không bác bỏ được" không phải bằng chứng của "bằng nhau".
 
 **Ba phán quyết, đọc từ CI của hiệu d = mới − cũ** (biên δ cam kết trước):
 
@@ -1135,7 +1133,7 @@ n tăng theo **1/Δ²**: muốn phát hiện khác biệt nhỏ một nửa cầ
 
 **Chấm mô hình:**
 
-- *"p > 0,05 nghĩa là hai cái như nhau."* — **SAI.** Đó là "không bác bỏ được", phụ thuộc power. Phản ví dụ: mục 5 — power để phát hiện 71% → 81% với n = 50 mỗi bên chỉ khoảng 1/5.
+- *"p > 0,05 nghĩa là hai cái như nhau."* — **SAI.** Đó là "không bác bỏ được", phụ thuộc power. Phản ví dụ: một thử nghiệm generic trên 10 bệnh nhân gần như luôn "không thấy khác" thuốc gốc, kể cả khi thuốc thử hấp thu kém hẳn — vì thế cơ quan quản lý không chấp nhận kiểu bằng chứng này. Câu 3 ở mục 5 tính power cho đúng tình huống K4.
 - *"PASS = không tệ hơn baseline một cách có ý nghĩa thống kê"* (định nghĩa trong bản gốc và bản Gemini K6 Bài 13). — **SAI**, và chính bản gốc mâu thuẫn với nó: bảng "Số phải ra" của gốc đòi canary −5 điểm với n = 50 phải ra INCONCLUSIVE, nhưng với n = 50 canary −5 điểm gần như không bao giờ "tệ hơn có ý nghĩa", nên theo định nghĩa này nó ra PASS. Định nghĩa đúng: PASS khi cận dưới CI của hiệu > −δ.
 - Script pass/fail/inconclusive bạn đã viết. — **ĐÚNG MỘT PHẦN** (chấm theo mô tả trong quy chuẩn): có trạng thái thứ ba là thứ hầu hết CI thiếu. Thiếu: biên δ cam kết trước, CI của hiệu làm tiêu chí, và power analysis để biết inconclusive cần bao nhiêu mẫu nữa. Phản ví dụ: nếu inconclusive định nghĩa là "p trong khoảng 0,05–0,2", một regression lớn đo bằng n rất nhỏ (p = 0,4) sẽ ra PASS.
 **Tên chuẩn của thứ bạn đã làm:** pass/fail/inconclusive = **kiểm định ba trạng thái**, phần pass là **non-inferiority test**, phần "bằng nhau" là **equivalence test (TOST)**; câu "cần thêm bao nhiêu" là **power analysis / sample size calculation**. Retry đến khi xanh = **optional stopping**.
@@ -1403,7 +1401,7 @@ Cách duy nhất chắc chắn để tách nhân quả là **can thiệp**: tự
 **Chấm mô hình:**
 
 - Mô hình của bạn ở K3 lượt 12: *"trong một system vật lý có số tác nhân biết trước, được thu thập dữ liệu đầy đủ trong thời gian dài, thì mọi công thức vật lý gần như là hằng số, nên mọi biến số có thể được tầng AI model biểu diễn và dự đoán."* — **ĐÚNG MỘT PHẦN.** Đúng: trong miền dữ liệu đã thấy và với hệ dừng (stationary), mô hình học từ dữ liệu nội suy rất tốt — đó là lý do system ID và learned dynamics hoạt động. Gãy ở ba chỗ: (1) **ngoại suy** ra ngoài dải đã thấy (nhiệt độ mới, tải mới) không được bảo đảm, và hệ vật lý thay đổi (mòn bánh, pin già, firmware mới) nên "hằng số" trôi; (2) mô hình học từ quan sát học **tương quan**, nên dự đoán tốt khi không ai can thiệp nhưng có thể sai khi bạn can thiệp (đổi controller làm đổi phân bố trạng thái); (3) "thu thập đầy đủ" là giả định không kiểm được — đuôi hiếm (→ F1.2) là chỗ thiếu dữ liệu nhất. Phản ví dụ: Google Flu Trends — hàng tỉ truy vấn, vẫn gãy khi hành vi tìm kiếm đổi.
-- *"R² > 0,95 nghĩa là quan hệ tuyến tính."* — **SAI.** Phản ví dụ: bài tập mục 5, đường cong vùng chết + bão hòa có R² tuyến tính ≈ 0,95.
+- *"R² > 0,95 nghĩa là quan hệ tuyến tính."* — **SAI.** Phản ví dụ: y = x² trên mười điểm x = 1…10 có R² tuyến tính ≈ 0,95 dù là parabol thuần `[đã chạy — numpy]`. Bài tập mục 5 cho bạn đoán R² của đường PWM.
 - *"Thêm bậc đa thức đến khi khớp mọi điểm là tốt nhất."* — **SAI.** Sai số huấn luyện → 0 trong khi sai số trên điểm giữ lại tăng vọt.
 
 **Tên chuẩn của thứ bạn đã làm:** nếu bạn từng chạy load test ở vài mức QPS rồi kẻ đường để dự đoán khi nào cần thêm máy, đó là **hồi quy để ngoại suy** — và bạn đã biết nó gãy ở đầu gối. Thứ còn thiếu: nhìn residual có hệ thống, CI cho tham số, và hold-out.

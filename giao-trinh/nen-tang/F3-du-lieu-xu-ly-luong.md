@@ -549,3 +549,236 @@ Checklist khi đọc một thay đổi schema hay một con số kích thước:
   </details>
 
 ---
+
+## F3.3 — Event time vs processing time: window, watermark, dữ liệu đến muộn (5h)
+
+> **Dùng cho:** K2 Bài 2 · K5 Bài 7, 13 · K7 C7.2 · **Cần trước:** F3.1; nên có F4.1 (ppm, drift) và F4.6 (thời điểm của một phép đo) · **Sau viên nang này bạn đánh giá được:** một timestamp trong file là thời điểm của *cái gì*, đo bằng đồng hồ nào; một cửa sổ/watermark có đóng sớm quá không; và một tỉ lệ "dữ liệu muộn" là do mạng, do hàng đợi hay do **đồng hồ trôi**.
+
+### 1. Câu chuyện
+
+Tyler Akidau và nhóm ở Google viết *Streaming 101* (2015) và *The Dataflow Model* (VLDB 2015) sau nhiều năm vận hành MillWheel và FlumeJava. Ví dụ họ dùng: điểm số của một trò chơi di động. Người chơi trên máy bay, điện thoại offline, điểm được gửi lên khi hạ cánh vài giờ sau. Nếu bạn cộng điểm theo **giờ server nhận** (processing time), bảng xếp hạng của giờ 14:00 chứa điểm chơi lúc 9:00. Nếu cộng theo **giờ chơi** (event time), bạn phải trả lời câu khó: *khi nào thì chắc đã nhận đủ điểm của 9:00?* Câu trả lời của họ là **watermark** — một ước lượng (không phải bảo đảm) rằng "dữ liệu có event time trước T có lẽ đã tới hết" — cộng với **allowed lateness** và cơ chế phát lại kết quả khi dữ liệu muộn vẫn tới `[chuẩn]`.
+
+Robot thêm một tầng mà điện thoại không có. Điện thoại đóng dấu bằng đồng hồ đã đồng bộ NTP. ESP32 đóng dấu bằng timer đếm µs từ lúc boot, chạy bằng thạch anh lệch vài chục ppm (→ F4.1). *Kịch bản:* một phiên ghi 3 giờ, host quy đổi `esp_timer` sang giờ host bằng offset đo lúc khởi động và không bù drift. Pipeline đóng cửa sổ 1 s theo đồng hồ host với dung sai 50 ms. Giờ đầu không có gì lạ. Từ phút thứ 20, tỉ lệ "dữ liệu muộn" tăng đều, không có sự cố mạng nào. Không ai đổi code. Đồng hồ trôi đã âm thầm biến thành độ muộn. Bài tập mục 5 dựng lại đúng kịch bản này.
+
+### 2. Mô hình tư duy
+
+Một mẫu IMU có ít nhất **bốn** thời điểm. Chỉ cái đầu tiên là sự thật; ba cái còn lại là ước lượng hoặc nhật ký:
+
+```
+ thời gian thật ─────●──────────────────────────────────────────────►
+                     │ t_phys: lúc gia tốc kế lấy mẫu (giữa cửa sổ lọc của chip, → F4.6)
+ đồng hồ ESP32  ─────●  esp_timer = t_phys·(1+ε) + θ   (ε ~ ±10–50 ppm, θ = gốc lúc boot)
+                     │   ↓ mô hình quy đổi (offset + drift), có version = clock_source
+ header.stamp   ─────●  ước lượng t_phys trên trục host  ← EVENT TIME (dùng để ghép, cửa sổ)
+                     ╲
+                      ╲ trễ USB + driver + hàng đợi (ms, đuôi dài, có lúc kẹt 100+ ms)
+ publish_time   ───────────●  lúc node publish                 ┐
+ log_time       ─────────────●  lúc writer ghi vào MCAP        ┘ PROCESSING TIME (nhật ký)
+```
+
+Định nghĩa trong MCAP: `log_time` là *"Time at which the message was recorded"*, `publish_time` là *"Time at which the message was published. If not available, must be set to the log time"* `[spec: MCAP, Message record]`. Không trường nào trong hai trường đó là thời điểm đo; thời điểm đo nằm trong payload (`header.stamp`).
+
+**Window và watermark trong một hình:**
+
+```
+ event time (stamp) →  [ 9.0 ─────────── 10.0 )[ 10.0 ──────── 11.0 )
+ watermark W(t) = "mọi mẫu có stamp < W đã tới"
+ cửa sổ [9,10) đóng khi W ≥ 10.0;  mẫu stamp=9.97 tới sau đó = DỮ LIỆU MUỘN → bỏ / side output / phát lại kết quả
+ Hai cách dựng W:
+   (1) theo dữ liệu:   W = (stamp lớn nhất đã thấy của nguồn chậm nhất) − L    ← đúng khi mỗi nguồn tới theo thứ tự
+   (2) theo đồng hồ host: W = now_host − L                                    ← phổ biến trên robot, NGẦM GIẢ ĐỊNH stamp và host cùng trục
+```
+
+Ba điều khác backend, mỗi cái là một quyết định:
+
+1. **Watermark phải tính theo từng nguồn rồi lấy min.** Một nguồn kẹt 200 ms (camera USB) giữ watermark của cả pipeline lại. Lấy max thì nguồn kẹt thành "muộn".
+2. **Độ muộn có ba thành phần cộng lại:** trễ truyền (đuôi dài), kẹt hàng đợi (→ F3.9), và **sai số mô hình đồng hồ** (lệch offset + drift chưa bù). Thành phần cuối *tăng theo thời gian phiên* nếu drift không được bù. L phải bao cả ba, và chỉ tự đo được: phân bố `log_time − header.stamp` (K2 Bài 2) theo từng luồng, theo thời gian.
+3. **Event time có thể lùi.** ESP32 reboot (timer về 0), NTP/PTP bước đồng hồ host, đổi mô hình quy đổi giữa phiên. Đây không phải lỗi dữ liệu để xóa; là **sự kiện** cần ghi lại (đổi `clock_source`/epoch) và tách phiên.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Flink `BoundedOutOfOrdernessWatermarks(L)` | Dung sai muộn L cho luồng cảm biến | Trong Flink, L bao *out-of-order*; ở đây L còn phải bao **drift tích lũy**, thứ tăng tuyến tính theo giờ chạy | Chọn L từ một phiên 10 phút, ra hiện trường 3 giờ thì drop tăng dần |
+| Kafka `CreateTime` (đồng hồ producer đã NTP) | `header.stamp` từ timer MCU | `CreateTime` cùng thang với giờ thế giới, sai số ms; timer MCU có gốc riêng và tốc độ riêng, phải qua mô hình quy đổi | Ghi thẳng µs-từ-boot vào `stamp` → mẫu nằm ở năm 1970 (đã chấm ở K5 Bài 13) |
+| `LogAppendTime` do broker cấp, đơn điệu | `log_time` của writer | Không phải trọng tài cho thời điểm đo; nhiều thread ghi thì `log_time` có thể không đơn điệu giữa các channel | Sort/ghép theo `log_time` cho tiện, nhúng jitter USB vào dữ liệu |
+| Dữ liệu muộn → side output, sửa kết quả sau | Mẫu muộn → không được bỏ âm thầm | Một mẫu bỏ vì muộn là phép đo mất vĩnh viễn (→ F3.9). Pipeline online (điều khiển) được phép bỏ; pipeline ghi dataset thì không | Writer ghi file áp chính sách cửa sổ của bộ điều khiển → lỗ trong dataset không ai đếm |
+
+**Chấm mô hình:**
+
+- *Mô hình của bạn ở K3 lượt 7: "mỗi thiết bị có khái niệm về clock, về thời gian của chúng … dù giới hạn tốc độ lại nhưng mọi thứ vẫn lệch clock nhau … nên phải có buffer, để các giao thức có nguồn để hoạt động."* — **ĐÚNG MỘT PHẦN.** Đúng: mỗi thiết bị có thời gian riêng, và chúng lệch nhau. Gãy: buffer hấp thụ **lệch tốc độ tức thời** (burst, jitter), không sửa **lệch đồng hồ**. Lệch đồng hồ cần một *mô hình* (offset + drift, ước lượng liên tục, → F4.4–F4.6) và một trường ghi lại mô hình nào đã dùng (`clock_source`). Phản ví dụ: mục 5 — buffer/dung sai 150 ms che được drift 40 ppm trong một giờ (144 ms) nhưng sang giờ thứ hai thì không; tăng buffer chỉ dời thời điểm hỏng.
+- *"Sort theo timestamp là xong thứ tự."* — Đã chấm **SAI** ở K5 Bài 13 (hai đồng hồ khác gốc, khác tốc độ). Thêm: ngay cả trong một nguồn, sau reboot thứ tự theo `stamp` khác thứ tự thật.
+
+**Tên chuẩn của thứ bạn đã làm:** khi bạn tính SLA "độ tươi dữ liệu" bằng `now − event_timestamp` trên dashboard, bạn đang đo **event-time skew** (Akidau gọi là *skew* giữa event time và processing time). Còn thiếu ở robot: tách skew thành phần truyền (đuôi, ổn định) và phần đồng hồ (trôi đều). Phần sau là tín hiệu để **sửa đồng hồ**, không phải để tăng L.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Event time / processing time | Lúc sự việc xảy ra / lúc hệ thống thấy nó | `publish_time` là event time |
+| 🟢 | `header.stamp`, `publish_time`, `log_time` | Thời điểm đo (ước lượng) / publish / ghi | Ba tên một thứ |
+| 🟢 | Watermark | Ước lượng "dữ liệu trước T đã tới hết" | Bảo đảm |
+| 🟢 | Allowed lateness, late data | Độ muộn còn chấp nhận / mẫu tới sau khi cửa sổ đóng | Lỗi mạng |
+| 🟢 | `clock_source`, mô hình quy đổi | Đồng hồ nào + công thức nào sinh ra stamp | Chi tiết triển khai không cần lưu |
+| 🟡 | Tumbling / sliding / session window | Cửa sổ rời / chồng / theo khoảng lặng | — |
+| 🟡 | Trigger, accumulation (Dataflow) | Khi nào phát kết quả, phát lại thì cộng dồn hay thay | — |
+| 🔴 | Exactly-once window state trong Flink | Không cần cho robot một máy | — |
+
+### 5. Bài tập dự đoán
+
+Mô phỏng 1 giờ IMU 200 Hz. ESP32 chậm 40 ppm so với host; host quy đổi bằng offset lúc boot, **không bù drift**. Trễ USB 2 ms + jitter mũ trung bình 1 ms. Mỗi 10 s, USB/đĩa kẹt 120 ms vắt qua ranh giới cửa sổ. Cửa sổ 1 s theo `stamp`, đóng khi đồng hồ host vượt `cuối cửa sổ + L`.
+
+**Dự đoán:**
+
+1. Sau 1 giờ, `stamp` lệch thời gian thật bao nhiêu ms? Dấu nào?
+2. Với L = 20 ms, 50 ms, 150 ms: tỉ lệ mẫu muộn tổng, và nó **đổi thế nào giữa 10 phút đầu và 10 phút cuối**?
+3. Với L = 50 ms, khoảng phút thứ mấy drift bắt đầu tự gây muộn (không cần kẹt)?
+4. Đếm mẫu trong mỗi cửa sổ 1 s theo processing time và theo event time: min/max mỗi cách? Cách nào cho thấy drift?
+5. Với L = 150 ms, sau bao nhiêu giờ thì lại bắt đầu muộn?
+
+Tham số cần tra cho máy thật: ppm của thạch anh ESP32 (`[spec]` datasheet module, thường ghi ±10 ppm tại 25 °C cho thạch anh 40 MHz; sống thật thì đo ở K5 Bài 10), phân bố trễ USB (K2 Bài 2 hoặc K5 Bài 8).
+
+```python
+# [đã chạy] Watermark theo đồng hồ host + đồng hồ nguồn trôi: dữ liệu "muộn" sinh ra từ đâu
+import numpy as np
+rng = np.random.default_rng(3)
+T, F = 3600.0, 200                                   # 1 giờ IMU 200 Hz
+t_true = np.arange(0, T, 1 / F)                      # thời điểm vật lý đo (không ai thấy trực tiếp)
+DRIFT = -40e-6                                       # đồng hồ ESP32 chậm 40 ppm so với host
+stamp = t_true * (1 + DRIFT)                         # header.stamp sau khi quy đổi offset LÚC BOOT, không bù drift
+lat = 0.002 + rng.exponential(0.001, t_true.size)    # trễ USB + driver: 2 ms + jitter
+ph = (t_true - 9.95) % 10.0                          # mỗi 10 s: USB/disk kẹt 120 ms, vắt qua
+stall = ph < 0.12                                    # ranh giới cửa sổ (9.95 → 10.07 s)
+lat[stall] += 0.12 - ph[stall]                       # mẫu dồn lại, xả một lượt khi hết kẹt
+arrive = t_true + lat                                # host nhận (processing time)
+
+def late_fraction(L):
+    # cửa sổ 1 s theo event time (stamp); đóng khi đồng hồ host vượt (cuối cửa sổ + L)
+    w_end = np.floor(stamp) + 1.0
+    late = arrive > w_end + L
+    blocks = late.reshape(6, -1).mean(axis=1)        # tỉ lệ muộn theo từng khối 10 phút
+    return late.mean(), blocks
+
+for L in (0.020, 0.050, 0.150):
+    tot, blocks = late_fraction(L)
+    print(f"L={L*1e3:4.0f} ms  muộn tổng {tot:7.2%}  theo 10 phút:", " ".join(f"{b:6.1%}" for b in blocks))
+
+# cùng dữ liệu, đếm theo cửa sổ processing time (thời điểm host nhận)
+cnt_proc = np.bincount(np.floor(arrive).astype(int))[:3599]
+cnt_event = np.bincount(np.floor(stamp).astype(int))[:3599]
+print("đếm/cửa sổ theo processing time: min", cnt_proc.min(), "max", cnt_proc.max())
+print("đếm/cửa sổ theo event time    : min", cnt_event.min(), "max", cnt_event.max())
+print("lệch stamp so với t_true sau 1 giờ (ms):", round((t_true[-1] - stamp[-1]) * 1e3, 1))
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+| L | muộn tổng | 10 phút đầu → 10 phút cuối |
+|---|---|---|
+| 20 ms | 6,27% | 0,7% → 12,2% |
+| 50 ms | 4,17% | 0,6% → 9,5% |
+| 150 ms | 0,00% | 0% suốt giờ đầu |
+
+1. **144 ms**, `stamp` chậm hơn thật (40 ppm × 3600 s).
+2. Tỉ lệ muộn **tăng tuyến tính theo thời gian phiên**. Phần nền ~0,5% ở 10 phút đầu là các mẫu bị kẹt 70 ms qua ranh giới (10 mẫu mỗi 10 s). Phần tăng dần là drift.
+3. Drift + trễ nền ≈ 50 ms khi 40 ppm × t ≈ 47 ms → t ≈ **20 phút**. Mô phỏng: khối 10–20 phút còn 0,9%, khối 20–30 phút nhảy lên 2,3%.
+4. Theo processing time: **190–210** mẫu/cửa sổ — đợt kẹt dồn mẫu sang cửa sổ sau, nhìn như tần số dao động ±5% dù cảm biến đều tuyệt đối. Theo event time: **200–201**; cửa sổ thỉnh thoảng có 201 là dấu vết của drift (đồng hồ nguồn chậm nên 1 s "theo nó" dài hơn 1 s thật). Đếm theo processing time là đo hàng đợi, không đo cảm biến.
+5. Drift tự vượt ~150 ms sau ≈ 148 ms / 40 ppm ≈ 3 700 s, **khoảng 1 giờ 2 phút**; phiên 3 giờ sẽ hỏng ở giờ thứ hai. Sửa đúng: bù drift (ước lượng liên tục offset + tốc độ, → F4.6) và tăng `clock_source` version, không tăng L.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi gặp một timestamp, một cửa sổ, hay một con số "dữ liệu muộn":
+
+1. Timestamp này là **thời điểm của cái gì** (đo, publish, ghi, nhận)? Do **đồng hồ nào** đóng dấu, quy đổi bằng **mô hình nào**, mô hình có version không?
+2. Cửa sổ/watermark dựng **theo dữ liệu** hay **theo đồng hồ host**? Nếu theo host: ngầm giả định stamp và host cùng trục — giả định đó được kiểm ở đâu?
+3. Watermark tính **theo từng nguồn** rồi lấy min, hay gộp?
+4. L được chọn từ **phân bố đo được** (đuôi nào, phiên dài bao nhiêu), hay từ cảm giác?
+5. Tỉ lệ muộn **có xu hướng theo thời gian phiên** không? Có → nghi đồng hồ trước khi nghi mạng.
+6. Mẫu muộn đi đâu: bỏ (có đếm?), side output, hay sửa kết quả? Pipeline này là điều khiển online hay ghi dataset?
+7. Event time **lùi** thì sao: reboot, bước đồng hồ? Có tách phiên/epoch không?
+
+**Khẳng định mẫu để tự chấm:**
+
+- (a) Gemini, K5 Bài 13, bước 2: *"Ghi cả `publish_time` (timestamp lúc cảm biến đo) và `log_time` (timestamp lúc daemon host ghi)."*
+- (b) Bản gốc K5 Bài 16, bảng rule: *"Timestamp đơn điệu tăng — Thời gian một chiều — Bất kỳ vi phạm nào."*
+- (c) *"Đặt watermark đủ rộng thì không còn dữ liệu muộn."*
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+- (a) **SAI** ở định nghĩa. Theo spec MCAP, `publish_time` là lúc message được publish (không có thì bằng `log_time`); thời điểm đo nằm trong payload, `header.stamp`. Dùng `publish_time` làm thời điểm đo là nhúng trễ driver + node vào dữ liệu. Phần đúng: ghi cả hai thời gian processing để chẩn đoán hàng đợi.
+- (b) **ĐÚNG MỘT PHẦN.** Đúng như một rule *cảnh báo* trên `header.stamp` **của một nguồn trong một epoch đồng hồ**. Sai nếu áp lên `log_time` gộp nhiều channel (có thể không đơn điệu hợp lệ), và sai nếu coi mọi vi phạm là dữ liệu hỏng: reboot ESP32 hay bước PTP tạo ra lùi thời gian hợp lệ, cần ghi thành sự kiện và tách epoch, không xóa. Bài tập F3.7 cho thấy rule này bắt được timestamp lùi 12 ms mà không rule nào khác bắt.
+- (c) **SAI.** Watermark heuristic chỉ là ước lượng (Akidau). Với drift chưa bù, độ muộn tăng không giới hạn theo thời gian phiên (mục 5 câu 5). Với đuôi dài (USB kẹt, GC, swap), luôn có mẫu vượt mọi L hữu hạn. L càng rộng thì kết quả càng trễ — đánh đổi độ đầy đủ lấy độ tươi, không xóa được nó.
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Nếu…thì]** Nếu bạn bù drift bằng hồi quy tuyến tính trên các cặp (esp_timer, host_time) *sau khi phiên kết thúc*, cửa sổ online và dataset offline sẽ thấy hai event time khác nhau. Cái nào ghi vào `header.stamp`?
+   <details><summary>Hướng nghĩ</summary>
+
+   Một lựa chọn: ghi raw counter + mô hình online vào file; dataset là view dẫn xuất áp mô hình offline tốt hơn, có version (→ F3.8). Đây là "log là sự thật, view tái tạo được" áp vào thời gian.
+
+   </details>
+2. **[Quy mô]** 100 robot, mỗi robot 6 luồng, mỗi luồng một đồng hồ. Watermark toàn đội tính thế nào, và một robot mất mạng 3 ngày làm gì với nó?
+   <details><summary>Hướng nghĩ</summary>
+
+   Watermark per-robot, per-stream; xử lý theo phiên của từng robot thay vì cửa sổ toàn cục. Robot offline = trò chơi di động trên máy bay của Akidau: batch hóa theo phiên khi dữ liệu tới.
+
+   </details>
+3. **[Failure mode]** Host chạy NTP và bị bước đồng hồ lùi 300 ms giữa phiên. Những trường nào trong file bị ảnh hưởng, những trường nào không?
+   <details><summary>Hướng nghĩ</summary>
+
+   `log_time` (nếu lấy từ CLOCK_REALTIME) và mọi stamp quy đổi qua giờ host. Timer ESP32 thô không bị. Đây là lý do giữ raw counter và dùng CLOCK_MONOTONIC cho đo khoảng (→ F4.3).
+
+   </details>
+4. **[Liên ngành]** Thiên văn dùng thang thời gian TDB/TT và ghi rõ trạm nào, đồng hồ nào cho mỗi quan sát. Giống `clock_source` ở đâu, khác ở đâu?
+   <details><summary>Hướng nghĩ</summary>
+
+   Giống: thời điểm luôn đi kèm thang đo và phép quy đổi. Khác: thiên văn quy đổi có mô hình vật lý chuẩn hóa quốc tế; robot tự xây mô hình và phải tự version.
+
+   </details>
+5. **[Vì sao không]** Vì sao không đóng dấu tất cả ở host lúc nhận cho đơn giản, khỏi cần đồng hồ MCU?
+   <details><summary>Hướng nghĩ</summary>
+
+   Receive time = thời điểm đo + trễ USB có đuôi dài; jitter vài ms nhúng thẳng vào dữ liệu. Ước lượng sai số: ở 2 rad/s, 3 ms jitter = 0,006 rad sai lệch góc mỗi lần ghép (→ F3.4). Đóng dấu tại nguồn + mô hình quy đổi cho sai số nhỏ hơn và đo được.
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Tài chính:** sàn giao dịch đóng dấu lệnh theo đồng hồ của sàn (processing time của sàn) nhưng quy định MiFID II buộc đồng bộ đồng hồ tới 100 µs cho giao dịch tần số cao `[chuẩn — kiểm RTS 25]`. Giống: thời điểm là dữ liệu có sai số được quy định. Khác: có một trọng tài pháp lý; robot không có.
+- **Mạng (RTP/VoIP):** gói RTP mang timestamp của nguồn theo đồng hồ lấy mẫu; bên nhận dùng jitter buffer (L) và báo cáo độ trôi qua RTCP. Đúng mô hình mục 2, đã chạy hàng tỉ cuộc gọi.
+
+### 9. Áp vào khóa chính
+
+- **K2 Bài 2:** vẽ `log_time − header.stamp` theo thời gian phiên; độ dốc khác 0 = drift chưa bù, không phải mạng.
+- **K5 Bài 7, 13:** ghi `clock_source` + version mô hình quy đổi; chọn L từ phân bố đo được của luồng chậm nhất (K5 Bài 13 phần 2 đã dùng `L_max` để mở rộng truy vấn theo `log_time`).
+- **K7 C7.2:** source time ESP32 vs host là câu hỏi của chính viên nang này trên robot thật; kiểm tỉ lệ muộn theo giờ chạy trong soak.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Định nghĩa `log_time`, `publish_time` | `[spec]` | MCAP Specification, Message record |
+| Watermark là heuristic; event time vs processing time | `[chuẩn]` | Akidau, Streaming 101/102; Dataflow Model, VLDB 2015 |
+| Tỉ lệ muộn tăng theo phiên khi drift không bù; số trong bảng | `[đã chạy]` | Mục 5, mô hình đồ chơi |
+| Thạch anh ESP32 ±10 ppm | `[spec — kiểm datasheet module bạn mua]` | Đo thật ở K5 |
+| MiFID II 100 µs cho HFT | `[chuẩn — kiểm RTS 25]` | Không ảnh hưởng nội dung chính |
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Akidau et al., *The Dataflow Model: A Practical Approach to Balancing Correctness, Latency, and Cost in Massive-Scale, Unbounded, Out-of-Order Data Processing* (VLDB 2015).
+- **Giải thích:** Tyler Akidau, *Streaming 101* và *Streaming 102* (O'Reilly Radar, 2015–2016).
+- **Đào sâu:** Kleppmann, *DDIA* chương 11, mục "Reasoning About Time".
+- **Tự kiểm tra:** (1) giải thích cho backend engineer trong 5 câu vì sao "dữ liệu muộn" tăng dần mà mạng không đổi; (2) vẽ lại hình bốn thời điểm từ trí nhớ; (3) câu hỏi:
+
+  Cửa sổ đếm theo processing time báo IMU "chỉ có 190 mẫu/s" trong một giây. Ba giả thuyết, và một phép kiểm phân biệt chúng?
+  <details><summary>Đáp án</summary>
+
+  (1) Cảm biến thật sự rớt mẫu; (2) hàng đợi kẹt, mẫu dồn sang giây sau; (3) đồng hồ host bị bước. Kiểm: đếm theo `header.stamp` và nhìn `sequence` — đủ 200 và `sequence` liên tục → (2) hoặc (3), không phải (1); nhìn cửa sổ kế bên có 210 không.
+
+  </details>
+
+---

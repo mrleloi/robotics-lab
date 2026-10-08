@@ -847,3 +847,243 @@ Checklist khi đọc một timestamp, một trường thời gian trong schema, 
   </details>
 
 ---
+
+## F4.4 — NTP: bốn timestamp, giả định đối xứng, giới hạn (3h)
+
+> **Dùng cho:** K3 Bài 8, Bài 9 · K5 Bài 6, Bài 9 · **Cần trước:** F4.1, F4.3 · **Sau viên nang này bạn đánh giá được:** một con số "độ chính xác NTP" hay "độ trễ một chiều = RTT/2" đúng trong điều kiện nào, sai số tối đa có thể chứng minh được là bao nhiêu, và khi nào NTP đủ cho ứng dụng của bạn.
+
+### 1. Câu chuyện
+
+David Mills bắt đầu NTP từ đầu thập niên 1980 trên những đường mạng mà trễ một chiều thay đổi hàng trăm mili-giây; RFC 958 (1985) là bản đầu, NTPv4 là RFC 5905 (2010) [chuẩn]. Bài toán ông gặp không giải được một cách tuyệt đối: client gửi một gói, server trả lời kèm giờ của nó, nhưng giờ đó đã cũ đi một khoảng bằng trễ đường về — mà trễ đường về chưa biết. Cristian (1989) chỉ ra cái có thể làm: thời điểm server đọc đồng hồ nằm *đâu đó* trong khoảng round-trip, nên sai số bị chặn bởi một nửa round-trip; và **những lần trao đổi nhanh nhất cho cận chặt nhất** [chuẩn: F. Cristian, *Probabilistic Clock Synchronization*, Distributed Computing 3(3), 1989]. NTP biến ý đó thành một bộ lọc: trong 8 mẫu gần nhất, tin mẫu có delay nhỏ nhất [spec: RFC 5905, clock filter algorithm].
+
+Thứ NTP không bao giờ sửa được, và chính Mills ghi rõ: nếu đường đi và đường về dài khác nhau một cách *cố định*, sai lệch đó biến thành offset và không phép đo nào trong giao thức thấy được. Bạn sẽ gặp lại nguyên văn câu này ở PTP (F4.5) và ở K3 Bài 9 (RTT/2 trên USB).
+
+### 2. Mô hình tư duy
+
+**Bốn timestamp** (tên theo RFC 5905):
+
+```
+ client (đồng hồ C)                         server (đồng hồ S)
+   T1 ── gửi request ──────── d_up ──────────► T2   nhận
+                                               │  (xử lý)
+   T4 ◄─ nhận reply ───────── d_down ───────── T3   gửi
+
+ θ (offset của server so với client, ước lượng) = [(T2 − T1) + (T3 − T4)] / 2
+ δ (round-trip delay, không tính thời gian xử lý)  = (T4 − T1) − (T3 − T2)
+```
+
+Với θ_thật là offset thật: `T2 − T1 = θ_thật + d_up`, `T4 − T3 = d_down − θ_thật`. Thay vào:
+
+```
+θ = θ_thật + (d_up − d_down)/2          ← sai số = nửa bất đối xứng
+δ = d_up + d_down
+⇒ |θ − θ_thật| ≤ δ/2                     ← cận cứng, không cần giả định gì
+```
+
+Ba điều rút ra [chuẩn]: (1) **δ/2 là cận sai số chứng minh được** của một lần trao đổi, bất kể mạng có đối xứng không; (2) nếu đối xứng, sai số bằng 0 dù δ lớn — nên "độ chính xác" thực tế nằm giữa 0 và δ/2 tùy bất đối xứng; (3) hàng đợi thường làm trễ *một chiều* tăng (upload nặng, WiFi), nên bất đối xứng do hàng đợi lớn lên đúng khi δ lớn — bộ lọc delay nhỏ nhất khai thác điều này.
+
+**Từ một mẫu tới đồng hồ được kỷ luật.** NTP không nhảy đồng hồ mỗi lần đo; nó đưa offset đã lọc vào một vòng điều khiển (PLL/FLL) chỉnh *tốc độ* đồng hồ (F4.3: slew) và học skew của thạch anh (F4.1) [spec: RFC 5905 mục clock discipline]. Mỗi tầng stratum cộng thêm sai số; NTP báo *root delay* và *root dispersion* để cộng dồn cận sai số về nguồn gốc (GPS, đồng hồ nguyên tử) — đây là ngân sách sai số GUM chạy trong giao thức (F1.1, F4.7).
+
+**Cỡ số** (để đặt kỳ vọng, không phải đáp án bài tập): qua Internet, cỡ mili-giây đến chục mili-giây; trong LAN có dây với chrony và timestamp phần mềm, thường cỡ chục µs; chrony với hardware timestamping trên NIC hỗ trợ có thể xuống dưới µs [ước lượng; chrony docs mục `hwtimestamp`; tự đo trên mạng của bạn bằng `chronyc tracking` và một trọng tài].
+
+Mô phỏng: ba điều kiện mạng, so trung bình mọi mẫu với trung bình 5% mẫu có delay nhỏ nhất.
+
+```python
+# [đã chạy] F4.4 — bốn timestamp NTP: hàng đợi làm nhiễu, bộ lọc "trễ nhỏ nhất" cứu được nhiễu,
+# nhưng KHÔNG cứu được bất đối xứng cố định
+import numpy as np
+rng = np.random.default_rng(7)
+THETA = 1500e-6                       # offset thật: client chậm hơn server 1,5 ms (s)
+N = 2000                              # số lần trao đổi
+
+def exchange(base_up, base_down, load_up, load_down):
+    """Trễ một chiều = phần cố định + hàng đợi (mũ, trung bình = load)."""
+    d_up   = base_up   + rng.exponential(load_up,   N)   # client → server
+    d_down = base_down + rng.exponential(load_down, N)   # server → client
+    t1 = np.sort(rng.uniform(0, 3600, N))                # client gửi (đồng hồ client)
+    t2 = t1 + THETA + d_up                               # server nhận (đồng hồ server)
+    t3 = t2 + 20e-6                                      # server xử lý 20 µs
+    t4 = t3 - THETA + d_down                             # client nhận (đồng hồ client)
+    off = ((t2 - t1) + (t3 - t4)) / 2                    # công thức RFC 5905
+    delay = (t4 - t1) - (t3 - t2)
+    return off, delay
+
+cases = {
+    "LAN yên, đối xứng":            (100e-6, 100e-6,  20e-6,  20e-6),
+    "Tải một chiều (upload nặng)":  (100e-6, 100e-6, 2e-3,   20e-6),
+    "Bất đối xứng cố định 400 µs":  (500e-6, 100e-6,  20e-6,  20e-6),
+}
+for name, args in cases.items():
+    off, delay = exchange(*args)
+    best = np.argsort(delay)[: N // 20]                  # giữ 5% mẫu có delay nhỏ nhất
+    print(f"{name:30s} sai số TB(mọi mẫu)={(off.mean()-THETA)*1e6:+8.1f} µs"
+          f" | std={off.std()*1e6:7.1f} µs | sai số TB(5% delay nhỏ nhất)={(off[best].mean()-THETA)*1e6:+7.1f} µs")
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Ping RTT, chia đôi ra one-way latency | Công thức offset của NTP dùng đúng giả định đó | Backend dùng RTT/2 để *ước lượng latency*, sai vài chục % không ai chết; ở đây cùng giả định quyết định *timestamp của dữ liệu* và sai số không bị phát hiện | K3 Bài 9: báo "chặng USB trễ 0,8 ms" từ RTT/2 trong khi OUT và IN đi qua hai lịch poll khác nhau |
+| Health check lấy p50 latency | Bộ lọc delay nhỏ nhất | Backend quan tâm trung vị/đuôi vì người dùng sống ở đó; đồng bộ đồng hồ quan tâm **mẫu tốt nhất**, vì nó có cận sai số chặt nhất | Lấy trung bình mọi mẫu khi mạng có tải một chiều → offset lệch hàng trăm µs |
+| Retry với timeout | Poll interval của NTP (64–1024 s mặc định) | Poll thưa vì giữa hai lần poll đồng hồ được giữ bằng skew đã học; backend nghĩ "poll thưa = dữ liệu cũ" | Giảm poll xuống 1 s cho "chính xác hơn" — tăng tải, ít lợi nếu sai số do bất đối xứng |
+| Service mesh đo latency ở sidecar | Tầng đóng dấu của NTP (app, kernel, NIC) | Sidecar thêm hàng đợi riêng; NTP phần mềm cũng vậy — mỗi tầng thêm jitter vào T1..T4 | Tin vào cận δ/2 mà quên δ đo được đã lẫn jitter của chính máy |
+
+**Chấm mô hình:**
+
+- *"NTP đồng bộ hai máy với sai số bằng jitter mạng."* — **ĐÚNG MỘT PHẦN.** Jitter (phần ngẫu nhiên) bị bộ lọc và vòng điều khiển làm nhỏ đi; phần **cố định** của bất đối xứng thì không giảm chút nào và không hiện trong bất kỳ thống kê nào NTP báo. Phản ví dụ: trường hợp 3 trong mô phỏng — std nhỏ, sai số lớn.
+- *"Mạng nhanh thì NTP chính xác."* — **ĐÚNG MỘT PHẦN.** δ nhỏ thì cận δ/2 nhỏ, nên mạng nhanh giới hạn sai số tối đa. Nhưng mạng chậm và đối xứng có thể chính xác hơn mạng nhanh mà bất đối xứng; và tầng đóng dấu (phần mềm) đặt sàn bất kể mạng nhanh cỡ nào.
+
+**Tên chuẩn của thứ bạn đã làm:** khi bạn so log giữa hai service và "bù" bằng cách giả định request và response đi mất thời gian như nhau, bạn đang tự chạy thuật toán của Cristian bằng tay. Các hệ tracing (Zipkin, Jaeger) có bước điều chỉnh skew dựa đúng trên ý đó: span con phải nằm trong span cha, nên dịch nó vào trong. Thứ còn thiếu: biết rằng bước dịch đó dựa trên giả định đối xứng, và cận sai số là δ/2.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | T1–T4, offset θ, delay δ | Bốn timestamp và hai đại lượng tính từ chúng | δ là trễ một chiều |
+| 🟢 | Giả định đối xứng | d_up = d_down | Luôn đúng trong LAN |
+| 🟢 | Cận δ/2 | Sai số tối đa chứng minh được của một lần trao đổi | Sai số điển hình |
+| 🟢 | NTP vs chrony vs systemd-timesyncd | Giao thức vs hai bản cài đặt; timesyncd là client SNTP đơn giản, Ubuntu 24.04 bật nó mặc định, không có bộ lọc/thống kê như chrony [tự đo: `timedatectl show-timesync`] | Ba thứ tương đương |
+| 🟡 | Stratum, root delay, root dispersion | Tầng cách nguồn chuẩn; cận sai số cộng dồn về nguồn | Stratum thấp = chính xác hơn (thường, không luôn) |
+| 🟡 | Clock filter, clock discipline | Chọn mẫu delay nhỏ nhất; vòng điều khiển chỉnh tốc độ | Lấy trung bình |
+| 🟡 | `chronyc tracking`, `chronyc sources -v` | Xem offset, skew, root dispersion máy tự báo | Sự thật |
+| 🔴 | NTS, symmetric mode, broadcast mode | Bảo mật, chế độ ngang hàng | Cần cho lộ trình |
+
+### 5. Bài tập dự đoán
+
+**Đề.** Mô phỏng mục 2, offset thật 1,5 ms. Dự đoán cho ba trường hợp (đơn vị µs):
+
+1. Sai số trung bình khi dùng mọi mẫu.
+2. Sai số trung bình khi chỉ dùng 5% mẫu có delay nhỏ nhất.
+3. Trường hợp nào bộ lọc delay nhỏ nhất cứu được, trường hợp nào không, và vì sao?
+4. Với trường hợp "tải một chiều", tính tay sai số trung bình kỳ vọng (dùng công thức θ − θ_thật).
+
+**Tham số cần tra:** không. Với mạng thật của bạn ở K5: `chronyc tracking` (dòng "System time", "Root dispersion", "Frequency") và `chronyc sourcestats`. **Phương pháp:** θ − θ_thật = (d_up − d_down)/2; trung bình của phần mũ bằng tham số `load`; mẫu delay nhỏ nhất là mẫu mà cả hai hàng đợi gần rỗng.
+
+```markdown
+# prediction.md — F4.4
+1. sai số TB mọi mẫu (µs): đối xứng ___ ; tải một chiều ___ ; bất đối xứng ___
+2. sai số TB 5% delay nhỏ nhất (µs): ___ ; ___ ; ___
+3. bộ lọc cứu được: ___ ; không cứu được: ___ ; vì ___
+4. tính tay "tải một chiều": ___ µs
+Độ tự tin (1–5): ___   Tôi sẽ ngạc nhiên nếu: ___
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Kết quả khi chạy (seed 7):
+
+| Trường hợp | Sai số TB mọi mẫu | std | Sai số TB 5% delay nhỏ nhất |
+|---|---|---|---|
+| LAN yên, đối xứng | ~0 µs | 14 µs | ~0 µs |
+| Tải một chiều (upload nặng) | **+1018 µs** | 1033 µs | +22 µs |
+| Bất đối xứng cố định 400 µs | **+200 µs** | 14 µs | **+200 µs** |
+
+- Câu 4: (2000 − 20)/2 = +990 µs; mô phỏng +1018 µs (dao động do mẫu).
+- Tải một chiều: trung bình mọi mẫu sai ~1 ms, *lớn hơn* jitter bạn nghĩ; bộ lọc delay nhỏ nhất kéo về ~20 µs vì mẫu nhanh nhất là mẫu hàng đợi gần rỗng ở cả hai chiều.
+- Bất đối xứng cố định: sai đúng 400/2 = 200 µs, std vẫn đẹp (14 µs), bộ lọc không làm gì được. Không một con số nào client nhìn thấy (δ, std, offset) báo hiệu lỗi này. Chỉ một trọng tài độc lập (F4.7) hoặc một con người khai báo bất đối xứng mới sửa được.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi đọc một khẳng định về NTP hoặc về độ trễ một chiều suy từ round-trip:
+
+1. Khẳng định dựa trên offset **tự báo** (chronyc, ntpq) hay đo bằng **trọng tài** độc lập?
+2. Có nêu δ (round-trip) không? Cận cứng là δ/2; mọi con số tốt hơn δ/2 dựa trên giả định đối xứng.
+3. Có nguồn bất đối xứng cố định nào (WiFi, upload/download khác băng thông, hai đường code khác nhau như USB OUT/IN) không?
+4. Timestamp T1..T4 đóng ở tầng nào (app, kernel, NIC)?
+5. "Độ chính xác" là trung bình, p99, hay cận tối đa? Sau bao lâu từ khi khởi động (vòng điều khiển cần thời gian hội tụ)?
+
+**Khẳng định mẫu — tự chấm trước khi mở:**
+
+(a) `robotics-data-infra-roadmap.md` mục 3.1 (và bảng ngân sách của Gemini K5 Bài 7): *"NTP — Sync qua mạng — Độ chính xác ~1–10 ms trong LAN. Không đủ cho sensor fusion."*
+
+(b) Bản Gemini K3 Bài 9: *"Chặng Host (Mini PC → ESP32): Host gửi gói PCM qua USB-CDC kèm timestamp monotonic, ESP32 nhận được thì phản hồi (echo) lại ngay. Đo round-trip rồi chia đôi để có ước lượng độ trễ chặng USB (kèm jitter có đuôi)."*
+
+(c) Câu thường gặp khi đọc output (không trích từ tài liệu nào của lộ trình): *"`chronyc tracking` báo System time 0.000012 seconds fast, nên đồng hồ máy tôi đúng tới 12 µs."*
+
+<details><summary>🔒 Đáp án</summary>
+
+(a) **ĐÚNG MỘT PHẦN.** "1–10 ms" là cỡ của NTP qua Internet hoặc mạng tải nặng/WiFi; LAN có dây với chrony thường tốt hơn một đến hai bậc (chục µs), và với hardware timestamping còn tốt hơn nữa — con số phải tự đo. "Không đủ cho sensor fusion" phụ thuộc ứng dụng và tốc độ chuyển động (F4.7): ghép IMU 200 Hz với camera 30 fps trên robot chậm có thể chấp nhận vài trăm µs; VIO khi quay nhanh thì không. Và câu này dễ bị đọc thành "PTP mới là đáp án" trong khi với cảm biến trên MCU qua USB, cả NTP lẫn PTP đều không chạm tới đồng hồ của cảm biến.
+
+(b) **ĐÚNG MỘT PHẦN.** RTT đo được; "chia đôi" là giả định đối xứng của NTP. Trên USB-CDC, chiều OUT (host ghi) và IN (host poll thiết bị) đi qua hai đường code và hai lịch khác nhau, nên bất đối xứng là quy luật chứ không phải ngoại lệ. Cách đúng: báo RTT kèm cận [0, RTT] cho mỗi chiều, hoặc đo một chiều bằng trọng tài (GPIO + logic analyzer), như bài chính K3 Bài 9 đã sửa.
+
+(c) **SAI** như phát biểu. 12 µs là offset ước lượng **so với nguồn** theo giả định đối xứng, tại thời điểm cập nhật cuối. Sai số so với UTC còn gồm bất đối xứng (không thấy), sai số của chính nguồn (root dispersion), và skew tích lũy từ lần cập nhật cuối. Đọc thêm dòng "Root dispersion" và "Root delay": cận lỏng (nhưng trung thực hơn) là root dispersion + root delay/2 [spec: tài liệu chrony, mục `chronyc tracking`].
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Vì sao không]** Vì sao NTP không gửi một gói "đo trễ đường về" riêng để khử giả định đối xứng?
+   <details><summary>Hướng nghĩ</summary>
+
+   Đo trễ một chiều cần hai đồng hồ đã đồng bộ — chính là thứ đang muốn có. Bài toán có bốn phương trình, ba ẩn mà hai phương trình phụ thuộc nhau; không thêm thông tin từ ngoài (GPS, cáp đo được, khai báo) thì không giải được.
+
+   </details>
+2. **[Quy mô]** 100 robot đồng bộ NTP với một server trên mini PC trạm sạc qua WiFi. Cái gì gãy trước khi số robot tăng: tải server, hay độ chính xác?
+   <details><summary>Hướng nghĩ</summary>
+
+   Tải NTP rất nhẹ. Độ chính xác gãy vì WiFi: kênh chung, power save làm trễ một chiều thay đổi theo lịch beacon, càng nhiều robot càng nhiều hàng đợi. Bộ lọc delay nhỏ nhất cứu một phần; bất đối xứng hệ thống của WiFi thì không.
+
+   </details>
+3. **[Failure mode]** Router văn phòng có bufferbloat. Mỗi khi có người upload video, offset chrony tự báo của robot vẫn đẹp. Bạn có tin không? Thiết kế một thí nghiệm để bác bỏ.
+   <details><summary>Hướng nghĩ</summary>
+
+   Bộ lọc giữ được nếu vẫn có mẫu nhanh; nếu hàng đợi không bao giờ rỗng thì không. Thí nghiệm: một sự kiện vật lý chung (LED/GPIO) ghi bởi hai máy, đo offset thật trong lúc bật/tắt upload.
+
+   </details>
+4. **[Liên ngành]** Hàng hải thế kỷ 18: đồng hồ hàng hải của Harrison cho phép tính kinh độ. Đó là đồng bộ đồng hồ kiểu gì, và sai số tích lũy theo đâu?
+   <details><summary>Hướng nghĩ</summary>
+
+   Đồng bộ một lần ở cảng, rồi giữ bằng một đồng hồ có skew nhỏ và biết trước (holdover). Sai số = skew × thời gian chuyến đi; thời gian mất đi = kinh độ sai (4 phút ≈ 1°). Đúng mô hình F4.1, chỉ là tàu thay robot.
+
+   </details>
+5. **[Phản biện]** "Cứ dùng PTP cho mọi thứ, NTP lỗi thời rồi." Tìm hai tình huống trong lộ trình mà NTP/chrony là lựa chọn đúng.
+   <details><summary>Hướng nghĩ</summary>
+
+   Log nhiệt độ 1 Hz, audit log của state machine K3 (cần thứ tự và giờ con người đọc, không cần µs); máy không có NIC hỗ trợ PTP; mạng WiFi (PTP qua WiFi không có hardware timestamp thì chẳng hơn bao nhiêu).
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Hệ thống tài chính.** Quy định MiFID II đòi các sàn ghi timestamp truy vết về UTC với dung sai tối đa (100 µs cho giao dịch tần suất cao) [spec: RTS 25, Commission Delegated Regulation (EU) 2017/574]. NTP qua Internet không đạt; nhiều nơi chuyển sang PTP hoặc GPS tại chỗ. Giống: cần cận sai số, không chỉ "đồng bộ". Khác: ở đó cận phải chứng minh được trước kiểm toán viên.
+- **Đo trễ mạng một chiều (OWAMP, RFC 4656).** IETF có hẳn giao thức đo trễ một chiều, và nó yêu cầu hai đầu đã đồng bộ (thường bằng GPS) [chuẩn]. Giống: thừa nhận RTT/2 không đủ. Khác: họ giải bằng nguồn thời gian bên ngoài, không bằng giao thức.
+
+### 9. Áp vào khóa chính
+
+- **K3 Bài 8–9:** mọi chặng có hai đầu ở hai đồng hồ (Google Sheet ↔ mini PC, host ↔ ESP32) ghi rõ: đã đồng bộ bằng gì, cận sai số bao nhiêu. RTT/2 chỉ được ghi kèm cận [0, RTT].
+- **K5 Bài 6:** chọn USB hay mạng cho luồng ESP32 — với mạng, NTP phần mềm trên ESP32 cho offset cỡ nào [tự đo]; với USB, không có giao thức, chỉ có đóng dấu ở nguồn.
+- **K5 Bài 9:** đọc offset ptp4l tự báo với tư thế của mục 6: là θ dưới giả định đối xứng, cần trọng tài.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Công thức θ, δ; cận δ/2 | [spec] | RFC 5905 mục 8 |
+| Clock filter chọn mẫu delay nhỏ nhất trong 8 mẫu | [spec] | RFC 5905 mục 10 |
+| Cristian 1989 | [chuẩn] | Distributed Computing 3(3) |
+| RFC 958 (1985) là NTP đầu tiên | [chuẩn] | — |
+| Cỡ độ chính xác NTP trong LAN/Internet | [ước lượng] / [tự đo] | Phụ thuộc mạng; đo bằng trọng tài |
+| MiFID II RTS 25: 100 µs cho HFT | [spec] | Regulation (EU) 2017/574, phụ lục |
+| Cách đọc `chronyc tracking` | [spec] | chrony documentation, `chronyc` |
+| Kết quả mô phỏng | [đã chạy] | seed 7 |
+
+Đã sửa so với bản gốc/Gemini: (Roadmap, Gemini K5 Bài 7) "NTP ~1–10 ms trong LAN" → cỡ đó là Internet/WiFi tải nặng; LAN có dây thường tốt hơn nhiều, phải tự đo; (Gemini K3 Bài 9) RTT/2 cho chặng USB → giả định đối xứng không đứng trên USB, báo RTT kèm cận.
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** RFC 5905 (*Network Time Protocol Version 4*), mục 8 (on-wire protocol) và mục 10 (clock filter).
+- **Giải thích:** tài liệu chrony (trang chính thức chrony-project), phần FAQ và `chronyc tracking` — giải thích từng dòng output.
+- **Đào sâu (tùy chọn):** F. Cristian, *Probabilistic Clock Synchronization* (1989).
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao std nhỏ không chứng minh offset đúng; (2) vẽ lại sơ đồ bốn timestamp và viết hai công thức; (3) câu hỏi:
+
+  T1 = 100,000000 s, T2 = 100,004100 s, T3 = 100,004150 s, T4 = 100,000650 s. Tính θ, δ và khoảng chứa offset thật.
+  <details><summary>Đáp án</summary>
+
+  T2 − T1 = 4,100 ms; T3 − T4 = 3,500 ms → θ = 3,800 ms. δ = 0,650 − 0,050 = 0,600 ms. Offset thật ∈ [3,500; 4,100] ms. Nếu đối xứng, đúng 3,8 ms.
+
+  </details>
+
+---
