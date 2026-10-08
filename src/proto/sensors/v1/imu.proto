@@ -1,0 +1,24 @@
+syntax = "proto3";
+package sensors.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message Vec3 {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+}
+
+message ImuSample {
+  google.protobuf.Timestamp stamp = 1;   // khi phép đo xảy ra
+  string frame_id = 2;                   // khung tọa độ — Bài 3
+  uint32 sequence = 3;                   // phát hiện mất mẫu
+
+  Vec3 linear_acceleration = 4;          // m/s²
+  Vec3 angular_velocity = 5;             // rad/s
+
+  // Ba trường dưới đây là chỗ bạn khác một backend engineer thông thường
+  repeated double acceleration_covariance = 6;  // uncertainty
+  string calibration_id = 7;                    // calibration state
+  string source_device_id = 8;                  // provenance
+}
