@@ -1013,13 +1013,13 @@ randomization:                     # [tự đo] tên trường theo schema Bài 
 
 Cài đặt: ma sát và khối lượng qua `model.geom_friction`, `model.body_mass` + `model.body_inertia` (hoặc `DynamicsModder` của robosuite `[tự đo theo phiên bản]`), áp **trước** reset mỗi episode; độ trễ bằng một hàng đợi lệnh d bước trong wrapper (giống `hist` trong mô phỏng); nhiễu quan sát cộng vào observation trước khi policy đọc. Ghi giá trị **đã áp** vào summary từng episode (Bài 9) — đây là cách duy nhất để biết randomization thật sự chạy.
 
-**Bước 1b — "train" ở mỗi λ, rẻ trên CPU.** Khóa này không train policy học sâu (bản gốc: đó là Khóa 7E). Dùng policy scripted rẻ của Bài 8 với 2–4 tham số (lực/độ đóng kẹp, độ cao tiếp cận, tốc độ nhấc, gain), và "train" = random search hoặc CEM trên tham số đó, tối đa hóa thành công trên phân bố train của λ, ngân sách cố định (ví dụ 24 ứng viên × 20 episode × 4 vòng ≈ 2.000 episode mỗi lần train) [ước lượng]. Dùng cùng bộ kịch bản và seed cho mọi ứng viên trong một vòng (ghép cặp, Bài 1/12). **≥3 seed train mỗi λ**: "policy ở λ" là một biến ngẫu nhiên. Nếu bạn có policy học từ K4 và GPU thuê, có thể train thật với DR — tính chi phí trước, theo ngân sách GPU của khóa.
+**Bước 1b — "train" ở mỗi λ, rẻ trên CPU.** Khóa này không train policy học sâu. Dùng policy scripted của Bài 8 với 2–4 tham số (lực kẹp, độ cao tiếp cận, tốc độ nhấc, gain); "train" = random search hoặc CEM tối đa hóa thành công trên phân bố train của λ, ngân sách cố định (ví dụ 24 ứng viên × 20 episode × 4 vòng ≈ 2.000 episode) [ước lượng]. Mọi ứng viên trong một vòng dùng cùng kịch bản và seed (ghép cặp). **≥3 seed train mỗi λ**: "policy ở λ" là biến ngẫu nhiên. Có policy học từ K4 và GPU thuê thì train thật được, tính chi phí trước.
 
 **Bước 2 — đánh giá ba tập cố định ở mỗi λ** (bản gốc: 0%, 25%, 50%, 100%; sửa định nghĩa tập):
 - **Nominal**: tham số mặc định của sim, một điểm.
 - **Mục tiêu**: phân bố bạn tin gần triển khai nhất, khai báo **trước** và **độc lập** với λ (ví dụ dải đo được ở K5, hoặc dải datasheet). Đây là tập dùng để chọn λ.
 - **OOD**: giá trị nằm ngoài dải train ở λ = 1 (ví dụ ma sát 0.5× tâm, khối lượng 1.5×, độ trễ +2 bước so với cận trên).
-Bản gốc định nghĩa "in-distribution = cùng phân bố đã dùng", tức tập ID **đổi theo λ** — so các điểm trên một đường mà thước đổi theo từng điểm. Giữ "phân bố train của λ" như cột chẩn đoán, không làm tiêu chí.
+Bản gốc định nghĩa "in-distribution = cùng phân bố đã dùng", tức thước **đổi theo λ**; giữ nó như cột chẩn đoán, không làm tiêu chí.
 
 **Bước 3 — n đủ theo Bài 12** (bản gốc): chọn n để MDE trên tập mục tiêu ≤ chênh bạn muốn phân biệt giữa hai λ liền kề. Phương sai tổng của một điểm = phương sai eval + phương sai giữa seed train; báo CI tính trên seed train (bootstrap theo seed), không chỉ CI Wilson của eval.
 
@@ -1052,7 +1052,7 @@ Bản gốc định nghĩa "in-distribution = cùng phân bố đã dùng", tứ
 - Nominal giảm theo λ đến λ = 1 (chi phí bảo thủ, nhỏ ở đây vì vật chưa sát ngưỡng hỏng). Thật tăng mạnh đến λ = 1 rồi **giảm**: ở λ ≥ 1.5 dải chứa ma sát thấp đến mức không giữ được vật, optimizer "bỏ cuộc" vùng đó và hạ f — f* không đơn điệu.
 - Nominal và OOD **không cắt nhau** trong dải λ = 0 → 1 (≈1.0 vs ≤ 0.03). Theo tiêu chí bản gốc ("không cắt nghĩa là dải quá hẹp"), bạn sẽ nới dải — và đi vào vùng λ ≥ 1.5 làm tệ thế giới thật. Tiêu chí bản gốc sai.
 - SysID thắng DR tốt nhất trên thế giới thật (0.59 vs 0.46) và **thua** trên nominal (0.89). Nominal của sim không phải thứ bạn triển khai; nó chỉ là điểm mà sim đoán sai.
-- Không chiến lược nào vượt ~0.6 trên thật: với μ ≈ 0.45, lực cần để không trượt đã sát ngưỡng hỏng vật. Một policy 1 tham số không có cảm biến lực không thoát được giới hạn đó; policy thích nghi (đo trượt, tăng lực dần) mới thoát. Đó là ranh giới giữa robust và adaptive.
+- Không chiến lược nào vượt ~0.6 trên thật: với μ ≈ 0.45, lực cần để không trượt đã sát ngưỡng hỏng vật. Chỉ policy thích nghi (đo trượt, tăng lực dần) thoát được: ranh giới giữa robust và adaptive.
 
 **Stack thật** (không có số chung; thường gặp [ước lượng]):
 
