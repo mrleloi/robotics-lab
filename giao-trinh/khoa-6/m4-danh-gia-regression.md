@@ -264,19 +264,19 @@ Hash của khối `success` vào provenance (Bài 7). Ghi `hold_steps` ra **th�
 
 ## Bài 12 — Bao nhiêu episode là đủ (8h)
 
-> **Vị trí:** Bài 11 (thành công là predicate) → **Bài 12** → Bài 13 (verdict ba trạng thái) · **Cần trước:** F1.4 (CI cho tỉ lệ, Wilson), F1.5 (power, cỡ mẫu, effect size), F1.3 (A/A test); K6 Bài 1 (CRN, thiết kế theo cặp), K6 Bài 10 (CI của hiệu, Newcombe) · **Sau bài này bạn quyết định được:** trước khi chạy, cần bao nhiêu episode (và bao nhiêu **kịch bản**) để thấy một chênh lệch Δ cho trước; sau khi chạy, một chênh lệch quan sát được có đủ căn cứ để nói hay không; và một báo cáo "78% vs 71%, n = 50" có đáng đọc tiếp không.
+> **Vị trí:** Bài 11 (thành công là predicate) → **Bài 12** → Bài 13 (verdict ba trạng thái) · **Cần trước:** F1.4 (CI cho tỉ lệ, Wilson), F1.5 (power, cỡ mẫu), F1.3 (A/A test); K6 Bài 1 (CRN, thiết kế theo cặp), K6 Bài 10 (CI của hiệu, Newcombe) · **Sau bài này bạn quyết định được:** trước khi chạy, cần bao nhiêu episode (và bao nhiêu **kịch bản**) để thấy một chênh lệch Δ cho trước; sau khi chạy, chênh lệch quan sát được có đủ căn cứ để nói hay không; và một báo cáo "78% vs 71%, n = 50" có đáng đọc tiếp không.
 
-Bản gốc gọi đây là bài quan trọng nhất Module 4. Giữ nhận định đó: mọi bài sau (verdict, randomization, gap) đều chi tiêu ngân sách episode, và bài này là nơi bạn biết giá của một kết luận.
+Bản gốc gọi đây là bài quan trọng nhất Module 4. Giữ nhận định đó: mọi bài sau đều chi tiêu ngân sách episode, và bài này là nơi bạn biết giá của một kết luận.
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
-Năm 2018, Peter Henderson và cộng sự công bố *Deep Reinforcement Learning that Matters* (AAAI 2018). Một thí nghiệm trong đó đáng nhớ hơn cả bài: họ chạy **cùng một thuật toán, cùng siêu tham số**, trên 10 seed, chia ngẫu nhiên thành hai nhóm 5 seed, và hai đường cong học của "hai nhóm" khác nhau đến mức một kiểm định thống kê thông thường nói là khác có ý nghĩa [chuẩn]. Không có gì thay đổi ngoài seed. Nhiều bài báo thời đó so sánh thuật toán bằng đúng 5 seed.
+Năm 2018, Peter Henderson và cộng sự công bố *Deep Reinforcement Learning that Matters* (AAAI 2018). Một thí nghiệm trong đó đáng nhớ hơn cả bài: họ chạy **cùng một thuật toán, cùng siêu tham số** trên 10 seed, chia ngẫu nhiên thành hai nhóm 5 seed, và đường cong học của "hai nhóm" khác nhau đến mức kiểm định thông thường gọi là có ý nghĩa [chuẩn]. Không có gì thay đổi ngoài seed. Nhiều bài báo thời đó so thuật toán bằng đúng 5 seed.
 
-Năm 2013, Katherine Button và cộng sự (*Power failure: why small sample size undermines the reliability of neuroscience*, Nature Reviews Neuroscience) ước tính power trung vị của các nghiên cứu khoa học thần kinh họ khảo sát vào khoảng 20% [chuẩn]. Hệ quả không chỉ là "bỏ lỡ hiệu ứng thật". Khi power thấp, **những kết quả có ý nghĩa thống kê được công bố lại phóng đại hiệu ứng** (vì chỉ những lần nhiễu đẩy số lên đủ cao mới vượt ngưỡng — "lời nguyền người thắng"), và tỉ lệ phát hiện là thật giảm xuống. Đánh giá robot ở 20–50 episode mỗi task, mỗi cấu hình, đang ở đúng vùng đó. Kress-Gazit et al. (2024, đã gặp ở Bài 10) ghi nhận phần lớn bài robot learning không báo phân tích thống kê. Bài này cho bạn công cụ để **chứng minh bằng số** một báo cáo có đủ sức nói điều nó nói hay không.
+Năm 2013, Katherine Button và cộng sự (*Power failure*, Nature Reviews Neuroscience) ước tính power trung vị của các nghiên cứu thần kinh học họ khảo sát vào khoảng 20% [chuẩn]. Hệ quả không chỉ là bỏ lỡ hiệu ứng thật: khi power thấp, **những kết quả có ý nghĩa được công bố lại phóng đại hiệu ứng**, vì chỉ những lần nhiễu đẩy số lên đủ cao mới vượt ngưỡng. Đánh giá robot ở 20–50 episode mỗi cấu hình đang ở đúng vùng đó. Bài này cho bạn công cụ để chứng minh bằng số một báo cáo có đủ sức nói điều nó nói hay không.
 
 ### 2. Mô hình tư duy
 
-Một run eval là một **dụng cụ đo**. Nó có ba thông số, giống như một cái multimeter có dải đo và độ phân giải:
+Một run eval là một **dụng cụ đo**, có "dải đo" và "số đọc ± sai số" như một multimeter:
 
 ```
                 ┌───────────────── trước khi chạy ─────────────────┐  ┌── sau khi chạy ──┐
@@ -288,23 +288,22 @@ Một run eval là một **dụng cụ đo**. Nó có ba thông số, giống nh
                 └─────────────────────────┴────────────────────────┘  └──────────────────┘
 ```
 
-Bốn ý bản chất:
+1. **Phương sai của một tỉ lệ là thuộc tính của đại lượng, không của máy.** Mỗi episode là một phép thử Bernoulli; SE của p̂ là `√(p(1−p)/n)` [chuẩn], cực đại ở p = 0.5. Host yên tĩnh, CPU ghim tần số, determinism hoàn hảo — không cái nào giảm được nó. Chỉ ba thứ giảm được: **tăng n**, **ghép cặp** (hai arm trên cùng kịch bản, cùng seed — K6 Bài 1), hoặc **đại lượng nhiều thông tin hơn bit 0/1** (ρ của Bài 11), với cái giá là đổi estimand.
 
-1. **Phương sai của một tỉ lệ là thuộc tính của đại lượng, không của máy.** Một episode là một phép thử Bernoulli; sai số chuẩn của p̂ là `√(p(1−p)/n)` [chuẩn], cực đại ở p = 0.5. Host yên tĩnh, CPU ghim tần số, determinism hoàn hảo — không cái nào giảm được con số này. Chỉ ba thứ giảm được: **tăng n**, **ghép cặp** (hai arm chạy trên cùng kịch bản, cùng seed, để nhiễu chung triệt tiêu — K6 Bài 1), hoặc **dùng đại lượng chứa nhiều thông tin hơn bit 0/1** (ρ của Bài 11), với cái giá là đổi estimand.
-
-2. **So hai cấu hình đắt hơn đo một cấu hình nhiều.** Sai số của hiệu hai tỉ lệ độc lập là `√(SE₀² + SE₁²)`, tức gấp √2 lần một bên. Thêm nữa, muốn *phát hiện* chứ không chỉ *ước lượng* thì phải trả cho cả hai loại sai: α (báo khác khi không khác) và β = 1 − power (bỏ lỡ khi có khác). Công thức cỡ mẫu mỗi nhóm, kiểm định hai tỉ lệ hai phía [chuẩn — dạng Fleiss, không hiệu chỉnh liên tục]:
+2. **So hai cấu hình đắt hơn đo một.** SE của hiệu hai tỉ lệ độc lập gấp √2 lần một bên, và muốn *phát hiện* thì phải trả cho cả α (báo khác khi không khác) lẫn β = 1 − power (bỏ lỡ khi có khác). Cỡ mẫu mỗi nhóm, kiểm định hai phía [chuẩn — dạng Fleiss, không hiệu chỉnh liên tục]:
 
    ```
-   n  =  [ z_{1−α/2} · √(2·p̄(1−p̄))  +  z_{1−β} · √(p₀(1−p₀) + p₁(1−p₁)) ]²  /  (p₁ − p₀)²      p̄ = (p₀+p₁)/2
+   n = [ z_{1−α/2}·√(2p̄(1−p̄)) + z_{1−β}·√(p₀(1−p₀) + p₁(1−p₁)) ]² / (p₁ − p₀)²        p̄ = (p₀+p₁)/2
+   MDE ≈ (z_{1−α/2} + z_{1−β}) · √(2p(1−p)/n)          ← đảo ngược: dải đo ở n cho trước
    ```
 
-   Đảo ngược để ra **MDE** (minimum detectable effect) ở n cho trước: `MDE ≈ (z_{1−α/2} + z_{1−β}) · √(2p(1−p)/n)`. MDE tỉ lệ với 1/√n: muốn MDE giảm một nửa, n phải gấp bốn.
+   MDE ∝ 1/√n: muốn MDE giảm một nửa, n phải gấp bốn.
 
-3. **n là số episode, nhưng thứ bạn muốn khái quát hóa thường là kịch bản.** Nếu bạn chạy 20 kịch bản × 50 episode, và câu hỏi là "policy có tốt hơn *trên phân bố kịch bản* không" (Bài 6), thì các episode cùng kịch bản không độc lập. Cỡ mẫu hiệu dụng là `n_eff = n / DEFF` với `DEFF = 1 + (m − 1)·ICC`, m = số episode mỗi kịch bản, ICC = tương quan nội cụm [chuẩn — design effect, Kish]. Nếu câu hỏi chỉ là "trên **đúng 20 kịch bản này**" thì không cần — nhưng khi đó kết luận cũng chỉ có giá trị trên 20 kịch bản đó. Viết estimand ra trước.
+3. **n là số episode, nhưng thứ bạn muốn khái quát hóa thường là kịch bản.** 20 kịch bản × 50 episode, câu hỏi "tốt hơn *trên phân bố kịch bản*" (Bài 6): episode cùng kịch bản không độc lập. Cỡ mẫu hiệu dụng `n_eff = n / DEFF`, `DEFF = 1 + (m − 1)·ICC`, m = episode mỗi kịch bản, ICC = tương quan nội cụm [chuẩn — design effect, Kish]. Câu hỏi chỉ về **đúng 20 kịch bản này** thì không cần — nhưng kết luận cũng chỉ đúng trên 20 kịch bản đó. Viết estimand ra trước.
 
-4. **Wilson thay Wald khi n nhỏ hoặc p sát 0/1** (bản gốc nói đúng). "CI 95%" kiểu `p̂ ± 1.96·SE` có độ phủ thật thấp hơn 95% đáng kể ở vùng policy tốt (p ≥ 0.9) — đúng vùng bạn quan tâm khi kiểm regression của một policy đã tốt. Mô phỏng dưới đo độ phủ đó.
+4. **Wilson thay Wald khi n nhỏ hoặc p sát 0/1** (bản gốc nói đúng). `p̂ ± 1.96·SE` phủ thấp hơn 95% đáng kể ở vùng p ≥ 0.9 — đúng vùng của một policy đã tốt mà bạn đang canh regression.
 
-Mô phỏng A/A — hai run giống hệt, khác `seed_root` — là phép đo "nhiễu sàn" của dụng cụ:
+Mô phỏng A/A — hai run giống hệt, khác `seed_root` — đo "nhiễu sàn" của dụng cụ:
 
 ```python
 # [đã chạy]  A/A: hai run GIỐNG HỆT, chênh lệch quan sát được bao nhiêu? + Wald vs Wilson.
@@ -336,74 +335,64 @@ for n, pt in [(50, .5), (50, .9), (50, .97), (20, .95)]:
     print(f"{n:3d}  {pt:.2f}  {w[wald].sum():.3f}   {w[wil].sum():.3f}")
 ```
 
-Đừng chạy trước khi commit `prediction.md` (phần 5). Cột cuối là thứ đáng nhìn nhất: tỉ lệ cặp A/A bị z-test gọi là "có ý nghĩa" **không đổi theo n**. Tăng n không làm biến mất báo động giả; nó chỉ làm các báo động giả *nhỏ đi*. Câu này là cầu sang Bài 13.
+Chạy sau khi commit `prediction.md`. Nhìn cột cuối: nó có đổi theo n không? Câu trả lời là cầu sang Bài 13.
 
 ### 3. Cầu nối từ backend
 
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
-| Đo trên host "yên tĩnh" để giảm nhiễu (vốn của bạn) | Chạy eval trên máy cô lập | Host yên tĩnh giảm phương sai của đại lượng **liên tục** (latency). Success rate có phương sai Bernoulli `p(1−p)/n` nội tại, không phụ thuộc máy | Đầu tư cô lập host rồi tin n = 50 là đủ, vì "đã khử nhiễu" |
-| Sample size calculator của A/B test web | Power analysis cho eval | Web có hàng triệu user, mỗi đơn vị gần như miễn phí và độc lập. Ở đây mỗi episode tốn giây–phút CPU, và episode **cụm theo kịch bản** | Dùng công thức iid cho 20 kịch bản × 50 episode, tưởng có n = 1.000 khi n hiệu dụng có thể chỉ vài chục |
-| SLO tính bằng tỉ lệ request tốt (error budget) | Success rate | SLO cũng là tỉ lệ, nhưng n là hàng triệu request/ngày nên sai số mẫu không đáng kể và ai cũng bỏ qua nó. Thói quen bỏ qua mang sang eval là lỗi | So 99.2% với 99.5% ở n = 400 như so hai SLO |
-| Load test chạy "10 phút" | Eval chạy "50 episode" | n được chọn theo **thời gian/thói quen**, không theo câu hỏi. Load test thường đo throughput (nhiều mẫu); eval đo tỉ lệ (ít mẫu) | Ngân sách quyết định kết luận, thay vì câu hỏi quyết định ngân sách |
-| Retry flaky test đến khi xanh | Chạy thêm episode đến khi "có ý nghĩa" | Retry che giấu một phép đo; chạy thêm và nhìn lại là **peeking** (Bài 13). Power analysis là cách cam kết n **trước** | Mọi chênh lệch đều "có ý nghĩa" nếu bạn đủ kiên nhẫn |
+| Đo trên host "yên tĩnh" để giảm nhiễu (vốn của bạn) | Chạy eval trên máy cô lập | Host yên tĩnh giảm phương sai của đại lượng **liên tục** (latency). Success rate có phương sai Bernoulli nội tại, không phụ thuộc máy | Cô lập host kỹ rồi tin n = 50 là đủ "vì đã khử nhiễu" |
+| Sample size calculator của A/B test web | Power analysis cho eval | Web có hàng triệu user gần như miễn phí và độc lập. Ở đây mỗi episode tốn giây–phút CPU, và episode **cụm theo kịch bản** | Dùng công thức iid cho 20 kịch bản × 50 episode, tưởng n = 1.000 khi n hiệu dụng có thể chỉ vài chục |
+| SLO tính bằng tỉ lệ request tốt | Success rate | Cùng là tỉ lệ, nhưng SLO có hàng triệu request/ngày nên sai số mẫu không đáng kể, và thói quen bỏ qua nó mang sang đây là lỗi | So 99.2% với 99.5% ở n = 400 như so hai SLO |
+| Retry flaky test đến khi xanh | Chạy thêm episode đến khi "có ý nghĩa" | Chạy thêm rồi nhìn lại là **peeking** (Bài 13). Power analysis là cam kết n **trước** | Mọi chênh lệch đều "có ý nghĩa" nếu bạn đủ kiên nhẫn |
 
 **Chấm mô hình:**
 
-- *"Tôi đã có host yên tĩnh và determinism, nên nhiễu đã được khử; 50 episode là đủ."* (suy từ vốn "đo trên host yên tĩnh" của bạn) — **SAI** cho success rate. Determinism đảm bảo *cùng seed cho cùng kết quả*; nó không làm 50 seed khác nhau cho cùng tỉ lệ. Phản ví dụ: policy p = 0.6 hoàn toàn tất định, hai run 50 episode với hai `seed_root` khác nhau — chạy mô phỏng A/A ở trên và xem cột p95. Thứ determinism *thật sự* mua cho bạn ở đây là quyền dùng **thiết kế theo cặp** (K6 Bài 1), không phải quyền dùng n nhỏ với thiết kế độc lập.
-- *"Chạy xong rồi tính power từ chênh lệch quan sát; nếu power thấp thì kết quả không có ý nghĩa là do thiếu n."* — **SAI.** "Observed power" (post-hoc power tính từ Δ̂) là một hàm một-một của p-value: p-value lớn luôn cho observed power thấp, nên nó không thêm thông tin nào [chuẩn — Hoenig & Heisey 2001, *The Abuse of Power*]. Power là thuộc tính của **thiết kế**, tính từ Δ bạn *quan tâm* trước khi chạy. Sau khi chạy, đại lượng đúng là CI của Δ̂: nó nói thẳng những Δ nào đã bị loại trừ và Δ nào chưa. Phản ví dụ: Δ̂ = +1 điểm, p = 0.8, observed power ≈ 6% — nhưng nếu CI của Δ là [−2, +4] thì bạn đã biết khá nhiều (không có regression quá 2 điểm), điều mà "power thấp" che mất.
-- *"Cứ chạy 10.000 episode là an toàn."* — **ĐÚNG MỘT PHẦN.** Đúng là CI hẹp. Gãy ở hai chỗ: (a) nếu 10.000 episode trải trên 20 kịch bản và ICC cao, n hiệu dụng cho câu hỏi về phân bố kịch bản gần 20 hơn là 10.000; (b) ở n rất lớn, chênh 0.3 điểm cũng có ý nghĩa thống kê — nhưng có thể vô nghĩa thực tế. Phản ví dụ: hai policy khác nhau 0.4 điểm, p < 0.01 ở n = 50.000; kết luận "B tốt hơn" đúng thống kê và vô dụng cho quyết định. Đây là lý do Bài 13 cần một **biên** δ do bạn chọn, không chỉ một α.
+- *"Tôi có host yên tĩnh và determinism, nhiễu đã được khử; 50 episode là đủ."* (suy từ vốn "đo trên host yên tĩnh" của bạn) — **SAI** cho success rate. Determinism đảm bảo cùng seed cho cùng kết quả; nó không làm 50 seed khác nhau cho cùng tỉ lệ. Phản ví dụ: policy p = 0.6 tất định hoàn toàn, hai run 50 episode với hai `seed_root` — xem cột p95 của mô phỏng A/A. Thứ determinism thật sự mua ở đây là quyền dùng **thiết kế theo cặp**.
+- *"Chạy xong thì tính power từ chênh lệch quan sát; power thấp nghĩa là không có ý nghĩa do thiếu n."* — **SAI.** Observed power tính từ Δ̂ là hàm một-một của p-value, không thêm thông tin [chuẩn — Hoenig & Heisey 2001]. Power là thuộc tính của **thiết kế**, tính từ Δ bạn *quan tâm*, trước khi chạy. Sau khi chạy, đại lượng đúng là CI của Δ̂. Phản ví dụ: Δ̂ = +1 điểm, observed power ~6%, nhưng CI của Δ là [−2, +4] — bạn đã loại trừ được regression quá 2 điểm, điều mà "power thấp" che mất.
+- *"Cứ chạy 10.000 episode là an toàn."* — **ĐÚNG MỘT PHẦN.** CI hẹp thật. Gãy ở hai chỗ: 10.000 episode trên 20 kịch bản với ICC cao có n hiệu dụng gần 20 hơn 10.000 cho câu hỏi về phân bố; và ở n rất lớn, chênh 0.4 điểm cũng "có ý nghĩa" mà vô dụng cho quyết định. Đó là lý do Bài 13 cần một **biên δ** do bạn chọn, không chỉ α.
 
 ### 4. Thuật ngữ
 
 | Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
 |---|---|---|---|
-| 🟢 | Standard error của tỉ lệ | `√(p(1−p)/n)`: độ dao động của p̂ giữa các run | Độ lệch chuẩn của từng episode |
-| 🟢 | Wilson score interval | CI cho tỉ lệ, giữ độ phủ gần danh nghĩa cả khi n nhỏ, p sát 0/1 | Một biến thể "chính xác hơn chút" |
-| 🟢 | Power (1 − β) | Xác suất thiết kế này phát hiện một Δ **cho trước**, nếu Δ đó có thật | Xác suất kết quả là đúng |
+| 🟢 | SE của tỉ lệ | `√(p(1−p)/n)`: độ dao động của p̂ giữa các run | Độ lệch chuẩn của từng episode |
+| 🟢 | Wilson score interval | CI cho tỉ lệ, giữ độ phủ gần danh nghĩa cả khi n nhỏ, p sát 0/1 | Biến thể "chính xác hơn chút" |
+| 🟢 | Power (1 − β) | Xác suất thiết kế phát hiện một Δ **cho trước**, nếu Δ đó có thật | Xác suất kết quả đúng |
 | 🟢 | MDE | Δ nhỏ nhất thiết kế phát hiện được ở α, power, n đã chọn | Chênh lệch quan sát được |
-| 🟢 | A/A test | So hai run giống hệt để đo nhiễu sàn và tỉ lệ báo động giả | Bài test thừa |
-| 🟢 | Thiết kế theo cặp / McNemar | Hai arm trên cùng kịch bản, cùng seed; chỉ cặp bất đồng mang thông tin | Hai run độc lập có cùng seed_root |
+| 🟢 | A/A test | So hai run giống hệt để đo nhiễu sàn và báo động giả | Bài test thừa |
+| 🟢 | Thiết kế theo cặp / McNemar | Hai arm trên cùng kịch bản, cùng seed; chỉ cặp bất đồng mang thông tin | Hai run độc lập cùng seed_root |
 | 🟡 | Design effect, ICC | Hệ số phồng phương sai khi mẫu cụm theo kịch bản | Chuyện riêng của khảo sát xã hội |
-| 🟡 | Post-hoc (observed) power | Power tính từ Δ̂ sau khi chạy — không thêm thông tin ngoài p-value | Cách kiểm "test có đủ mạnh không" |
-| 🟡 | Winner's curse / effect inflation | Kết quả có ý nghĩa ở power thấp phóng đại hiệu ứng thật | Hiếm gặp |
-| 🔴 | Clopper–Pearson, Jeffreys, Agresti–Coull | Các CI khác cho tỉ lệ | Thứ cần chọn giữa ở khóa này — Wilson là đủ |
+| 🟡 | Post-hoc power | Power tính từ Δ̂ — không thêm gì ngoài p-value | Cách kiểm "test có đủ mạnh không" |
+| 🔴 | Clopper–Pearson, Jeffreys, Agresti–Coull | Các CI khác cho tỉ lệ | Thứ phải chọn giữa — Wilson là đủ |
 
 ### 5. Dự đoán
 
 **Đề:**
-1. Không mở bảng nào, ước lượng bằng công thức ở phần 2: số episode **mỗi nhóm** (hai nhóm độc lập, α = 0.05 hai phía, power 0.8) để phát hiện: 0.50→0.70, 0.50→0.60, 0.50→0.55, 0.80→0.90, 0.80→0.85, và 0.90→0.95.
-2. A/A ở p = 0.6: với n = 50, 100, 400, 1.000 mỗi run, dự đoán **p95 của |Δ|** giữa hai run giống hệt, và tỉ lệ cặp A/A mà z-test gọi là "có ý nghĩa".
-3. Độ phủ thật của CI Wald "95%" ở n = 50, p = 0.97. Dưới 95% bao nhiêu?
-4. Trên dự án thật của bạn: lấy một task, đo ψ = tỉ lệ cặp bất đồng giữa hai policy trên cùng kịch bản, cùng seed (dữ liệu của Bài 1 hoặc chạy 200 cặp). Dự đoán số cặp cần cho thiết kế theo cặp so với số episode mỗi nhóm của thiết kế độc lập, ở cùng Δ.
-5. Báo cáo công khai mẫu: "78% vs 71%, n = 50 mỗi bên". Dự đoán CI Wilson mỗi bên, CI của hiệu, và n mỗi bên cần để phát hiện 7 điểm quanh mức đó.
+1. Bằng công thức phần 2 (không tra bảng): n **mỗi nhóm** (độc lập, α = 0.05 hai phía, power 0.8) cho 0.50→0.70, 0.50→0.60, 0.50→0.55, 0.80→0.90, 0.80→0.85, 0.90→0.95.
+2. A/A ở p = 0.6, n = 50/100/400/1.000 mỗi run: p95 của |Δ|, và tỉ lệ cặp A/A mà z-test gọi là "có ý nghĩa".
+3. Độ phủ thật của CI Wald "95%" ở n = 50, p = 0.97.
+4. Trên dự án thật: đo ψ = tỉ lệ cặp bất đồng giữa hai policy trên cùng kịch bản, cùng seed. Dự đoán số cặp cần so với số episode mỗi nhóm của thiết kế độc lập, ở cùng Δ.
+5. Báo cáo mẫu "78% vs 71%, n = 50 mỗi bên": CI Wilson mỗi bên, CI của hiệu, n mỗi bên để phát hiện 7 điểm.
 
-**Tham số cần tra:** `z_{0.975} = 1.960`, `z_{0.80} = 0.842` (`scipy.stats.norm.ppf`); p của task thật lấy từ báo cáo Bài 10; số kịch bản và số episode mỗi kịch bản trong bộ của Bài 6. Hàm sẵn có để đối chiếu, **sau** khi tự viết: `statsmodels.stats.proportion.proportion_confint(method="wilson")`, `statsmodels.stats.power.NormalIndPower` với `proportion_effectsize` (dùng Cohen's h, sẽ lệch vài phần trăm so với công thức Fleiss — biết vì sao) `[tự đo theo phiên bản statsmodels]`.
+**Tham số cần tra:** `z_{0.975} = 1.960`, `z_{0.80} = 0.842` (`scipy.stats.norm.ppf`); p của task thật từ báo cáo Bài 10; số kịch bản và episode mỗi kịch bản trong bộ của Bài 6. Để đối chiếu **sau** khi tự viết: `statsmodels.stats.proportion.proportion_confint(method="wilson")`, `statsmodels.stats.power.NormalIndPower` + `proportion_effectsize` (dùng Cohen's h, sẽ lệch vài phần trăm so với Fleiss) `[tự đo theo phiên bản]`.
 
-**Phương pháp:** câu 1 bằng tay hoặc máy tính bỏ túi, không chạy code. Câu 2: SE của hiệu ở p = 0.6 là `√(2·0.24/n)`; |Δ| xấp xỉ nửa chuẩn. Câu 4: công thức McNemar `n_cặp = [z_{1−α/2}√ψ + z_{1−β}√(ψ − Δ²)]² / Δ²` [chuẩn — Connor 1987].
+**Phương pháp:** câu 1 bằng máy tính bỏ túi. Câu 2: SE của hiệu là `√(2·0.24/n)`, |Δ| xấp xỉ nửa chuẩn. Câu 4: McNemar `n_cặp = [z_{1−α/2}√ψ + z_{1−β}√(ψ − Δ²)]² / Δ²` [chuẩn — Connor 1987].
 
 ```markdown
 # prediction.md — K6 Bài 12
-## 1. n mỗi nhóm (α=0.05 hai phía, power 0.8)
-| p₀→p₁ | n dự đoán |
-|---|---|
-| 0.50→0.70 | |
-| 0.50→0.60 | |
-| 0.50→0.55 | |
-| 0.80→0.90 | |
-| 0.80→0.85 | |
-| 0.90→0.95 | |
-## 2. A/A, p=0.6: p95 |Δ| ở n=50 ___ / 100 ___ / 400 ___ / 1000 ___ ; tỉ lệ "có ý nghĩa" ___ (đổi theo n? ___)
-## 3. Độ phủ Wald, n=50, p=0.97: ___
-## 4. Task ___: ψ đo = ___ ; n_cặp ___ vs n_độc_lập ___
-## 5. 78/71, n=50: CI ___ / ___ ; CI hiệu ___ ; n cần ___
+## 1. n mỗi nhóm: 0.5→0.7 ___ | 0.5→0.6 ___ | 0.5→0.55 ___ | 0.8→0.9 ___ | 0.8→0.85 ___ | 0.9→0.95 ___
+## 2. A/A p=0.6, p95|Δ|: n=50 ___ / 100 ___ / 400 ___ / 1000 ___ ; tỉ lệ "có ý nghĩa" ___ (đổi theo n? ___)
+## 3. Độ phủ Wald n=50 p=0.97: ___
+## 4. Task ___: ψ = ___ ; n_cặp ___ vs n_độc_lập ___
+## 5. 78/71 n=50: CI ___ / ___ ; CI hiệu ___ ; n cần ___
 ```
 
 ### 6. Làm
 
-**Bước 1 — Wilson CI và kiểm định hai tỉ lệ trong harness** (giữ bản gốc). Module `sim_eval/stats.py`: `wilson(k, n)`, `newcombe(k1, n1, k0, n0)` (đã viết ở Bài 10, chuyển vào đây), `ztest_two_prop`, và `mcnemar(n10, n01)` cho thiết kế theo cặp. Test bằng giá trị biết trước: so với `statsmodels` ở 10 cặp (k, n), gồm k = 0 và k = n. Sai số chấp nhận: 1e-9 cho Wilson (cùng công thức đóng).
+**Bước 1 — Wilson CI và kiểm định hai tỉ lệ trong harness** (bản gốc). Module `sim_eval/stats.py`: `wilson`, `newcombe` (chuyển từ Bài 10), `ztest_two_prop`, `mcnemar(n10, n01)`. Test với `statsmodels` ở 10 cặp (k, n), gồm k = 0 và k = n; sai số chấp nhận 1e-9 (cùng công thức đóng).
 
-**Bước 2 — hàm power analysis** (giữ bản gốc, mở rộng): đưa p kỳ vọng và Δ muốn phát hiện, trả về n cần thiết. Ba biến thể, cùng một file:
+**Bước 2 — hàm power analysis** (bản gốc, mở rộng): p kỳ vọng + Δ → n. Hai biến thể (độc lập, theo cặp), kiểm bằng mô phỏng — đây là bước **kiểm dụng cụ đo**:
 
 ```python
 # [đã chạy]  Power analysis: công thức vs mô phỏng; độc lập vs theo cặp (CRN) vs metric liên tục ρ.
@@ -462,37 +451,33 @@ for _ in range(4000):
 print(f"n = 100 : power trên bit thành công {hb/4000:.2f} | trên ρ liên tục {hc/4000:.2f}")
 ```
 
-Đây là bước **kiểm dụng cụ đo**: công thức được tin khi power mô phỏng ở n công thức rơi quanh 0.80. Sai số của chính phép kiểm: 4.000 lần lặp cho SE ≈ `√(0.16/4000)` ≈ 0.006, nên lệch ±0.02 là nhiễu Monte Carlo. Mô hình `chaos` là giả định đồ chơi; trên dự án thật bạn **đo** ψ (bước 2b), không đoán.
+Công thức được tin khi power mô phỏng ở n công thức rơi quanh 0.80. Sai số của phép kiểm: 4.000 lần lặp → SE ≈ 0.006, lệch ±0.02 là nhiễu Monte Carlo. `chaos` là giả định đồ chơi; trên dự án thật bạn **đo** ψ: chạy hai policy (hoặc một policy và một biến thể nhỏ) trên cùng 200 kịch bản, cùng seed dẫn xuất từ (kịch bản, chỉ số), đếm cặp bất đồng. Con số này quyết định Bài 13 dùng thiết kế theo cặp hay độc lập — đúng như `DETERMINISM.md` ở Bài 1 đã hẹn.
 
-**Bước 2b (thêm) — đo ψ thật.** Chạy hai policy (hoặc một policy và một biến thể nhỏ) trên cùng 200 kịch bản, cùng seed episode dẫn xuất từ (kịch bản, chỉ số). Đếm cặp bất đồng. Đưa ψ vào `n_paired`. Đây là con số quyết định Bài 13 dùng thiết kế theo cặp hay độc lập (đúng như `DETERMINISM.md` ở Bài 1 đã hẹn).
-
-**Bước 3 — bắt harness từ chối kết luận khi n không đủ** (giữ bản gốc, sửa cách nói). Thay vì in "62% vs 58%, cải thiện", harness in:
+**Bước 3 — bắt harness từ chối kết luận khi n không đủ** (bản gốc, sửa cách nói). Thay vì "62% vs 58%, cải thiện", harness in:
 
 ```
 candidate  62.0%  [Wilson 95%: 52.2–70.9]  n=100
 baseline   58.0%  [Wilson 95%: 48.2–67.2]  n=100
-Δ = +4.0 điểm  [Newcombe 95%: −9.6, +17.3]   → KHÔNG PHÂN BIỆT ĐƯỢC ở n=100
-dải đo của run này: MDE ≈ 19.8 điểm (α=0.05, power 0.8, p≈0.6 độc lập)
-muốn thấy Δ=10 điểm: cần ≈ 385 episode/nhóm (độc lập) hoặc ≈ ___ cặp (ψ đo = ___)
+Δ = +4.0 điểm  [Newcombe 95%: −9.4, +17.2]   → KHÔNG PHÂN BIỆT ĐƯỢC ở n=100
+dải đo của run này: MDE ≈ __ điểm (α=0.05, power 0.8, p≈0.6, độc lập)
+muốn thấy Δ=10 điểm: cần ≈ __ episode/nhóm (độc lập) hoặc ≈ __ cặp (ψ đo = __)
 ```
 
-(CI Newcombe dòng ba là ví dụ in ra; tự tính lại bằng hàm của bạn.) Hai sửa so với bản gốc: (a) câu "cần n ≈ 385" là **MDE của thiết kế**, tính từ Δ bạn quan tâm, không từ Δ̂ = 4 quan sát được (đó là post-hoc power); (b) luôn in CI của hiệu, vì nó nói Δ nào đã bị loại trừ. Phán quyết ba trạng thái đầy đủ thuộc Bài 13.
+Hai sửa so với bản gốc: câu "cần n ≈ …" là **MDE của thiết kế**, tính từ Δ bạn quan tâm, không từ Δ̂ = 4 (đó là post-hoc power); và luôn in CI của hiệu, vì nó nói Δ nào đã bị loại trừ. Verdict ba trạng thái đầy đủ thuộc Bài 13.
 
-**Bước 4 — thực nghiệm A/A** (giữ bản gốc). Cùng một policy, hai run với `seed_root` khác nhau, n = 50, 100, 400, 1.000. Lưu ý từ K6 Bài 1, bảng Cầu nối: seed episode phải dẫn xuất từ (seed_root, kịch bản, chỉ số) bằng hash, **không** `seed_root + i`, nếu không hai run "độc lập" dùng chung gần hết seed và A/A cho chênh nhỏ giả tạo. Lặp mỗi n ít nhất 5 cặp nếu ngân sách cho phép (n = 1.000 × 2 × 5 = 10.000 episode — dùng runner của Bài 8, policy rẻ). Với n = 1.000 mà chỉ chạy được một cặp, bổ sung bằng mô phỏng binomial ở phần 2.
+**Bước 4 — thực nghiệm A/A** (bản gốc). Cùng một policy, hai `seed_root` khác nhau, n = 50, 100, 400, 1.000. Seed episode phải dẫn xuất bằng hash (seed_root, kịch bản, chỉ số), **không** `seed_root + i` (K6 Bài 1, bảng Cầu nối), nếu không hai run "độc lập" dùng chung gần hết seed. Lặp mỗi n ≥ 5 cặp nếu ngân sách cho phép (runner Bài 8, policy rẻ); thiếu thì bổ sung bằng mô phỏng binomial ở phần 2.
 
-**Bước 5 — vẽ** (giữ bản gốc): |Δ| giữa hai run giống hệt theo n, trục log, chồng lên dải lý thuyết `1.96·√(2p(1−p)/n)`. Nếu điểm thật nằm **ngoài** dải nhiều hơn khoảng 1/20 số lần, episode của bạn không độc lập như bạn tưởng (cụm theo kịch bản, seed trùng) — đó là phát hiện, ghi vào `notes/12-aa.md`.
+**Bước 5 — vẽ** (bản gốc): |Δ| A/A theo n, trục log, chồng lên dải `1.96·√(2p(1−p)/n)`. Điểm thật nằm ngoài dải nhiều hơn ~1/20 số lần nghĩa là episode không độc lập như bạn tưởng (cụm theo kịch bản, seed trùng) — ghi vào `notes/12-aa.md`. Sinh kèm **bảng MDE** theo (p, n) cho ngân sách thật: n = 50/100/200/400/1.000 × p = 0.5/0.8/0.9/0.95 — đầu vào của Gate K6 mục 3.
 
-**Bước 6 (thêm) — design effect trên bộ kịch bản thật.** Với bộ random 100 kịch bản của Bài 6, chạy m = 10 episode mỗi kịch bản. Ước lượng ICC bằng ANOVA một chiều trên kết quả 0/1 (hoặc bằng bootstrap theo kịch bản: so CI bootstrap theo episode với CI bootstrap theo cụm kịch bản). Ghi vào `EVAL.md`: với câu hỏi "trên phân bố kịch bản", nên chạy nhiều kịch bản ít episode hay ít kịch bản nhiều episode.
-
-**Bước 7 (thêm) — bảng tra cho README.** Sinh tự động bảng MDE theo (p, n) cho ngân sách thật của bạn: n = 50/100/200/400/1.000; p = 0.5/0.8/0.9/0.95. Bảng này là đầu vào của Gate K6 mục 3 ("ngưỡng phát hiện tối thiểu nêu bằng số").
+**Bước 6 (thêm) — design effect trên bộ kịch bản thật.** Bộ random 100 kịch bản của Bài 6, m = 10 episode mỗi kịch bản. So CI bootstrap theo episode với CI bootstrap theo cụm kịch bản; tỉ số bình phương độ rộng ≈ DEFF. Ghi vào `EVAL.md`: với câu hỏi về phân bố, chạy nhiều kịch bản ít episode hay ngược lại.
 
 ### 7. Số phải ra
 
 <details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
 
-**Câu 1 — n mỗi nhóm** (công thức Fleiss không hiệu chỉnh liên tục; bản gốc làm tròn hơi khác):
+**Câu 1** (Fleiss, không hiệu chỉnh liên tục):
 
-| p₀→p₁ | Chênh | n mỗi nhóm (bản gốc) | n tính lại |
+| p₀→p₁ | Chênh | Bản gốc | Tính lại |
 |---|---|---|---|
 | 0.50→0.70 | 20 điểm | ~90 | 93 |
 | 0.50→0.60 | 10 điểm | ~385 | 387 |
@@ -501,49 +486,35 @@ muốn thấy Δ=10 điểm: cần ≈ 385 episode/nhóm (độc lập) hoặc �
 | 0.80→0.85 | 5 điểm | ~903 | 905 |
 | 0.90→0.95 | 5 điểm | — | 434 |
 
-Dùng Cohen's h (`statsmodels`) cho số lệch vài phần trăm vì h là phép biến đổi arcsin, không cùng xấp xỉ. Lệch dưới ~5% là bình thường. **Kết luận thực tế của bản gốc giữ nguyên:** phát hiện 5 điểm quanh p = 0.5 cần khoảng 1.500 episode mỗi nhóm; Module 3 tồn tại để trả khoản này.
+Cohen's h (`statsmodels`) lệch vài phần trăm; dưới ~5% là bình thường. Kết luận của bản gốc giữ nguyên: phát hiện 5 điểm quanh p = 0.5 cần ~1.500 episode mỗi nhóm, và Module 3 tồn tại để trả khoản này.
 
-**Câu 2 — A/A ở p = 0.6** (mô phỏng phần 2, seed 0, 20.000 cặp; số của bạn lệch ±0.3 điểm):
+**Câu 2 — A/A ở p = 0.6** (seed 0, 20.000 cặp; số của bạn lệch ±0.3 điểm):
 
-| n mỗi run | |Δ| trung vị | |Δ| p95 | P(|Δ| ≥ 10 điểm) | Tỉ lệ "có ý nghĩa" |
+| n mỗi run | |Δ| trung vị | |Δ| p95 | P(|Δ| ≥ 10 điểm) | "Có ý nghĩa" |
 |---|---|---|---|---|
 | 50 | 6.0 | 20.0 | 0.28 | ≈ 0.05 |
 | 100 | 5.0 | 14.0 | 0.13 | ≈ 0.05 |
 | 400 | 2.3 | 6.8 | 0.004 | ≈ 0.05 |
 | 1.000 | 1.5 | 4.3 | ≈ 0 | ≈ 0.05 |
 
-Sửa con số bản gốc: bản gốc nói "n = 50, chênh có thể tới 10–15 điểm". Thực tế p95 là ~20 điểm, và hơn một phần tư cặp A/A ở n = 50 lệch ≥ 10 điểm. Tỉ lệ "có ý nghĩa" ≈ α ở **mọi** n: đó là định nghĩa của α, không phải lỗi.
+Bản gốc nói "n = 50, chênh có thể tới 10–15 điểm" — thấp hơn thực tế: p95 ~20 điểm, hơn một phần tư cặp lệch ≥ 10 điểm. Tỉ lệ "có ý nghĩa" ≈ α ở **mọi** n: đó là định nghĩa của α. Tăng n không làm biến mất báo động giả, chỉ làm chúng nhỏ đi — Bài 13 bắt đầu từ đây.
 
-**Câu 3 — độ phủ:**
+**Câu 3:** Wald 0.781, Wilson 0.937 ở n = 50, p = 0.97 ("CI 95%" kiểu Wald thực chất là CI ~78%). Ở p = 0.9: 0.879 vs 0.970; n = 20, p = 0.95: 0.639 vs 0.925. Độ phủ của mọi CI cho tỉ lệ rời rạc đều răng cưa theo n, p — bình thường.
 
-| n | p | Wald | Wilson |
-|---|---|---|---|
-| 50 | 0.50 | 0.935 | 0.935 |
-| 50 | 0.90 | 0.879 | 0.970 |
-| 50 | 0.97 | 0.781 | 0.937 |
-| 20 | 0.95 | 0.639 | 0.925 |
+**Mô phỏng bước 2:** độc lập n = 388 → power ≈ 0.80. Theo cặp (`chaos` 0.5): ψ ≈ 0.23, n ≈ 178 cặp → power ≈ 0.81. Ở n = 100: độc lập ≈ 0.31, theo cặp ≈ 0.57. ρ liên tục ≈ 0.43 vs bit thành công ≈ 0.30 (nhị phân hóa ở trung vị mất khoảng 1/3 hiệu suất với phân bố chuẩn [chuẩn — Cohen 1983]). Ghép cặp mua nhiều hơn đổi metric, và không đổi estimand.
 
-Ở p = 0.97, "CI 95%" kiểu Wald thật ra là CI ~78%. Wilson dao động quanh 95% (độ phủ của mọi CI cho tỉ lệ rời rạc đều răng cưa theo n, p — bình thường).
+**Câu 4:** không có số chung. ψ nhỏ → theo cặp rẻ hơn nhiều lần; ψ tiến tới `p₀(1−p₁) + p₁(1−p₀)` → lợi ích chỉ còn phần chặn độ khó kịch bản.
 
-**Mô phỏng power (bước 2):** độc lập, n = 388/nhóm → power mô phỏng ≈ 0.80. Theo cặp với `chaos` = 0.5: ψ ≈ 0.23, n ≈ 178 cặp → power ≈ 0.81. Ở n = 100: độc lập ≈ 0.31, theo cặp ≈ 0.57. Metric liên tục ρ: ≈ 0.43 so với ≈ 0.30 của bit thành công ở n = 100 (nhị phân hóa ở trung vị mất khoảng 1/3 hiệu suất thống kê với phân bố chuẩn [chuẩn — Cohen 1983, *The cost of dichotomization*]). Đọc: ghép cặp mua nhiều hơn đổi metric, và không đổi estimand.
+**Câu 5:** 39/50 → Wilson [64.8, 87.2]. 71% của 50 là 35.5 — không phải số nguyên, nên con số đã làm tròn; 35/50 → [56.2, 80.9], 36/50 → [58.3, 82.5]. Tỉ lệ không khớp k/n nguyên là dấu hiệu đầu tiên để hỏi lại n. CI Newcombe của hiệu khoảng [−10, +23] điểm. n mỗi bên để phát hiện 7 điểm (0.71→0.78): **≈ 610**, không phải ~700 như bản gốc và Gemini.
 
-**Câu 4 — dự án thật:** không có số chung. ψ nhỏ (đổi policy ít làm phân kỳ quỹ đạo) → theo cặp rẻ hơn nhiều lần; ψ tiến tới `p₀(1−p₁) + p₁(1−p₀)` (mức của hai run độc lập trên cùng kịch bản) → lợi ích chỉ còn phần đến từ chặn độ khó kịch bản.
-
-**Câu 5 — 78% vs 71%, n = 50** (tự kiểm tra của bản gốc, có sửa):
-- Wilson: 39/50 → [64.8, 87.2]; 35.5/50 không phải số nguyên — 71% của 50 là 35.5, nên con số báo cáo đã làm tròn; với 35/50 → [56.2, 80.9], với 36/50 → [58.3, 82.5]. Một báo cáo có tỉ lệ không khớp với k/n nguyên là dấu hiệu đầu tiên để hỏi lại n.
-- CI của hiệu chứa 0 rộng rãi (khoảng ±17 điểm).
-- n mỗi bên để phát hiện 7 điểm (0.71→0.78): **≈ 610**, không phải ~700 như bản gốc và Gemini.
-
-**Bước 6:** ICC thật phụ thuộc bộ kịch bản. Thang tham khảo [ước lượng]: m = 50 episode mỗi kịch bản, ICC = 0.05 → DEFF ≈ 3.5; ICC = 0.2 → DEFF ≈ 11, tức 20 × 50 = 1.000 episode có giá trị như ~90 episode độc lập cho câu hỏi về phân bố kịch bản. Hệ quả thường gặp: nhiều kịch bản, ít episode mỗi kịch bản (m = 1–5) hiệu quả hơn.
+**Bước 6** [ước lượng]: m = 50, ICC 0.05 → DEFF ≈ 3.5; ICC 0.2 → DEFF ≈ 11, tức 20 × 50 = 1.000 episode có giá trị như ~90 episode độc lập cho câu hỏi về phân bố. Thường thì nhiều kịch bản, m = 1–5, hiệu quả hơn.
 
 | Kiểm tra (bản gốc) | Kết quả đúng |
 |---|---|
-| Hai run cùng policy, n = 50 | Chênh lệch thường 5–10 điểm, p95 ~20 điểm, dù không có khác biệt thật |
+| Hai run cùng policy, n = 50 | Thường lệch 5–10 điểm, p95 ~20 điểm, dù không có khác biệt thật |
 | Hai run cùng policy, n = 1.000 | Thu về vài điểm (p95 ~4) |
 | Power analysis vs bảng | Khớp trong vài phần trăm |
-| Harness gặp n không đủ | **Từ chối kết luận**, in CI của hiệu và MDE, không im lặng báo cáo |
-
-Bước 4 sẽ thay đổi cách bạn đọc mọi báo cáo robot từ nay về sau (bản gốc).
+| Harness gặp n không đủ | **Từ chối kết luận**, in CI của hiệu và MDE |
 
 </details>
 
@@ -551,68 +522,63 @@ Bước 4 sẽ thay đổi cách bạn đọc mọi báo cáo robot từ nay v�
 
 | Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
 |---|---|---|---|
-| Hai run A/A cho kết quả giống hệt hoặc gần như giống | Seed episode dẫn xuất bằng `seed_root + i`, hai root gần nhau dùng chung seed; hoặc cache kết quả theo kịch bản | So danh sách seed episode của hai run (giao nhau bao nhiêu) | Dẫn xuất seed bằng hash (seed_root, scenario_hash, i) — K6 Bài 6 |
-| A/A lệch ngoài dải lý thuyết nhiều hơn ~5% số lần | Episode cụm theo kịch bản (ICC > 0); hoặc thay đổi môi trường giữa hai run (image, tần số CPU) | Bootstrap theo cụm kịch bản; so provenance hai run | Dùng CI theo cụm; khóa môi trường; chạy hai run xen kẽ thay vì nối tiếp |
-| `n_indep` lệch bảng > 10% | Nhầm một phía/hai phía, nhầm z_{0.8} với z_{0.9}, dùng p₁ thay p̄ trong số hạng α | In từng số hạng | Đối chiếu với `statsmodels` và với mô phỏng Monte Carlo |
-| Power mô phỏng ở n công thức xa 0.80 | Mô phỏng không giữ tỉ lệ biên đúng p₀, p₁ (khi thêm độ khó kịch bản, tỉ lệ biên đổi) | In `y0.mean()`, `y1.mean()` trên mẫu lớn | Hiệu chỉnh tham số như `brentq` trong code |
-| Hàm cỡ mẫu trả vô cực/lỗi | Δ = 0, hoặc p₁ ∉ (0, 1), hoặc ψ < Δ² trong `n_paired` (không thể: mỗi cặp bất đồng tối đa đóng góp 1) | Validate đầu vào | Từ chối đầu vào ngoài miền, báo lý do (giữ ý của Gemini) |
-| Thiết kế theo cặp không có lợi (ψ cao) | Đổi policy làm quỹ đạo phân kỳ ngay bước đầu (tiếp xúc hỗn loạn, Bài 3), hoặc seed không thật sự ghép | Đo ψ trên A/A theo cặp: phải gần 0 nếu determinism đúng | Nếu A/A theo cặp ψ ≈ 0 mà A/B ψ cao, đó là vật lý; chấp nhận, dùng thiết kế độc lập + chặn theo kịch bản |
+| Hai run A/A giống hệt hoặc gần như giống | Seed episode `seed_root + i`, hai root gần nhau dùng chung seed; hoặc cache kết quả theo kịch bản | Giao của hai danh sách seed | Dẫn xuất seed bằng hash (K6 Bài 6) |
+| A/A lệch ngoài dải lý thuyết > ~5% số lần | Episode cụm theo kịch bản; hoặc môi trường đổi giữa hai run (image, tần số CPU) | Bootstrap theo cụm; so provenance | CI theo cụm; khóa môi trường; chạy hai run xen kẽ |
+| `n_indep` lệch bảng > 10% | Nhầm một/hai phía, nhầm z_{0.8} với z_{0.9}, dùng p₁ thay p̄ | In từng số hạng | Đối chiếu `statsmodels` và mô phỏng |
+| Power mô phỏng ở n công thức xa 0.80 | Mô phỏng không giữ tỉ lệ biên đúng p₀, p₁ | In `y0.mean()`, `y1.mean()` trên mẫu lớn | Hiệu chỉnh như `brentq` trong code |
+| Hàm cỡ mẫu trả vô cực/lỗi | Δ = 0, p₁ ∉ (0, 1), hoặc ψ < Δ² | Validate đầu vào | Từ chối đầu vào ngoài miền, báo lý do |
+| Ghép cặp không có lợi (ψ cao) | Đổi policy làm quỹ đạo phân kỳ ngay (tiếp xúc hỗn loạn, Bài 3), hoặc seed không thật sự ghép | ψ của A/A theo cặp phải ≈ 0 | A/A ψ ≈ 0 mà A/B ψ cao là vật lý: dùng thiết kế độc lập + chặn theo kịch bản |
 
 ### 9. Câu hỏi ngược
 
-1. **[Nếu…thì]** Nếu bạn chỉ đủ ngân sách cho n = 200 mỗi arm, và policy đang ở p ≈ 0.9, bạn có nên đặt câu hỏi "có cải thiện không" hay một câu hỏi khác?
-   <details><summary>Hướng nghĩ</summary>Tính MDE ở n = 200, p = 0.9. Nếu MDE lớn hơn mọi cải thiện hợp lý, câu "có cải thiện không" là câu hỏi không trả lời được ở ngân sách này. Câu hỏi khác có thể trả lời: "có regression lớn hơn X không" (một phía, Bài 13), hoặc chuyển sang thiết kế theo cặp, hoặc tập trung ngân sách vào task/khu vực kịch bản nơi policy còn yếu (p gần 0.5 hơn thì phát hiện cải thiện tuyệt đối khó hơn, nhưng cải thiện lớn hơn).</details>
-2. **[Quy mô]** 50 task, 4 cấu hình candidate mỗi tuần, MDE 5 điểm cho mỗi task. Tính tổng số episode mỗi tuần. Ở thang đó, thứ gì gãy trước: compute, lưu trữ trajectory (Bài 9), hay chính câu hỏi?
-   <details><summary>Hướng nghĩ</summary>~1.500 × 2 × 50 × 4 ≈ 600.000 episode/tuần theo thiết kế độc lập. Bội so sánh (Bài 13) còn làm n mỗi task tăng. Lối ra: ghép cặp, metric phụ liên tục để sàng lọc, tầng hóa (PR chạy MDE thô, nightly MDE tinh), và hỏi lại xem có thật cần MDE 5 điểm cho cả 50 task không. Lưu trữ: tầng summary của Bài 9 tăng tuyến tính và rẻ; trajectory phải lấy mẫu.</details>
-3. **[Failure mode]** Một tuần, mọi A/B của bạn đều cho Δ âm nhỏ, không cái nào có ý nghĩa, và bạn không đổi gì trong policy. Kể hai cơ chế có thể gây ra điều này mà power analysis không bắt được.
-   <details><summary>Hướng nghĩ</summary>Baseline được chạy một lần và "may" (cao hơn p thật) — mọi candidate so với một baseline may đều trông tệ hơn (Bài 13 xử lý). Hoặc môi trường trôi giữa lúc chạy baseline và candidate (image rebuild, tần số CPU, phiên bản MuJoCo) — Δ là thay đổi của môi trường. Power analysis giả định hai mẫu cùng điều kiện; nó không kiểm giả định đó, A/A định kỳ thì kiểm.</details>
-4. **[Vì sao không]** Vì sao không dùng ρ (robustness liên tục của Bài 11) làm metric chính để có power cao hơn, khi mô phỏng cho thấy nó mạnh hơn bit thành công?
-   <details><summary>Hướng nghĩ</summary>Power cao hơn cho một estimand khác. Trung bình ρ có thể tăng khi tỉ lệ thành công giảm (episode dư dả bù episode hụt). Dùng ρ cho sàng lọc nhanh hoặc làm covariate giảm phương sai (kiểu CUPED ở A/B web) — giữ success rate là endpoint chính. So với lâm sàng: endpoint chính khai báo trước, endpoint phụ không thay được nó.</details>
-5. **[Liên ngành]** Thử nghiệm thuốc giai đoạn III thường tuyển hàng trăm đến hàng nghìn bệnh nhân, và cỡ mẫu được khai báo trong protocol trước khi tuyển người đầu tiên. Vì sao cơ quan quản lý bắt khai báo trước, mà không cho phép "tuyển đến khi có ý nghĩa"?
-   <details><summary>Hướng nghĩ</summary>Tuyển đến khi có ý nghĩa là peeking: xác suất có ý nghĩa giả tiến tới 1 khi bạn kiên nhẫn đủ lâu. Thiết kế tuần tự (interim analysis có ngân sách α) là cách hợp lệ để dừng sớm — Bài 13. `prediction.md` + n cam kết trước là bản thu nhỏ của protocol.</details>
-6. **[Phản biện]** "Phần lớn kết quả eval robot công bố không đủ power" (bản gốc). Kể một trường hợp n = 20 episode là đủ để kết luận mạnh.
-   <details><summary>Hướng nghĩ</summary>Khi hiệu ứng rất lớn: 0/20 vs 18/20 có ý nghĩa rõ ràng. Hoặc khi câu hỏi là tồn tại ("policy có *bao giờ* làm được không"), hoặc khi đối tượng là một ca thất bại tất định tái hiện được (bug). Power thấp là vấn đề với chênh **nhỏ**, và chênh nhỏ là thứ phần lớn bài báo tuyên bố. Đánh giá theo MDE, không theo n tuyệt đối.</details>
+1. **[Nếu…thì]** Ngân sách chỉ đủ n = 200 mỗi arm, policy đang ở p ≈ 0.9. Bạn nên hỏi "có cải thiện không" hay một câu khác?
+   <details><summary>Hướng nghĩ</summary>Tính MDE ở n = 200, p = 0.9. Nếu MDE lớn hơn mọi cải thiện hợp lý, câu hỏi đó không trả lời được ở ngân sách này. Câu trả lời được: "có regression lớn hơn X không" (một phía, Bài 13), hoặc chuyển sang ghép cặp, hoặc dồn ngân sách vào vùng kịch bản policy còn yếu.</details>
+2. **[Quy mô]** 50 task, 4 candidate mỗi tuần, MDE 5 điểm mỗi task. Bao nhiêu episode mỗi tuần? Thứ gì gãy trước: compute, lưu trữ (Bài 9), hay chính câu hỏi?
+   <details><summary>Hướng nghĩ</summary>~1.500 × 2 × 50 × 4 ≈ 600.000 episode/tuần theo thiết kế độc lập, chưa tính bội so sánh. Lối ra: ghép cặp, sàng lọc bằng metric liên tục, tầng hóa (PR MDE thô, nightly MDE tinh), và hỏi lại có thật cần MDE 5 điểm cho cả 50 task không.</details>
+3. **[Failure mode]** Một tuần, mọi A/B đều cho Δ âm nhỏ, không cái nào có ý nghĩa, và bạn không đổi gì trong policy. Kể hai cơ chế power analysis không bắt được.
+   <details><summary>Hướng nghĩ</summary>Baseline chạy một lần và "may" — mọi candidate so với nó đều trông tệ hơn (Bài 13). Hoặc môi trường trôi giữa lúc chạy baseline và candidate. Power analysis giả định hai mẫu cùng điều kiện; A/A định kỳ mới kiểm giả định đó.</details>
+4. **[Vì sao không]** Vì sao không dùng ρ làm metric chính khi nó cho power cao hơn?
+   <details><summary>Hướng nghĩ</summary>Power cao hơn cho một estimand khác: trung bình ρ có thể tăng khi tỉ lệ thành công giảm. Dùng ρ để sàng lọc hoặc làm covariate giảm phương sai (kiểu CUPED ở A/B web); success rate vẫn là endpoint chính.</details>
+5. **[Phản biện]** "Phần lớn kết quả eval robot công bố không đủ power" (bản gốc). Kể một trường hợp n = 20 là đủ để kết luận mạnh.
+   <details><summary>Hướng nghĩ</summary>Hiệu ứng rất lớn (0/20 vs 18/20); câu hỏi tồn tại ("có bao giờ làm được không"); một ca thất bại tất định tái hiện được. Power thấp là vấn đề với chênh **nhỏ** — thứ phần lớn bài báo tuyên bố. Đánh giá theo MDE, không theo n tuyệt đối.</details>
 
 ### 10. Liên kết ra ngoài
 
-- **Khủng hoảng tái lập trong tâm lý học và thần kinh học.** Dự án Open Science Collaboration (2015, Science) lặp lại 100 nghiên cứu tâm lý học và thu được tỉ lệ kết quả có ý nghĩa thấp hơn nhiều bản gốc, với hiệu ứng trung bình khoảng một nửa [chuẩn]. Power thấp + chỉ công bố kết quả có ý nghĩa là cơ chế chính. Giống: đánh giá robot ở n nhỏ, chỉ báo cáo cấu hình thắng. Khác: bạn có thể chạy thêm episode với chi phí CPU; nhà tâm lý học phải tuyển người thật.
-- **Kiểm định chất lượng lô sản xuất (acceptance sampling).** Nhà máy không kiểm mọi linh kiện; họ dùng kế hoạch lấy mẫu với hai rủi ro được nêu rõ: *producer's risk* (từ chối lô tốt, ~α) và *consumer's risk* (nhận lô xấu, ~β), ở hai mức chất lượng AQL và LTPD [chuẩn — ANSI/ASQ Z1.4]. Giống: thiết kế n theo hai rủi ro, nói trước. Khác: kiểm lô so một lô với một ngưỡng cố định, còn bạn so hai lô đều có sai số — đó là lý do √2.
-- **Thiên văn: thời gian phơi sáng.** Để phát hiện một nguồn sáng mờ với tỉ số tín hiệu/nhiễu cho trước, nhà thiên văn tính thời gian phơi sáng trước khi xin giờ kính; nhiễu photon là Poisson, SNR tăng như √t [chuẩn]. Giống: sai số ∝ 1/√n, "giờ kính" là ngân sách episode. Khác: họ có thể tách nhiễu nền bằng mô hình vật lý của detector; với policy, phương sai Bernoulli không có mô hình nào khử được.
+- **Khủng hoảng tái lập trong tâm lý học.** Open Science Collaboration (2015, Science) lặp lại 100 nghiên cứu và thu được tỉ lệ kết quả có ý nghĩa thấp hơn nhiều bản gốc, hiệu ứng trung bình khoảng một nửa [chuẩn]. Power thấp + chỉ công bố kết quả có ý nghĩa là cơ chế chính. Giống: eval robot n nhỏ, chỉ báo cấu hình thắng. Khác: bạn chạy thêm episode bằng CPU; họ phải tuyển người thật.
+- **Acceptance sampling trong sản xuất.** Kế hoạch lấy mẫu nêu rõ hai rủi ro: *producer's risk* (từ chối lô tốt, ~α) và *consumer's risk* (nhận lô xấu, ~β) ở hai mức chất lượng [chuẩn — ANSI/ASQ Z1.4]. Giống: thiết kế n theo hai rủi ro, nói trước. Khác: họ so một lô với ngưỡng cố định; bạn so hai lô đều có sai số — đó là lý do √2.
 
 ### 11. Độ tin cậy và sửa lỗi
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| SE tỉ lệ `√(p(1−p)/n)`, công thức cỡ mẫu hai tỉ lệ | [chuẩn] | Fleiss, Levin, Paik, *Statistical Methods for Rates and Proportions*; đối chiếu bằng mô phỏng ở bước 2 |
-| Bảng n của bản gốc | [chuẩn] | Tính lại: khớp trong ~2% (0.80→0.90: 199 vs 196) |
-| Wald phủ ~78% ở n = 50, p = 0.97; Wilson ~94% | [chuẩn] | Tính chính xác bằng phân bố nhị thức trong code phần 2; Brown, Cai, DasGupta (2001) |
-| McNemar sample size `[z√ψ + z_β√(ψ−Δ²)]²/Δ²` | [chuẩn] | Connor (1987), Biometrics; kiểm bằng mô phỏng (≈0.81 ở n công thức) |
+| Công thức cỡ mẫu hai tỉ lệ; bảng n bản gốc khớp trong ~2% | [chuẩn] | Fleiss, Levin, Paik, *Statistical Methods for Rates and Proportions*; mô phỏng bước 2 |
+| Wald phủ ~78% ở n = 50, p = 0.97 | [chuẩn] | Tính chính xác trong code phần 2; Brown, Cai, DasGupta (2001) |
+| Cỡ mẫu McNemar | [chuẩn] | Connor (1987), Biometrics; mô phỏng ≈ 0.81 |
 | Design effect `1 + (m−1)ICC` | [chuẩn] | Kish (1965), *Survey Sampling* |
-| Henderson et al. 2018: chia 10 seed thành hai nhóm 5 cho khác biệt có ý nghĩa | [chuẩn] | *Deep Reinforcement Learning that Matters*, AAAI 2018, phần về random seeds |
-| Button et al. 2013: power trung vị ~20% | [chuẩn] | Nature Reviews Neuroscience 14; con số trung vị là ~21% trong bài, đọc lại nếu trích |
-| Observed power là hàm của p-value | [chuẩn] | Hoenig & Heisey (2001), *The American Statistician* |
-| Nhị phân hóa ở trung vị mất ~1/3 hiệu suất (chuẩn) | [chuẩn] | Cohen (1983); mô phỏng: 0.30 vs 0.43 ở n = 100 |
-| `statsmodels` có `proportion_confint(method="wilson")`, `NormalIndPower` | [tự đo] | Kiểm theo bản cài |
+| Henderson et al. 2018, hai nhóm 5 seed khác có ý nghĩa | [chuẩn] | AAAI 2018, phần random seeds |
+| Button et al. 2013, power trung vị ~20% | [chuẩn] | Nature Reviews Neuroscience 14 (trong bài ~21%) |
+| Observed power là hàm của p-value | [chuẩn] | Hoenig & Heisey (2001), The American Statistician |
+| API `statsmodels` | [tự đo] | Kiểm theo bản cài |
 
 **Đã sửa so với bản gốc/Gemini:**
-- **Bản gốc, Số phải ra:** "n = 50, chênh giữa hai run giống hệt có thể tới 10–15 điểm" → thấp hơn thực tế: p95 ≈ 20 điểm ở p = 0.6, ~28% cặp lệch ≥ 10 điểm.
-- **Bản gốc + Gemini, Tự kiểm tra câu 1:** "cần khoảng 700 episode mỗi bên để phát hiện 7 điểm quanh 71–78%" → ≈ 610. Lập luận "hai khoảng chồng lên nhau rất nhiều" → thay bằng CI của hiệu (chồng nhau không phải quy tắc quyết định — K6 Bài 10).
-- **Gemini, Nếu ra khác:** "buộc toàn bộ phán quyết dựa trên p-value < 0.05" → p ≥ 0.05 không có nghĩa "không khác"; bước 3 in CI của hiệu và MDE, Bài 13 thêm biên δ.
-- **Gemini, Câu hỏi cốt lõi:** "về mặt thống kê, con số đó (62 vs 58) hoàn toàn vô giá trị" → quá tay: nó là một ước lượng có CI rộng, vẫn loại trừ được các chênh lớn. Thứ vô giá trị là **kết luận "cải thiện"**, không phải số đo.
-- **Gemini, Bước 3:** "nếu n chưa đạt power thì từ chối" kết hợp với Δ quan sát → dễ trượt thành post-hoc power; sửa: MDE tính từ Δ quan tâm, khai báo trước.
-- **Thêm:** design effect theo kịch bản, thiết kế theo cặp (đo ψ), Wald vs Wilson bằng số, ρ như metric phụ.
+- **Bản gốc, Số phải ra:** "n = 50, hai run giống hệt chênh tới 10–15 điểm" → thực tế p95 ≈ 20 điểm ở p = 0.6.
+- **Bản gốc + Gemini, Tự kiểm tra:** "cần ~700 episode mỗi bên cho 7 điểm" → ≈ 610; lập luận "hai CI chồng nhau" → thay bằng CI của hiệu (K6 Bài 10).
+- **Gemini, Nếu ra khác:** "phán quyết dựa trên p-value < 0.05" → p ≥ 0.05 không có nghĩa "không khác"; in CI của hiệu và MDE, Bài 13 thêm biên δ.
+- **Gemini:** "62 vs 58 hoàn toàn vô giá trị về thống kê" → quá tay: số đo có CI rộng vẫn loại trừ được chênh lớn; thứ vô giá trị là kết luận "cải thiện".
+- **Gemini, Bước 3:** từ chối kết luận dựa trên power tính cùng Δ quan sát → trượt thành post-hoc power; sửa: MDE từ Δ quan tâm, khai báo trước.
+- **Thêm:** design effect theo kịch bản, ghép cặp với ψ đo được, Wald vs Wilson bằng số, ρ như metric phụ.
 
 ### 12. Đọc thêm và tự kiểm tra
 
-- **Nguồn gốc:** L. D. Brown, T. T. Cai, A. DasGupta (2001), *Interval Estimation for a Binomial Proportion*, Statistical Science — vì sao Wald tệ, Wilson tốt.
-- **Giải thích:** H. Kress-Gazit et al. (2024), *Robot Learning as an Empirical Science: Best Practices for Policy Evaluation*, arXiv 2409.09491 — phần thống kê; và P. Henderson et al. (2018), *Deep Reinforcement Learning that Matters*.
-- **Đào sâu (tùy chọn):** K. Button et al. (2013), *Power failure*, Nature Reviews Neuroscience.
-- **Tự kiểm tra:** (1) giải thích cho một backend engineer trong 5 câu vì sao host yên tĩnh không giảm được sai số của success rate; (2) vẽ lại bảng ba cột "trước khi chạy / sau khi chạy" ở phần 2 từ trí nhớ; (3) hai câu dưới.
+- **Nguồn gốc:** L. D. Brown, T. T. Cai, A. DasGupta (2001), *Interval Estimation for a Binomial Proportion*, Statistical Science.
+- **Giải thích:** H. Kress-Gazit et al. (2024), *Robot Learning as an Empirical Science: Best Practices for Policy Evaluation*, arXiv 2409.09491 — phần thống kê.
+- **Đào sâu (tùy chọn):** P. Henderson et al. (2018), *Deep Reinforcement Learning that Matters*.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer trong 5 câu vì sao host yên tĩnh không giảm sai số của success rate; (2) vẽ lại bảng "trước khi chạy / sau khi chạy" từ trí nhớ; (3) hai câu dưới.
 
 *Câu 1 (bản gốc): Vì sao phát hiện chênh 10 điểm quanh p = 0.8 cần ít episode hơn quanh p = 0.5?*
-<details><summary>Đáp án</summary>Phương sai Bernoulli p(1−p) cực đại ở 0.5 (0.25) và nhỏ hơn ở 0.8 (0.16), nên SE nhỏ hơn ở cùng n. Lưu ý chiều ngược: quanh p = 0.95, "10 điểm" không còn chỗ để tăng; với policy tốt, câu hỏi thực tế là regression vài điểm, và nó lại đắt.</details>
+<details><summary>Đáp án</summary>p(1−p) cực đại ở 0.5 (0.25), nhỏ hơn ở 0.8 (0.16), nên SE nhỏ hơn ở cùng n. Chiều ngược: quanh p = 0.95 không còn chỗ cho +10 điểm; với policy tốt, câu hỏi thực tế là regression vài điểm, và nó lại đắt.</details>
 
-*Câu 2: Bạn có 1.000 episode ngân sách cho câu hỏi "policy có bền trên phân bố kịch bản không". Chọn 10 kịch bản × 100 episode hay 500 kịch bản × 2 episode? Khi nào lựa chọn kia đúng?*
-<details><summary>Đáp án</summary>Với câu hỏi về phân bố, 500 × 2: DEFF = 1 + (m−1)·ICC nhỏ khi m nhỏ, và 10 kịch bản không đại diện cho phân bố. 10 × 100 đúng khi câu hỏi là về **đúng 10 kịch bản đó** (ví dụ 10 ca regression đã biết, cần ước lượng chính xác tỉ lệ ở từng ca).</details>
+*Câu 2: 1.000 episode cho câu hỏi "policy có bền trên phân bố kịch bản không": 10 kịch bản × 100 hay 500 × 2? Khi nào lựa chọn kia đúng?*
+<details><summary>Đáp án</summary>500 × 2: DEFF nhỏ khi m nhỏ, và 10 kịch bản không đại diện cho phân bố. 10 × 100 đúng khi câu hỏi là về **đúng 10 kịch bản đó** (ví dụ 10 ca regression đã biết).</details>
 
 ---
