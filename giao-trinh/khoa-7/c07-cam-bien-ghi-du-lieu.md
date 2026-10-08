@@ -17,7 +17,6 @@ Sau C6 robot biết nó **nghĩ** mình ở đâu. C7 cho nó hai giác quan đ�
 | Gate chặng 7 | 2 |
 | **Tổng** | **35** |
 
-Bản gốc dành 14h cho Bài 5 (ghi dữ liệu), không có phần gá cảm biến, TF hay timestamp riêng. Phần thêm là phần người mới tự dựng robot phải làm mà K5 (trên bàn) không làm.
 
 ## 0. Bức tranh chặng
 
@@ -74,7 +73,6 @@ Giá `[ước lượng 10/2026]`, kiểm lại ở cửa hàng.
 | **Camera USB** | UVC (không cần driver riêng), **MJPEG** 1280×720 @30 fps, **lấy nét cố định**, FOV ghi rõ, gá ren 1/4" hoặc lỗ vít | MJPEG vừa băng thông USB 2.0 (Bài C7.1); nét cố định để hiệu chuẩn ở C8.2 còn đúng (autofocus đổi tiêu cự) | 300–900k | `v4l2-ctl --list-formats-ext` liệt kê MJPEG 720p30 | Camera global shutter USB (đắt hơn, ít rolling shutter khi rung `[ước lượng]`) |
 | Giá camera | Nhôm hoặc nhựa in dày, bắt **hai** vít vào khung | Một vít = trục xoay; rung làm camera lắc | 50–200k | Lắc tay không thấy dịch | — |
 | Cáp USB ngắn + kẹp | 0,3–0,5 m, có kẹp dây | Cáp dài treo lỏng vướng bánh, lắc đầu nối | 50–100k | — | — |
-| Ổ lưu trên mini PC | Còn trống ≥ 50 GB | Ngân sách dữ liệu (Bài C7.3) | có sẵn | `df -h` | SSD ngoài USB 3 (lưu ý nhiễu 2,4 GHz, Bài C7.1) |
 
 **Tổng C7 `[ước lượng]`:** ~0,6–1,7tr (0 cho IMU nếu dùng lại K5). Object store: MinIO/Garage tự chạy trên laptop như K5 Bài 14 (0đ).
 
@@ -213,7 +211,7 @@ Gá một cảm biến quyết định ba thứ, và mỗi thứ có một cách
 
 ```python
 # [đã chạy] Rung motor 170 Hz lấy mẫu ở ODR 200 Hz: không lọc chống aliasing -> "chuyển động ma" 30 Hz
-import numpy as np, matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
+import numpy as np
 from scipy import signal
 FS_IN, ODR, T = 8000, 200, 10.0                    # mô phỏng "liên tục" 8 kHz; IMU xuất 200 Hz; 10 s
 t = np.arange(0, T, 1 / FS_IN)
@@ -231,9 +229,6 @@ def amp_at(x, f0):                                  # biên độ thành phần 
 for name, x in [("không lọc", raw), ("lọc 50 Hz trước", filt)]:
     print(f"{name:16s} biên độ ở 1 Hz = {amp_at(x, 1):.2f}  ở 30 Hz (ma) = {amp_at(x, 30):.3f} m/s²"
           f"  | std(a − chuyển động thật) = {np.std(x - 0.3*np.sin(2*np.pi*ts)):.3f}")
-plt.plot(ts[:100], raw[:100], label="không lọc"); plt.plot(ts[:100], filt[:100], label="lọc trước")
-plt.plot(ts[:100], 0.3*np.sin(2*np.pi*ts[:100]), "k--", label="thật"); plt.legend(); plt.xlabel("t (s)")
-plt.savefig("c71_alias.png")                       # trong bài: plt.show()
 ```
 
 Ba ý bản chất: (1) sau khi đã lấy mẫu, **không** phần mềm nào phân biệt được 30 Hz ma với 30 Hz thật (→ F5.5); lọc phải xảy ra **trước** bước hạ tần số, tức là trong chip (DLPF/AAF của IMU, nó lấy mẫu nội bộ ở tần số cao hơn ODR) hoặc bằng cơ khí (đế giảm rung). (2) Lọc có giá: trễ pha, nên băng thông lọc là thỏa hiệp với vòng điều khiển/ước lượng dùng IMU. (3) Đế mềm là một bộ lọc cơ khí thông thấp; quá mềm thì nó **cộng hưởng** ở tần số riêng của nó và khuếch đại rung ở đó.
@@ -298,7 +293,6 @@ Accelerometer đo **lực riêng** (specific force), không đo gia tốc: đứ
 | 🟢 | Optical frame | Frame camera theo quy ước ảnh: z trước, x phải, y xuống | `camera_link` (x trước, z lên) |
 | 🟡 | Isochronous / bulk (USB) | Băng thông đặt trước, không gửi lại / phần còn lại, có gửi lại | "USB 480 Mbit/s là của mỗi thiết bị" |
 | 🟡 | Tần số cộng hưởng của đế | Tần số đế giảm rung khuếch đại thay vì giảm | — |
-| 🔴 | Hiệu chuẩn ngoại (extrinsic) camera–IMU bằng tối ưu | Ước lượng chính xác TF camera–IMU từ dữ liệu chuyển động | — |
 
 ### 5. Dự đoán
 
@@ -402,33 +396,24 @@ Hai camera YUYV VGA@30 trên một controller: tổng 36,8 MB/s < 48 MB/s nên *
 | Đỉnh dịch theo tốc độ, tỉ lệ đúng với `f_motor` | Rung motor/hộp số | — | Đế + lọc; kiểm motor có lệch tâm, bánh có đảo |
 | Gyro đứng yên trên robot khác trên bàn | Nhiệt (gần driver/mini PC), ứng suất cơ khi siết vít | Đo bias theo nhiệt độ chip | Gá xa nguồn nhiệt; không siết vít ép module |
 | `ω_z` âm khi quay trái | Trục z chip ngược, TF chưa ghi | Bước 8 | Sửa rpy URDF (hoặc hoán trục firmware, chỉ một nơi) |
-| Ảnh lộn ngược / vật bên trái hiện bên phải | Camera gá ngược; optical frame sai | Bước 8 | Xoay camera, hoặc rpy; KHÔNG lật ảnh trong driver mà không sửa TF |
-| fps thật thấp hơn đặt, CPU driver cao | Giải nén MJPEG trên host rồi nén lại | `top` | Ghi thẳng ảnh nén (`CompressedImage`) không giải nén |
 
 ### 9. Câu hỏi ngược
 
-1. **[Nếu…thì]** Nếu bạn tăng ODR IMU lên 1 kHz và lọc trên host bằng phần mềm, có thay được AAF trong chip không? Nếu có, giá là gì?
-<details><summary>Hướng nghĩ</summary>
-
-Có, nếu 1 kHz đủ cao để mọi rung đáng kể nằm dưới 500 Hz (đo phổ ở bước A mới biết). Giá: 5× băng thông serial và dung lượng, thêm tải CPU, và vẫn alias nếu có thành phần trên 500 Hz. Lọc trong chip miễn phí và ở đúng chỗ, nhưng bạn phải tin cấu hình chip (đọc lại thanh ghi).
-
-</details>
-
-2. **[Quy mô]** 100 robot cùng thiết kế, lắp bởi 3 người khác nhau. Gá IMU lệch vài độ, đế mềm cứng khác nhau. Cái gì trong dataset gãy trước, và bạn phát hiện bằng dữ liệu nào mà không phải đi xem từng con?
+1. **[Quy mô]** 100 robot cùng thiết kế, lắp bởi 3 người khác nhau. Gá IMU lệch vài độ, đế mềm cứng khác nhau. Cái gì trong dataset gãy trước, và bạn phát hiện bằng dữ liệu nào mà không phải đi xem từng con?
 <details><summary>Hướng nghĩ</summary>
 
 TF tĩnh trong URDF là của **thiết kế**, không của **từng con**: lệch gá thành bias trục chéo (gravity rò sang x/y). Phát hiện bằng rule đứng yên (`gravity_up` mở rộng cho x/y) và phổ rung theo `robot_id`. Cần `calibration_id` theo từng robot cho cả TF, không chỉ cho hệ số.
 
 </details>
 
-3. **[Failure mode]** Một vít gá camera lỏng dần sau hai tuần. Dữ liệu nào lộ ra trước khi ai đó nhìn thấy bằng mắt?
+2. **[Failure mode]** Một vít gá camera lỏng dần sau hai tuần. Dữ liệu nào lộ ra trước khi ai đó nhìn thấy bằng mắt?
 <details><summary>Hướng nghĩ</summary>
 
 Ảnh rung khi robot đứng yên mà motor chạy (rung tần số motor trong luồng ảnh); pose marker (C8) có phần dư lớn dần và có hướng; extrinsic hiệu chuẩn ở C8.2 không còn đúng. Một phép kiểm định kỳ: chụp một mục tiêu cố định khi robot ở trạm sạc.
 
 </details>
 
-4. **[Vì sao không]** Vì sao không cắm IMU thẳng vào mini PC qua một adapter USB–I2C, khỏi đi qua ESP32?
+3. **[Vì sao không]** Vì sao không cắm IMU thẳng vào mini PC qua một adapter USB–I2C, khỏi đi qua ESP32?
 <details><summary>Hướng nghĩ</summary>
 
 Được, nhưng mất thứ C7.2 cần: một đồng hồ tất định đóng dấu ngay lúc data-ready. Adapter USB–I2C bị host thăm dò theo lịch USB; thời điểm đọc trên host là thời điểm của lịch, không của mẫu. Và kiến trúc K7 đã quyết mọi tín hiệu phần cứng đi qua ESP32 (mini PC không có GPIO).
@@ -438,7 +423,6 @@ TF tĩnh trong URDF là của **thiết kế**, không của **từng con**: l�
 ### 10. Liên kết ra ngoài
 
 - **Âm thanh số: lọc chống aliasing trước ADC.** Mọi ADC âm thanh có lọc tương tự (hoặc oversampling + lọc số) trước khi hạ xuống 44,1/48 kHz; K3 đã gặp phía phát. Giống hệt nguyên lý. Khác: âm thanh biết trước dải quan tâm (20 Hz–20 kHz), robot phải **đo** dải rung của chính nó.
-- **Máy quay phim: gimbal và giảm rung cơ khí.** Gá camera điện ảnh trên đế treo giảm rung trước khi nói tới ổn định ảnh bằng phần mềm. Cùng thứ tự ưu tiên: chặn ở cơ khí, rồi lọc, cuối cùng mới bù bằng thuật toán.
 
 ### 11. Độ tin cậy và sửa lỗi
 
@@ -553,7 +537,6 @@ print(f"skew ước lượng {a*1e6:.2f} ppm (thật {SKEW*1e6:.0f}); offset th�
 |---|---|---|---|
 | Event time vs processing time (Kafka/Flink, → F3.3) | `t_src` vs `t_rx` | Trong backend, event time do đồng hồ producer gán và **mặc nhiên** coi là cùng trục (NTP). ESP32 không có NTP, gốc là lúc boot, tốc độ lệch ppm: event time **phải được ánh xạ** trước khi so với bất kỳ thứ gì | Ghép IMU với ảnh bằng `t_src` thô: lệch hàng giây (gốc boot), trôi thêm hàng chục ms mỗi giờ |
 | NTP: bốn timestamp, chọn mẫu RTT nhỏ (→ F4.4) | Ping hai chiều host ↔ ESP32 qua USB | Hai đầu cùng một cáp 30 cm, nên RTT nhỏ; nhưng hướng vào/ra của USB có lịch khác nhau, bất đối xứng không đo được bằng chính ping | Báo "sai số đồng bộ 0,02 ms" (độ tản của fit) trong khi bias bất đối xứng lớn hơn nhiều lần |
-| Distributed tracing: span timestamp từ nhiều máy | Ghép luồng nhiều nguồn trên robot | Tracing chấp nhận lệch vài ms vì chỉ cần thứ tự gần đúng; ghép cảm biến cần sai số nhân với vận tốc nhỏ hơn dung sai vật lý | Dùng tiêu chuẩn "vài ms là đủ" của tracing cho gyro 2 rad/s |
 
 **Chấm mô hình:**
 
@@ -572,7 +555,6 @@ print(f"skew ước lượng {a*1e6:.2f} ppm (thật {SKEW*1e6:.0f}); offset th�
 | 🟢 | `boot_id` | Định danh lần boot; monotonic chỉ so được trong cùng `boot_id` | — |
 | 🟡 | Trễ nhóm của bộ lọc | Bộ lọc thông thấp trong IMU làm mẫu "muộn" một lượng cố định | Trễ USB |
 | 🟡 | `sensor_msgs/TimeReference` | Message chuẩn mang một mốc thời gian ngoài (`time_ref`) kèm lúc nhận | Message riêng tự chế |
-| 🔴 | Hardware timestamping qua PTP cho USB | Không có trên USB-serial; PTP chỉ cho Ethernet có PHC (K5 Bài 9) | — |
 
 ### 5. Dự đoán
 
@@ -641,8 +623,6 @@ Skew ước lượng 25,01 ppm; trôi thô ~45 ms sau 30 phút. Sai số còn l�
 |---|---|---|---|
 | Skew ước lượng nhảy giữa các cửa sổ | ESP32 reset (gốc đổi); RTT tối thiểu không đủ nhỏ | `seq` về 0? RTT min theo thời gian | Xử lý reset; cửa sổ dài hơn; ping dày hơn |
 | Skew trôi chậm theo giờ chạy | Nhiệt độ ESP32/thạch anh đổi (→ F4.1) | Ghi nhiệt độ chip cạnh skew | Cửa sổ fit ngắn hơn; ghi skew theo thời gian vào metadata |
-| `t_map` có bước nhảy vài ms mỗi lần cập nhật fit | Cập nhật tham số đột ngột | Vẽ `t_map − t_rx` quanh lúc cập nhật | Chuyển tham số mượt (nội suy), hoặc ghi ánh xạ theo đoạn và ánh xạ lại offline |
-| Tương quan chéo camera–gyro có nhiều đỉnh | Xoay tuần hoàn quá đều | — | Xoay không đều (ngẫu nhiên) |
 | Mất mẫu (`seq` nhảy) chỉ khi tải nặng | Hàng đợi RX host tràn; ESP32 bỏ gói khi TX đầy | Đếm theo tải | Tăng buffer, giảm ODR nếu cần, nhưng **đếm** mất (→ F3.9) |
 
 ### 9. Câu hỏi ngược
@@ -668,17 +648,9 @@ Dấu skew sai làm sai số lớn dần tuyến tính: 2 × skew × thời gian
 
 </details>
 
-4. **[Liên ngành]** Thiên văn vô tuyến (VLBI) ghép tín hiệu của các kính thiên văn cách nhau hàng nghìn km. Mỗi trạm ghi dữ liệu kèm đồng hồ maser hydro tại chỗ, rồi ghép **sau** ở trung tâm xử lý. Giống và khác cách bạn làm với ESP32 ở đâu?
-<details><summary>Hướng nghĩ</summary>
-
-Giống: đóng dấu ở nguồn bằng đồng hồ tại chỗ, ghi thô, ánh xạ/ghép offline với mô hình đồng hồ ước lượng sau. Khác: VLBI cần độ ổn định cực cao (maser), robot dùng thạch anh thường và bù bằng ước lượng skew liên tục.
-
-</details>
-
 ### 10. Liên kết ra ngoài
 
 - **Hàng không: flight data recorder.** Dữ liệu từ nhiều hệ con được ghi với khung thời gian của recorder; khi điều tra, nhóm phân tích phải căn lại độ trễ riêng của từng tham số. Giống: ghi thô kèm nguồn thời gian, căn chỉnh sau. Khác: FDR có chuẩn về tần số và trễ cho từng tham số; robot của bạn phải tự đo.
-- **Tài chính: timestamp giao dịch theo quy định.** Các sàn và công ty giao dịch ở châu Âu phải đồng bộ đồng hồ với UTC trong một dung sai quy định và chứng minh được nguồn thời gian (MiFID II RTS 25) `[chuẩn]`. Giống: `clock_source` là bằng chứng bắt buộc, không phải chi tiết. Khác: họ đồng bộ đồng hồ; bạn ánh xạ sau.
 
 ### 11. Độ tin cậy và sửa lỗi
 
@@ -690,7 +662,6 @@ Giống: đóng dấu ở nguồn bằng đồng hồ tại chỗ, ghi thô, án
 | Phân bố trễ USB và tỉ lệ kẹt trong mô phỏng | [ước lượng] | Đo ở bước 4 |
 | `imu_sensor_broadcaster` stamp theo controller manager | [tự đo] | Đọc mã nguồn theo phiên bản |
 | Trễ camera vài chục ms | [ước lượng] | Đo ở bước 5 |
-| MiFID II RTS 25 | [chuẩn] | — |
 
 **Đã sửa so với bản gốc/Gemini:**
 - Bản gốc: "Offset clock ESP32 ↔ mini PC: vài chục ms nếu không sync". Offset thô là tùy ý (gốc boot); con số có nghĩa là **tốc độ trôi** (ppm → ms/giờ). Sửa cách đọc, giữ ý "trôi theo thời gian".
@@ -722,7 +693,6 @@ Một phần. Nếu payload có `seq` và ODR cố định, dựng lại lưới
 
 Bản gốc viết: "Đây là chỗ Khóa 5 vào việc. Không có khái niệm mới, chỉ có tích hợp", và kết thúc bằng một khoảnh khắc: công cụ audit bạn viết ở Khóa 2 để kiểm dataset của người khác giờ tìm ra lỗi trong dữ liệu do chính robot bạn tạo ra. Câu chuyện của bài là câu chuyện đó, và nó chỉ xảy ra nếu bạn **không** sửa dữ liệu bằng tay trước khi chạy tool.
 
-Phía bên kia: ở K2 Bài 9 bạn đã gặp lý do LeRobot đổi định dạng sang v3.0: quá nhiều file nhỏ, khởi tạo chậm, khó streaming. Những người làm dataset robot cộng đồng đã khổ vì quyết định ghi file của **phía robot**. Robot của bạn bây giờ là phía đó.
 
 ### 2. Mô hình tư duy
 
@@ -803,7 +773,6 @@ if __name__ == "__main__":                                            # thử tr
 |---|---|---|---|
 | Sidecar container (log shipper cạnh service) | rosbag2 trong container riêng cạnh `ros2_control` | Log shipper backend chỉ tranh CPU/IO. Ở đây có **đường vật lý** ngược về MCU (serial) và có pin: sidecar tốn CPU là tốn **Wh** | Tin "khác process thì không ảnh hưởng", không đo jitter; hoặc sidecar ăn 20 % pin không ai biết |
 | Log rotation + shipping (Fluent Bit, Vector) có buffer đĩa | Split MCAP + hàng đợi upload trên đĩa robot | Log backend mất vài dòng thì sao; ở đây **một file** có thể là phiên duy nhất của một lỗi hiếm, và mất mạng hàng giờ là bình thường | Xóa file sau khi "đã gửi" (200 OK) thay vì sau khi băm lại khớp |
-| Dead-letter queue | Quarantine cho file FAIL contract | DLQ backend thường được xử lý lại tự động; file robot sai thường cần **người** xem (TF sai, cảm biến hỏng) | Tự động "sửa" dữ liệu sai rồi đẩy tiếp: dataset nhiễm lỗi có hệ thống |
 
 **Chấm mô hình:**
 
@@ -905,7 +874,6 @@ zstd nén mạnh các luồng nhiều số 0 (covariance, quaternion không dùn
 | File sau `kill -9` không mở được | Chưa có summary/index | `mcap doctor` | `mcap recover` (K2 Bài 7); split ngắn hơn |
 | IMU trong bag thưa hơn 200 Hz | QoS không khớp; cache recorder đầy; CPU | `ros2 bag info`, đếm `seq` | QoS `best_effort` khớp; tăng cache có giới hạn; đếm drop |
 | Upload xong mà file local vẫn còn | Băm lại không khớp → đúng là phải giữ | Log uploader | Điều tra (đĩa, ghi đè sau niêm phong); quarantine |
-| Upload tạo hai object cho một file | Key theo tên file/UUID thay vì sha256 | So key | Key theo nội dung (K5 Bài 14) |
 | Foxglove không hiện TF | `/tf_static` không có trong file (recorder khởi động sau `robot_state_publisher`, QoS transient local) | `ros2 bag info` | Ghi `/tf_static` với QoS durability đúng `[tự đo]`, hoặc chép TF vào metadata lúc niêm phong |
 
 ### 9. Câu hỏi ngược
@@ -931,17 +899,9 @@ Wi-Fi văn phòng mất kết nối là chuyện thường; streaming biến m�
 
 </details>
 
-4. **[Liên ngành]** Hộp đen máy bay ghi liên tục vào bộ nhớ chịu va đập, vòng tròn ghi đè, chỉ giữ N giờ cuối; dữ liệu được lấy ra sau sự cố. Robot của bạn nên giống hộp đen ở đâu, khác ở đâu?
-<details><summary>Hướng nghĩ</summary>
-
-Giống: ring buffer cục bộ cho luồng đầy đủ (ảnh), giữ lại khi có sự kiện. Khác: robot còn cần dữ liệu **bình thường** để huấn luyện và đánh giá (C11), không chỉ dữ liệu quanh sự cố; nên có hai lớp: ghi liên tục luồng nhẹ, ghi có trigger luồng nặng.
-
-</details>
-
 ### 10. Liên kết ra ngoài
 
 - **Thiên văn quan sát: pipeline từ kính về trung tâm dữ liệu.** Đài quan sát ghi tại chỗ, kiểm chất lượng và gắn metadata (header FITS) trước khi chuyển, giữ bản gốc tới khi trung tâm xác nhận. Giống: niêm phong ở nguồn, xóa sau xác nhận. Khác: kính thiên văn có đường truyền ổn định theo lịch; robot có Wi-Fi văn phòng.
-- **Y tế: hồ sơ thiết bị theo dõi bệnh nhân.** Máy theo dõi lưu cục bộ khi mất kết nối với hệ thống trung tâm và đồng bộ lại sau; dữ liệu thiếu phải được đánh dấu là thiếu, không nội suy im lặng. Cùng nguyên tắc đếm drop của F3.9.
 
 ### 11. Độ tin cậy và sửa lỗi
 
@@ -1045,7 +1005,6 @@ Ngưỡng trong code là ví dụ; ngưỡng thật lấy từ số đo của b�
 |---|---|---|---|
 | Data contract giữa team (schema registry, kiểu, nullable) | Contract của robot | Contract backend dừng ở kiểu và tính tương thích. Dữ liệu robot hợp lệ về kiểu vẫn có thể sai vật lý; rule vật lý cần **tiền điều kiện** về trạng thái thế giới | Contract xanh 100 % trên file có IMU úp ngược |
 | Test ba trạng thái pass/fail/inconclusive (bạn đã tự làm) | Rule không thỏa tiền điều kiện → INCONCLUSIVE | Ở đây inconclusive có **nguyên nhân vật lý** (robot không đứng yên lần nào trong file) và sửa được bằng **quy trình** (mỗi phiên bắt đầu bằng 5 s đứng yên) | Coi inconclusive là pass; file không bao giờ được kiểm trọng lực |
-| Trung bình tỉ lệ request thành công | Tần số trung bình | Trung bình che khoảng hở | Tần số trung bình đạt mà mất nửa giây dữ liệu (xem mục 7) |
 
 **Chấm mô hình:**
 
@@ -1103,7 +1062,6 @@ Tần số trung bình bắt khoảng hở 0,5 s? __
 |---|---|---|---|
 | `gravity_up` FAIL nhẹ (lệch 0,3–0,5 m/s²) mà gá đúng | Offset accel chưa hiệu chuẩn; sàn nghiêng | Đo trên hai hướng ngược nhau của robot | Hiệu chuẩn offset (K5 Bài 4); nới ngưỡng **có nguồn** |
 | `yaw_agree` báo giả khi quay | Lốp chà khi quay tại chỗ | Tách theo |ω lệnh| | Tiền điều kiện `|ω| < ngưỡng`, hoặc ngưỡng theo ω |
-| Lỗi tiêm không bị bắt | Rule đọc sai topic/frame; adapter bỏ qua | Test đơn vị trên file tiêm lỗi | Sửa rule; đây chính là lý do tiêm |
 
 ### 9. Câu hỏi ngược
 
@@ -1174,4 +1132,4 @@ Giữ tiêu chí 5 của **GATE 7A gốc** (phần ghi dữ liệu về C7, `_KE
 
 **FAIL action (gốc Gate 7A):** "chạm 80h chưa PASS → bỏ tiêu chí 5 (ghi dữ liệu), giữ 1–4, publish, sang 7B. Phần ghi dữ liệu gắn lại sau ở 7E." Áp vào K7 mới: nếu C7 vượt trần giờ bạn đặt cho chặng (ghi trước trong `decisions.md`), **hoãn tiêu chí 1** (giữ tiêu chí 2–4 vì C8 cần TF và timestamp đúng), sang C8, và gắn lại phần ghi dữ liệu ở C11.5. Trần giờ cho chặng là quyết định của bạn: bản gốc chỉ cho trần của cả 7A (80h trên 60h); **đề xuất** dùng cùng tỉ lệ (~47h cho C7), không phải tiêu chí.
 
-Gate PASS → mở C8. Robot lúc này: odometry đã hiệu chuẩn, IMU và camera có TF và timestamp đáng tin, mọi phiên chạy thành file MCAP đã niêm phong, kiểm, upload, xem được.
+Gate PASS → mở C8.

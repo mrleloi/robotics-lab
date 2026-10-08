@@ -1133,3 +1133,184 @@ Quyết định trước: sạc ban đêm ở đâu ___ ; robot làm gì 19h–7
   </details>
 
 ---
+
+## Bài C10.4 — HRI đo được (tùy chọn, 16h)
+
+> **Vị trí:** C10.3 (chạy cùng hoặc ngay sau soak) → **C10.4** → C11, C12 · **Cần trước:** → F1.4 (Wilson, bootstrap), → F1.5 (power, cỡ mẫu), K6 Bài 12 (bao nhiêu episode là đủ), K7 C9.1 (hai lớp đồng ý: đo phản ứng người mà không lưu ảnh), C8.5 (session điều hướng) · **Sau bài này bạn quyết định được:** cấu hình tốc độ/khoảng cách dừng nào khi gần người, và dữ liệu của bạn có đủ để chọn không.
+
+K7 Phụ lục C ("nên làm"). Nó không nằm trong đường lõi; nhưng nếu C10.3 có E-stop do đồng nghiệp nhấn vì "robot đi sát quá", bài này là cách trả lời bằng số thay vì bằng cảm giác.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Tháng 7/2016, ở Stanford Shopping Center (Palo Alto), một robot an ninh Knightscope K5 nặng khoảng 300 pound va vào một em bé 16 tháng tuổi. Mẹ em kể robot đâm vào đầu, làm em ngã, rồi tiếp tục đi qua chân em; em bị trầy và sưng, chụp X-quang không gãy. Knightscope nói dữ liệu cảm biến cho thấy robot đã **đổi hướng để tránh và dừng**, và em bé chạy vào robot. Trung tâm thương mại tạm ngừng các robot; công ty xin lỗi gia đình `[chuẩn — CNBC, The Register, 7/2016; hai bên mô tả mâu thuẫn]`.
+
+Hai bài học. Một: "robot đã dừng" (về mặt máy) và "người thấy an toàn" (về mặt người) là hai đại lượng khác nhau; robot đứng yên đúng lúc vẫn có thể ở quá gần. Hai: khi có tranh chấp, thứ duy nhất có giá trị là **dữ liệu đo trước khi có tranh chấp** — khoảng cách, tốc độ, ai đổi hướng trước. HRI (tương tác người–robot) không mềm; nó đo được bằng đúng dữ liệu bạn đã ghi, cộng một khảo sát ngắn.
+
+### 2. Mô hình tư duy
+
+**Proxemics** (Edward T. Hall, *The Hidden Dimension*, 1966): người Mỹ trong nghiên cứu của Hall giữ các vùng khoảng cách: thân mật (~0–0,45 m), cá nhân (~0,45–1,2 m), xã hội (~1,2–3,6 m), công cộng (xa hơn) `[chuẩn — số khác theo văn hóa; nghiên cứu HRI đo lại cho robot]`. Robot vào vùng cá nhân của người lạ thì người **phản ứng** — và phản ứng đo được.
+
+| Phần | Đo gì | Từ đâu | Loại số |
+|---|---|---|---|
+| A. Hành vi robot | Khoảng cách gần nhất tới người (phân bố); tốc độ khi có người trong 2 m; dừng hẳn hay chỉ giảm tốc khi người cắt ngang; thời gian robot chắn lối | Log `/odom`, detections C9 (vị trí người, không ảnh) | Phân bố, percentile |
+| B. Phản ứng người | **Người có đổi hướng để tránh robot không** (chỉ số tốt nhất: người phải né = robot đang lấn); tần suất người dừng lại | Quỹ đạo người trích từ camera **trên robot**, chỉ lưu số (C9.1) | Tỉ lệ theo lần gặp |
+| C. Khảo sát | Thang 1–5: thoải mái; đoán được; muốn tiếp tục. Một câu mở: "điều gì khiến bạn khó chịu nhất" | n ≥ 10 đồng nghiệp, sau soak | Phân bố, nguyên văn |
+| D. A/B | Tốc độ gần người 0,5 vs 0,3 m/s; khoảng dừng 1,0 vs 1,5 m | Đo lại A, B, C cho mỗi cấu hình | So sánh có khoảng tin cậy |
+
+Với n nhỏ, câu hỏi đúng không phải "B tốt hơn A không" mà "**dữ liệu của tôi có thấy được** một khác biệt cỡ nào". Mô phỏng (số giả định):
+
+```python
+# [đã chạy] HRI với cỡ mẫu nhỏ: Wilson cho tỉ lệ, bootstrap cho trung vị Likert, và cỡ hiệu ứng thấy được.
+import numpy as np
+from scipy import stats
+rng = np.random.default_rng(4)
+def wilson(k, n, z=1.96):
+    p = k / n; d = 1 + z**2 / n
+    c = (p + z**2 / (2 * n)) / d; h = z * np.sqrt(p * (1 - p) / n + z**2 / (4 * n**2)) / d
+    return c - h, c + h
+# (1) Tỉ lệ người đổi hướng né robot, hai cấu hình (SỐ GIẢ ĐỊNH — thay bằng đếm từ log của bạn)
+for name, k, n in (("A: 0,5 m/s, dừng 1,0 m", 14, 40), ("B: 0,3 m/s, dừng 1,5 m", 8, 40)):
+    lo, hi = wilson(k, n); print(f"{name}: {k}/{n} = {k/n:.0%}  CI95 Wilson [{lo:.0%}, {hi:.0%}]")
+print("Fisher exact A vs B: p =", round(stats.fisher_exact([[14, 26], [8, 32]])[1], 3))
+# Cặp đi qua của CÙNG một người không độc lập: 40 lần có thể chỉ là 12 người -> n hiệu dụng nhỏ hơn.
+
+# (2) Khảo sát n = 10, thang 1–5 "thấy thoải mái"
+likert = np.array([4, 5, 3, 4, 2, 4, 5, 3, 4, 1])
+boots = np.median(rng.choice(likert, (10000, likert.size)), axis=1)
+print(f"Likert trung vị {np.median(likert)}, bootstrap CI95 [{np.percentile(boots, 2.5):.1f}, {np.percentile(boots, 97.5):.1f}]")
+k4 = (likert >= 4).sum(); lo, hi = wilson(k4, likert.size)
+print(f"'thoải mái' (>=4): {k4}/10, CI95 Wilson [{lo:.0%}, {hi:.0%}]")
+
+# (3) A/B trên cùng 10 người (thiết kế cặp): cần chênh bao nhiêu điểm Likert để power 80%?
+def power(delta, sd_diff=1.2, n=10, sims=4000):
+    hits = 0
+    for _ in range(sims):
+        d = np.clip(np.round(rng.normal(delta, sd_diff, n)), -4, 4)
+        hits += stats.wilcoxon(d, zero_method="zsplit").pvalue < 0.05 if np.any(d) else 0
+    return hits / sims
+for delta in (0.5, 1.0, 1.5):
+    print(f"chênh thật {delta} điểm, n=10 cặp: power ≈ {power(delta):.0%}")
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| A/B test UI với hàng triệu user | A/B tốc độ robot với ~10 người | Không có cỡ mẫu; người học dần robot (hiệu ứng mới lạ giảm theo ngày); cùng người lặp lại nhiều lần | Tuyên bố "B giảm 43% số người né" từ 14 vs 8 |
+| NPS / khảo sát hài lòng | Likert 1–5 | Thang thứ bậc: trung bình "3,6" không có nghĩa số học vững; n = 10 cho khoảng rất rộng | Báo "điểm thoải mái 3,5/5" như số đo |
+| Session replay để hiểu user | Quỹ đạo người từ camera robot | Người không đồng ý bị quay; privacy C9 áp đầy đủ | Lưu video "để phân tích sau" |
+| Log làm bằng chứng khi khách khiếu nại | Log khoảng cách/tốc độ khi có tranh chấp | Log phải đủ tần số và có timestamp nguồn (C7.2) để tái dựng vài giây trước va chạm | Log 1 Hz không tái dựng được tình huống 0,5 s |
+
+**Chấm mô hình:**
+- *Bản Gemini K7: "Đảm bảo khi phát hiện người trong bán kính 2 m, vận tốc xe luôn giảm xuống dưới 0,3 m/s."* — **CHƯA RÕ → ĐÚNG MỘT PHẦN.** Là một **giả thuyết thiết kế** hợp lý, không phải kết luận của bài; gốc yêu cầu **đo** tốc độ trong 2 m và so hai cấu hình. Gãy: "phát hiện người" có FRR (C9.2): người không được phát hiện thì luật không áp. **Phản ví dụ:** người ngồi xổm sau ghế không được detector thấy; robot đi 0,5 m/s qua cách 0,8 m.
+- *"Khảo sát n = 10 cho thấy 60% hài lòng."* — **SAI** như một kết luận. Khoảng Wilson 95% cho 6/10 rộng từ khoảng một phần ba tới hơn bốn phần năm (mô phỏng). Viết: "6/10 người chọn ≥4; với n = 10, khoảng tin cậy rất rộng; đây là tín hiệu định tính", rồi đưa câu trả lời mở nguyên văn.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Proxemics | Nghiên cứu khoảng cách người giữ với nhau theo quan hệ | Quy tắc cố định cho mọi văn hóa |
+| 🟢 | Avoidance / path deviation | Người đổi hướng để né robot, đo bằng lệch khỏi đường thẳng | Va chạm |
+| 🟢 | Likert | Thang thứ bậc 1–5 | Thang khoảng cách đều |
+| 🟢 | Power, effect size tối thiểu thấy được | Xác suất thấy khác biệt nếu nó có thật; cỡ khác biệt nhỏ nhất dữ liệu thấy được | p-value |
+| 🟡 | Hiệu ứng mới lạ (novelty effect) | Hành vi người đổi trong những ngày đầu gặp robot | Nhiễu ngẫu nhiên |
+| 🟡 | Human-aware navigation, social costmap | Điều hướng có tính đến người (vùng chi phí quanh người) | `inflation_radius` |
+| 🔴 | Thang đo HRI chuẩn hóa (Godspeed, RoSAS) | Bảng hỏi đã kiểm định | Bắt buộc cho dự án này |
+
+### 5. Dự đoán
+
+**Tham số cần tra:** số lần gặp người mỗi giờ (đếm từ log soak C10.3); FRR detector người của bạn (C9.2) ở khoảng cách 1–3 m; quãng dừng ở 0,3 và 0,5 m/s (C10.1); số đồng nghiệp sẵn sàng trả lời. **Phương pháp:** Wilson cho tỉ lệ, bootstrap cho trung vị, power bằng mô phỏng (→ F1.5, K6 Bài 12).
+
+```markdown
+# prediction.md — C10.4
+- Khoảng cách gần nhất p5 / p50: A ___ m ; B ___ m
+- Tỉ lệ người né: A ___ ; B ___ ; khoảng Wilson có chồng nhau không: ___
+- Likert n=10: trung vị ___, CI ___ ; power để thấy chênh 1 điểm: ___
+- Quyết định nếu khoảng chồng nhau: ___ (viết TRƯỚC khi có dữ liệu)
+```
+
+### 6. Làm
+
+1. **Phần A, từ log** (gốc 1–4): từ session C10.3, tính phân bố khoảng cách gần nhất tới người (p5, p50), tốc độ robot khi có người trong 2 m, số lần người cắt ngang mà robot chỉ giảm tốc (không dừng hẳn), tổng thời gian robot chắn lối (đứng yên trong vùng hành lang đã khoanh trên bản đồ).
+2. **Phần B, từ camera, không lưu ảnh** (gốc 5–6): pipeline C9 xuất quỹ đạo người (vị trí theo thời gian trong frame `map`) và xóa frame ngay; tính độ lệch hướng của người trong cửa sổ 3 s trước khi tới gần robot; định nghĩa "né" (ví dụ lệch > X m so với đường thẳng ngoại suy) **trước** khi xem dữ liệu. Áp hai lớp đồng ý (C9.1): biển báo và lựa chọn không tham gia.
+3. **Phần C, khảo sát n ≥ 10 sau soak** (gốc 7–8): ba câu Likert + một câu mở. Ẩn danh; người trả lời biết số liệu dùng làm gì.
+4. **Phần D, A/B** (gốc 9–10): hai cấu hình (tốc độ gần người 0,5 vs 0,3 m/s; khoảng dừng 1,0 vs 1,5 m), mỗi cấu hình ≥1 ngày, đổi thứ tự nếu chạy được hai đợt (giảm hiệu ứng mới lạ). Đo lại A, B, C. **Áp dụng K6 Bài 12:** với n = 10 người, khảo sát có sức mạnh thống kê rất thấp; báo cáo khoảng tin cậy, không tuyên bố quá dữ liệu.
+5. **Báo cáo** một trang: bảng A/B có khoảng tin cậy, câu trả lời mở nguyên văn, quyết định cấu hình và lý do (gồm cả "dữ liệu không đủ để chọn, chọn B vì an toàn hơn về vật lý: quãng dừng C10.1").
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Mô phỏng** (số giả định): A 14/40 = 35% (Wilson ~22–50%), B 8/40 = 20% (~10–35%); Fisher p ≈ 0,21 — **không** kết luận được dù B "thấp hơn gần một nửa". Likert 6/10 chọn ≥4, Wilson ~31–83%; trung vị 4, bootstrap ~3–4,5. Power với 10 cặp: chênh thật 0,5 điểm ~12%, 1 điểm ~50%, 1,5 điểm ~87%: chỉ khác biệt rất lớn mới thấy được.
+
+**Kỳ vọng gốc:**
+
+| Kiểm tra | Kỳ vọng |
+|---|---|
+| Tỉ lệ người đổi hướng tránh robot | **Nên giảm** khi robot chậm và dừng sớm hơn |
+| Khảo sát n = 10, thang 1–5 | Khoảng tin cậy **rất rộng**. Báo cáo trung thực, coi là tín hiệu định tính |
+| Câu mở | Thường có giá trị hơn con số. Đưa nguyên văn vào báo cáo |
+
+"n = 10 nên khảo sát này không kết luận được gì chắc chắn, nhưng đây là những gì người ta nói" là một đoạn mạnh: cùng kỷ luật thống kê cho dữ liệu định tính lẫn định lượng.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Khoảng cách gần nhất nhỏ hơn khoảng dừng cấu hình | Người không được phát hiện (FRR), hoặc người đi tới robot | Xem frame detection quanh sự kiện (số, không ảnh) | Ghi hai trường hợp riêng; FRR là giới hạn của luật |
+| Tỉ lệ né giảm dần theo ngày ở cả hai cấu hình | Hiệu ứng mới lạ | Tỉ lệ theo ngày | Đổi thứ tự cấu hình; so cùng ngày trong tuần |
+| Khảo sát toàn 4–5 | Người trả lời là bạn bè, ngại chê | Câu mở có phàn nàn không | Ẩn danh thật; hỏi "điều gì khó chịu nhất" trước |
+| 40 lần gặp nhưng chỉ 8 người | Cùng người lặp lại | Đếm người khác nhau (ẩn danh theo phiên) | Báo cả hai số; n hiệu dụng gần số người |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot ở 20 văn phòng. Chỉ số HRI nào bạn đưa lên dashboard đội xe, và chỉ số nào chỉ có nghĩa trong một văn phòng?
+   <details><summary>Hướng nghĩ</summary>
+
+   Tỉ lệ E-stop do người ngoài nhấn trên giờ chạy, tỉ lệ người né trên lần gặp — so được giữa văn phòng nếu chuẩn hóa theo lưu lượng người. Câu mở và văn hóa khoảng cách thì theo nơi. Với 20 văn phòng, A/B thành thí nghiệm theo cụm.
+
+   </details>
+2. **[Failure mode]** Cấu hình B (chậm, dừng xa) làm người né ít hơn nhưng robot chắn lối lâu hơn và người phải vòng qua robot đang đứng yên. Chỉ số nào của bạn thấy được điều đó?
+   <details><summary>Hướng nghĩ</summary>
+
+   "Thời gian chắn lối" (phần A.4) và "người né" phải đọc cùng nhau: một robot đứng yên giữa hành lang cũng bị né. Tối ưu một chỉ số (Goodhart, → F2.8) có thể đẩy vấn đề sang chỉ số kia.
+
+   </details>
+3. **[Liên ngành]** Thiết kế đường đô thị đo hành vi người đi bộ (khoảng cách, tốc độ, chỗ dừng) bằng quan sát hiện trường từ thập niên 1970 (William H. Whyte). Giống và khác cách bạn đo người quanh robot?
+   <details><summary>Hướng nghĩ</summary>
+
+   Giống: đo hành vi thay vì hỏi ý kiến; hành vi lộ điều người không nói. Khác: Whyte quan sát từ xa, không phải từ chính vật thể người đang phản ứng với — camera trên robot đổi hành vi được quan sát.
+
+   </details>
+
+### 10. Liên kết ra ngoài
+
+- **Ô tô tự hành — "lái quá rụt rè" cũng là lỗi.** Xe tự hành dừng/chậm quá mức gây bất ngờ cho người lái phía sau và chắn đường. Giống: tối ưu "an toàn cục bộ" (dừng xa) có giá ở người khác (chắn lối). Khác: xe có luật giao thông làm chuẩn chung; văn phòng thì không.
+- **Thiết kế sản phẩm — usability test 5 người.** Ngành UX quen thử với vài người để **tìm vấn đề**, không để **ước lượng tỉ lệ**. Giống: n = 10 của bạn tốt cho câu mở. Khác: bạn còn muốn so hai cấu hình — việc đó cần n lớn hơn nhiều.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Knightscope K5, Stanford Shopping Center 7/2016, em bé 16 tháng; mô tả của gia đình và công ty mâu thuẫn | [chuẩn] | CNBC, The Register, 7/2016 |
+| Vùng proxemics của Hall | [chuẩn] | Hall, *The Hidden Dimension*, 1966; khác theo văn hóa |
+| Kết quả mô phỏng Wilson, bootstrap, power | [đã chạy] | Số đầu vào giả định; sd chênh 1,2 điểm là giả định |
+
+**Đã sửa so với bản gốc / Gemini:** giữ nguyên Phụ lục C (phần A–D, n ≥ 10, kỳ vọng). Thêm: định nghĩa "né" viết trước, n hiệu dụng theo số người, hiệu ứng mới lạ. Gemini: "khoảng tin cậy Wilson cho điểm trung vị Likert" → Wilson dành cho **tỉ lệ** (ví dụ tỉ lệ chọn ≥4); trung vị dùng bootstrap hoặc báo cả phân bố. Gemini: "< 0,3 m/s trong 2 m" và "inflation_radius 1,0 m" là giả thuyết/cấu hình chưa đo, không phải kết quả (C10.3 phần 11).
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Edward T. Hall, *The Hidden Dimension* (1966).
+- **Giải thích:** Kruse, Pandey, Alami, Kirsch, *Human-aware robot navigation: A survey*, Robotics and Autonomous Systems, 2013.
+- **Tự kiểm tra:** (1) giải thích vì sao "người né robot" tốt hơn "khảo sát hài lòng" làm chỉ số chính; (2) vẽ bảng A–D; (3) câu hỏi:
+
+  Bạn thấy 3/12 người né ở cấu hình B và 6/12 ở A. Viết một câu báo cáo trung thực.
+  <details><summary>Đáp án</summary>
+
+  "B: 3/12 (25%), A: 6/12 (50%); với 12 lần gặp mỗi cấu hình, khoảng tin cậy hai bên chồng nhau rộng (Wilson ~9–53% và ~25–75%), nên dữ liệu không đủ để nói B giảm số người né. Chọn B vì quãng dừng ngắn hơn (C10.1), không vì khảo sát này."
+
+  </details>
+
+---
