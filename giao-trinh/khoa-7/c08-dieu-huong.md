@@ -613,7 +613,7 @@ RMS reprojection <…> px; fx giữa hai lần hiệu chuẩn lệch <…> %
 **Phần C — Phát hiện tag và pose bằng OpenCV hiện hành (1h).** API ArUco của OpenCV đã đổi: từ 4.7 module nằm trong `objdetect` với lớp `ArucoDetector`; trên OpenCV 5.0.0 (đã kiểm) **không còn** `DetectorParameters_create`, `Dictionary_get`, `drawMarker`, `estimatePoseSingleMarkers`. Bài viết/ví dụ cũ trên mạng dùng các hàm này sẽ lỗi `AttributeError`. Pose giải bằng `solvePnPGeneric(..., SOLVEPNP_IPPE_SQUARE)` để lấy **cả hai nghiệm** và error của từng nghiệm. Chạy thử trên ảnh tổng hợp trước khi đụng camera; dự đoán trước: chế độ tinh chỉnh góc mặc định là gì, và nó có làm lệch Z không?
 
 ```python
-# [đã chạy] OpenCV 5.0.0: phát hiện tag36h11 trên ảnh tổng hợp, so 3 kiểu tinh chỉnh góc, PnP hai nghiệm
+# [đã chạy] OpenCV 5.0.0: phát hiện tag36h11 trên ảnh tổng hợp, so 2 kiểu tinh chỉnh góc, PnP hai nghiệm (~10 s)
 import numpy as np, cv2
 rng = np.random.default_rng(0)
 DICT = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
@@ -774,14 +774,14 @@ Tag canary ở điểm xuất phát (bước 10), đo mỗi lần khởi động
 | Z ≈ f·s/w; σZ ngẫu nhiên ~d², bias do f, s ~d | `[chuẩn]` | Mô phỏng 2; thực đo bước 5–7 |
 | Hướng tag phẳng kém xác định nhất khi chính diện | `[chuẩn]` | cos ψ; Schweighofer & Pinz 2006; mô phỏng 2 và Phần C |
 | OpenCV 5.0.0: `ArucoDetector`, `generateImageMarker`, không còn `estimatePoseSingleMarkers`/`DetectorParameters_create`; `cornerRefinementMethod` mặc định NONE | `[spec — đã kiểm trên opencv-python-headless 5.0.0]` | Bản 4.x khác: `[tự đo]` |
-| Bias Z do tinh chỉnh góc (+1…+4 % NONE, +0,2…+2,6 % SUBPIX) | `[đã chạy trên ảnh tổng hợp]` | Ảnh thật: đo bằng fit a ở bước 5 |
+| Bias Z theo chế độ tinh chỉnh góc (số ở 🔒 phần 7) | `[đã chạy trên ảnh tổng hợp]` | Ảnh thật: đo bằng fit a ở bước 5 |
 | Ngưỡng RMS < 0,5 px | `[ước lượng]` | Quy ước thực hành, phụ thuộc độ phân giải |
 | Hubble: null corrector lệch ~1,3 mm | `[chuẩn]` | Allen Report, NASA 1990 |
 
 **Đã sửa so với bản gốc/Gemini:**
 - K7 gốc Bài 7: "góc nhìn 60° tệ hơn nhiều" và "sai số góc yaw xấu hơn sai số vị trí" gộp hai hiện tượng. Sửa: tách *tỉ lệ phát hiện/kích thước tag* (tệ đi khi nghiêng) khỏi *độ chính xác hướng* (tệ nhất ở chính diện); quy sai số hướng về hậu quả d·δψ.
 - K7 gốc: "sai số tăng theo bình phương khoảng cách": đúng cho phần ngẫu nhiên của chiều sâu; phần hệ thống tăng tuyến tính.
-- Mới: bias do `CORNER_REFINE_NONE` mặc định và NaN từ IPPE với góc nguyên pixel; danh sách API ArUco đã bị gỡ trên OpenCV 5.0.0.
+- Mới: ảnh hưởng của chế độ tinh chỉnh góc mặc định và trường hợp IPPE trả NaN (🔒 phần 7); danh sách API ArUco đã bị gỡ trên OpenCV 5.0.0.
 - Gemini: lật góc 180° → "bộ lọc thông thấp". Sai: trung bình hai mode là hướng không thuộc mode nào.
 - Gemini: RMS > 1 px do "kích thước ô khai báo sai": sai, kích thước ô không ảnh hưởng RMS hay K. Gemini: "σ yaw 2°–8°", "60° tăng 3–5 lần", "nhận diện < 30 % khi quay": không nguồn, bỏ.
 - Gemini: `exposure_absolute=100`. Tên control phụ thuộc driver; nhiều bản uvcvideo mới dùng `exposure_time_absolute` và cần `auto_exposure` thủ công trước `[tự đo]`.
@@ -801,3 +801,837 @@ Tag canary ở điểm xuất phát (bước 10), đo mỗi lần khởi động
 </details>
 
 ---
+
+## Bài C8.3 — Hợp nhất odometry và marker, cây TF `map→odom→base_link` (14h)
+
+> **Vị trí:** C8.2 (`marker_noise.yaml`) → **C8.3** → C8.4 · **Cần trước:** → F6.7 (ước lượng trạng thái, Kalman trực giác, covariance), → F6.8 + K2 Bài 3 (frame, TF), → F4.6 + K5 Bài 7 (thời điểm của phép đo, ngân sách sai số thời gian), → F3.4 (ghép luồng khác tần số), C6.2 (UMBmark), C5.2 (`diff_drive_controller`) · **Sau bài này bạn quyết định được:** nguồn nào đưa đại lượng nào vào bộ lọc với covariance nào, số đo nào bị loại, ai publish cạnh TF nào, và chính sách cho cú nhảy `map → odom`.
+
+**Câu hỏi gốc:** hai nguồn, một cái trôi liên tục, một cái chính xác nhưng gián đoạn — kết hợp thế nào?
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Đầu thập niên 1960, nhóm của Stanley Schmidt ở NASA Ames phải định vị cho chuyến bay tới Mặt Trăng: hệ quán tính trôi theo thời gian; phép đo tuyệt đối (ngắm sao, radar mặt đất) chính xác hơn nhưng thưa, mỗi loại một kiểu sai. Họ đọc bài báo năm 1960 của Rudolf Kalman, mở rộng cho hệ phi tuyến (chính là EKF), và bộ lọc đó bay trên máy tính dẫn đường Apollo `[chuẩn — McGee & Schmidt, NASA TM-86847, 1985]`. Hoa tiêu đã làm bản thủ công từ nhiều thế kỷ trước: dead reckoning giữa hai lần đo sao, và khi có điểm đo sao thì quyết định *tin bao nhiêu* tùy trời có mây, sóng có lớn.
+
+Kalman không thêm ý tưởng "trộn hai nguồn". Ông thêm **quy tắc trộn theo độ bất định đã khai báo**, và một độ bất định *tự nở ra* khi không có số đo. Cả bài xoay quanh một dòng của CONVENTIONS: covariance phải từ số đo thật, không để 0. Bộ lọc không biết sự thật; nó chỉ biết những gì bạn khai.
+
+### 2. Mô hình tư duy
+
+```
+                 PREDICT (mỗi /odom, 50 Hz)                 UPDATE (khi có /marker_pose)
+ trạng thái x ──► x ← x + v·dt                    ──►  K = P / (P + R)          (1D)
+ độ bất định P ──► P ← P + Q·dt   (NỞ ra)              x ← x + K·(z − x)        (kéo về số đo)
+                                                       P ← (1 − K)·P           (CO lại)
+   Q: odometry tệ cỡ nào mỗi giây (C6)            R: marker tệ cỡ nào ở (d, θ) này (C8.2)
+```
+
+Trực giác nằm ở **K = P/(P+R)**: bộ lọc đang rất không chắc (P lớn) mà số đo tốt (R nhỏ) → K → 1, nhảy theo số đo; bộ lọc đang chắc mà số đo tồi → K → 0, phớt lờ. Khai R = 0 là ra lệnh "tin tuyệt đối mọi phát hiện tag, kể cả nghiệm lật". Khai Q ≈ 0 là "odometry hoàn hảo", bộ lọc sẽ phớt lờ marker. EKF trong `robot_localization` là cùng ý tưởng, nhiều chiều (x, y, yaw, vận tốc…), tuyến tính hóa quanh ước lượng hiện tại. Toán đầy đủ: → F6.7.
+
+**Cây TF — ai publish cạnh nào (REP-105):**
+
+```mermaid
+flowchart TB
+  map["map<br/>(cố định với thế giới)"] -->|"EKF world_frame=map<br/>ĐƯỢC PHÉP NHẢY"| odom["odom<br/>(cục bộ, trôi)"]
+  odom -->|"diff_drive_controller (hoặc EKF local)<br/>PHẢI LIÊN TỤC"| base["base_link"]
+  base -->|"static, đo cơ khí (C7.1)"| cam["camera_front_link"]
+  cam -->|"static, xoay chuẩn: z trước, x phải, y xuống"| opt["camera_front_optical_frame"]
+```
+
+Hai frame cho hai khách hàng trái nhu cầu: bộ điều khiển cần thứ **mượt** (vận tốc tính từ chênh pose không được giật) → làm việc trong `odom`; planner cần thứ **đúng** so với bản đồ → làm việc trong `map`. Mỗi cạnh TF chỉ **một** node publish. `map → odom` không phải "vị trí robot"; nó là **phần hiệu chỉnh** = pose trong map "trừ" pose trong odom.
+
+**Thời gian của một phát hiện tag:**
+
+```
+t (ms):   0        20       40       60       80      100
+/odom:    o        o        o        o        o        o          50 Hz
+camera:   [phơi sáng]──truyền USB──[detect + PnP]──► publish
+          ^ t_capture                                ^ t_publish
+EKF:      nhận ở t_publish; phải áp số đo vào trạng thái TẠI t_capture
+```
+
+Stamp bằng thời điểm nhận/xử lý thì số đo "cũ" bị áp vào pose "mới": đi thẳng vận tốc v bị kéo lùi v·trễ; đang quay ω thì hướng sai ω·trễ. Đây là F4.6 đi vào bộ lọc.
+
+**Mô phỏng — Kalman 1D, odometry trôi + marker thưa** (20 phút, thấy tag 10 s mỗi phút, một khoảng che 2 phút). Chạy sau khi commit dự đoán:
+
+```python
+# [đã chạy] Kalman 1D: odometry trôi (bias + nhiễu) + marker thưa. Không cần ROS.
+import numpy as np, matplotlib
+matplotlib.use("Agg")                       # trong bài có thể bỏ dòng này và dùng plt.show()
+import matplotlib.pyplot as plt
+
+dt, T, v = 0.02, 1200.0, 0.2                # 50 Hz, 20 phút, robot đi 0.2 m/s
+n = int(T / dt); t = np.arange(n) * dt
+x_true = v * t
+rng = np.random.default_rng(1)
+v_odom = v * 1.01 + rng.normal(0, 0.02, n)  # 1% sai hệ số bánh (UMBmark chưa sạch) + nhiễu
+seen = (t % 60) < 10                        # thấy tag 10 s mỗi phút...
+seen &= ~((t > 600) & (t < 720))            # ...trừ 2 phút bị che hẳn
+seen &= (np.arange(n) % 5 == 0)             # camera 10 Hz
+sig_m = 0.03                                # σ marker (m) — lấy từ bảng C8.2
+
+def run(q, r):
+    x, P, out, Ps = 0.0, 0.0, [], []
+    for k in range(n):
+        x += v_odom[k] * dt; P += q * dt    # predict: tích phân odometry, độ bất định NỞ ra
+        if seen[k]:
+            z = x_true[k] + rng.normal(0, sig_m)
+            K = P / (P + r)                 # tin ai hơn: tỉ lệ hai phương sai
+            x += K * (z - x); P *= (1 - K)  # update: kéo về marker, độ bất định CO lại
+        out.append(x); Ps.append(P)
+    return np.array(out), np.sqrt(Ps)
+
+x_odom = np.cumsum(v_odom * dt)
+x_kf, s_kf = run(q=0.02**2, r=sig_m**2)     # q: phương sai trôi/giây, ước từ số đo
+x_bad, _ = run(q=1e-8, r=sig_m**2)          # odometry khai quá tự tin (covariance ~0)
+
+for name, x in [("odom thuần", x_odom), ("KF, Q hợp lý", x_kf), ("KF odom quá tự tin", x_bad)]:
+    e = x - x_true
+    print(f"{name:20s} sai cuối {e[-1]:+.3f} m  |sai| max {abs(e).max():.3f} m")
+idx = np.flatnonzero(seen); g = np.argmax(np.diff(t[idx]))   # khoảng mù dài nhất
+a, j = idx[g], idx[g + 1]                                      # mẫu cuối trước mù, mẫu đầu sau mù
+print(f"mù {t[j]-t[a]:.0f} s: cuối mù sai {x_kf[j-1]-x_true[j-1]:+.3f} m, 1σ tự báo {s_kf[j-1]:.3f} m,"
+      f" bước nhảy khi thấy lại {x_kf[j]-x_kf[j-1]:+.3f} m")
+
+fig, ax = plt.subplots(2, 1, sharex=True, figsize=(8, 5))
+ax[0].plot(t, x_odom - x_true, label="odom thuần")
+ax[0].plot(t, x_kf - x_true, label="KF"); ax[0].plot(t, x_bad - x_true, label="KF, Q≈0")
+ax[0].set_ylabel("sai số (m)"); ax[0].legend()
+ax[1].plot(t, s_kf); ax[1].set_ylabel("1σ KF tự báo (m)"); ax[1].set_xlabel("t (s)")
+plt.savefig("kf1d.png", dpi=100)            # plt.show()
+```
+
+Mô phỏng cố tình sai giống đời thật: odometry có **bias 1 %** mà bộ lọc *không mô hình hóa* (nó chỉ biết nhiễu trắng q). Thử thêm: khoảng che 5 phút (`t < 900`), so "sai thật" với "1σ tự báo".
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| `CLOCK_MONOTONIC` vs `CLOCK_REALTIME` có NTP step (→ F4.3) | `odom` (mượt, trôi) vs `map` (đúng, được nhảy) | **Kết nối sâu, không chỉ ví von:** cùng lý do có hai đồng hồ — đo khoảng cần thứ không nhảy, đối chiếu thế giới cần thứ đúng. Gãy ở chỗ đồng hồ một chiều; pose có 3 bậc tự do, sửa hướng **xoay** cả frame `odom` quanh gốc, nên sửa 2° ở xa gốc thành dịch chuyển lớn | Controller tính vận tốc từ pose `map` → mỗi lần thấy tag là một cú giật lệnh; giống đo latency bằng `CLOCK_REALTIME` rồi thấy số âm |
+| Đọc nhiều replica, lấy cái "đáng tin hơn" | Update theo nghịch đảo phương sai | Trọng số **đổi theo thời gian** (P nở khi không có số đo) và theo điều kiện số đo (R theo d, θ) | Covariance hằng cho marker: số đo 4 m chính diện kéo pose mạnh như 0,5 m |
+| Event đến muộn, watermark (→ F3.3) | Số đo camera đến sau 50–150 ms `[ước lượng — tự đo]` | Backend tính lại được kết quả cũ; robot **đã gửi lệnh motor** theo ước lượng cũ | Stamp bằng thời điểm nhận → bias tỉ lệ vận tốc, chỉ lộ khi vào cua |
+| Hard-code `confidence = 1.0` | Covariance = 0 | Phương sai 0 làm K = 1 hoặc ma trận suy biến: bộ lọc **ngừng nghe** nguồn khác | Một topic covariance toàn 0 (mặc định của nhiều node!) chiếm quyền ước lượng |
+
+**Chấm mô hình:**
+- *"Fusion là lấy trung bình hai nguồn."* — **ĐÚNG MỘT PHẦN.** Là trung bình **trọng số nghịch đảo phương sai**, trọng số đổi liên tục, cộng bước *dự đoán* bằng mô hình chuyển động. Phản ví dụ: odom báo 5,00 m (σ 1 m), marker báo 4,80 m (σ 2 cm); trung bình 4,90 m sai hơn chính marker.
+- *"Kalman tự sửa được nếu covariance khai hơi sai."* — **SAI** theo nghĩa thường hiểu. Kalman tối ưu *khi mô hình và covariance đúng*; khai sai thì vẫn chạy, vẫn ra số mượt, và tự báo độ bất định không khớp sai số thật. Phản ví dụ: dòng "KF odom quá tự tin" và thí nghiệm mù 5 phút.
+- *Mô hình của bạn ở K3 lượt 12:* "trong một system vật lý có số tác nhân biết trước, thu dữ liệu đủ lâu, mọi công thức vật lý gần như là hằng số, nên mọi biến số có thể được tầng AI model biểu diễn và dự đoán". — **ĐÚNG MỘT PHẦN.** Bước *predict* chính là "dự đoán bằng mô hình", và động học bánh xe là mô hình gần như hoàn hảo. Gãy ở chỗ: đại lượng cần biết là **tích phân** của thứ mô hình dự đoán (vị trí = ∫ vận tốc), nên sai tham số nhỏ cố định (1 % bán kính bánh) tích lũy không giới hạn. Không mô hình nào bỏ được nhu cầu số đo tuyệt đối định kỳ; mô hình tốt chỉ kéo dài khoảng giữa hai lần neo. Phản ví dụ: odometry đã qua UMBmark vẫn trôi hàng mét sau 20 phút.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Covariance (pose/twist) | Ma trận độ bất định; đường chéo là phương sai từng đại lượng | Trường tùy chọn, để 0 được |
+| 🟢 | REP-105 `map`/`odom`/`base_link` | Thế giới (được nhảy), cục bộ (liên tục), thân robot | `odom` là "vị trí robot" |
+| 🟢 | TF tree | Cây biến đổi có thời gian; mỗi cạnh một publisher | Nhiều node cùng publish một cạnh |
+| 🟡 | Kalman / EKF | Vòng predict–update trọng số theo covariance; EKF tuyến tính hóa cho hệ phi tuyến | Bộ lọc làm mượt (low-pass) |
+| 🟡 | Q / R | Q: mô hình chuyển động tệ cỡ nào; R: số đo tệ cỡ nào | Tham số "tuning" chỉnh cho đẹp |
+| 🟡 | Innovation, NIS | Hiệu số đo − dự đoán; NIS = innovation² chuẩn hóa theo covariance kỳ vọng | Sai số của số đo |
+| 🟡 | Gating (Mahalanobis) | Loại số đo có innovation quá lớn so với độ bất định | Lọc nhiễu thường |
+| 🔴 | Particle filter/AMCL, UKF, Lie group SE(2) | Biến thể và lý thuyết sâu hơn | Cần cho bài này |
+
+### 5. Dự đoán
+
+1. Sai số vị trí **odometry thuần** sau 20 phút chạy vòng văn phòng, từ số UMBmark còn lại của bạn (C6.2), tốc độ và quãng đường. Gợi ý: sai hướng δψ mỗi mét → sai ngang ≈ δψ·s²/2 sau quãng s, nhanh hơn tuyến tính.
+2. Sai số fusion tại các điểm dừng ground truth (median, max).
+3. Che hết tag 2 phút: pose trôi bao xa? Bộ lọc **tự báo** σ bao nhiêu, lớn hay nhỏ hơn sai thật, vì sao?
+4. Khi thấy tag lại: cú nhảy `map → odom` lớn cỡ nào?
+5. Stamp marker = thời điểm publish, trễ đo được L, robot 0,3 m/s và quay 0,5 rad/s: sai vị trí và sai hướng?
+6. Khai covariance twist của `/odom` bằng 0: bộ lọc làm gì khi thấy tag?
+
+**Tham số cần tra:** UMBmark sau hiệu chuẩn (C6.2); `marker_noise.yaml`; vận tốc trung bình; tỉ lệ thời gian thấy tag dọc lộ trình (ước từ sơ đồ C8.1); trễ camera (bước 5). Câu 3–4: mô phỏng 1D chỉnh tham số của bạn (rồi tự hỏi 1D bỏ sót gì so với 2D có hướng).
+
+```markdown
+# Dự đoán C8.3 — commit trước khi chạy 20 phút
+UMBmark còn lại <…>; v_tb <…> m/s; quãng 20 phút <…> m; tỉ lệ thấy tag <…> %
+| Cấu hình | Sai tại điểm dừng (median / max) | Lý do |
+|---|---|---|
+| Odom thuần | | |
+| Marker thuần (khi thấy) | | |
+| Fusion | | |
+Che 2 phút: trôi <…> m; σ tự báo <…> m; lớn/nhỏ hơn sai thật vì <…>; cú nhảy <…> m
+Stamp sai, L = <…> ms: <…> cm, <…>°;  covariance odom = 0 thì <…>
+```
+
+### 6. Làm
+
+1. **Odometry vào bộ lọc dưới dạng vận tốc.** `diff_drive_controller` (C5.2) publish `nav_msgs/Odometry` trên `~/odom` với tham số `pose_covariance_diagonal`, `twist_covariance_diagonal`, `enable_odom_tf` `[tự đo — ros2 param list trên Jazzy]`. Covariance pose của controller là **hằng số** bạn khai: vô nghĩa với thứ trôi theo quãng đường. Đưa **vận tốc** (vx, vyaw) vào EKF, không đưa pose x, y. Điền `twist_covariance_diagonal` từ std vận tốc khi chạy đều (C6), không từ "phương sai UMBmark": UMBmark đo sai số **hệ thống** đã được sửa. Chỉ **một** node publish `odom → base_link`.
+2. **Extrinsic.** `base_link → camera_front_link` từ C7.1. Kiểm bằng tag đặt thẳng trước robot ở 2 m, đo bằng thước: tag phải nằm trên trục x của `base_link`. Sai yaw lắp camera δ sinh sai ngang d·δ như sai yaw tag.
+3. **`marker_node`.** Phát hiện tag, PnP (C8.2), cổng loại, `isfinite`, tính `T_map_base = T_map_tag · T_tag_cam · T_cam_base`, publish `geometry_msgs/msg/PoseWithCovarianceStamped` trên `/marker_pose`, `frame_id = map`, **`stamp = thời điểm chụp`**. Covariance 6×6 hàng-trước (x, y, z, roll, pitch, yaw): σ từ `marker_noise.yaml` theo (d, θ), **cộng** độ bất định pose tag trong `landmarks.yaml`, **cộng** d·σψ quy ra x, y; kiểm đối xứng, xác định dương trước khi publish. Đếm phát hiện bị loại lên `/diagnostics`. Khi thấy ≥2 tag, ưu tiên giải pose từ cả hai (8 góc) thay vì từng tag riêng.
+4. **`robot_localization`.** Chọn một, ghi `decisions.md`: (a) một EKF `world_frame: map`, fuse twist `/odom` + pose `/marker_pose`, publish `map → odom`; controller publish `odom → base_link`. (b) Hai EKF như tài liệu `robot_localization` gợi ý: local (`world_frame: odom`) publish `odom → base_link` (tắt TF của controller), global (`world_frame: map`) publish `map → odom`.
+
+```yaml
+# [chưa chạy] (a) một EKF, world_frame = map. Cần ROS 2 Jazzy + robot_localization; tên khóa theo
+# params/ekf.yaml nhánh ros2 — kiểm lại với bản bạn cài.
+ekf_filter_node:
+  ros__parameters:
+    frequency: 30.0
+    two_d_mode: true
+    publish_tf: true
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: map                 # EKF này publish map -> odom
+    odom0: /diff_drive_controller/odom
+    #            x      y      z      roll   pitch  yaw    vx    vy     vz     vroll  vpitch vyaw  ax     ay     az
+    odom0_config: [false, false, false, false, false, false, true, false, false, false, false, true, false, false, false]
+    pose0: /marker_pose
+    pose0_config: [true,  true,  false, false, false, true,  false, false, false, false, false, false, false, false, false]
+    pose0_rejection_threshold: 5.0   # ngưỡng Mahalanobis; chỉnh từ phân bố innovation thật
+```
+
+5. **Thời gian.** Đo phân bố trễ (t_nhận − stamp) của `/odom` và `/marker_pose` trong 5 phút; ghi p50/p99. Hai luồng phải cùng miền đồng hồ (K5 Bài 7; C7.2 nếu ESP32 stamp nguồn).
+6. **Chạy 20 phút** quanh khu thử (teleop hoặc chuỗi waypoint), **dừng ở ≥5 điểm ground truth** G1..Gn. Ghi ba nguồn tại mỗi điểm: `/odom` (đổi sang `map` bằng pose ban đầu), `/marker_pose` khi có, `/odometry/filtered`; đo vị trí thật robot bằng thước từ mốc (tâm robot đánh dấu trên thân). MCAP toàn bộ (cần cho C8.5). Tùy chọn mạnh: giữ **một tag không vào bộ lọc** làm tập giữ kín.
+7. **So ba đường:** bảng sai số tại điểm dừng (median, max), vẽ quỹ đạo ba nguồn; thêm cột **"bộ lọc trung thực?"**: tỉ lệ điểm dừng có sai thật mỗi trục nằm trong ±2σ tự báo (kỳ vọng ~95 % nếu covariance đúng; với 5–10 điểm chỉ thấy sai lệch thô, → F1.4).
+8. **Ép hỏng:** che camera 2 phút khi đang chạy, dừng và đo ở cuối khoảng che; ghi sai thật, σ tự báo, bước nhảy `map → odom` khi bỏ che (đọc TF trong MCAP). Kiểm `odom → base_link` **không** nhảy.
+9. **Chính sách cú nhảy** → `decisions.md`: (a) để nhảy (đúng REP-105, Nav2 replan được); (b) slew thay step, trả giá bằng một khoảng pose sai có chủ ý; (c) chỉ nhận hiệu chỉnh lớn khi robot dừng; (d) nhảy + phát sự kiện `relocalization` có cờ cho C8.5 và Nav2. Ghi ngưỡng và lý do.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Mô phỏng 1D** (seed cố định, đã chạy lại):
+
+| Cấu hình | Sai cuối | \|sai\| max |
+|---|---|---|
+| Odom thuần (bias 1 %) | +2,20 m | 2,20 m |
+| KF, Q hợp lý | +0,10 m | 0,22 m |
+| KF, odom khai quá tự tin (Q ≈ 0) | +0,48 m | 0,65 m |
+
+Mù 120 s: sai thật cuối mù +0,22 m, σ tự báo 0,22 m, nhảy −0,19 m khi thấy lại. Mù 300 s: sai thật **+0,60 m** nhưng σ tự báo chỉ **0,35 m**: bộ lọc tự tin quá mức. Bias làm sai số tăng **tuyến tính** theo thời gian, còn Q (nhiễu trắng) làm σ tăng theo **√t**; ở 120 s hai đường cắt nhau gần như tình cờ. Bài học: covariance odometry khai dạng nhiễu trắng **đánh giá thấp** sai số trong khoảng mù dài; nếu C8.4 dựa vào σ để quyết định "còn đủ chắc để đi tiếp", cần thổi phồng hoặc giới hạn thời gian mù.
+
+Q ≈ 0: bộ lọc tin odometry, mỗi lần thấy tag chỉ kéo về một chút: đúng triệu chứng "EKF phớt lờ marker".
+
+**Thực đo (khoảng chấp nhận của bản gốc):** odometry thuần **trôi liên tục, hàng mét** (nhanh hơn tuyến tính khi có sai hướng); marker thuần chính xác khi thấy tag (C8.2), **không có gì khi không thấy**; fusion **trong vài chục cm** tại điểm dừng; sau 2 phút mất tag trôi theo tốc độ trôi của odometry rồi **nhảy về**, `odom → base_link` không nhảy.
+
+**Câu 5:** sai vị trí = v·L, sai hướng = ω·L. L = 100 ms: 3 cm và 0,05 rad ≈ 2,9°; sai hướng này ở tag cách 3 m thành ~15 cm ngang. Chỉ lộ khi vào cua.
+
+**Câu 6:** covariance 0 trên vận tốc odom → bộ lọc coi vận tốc odometry là chân lý; tùy bản cài, nó thay 0 bằng số rất nhỏ hoặc gặp ma trận suy biến `[tự đo — log của robot_localization]`. Triệu chứng: marker gần như vô tác dụng, hoặc ước lượng bất ổn.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Robot "giật" mỗi khi thấy tag, cả trong frame `odom` | Marker vào EKF `world_frame: odom`, hoặc hai node cùng publish `odom → base_link` | `ros2 run tf2_ros tf2_monitor`; `ros2 run tf2_tools view_frames` | Một publisher mỗi cạnh; marker chỉ vào EKF `world_frame: map` |
+| EKF bám odometry, phớt lờ marker | Covariance marker quá lớn, odom quá nhỏ/0, hoặc gating loại hết | Đếm marker bị loại; vẽ innovation | Covariance từ số đo; nới ngưỡng *sau khi* xem phân bố innovation |
+| Sai hệ thống chỉ khi nhìn một tag | Pose tag trong `landmarks.yaml` sai (nhất là yaw) | Innovation trung bình theo tag ID | Đo lại tag (Lắp bước 4) |
+| Sai lớn khi vào cua, nhỏ khi đi thẳng | Stamp = thời điểm nhận; lệch đồng hồ | Phân bố (t_nhận − stamp); sai số theo ω | Stamp thời điểm chụp; cùng miền đồng hồ |
+| "Extrapolation into the future/past", số đo bị bỏ | Lệch đồng hồ, trễ vượt bộ đệm TF | Đo trễ; `use_sim_time` nhất quán | Sửa đồng hồ; không stamp thời điểm nhận |
+| Ước lượng NaN/phân kỳ | Covariance 0, âm, không đối xứng; trục quang học bị dùng như trục thân | Validate trước khi publish | Kiểm ma trận; xoay quang học chuẩn |
+
+### 9. Câu hỏi ngược
+
+1. **[Failure mode]** Bộ lọc báo σ = 5 cm, sai thật 40 cm, không gì báo lỗi. Nguồn gốc nào gây "tự tin mà sai", và phát hiện ở runtime bằng gì khi không có ground truth?
+<details><summary>Hướng nghĩ</summary>
+
+Bias không mô hình hóa, covariance khai nhỏ, số đo tương quan bị coi là độc lập. Runtime: NIS — nếu bộ lọc trung thực, innovation chuẩn hóa có phân bố biết trước (χ²); lệch kéo dài = bộ lọc đang nói dối. Một rule cho C8.5.
+
+</details>
+
+2. **[Quy mô]** 100 robot, 1000 giờ dữ liệu, không ground truth. Muốn biết robot nào khai covariance sai: dữ liệu nào trong MCAP cho phép?
+<details><summary>Hướng nghĩ</summary>
+
+Innovation và covariance của từng update (`robot_localization` không mặc định publish innovation; tự tính từ `/marker_pose` và `/odometry/filtered` cùng stamp). Thống kê theo robot, tag, `calibration_id`. Ở quy mô, robot "lệch đàn" tự nổi lên: dễ hơn chứ không khó hơn.
+
+</details>
+
+3. **[Vì sao không]** Vì sao không đưa luôn pose x, y của `/odom` vào bộ lọc cùng marker?
+<details><summary>Hướng nghĩ</summary>
+
+Hai nguồn pose tuyệt đối mâu thuẫn ngày càng tăng (odom trôi), covariance pose của controller là hằng số; bộ lọc bị kéo giữa hai "sự thật". Odom là phép đo **tương đối**: đưa dưới dạng vận tốc hoặc chế độ differential.
+
+</details>
+
+4. **[Liên ngành]** NTP mặc định **slew** khi lệch nhỏ và **step** khi lệch lớn. Ánh xạ sang chính sách cú nhảy ở bước 9.
+<details><summary>Hướng nghĩ</summary>
+
+Hiệu chỉnh nhỏ → làm mượt vài trăm ms; hiệu chỉnh lớn (kidnapped, sau khoảng mù dài) → nhảy ngay + phát sự kiện + có thể dừng robot. Slew lâu = chạy với pose sai lâu. Ngưỡng là quyết định có đánh đổi.
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Hàng không — INS/GNSS:** quán tính trôi, GPS neo lại. *Loosely coupled* đưa vị trí GPS đã tính vào bộ lọc; *tightly coupled* đưa thẳng khoảng cách giả tới từng vệ tinh. Giống: bạn đang loosely coupled (pose đã giải PnP); tightly coupled là đưa 4 góc tag (pixel) vào bộ lọc, xử lý mơ hồ tốt hơn, phức tạp hơn. Khác: GPS gần như liên tục; tag gián đoạn theo hình học.
+- **Servo đồng hồ PTP (→ F4.5):** một bộ lọc ước lượng offset và drift từ số đo nhiễu, có chính sách step/slew. Khác: đồng hồ một chiều, số đo đều đặn; robot có hướng, số đo phụ thuộc chỗ đứng.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| `map → odom` được nhảy, `odom → base_link` liên tục | `[spec]` | REP-105 |
+| Frame quang học z trước, x phải, y xuống | `[spec]` | REP-103; CONVENTIONS §2 |
+| EKF trên Apollo | `[chuẩn]` | McGee & Schmidt, NASA TM-86847 (1985) |
+| Khóa `world_frame`, `odom0_config` (15 bool), `pose0_rejection_threshold` | `[spec]` | `params/ekf.yaml` nhánh ros2 của robot_localization; `[tự đo]` với bản Jazzy |
+| Tham số `diff_drive_controller` (covariance diagonal, `enable_odom_tf`) | `[tự đo]` | `ros2 param list` |
+| Trễ camera 50–150 ms | `[ước lượng]` | Đo ở bước 5 |
+
+**Đã sửa so với bản gốc/Gemini:**
+- K7 gốc Bài 8: "Cây TF … | Khóa 3 Bài L3": không có bài đó; bài về frame/TF là **K2 Bài 3**.
+- Gemini: `camera_link → camera_optical_frame` "theo REP-103 (x tiến, y trái, z lên)": **sai**, đó là trục thân; frame quang học là z trước, x phải, y xuống.
+- Gemini: lệch đồng hồ thì "dùng thời gian nhận gói tin làm mốc": **sai**, gắn trễ xử lý vào số đo (bias tỉ lệ vận tốc). Đúng: stamp thời điểm chụp, đưa hai luồng về cùng miền đồng hồ.
+- Gemini: "hiệp phương sai odometry lấy từ phương sai UMBmark": sửa — UMBmark sửa sai số hệ thống; covariance vận tốc lấy từ nhiễu vận tốc đo được; fuse vận tốc.
+- Gemini: "σ²_yaw marker đặt rất lớn để tránh lật góc": sửa một phần — thổi phồng phương sai không xử lý được phân bố **hai mode**; cần cổng loại/chọn nghiệm (C8.2).
+- Gemini: "Fusion < 25 cm" như ngưỡng cứng; bản gốc nói "vài chục cm"; giữ bản gốc.
+- Số mô phỏng 1D của bản nháp 7B: chạy lại, trùng.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** R. E. Kalman, "A New Approach to Linear Filtering and Prediction Problems", 1960; T. Moore & D. Stouch, "A Generalized Extended Kalman Filter Implementation for the Robot Operating System", IAS-13, 2014; REP-105.
+- **Giải thích:** Thrun, Burgard, Fox — *Probabilistic Robotics*, chương 3; tài liệu `robot_localization` (mục "Preparing your sensor data").
+- **Đào sâu (tùy chọn):** McGee & Schmidt (1985).
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao có hai frame `map` và `odom` (dùng phép so hai đồng hồ, nói chỗ nó gãy); (2) vẽ lại vòng predict–update và cây TF; (3) P = 0,04 m², R = 0,01 m², x = 2,00 m, marker đo z = 2,20 m. x mới, P mới?
+
+<details><summary>Đáp án tự kiểm tra</summary>
+
+(3) K = 0,04/0,05 = 0,8; x = 2,00 + 0,8·0,20 = **2,16 m**; P = 0,2·0,04 = **0,008 m²** (σ ≈ 9 cm). P mới nhỏ hơn cả P lẫn R: hai nguồn độc lập cộng lại chắc hơn từng nguồn, *nếu* thật sự độc lập.
+
+</details>
+
+---
+
+## Bài C8.4 — Nav2 từ A tới B (18h)
+
+> **Vị trí:** C8.3 (pose `map` có covariance trung thực) → **C8.4** → C8.5 · **Cần trước:** → F1.2 (percentile từ ít mẫu), → F1.4 (Wilson), → F2.1 (oracle: ai chấm "tới đích"), → F7.6 (chế độ hỏng), K6 Bài 11–12 (thành công bằng toán, bao nhiêu lần chạy là đủ), C4.4 (kẹp tốc độ, timeout), C5.3 (teleop, E-stop tạm); Lắp bước 5–6 · **Sau bài này bạn quyết định được:** robot có "đi được A→B" hay không *với độ tin bao nhiêu*; recovery nào được phép, bao nhiêu lần, và khi nào dừng hẳn và báo lỗi.
+
+**Câu hỏi gốc:** robot tự đi từ bàn của tôi tới bàn của đồng nghiệp, 20 lần liên tiếp, được không?
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 2010, Willow Garage cho robot PR2 tự đi 26,2 dặm (một quãng marathon) trong tòa văn phòng có người đi lại, cửa đóng mở, ghế bị kéo lệch, và công bố **số lần cần người can thiệp** thay vì một video demo (Marder-Eppstein và cộng sự, "The Office Marathon", ICRA 2010). Stack của bài đó thành navigation stack ROS 1 (`move_base`): vòng cố định "lập đường → bám đường → kẹt thì xóa costmap, xoay, thử lại". Khi đem ra sản xuất, phần khó nhất hóa ra là **hành vi khi hỏng**: thử lại bao nhiêu, thứ tự nào, khi nào bỏ cuộc, đổi chính sách mà không viết lại C++. Nav2 (Macenski và cộng sự, "The Marathon 2", IROS 2020) trả lời bằng **behavior tree** cấu hình bằng XML.
+
+Bài này vì vậy không phải bài "cài Nav2". Nó là bài **đo** một hệ có chính sách thất bại, bằng một gate 20 mẫu, và hỏi gate đó phân biệt được gì.
+
+### 2. Mô hình tư duy
+
+```mermaid
+flowchart LR
+  G["goal NavigateToPose"] --> BT["bt_navigator (BT XML)"]
+  BT -->|"ComputePathToPose"| PL["planner_server<br/>global costmap (map_server + ToF/lidar)"]
+  BT -->|"FollowPath"| CT["controller_server<br/>local costmap, goal + progress checker"]
+  BT -.->|"khi lỗi: ClearCostmap, Spin, Wait, BackUp"| BH["behavior_server"]
+  CT -->|"cmd_vel"| VS["velocity_smoother"] --> CM["collision_monitor"] --> DD["diff_drive_controller<br/>(Jazzy: TwistStamped)"]
+  BH --> VS
+  DD --> ESP["ESP32: kẹp ≤0,5 m/s + timeout (C4.4)"]
+  LOC["C8.3: map→odom→base_link"] --> PL & CT
+```
+
+Cây hành vi mặc định `navigate_to_pose_w_replanning_and_recovery.xml` (nhánh jazzy, rút gọn) `[spec — đã đọc 10/2026; tự đo bản cài]`:
+
+```
+RecoveryNode(number_of_retries=6)
+├── PipelineSequence
+│   ├── RateController(1 Hz) → RecoveryNode(1): ComputePathToPose | [WouldAPlannerRecoveryHelp → ClearGlobalCostmap]
+│   └── RecoveryNode(1): FollowPath | [WouldAControllerRecoveryHelp → ClearLocalCostmap]
+└── Sequence: [WouldAControllerRecoveryHelp | WouldAPlannerRecoveryHelp]   ← recovery CHỈ chạy khi mã lỗi cho là có ích
+    └── ReactiveFallback: GoalUpdated | RoundRobin: ClearCostmaps → Spin(1,57 rad) → Wait(5 s) → BackUp(0,30 m, 0,15 m/s)
+```
+
+1. **"SUCCEEDED" là phán quyết của robot về chính nó.** Goal checker so pose *ước lượng* với đích theo `xy_goal_tolerance`. Sai số thật ở đích = phần dư goal checker cho phép **cộng** sai số định vị C8.3. Thước dây mới là oracle (→ F2.1).
+2. **Recovery là hành động vật lý**, không phải retry: xoay và lùi đổi thế giới, và lùi thì không có cảm biến phía sau.
+3. **Giới hạn an toàn phải ở nhiều tầng:** controller, `velocity_smoother`, `collision_monitor`, và cuối cùng firmware ESP32 (C4.4). Tham số Nav2 là cấu hình; cấu hình gõ nhầm được.
+
+**Robot dừng được trong bao xa?** Quãng dừng = v·t_trễ + v²/(2a), trễ gồm cảm biến + chu kỳ costmap/controller + ESP32.
+
+```python
+# [đã chạy] Quãng dừng = v·t_trễ + v²/(2a): robot tự đi phải dừng được trước khi tới chân người
+import numpy as np
+M = 5.0                                         # kg — thay bằng khối lượng cân ở C2.4
+for a in (0.5, 1.0):                            # gia tốc phanh thực (m/s²) — đo ở C8.4 bước an toàn [tự đo]
+    for t_lat in (0.15, 0.4):                   # trễ: cảm biến + costmap + controller + ESP32 (s) [ước lượng]
+        for v in (0.2, 0.3, 0.5):
+            d = v * t_lat + v**2 / (2 * a)
+            print(f"a={a:.1f} m/s²  trễ={t_lat:.2f} s  v={v:.1f} m/s -> quãng dừng {100*d:5.1f} cm,"
+                  f" động năng {0.5*M*v*v:.2f} J")
+```
+
+**Gate "≥19/20" đo được gì?** (chạy sau khi trả lời câu 4–5 phần Dự đoán):
+
+```python
+# [đã chạy]  Gate "≥19/20" đo được gì? Wilson CI + xác suất qua gate theo tỉ lệ thành công thật
+import numpy as np
+from scipy.stats import binom, norm
+
+def wilson(k, n, conf=0.95):
+    z = norm.ppf(1 - (1 - conf) / 2); p = k / n
+    c = (p + z*z/(2*n)) / (1 + z*z/n)
+    h = z * np.sqrt(p*(1-p)/n + z*z/(4*n*n)) / (1 + z*z/n)
+    return c - h, c + h
+
+for k in [20, 19, 18]:
+    lo, hi = wilson(k, 20); print(f"{k}/20 -> CI95 tỉ lệ thật [{lo:.2f}, {hi:.2f}]")
+
+for p in [0.99, 0.95, 0.90, 0.80]:
+    print(f"robot thật p={p:.2f}: P(qua gate ≥19/20) = {binom.sf(18, 20, p):.2f}")
+
+# p95 của sai lệch cuối từ 20 lần: thực chất là mẫu thứ 19-20 sau khi sắp xếp
+rng = np.random.default_rng(2)
+true_p95 = np.percentile(np.abs(rng.normal(0, 0.08, 10**6)), 95)   # σ=8 cm giả định
+est = [np.percentile(np.abs(rng.normal(0, 0.08, 20)), 95) for _ in range(5000)]
+print(f"p95 thật {true_p95:.3f} m; p95 từ 20 mẫu: 5%–95% của ước lượng "
+      f"[{np.percentile(est,5):.3f}, {np.percentile(est,95):.3f}] m")
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Retry có giới hạn + backoff | `RecoveryNode(number_of_retries)` + chuỗi behavior | Retry đúng khi thao tác **idempotent** và không đổi thế giới. Spin/BackUp **đổi** vị trí robot, có thể tạo tình huống xấu hơn (lùi vào người phía sau) | Tăng retries "cho chắc": robot nhảy múa trước chướng ngại 3 phút, lùi vào chân người |
+| Xóa cache khi nghi dữ liệu cũ | `ClearCostmap` | Costmap đúng là cache của quan sát; gãy ở chỗ nó là **thứ duy nhất nhớ chướng ngại ngoài tầm cảm biến** | Xóa costmap rồi lao vào vật vừa né (ToF hẹp, không thấy lại) |
+| Health check / timeout | `progress_checker` | "Tiến triển" đo bằng pose **ước lượng**; bánh trượt quay tại chỗ thì odometry vẫn báo tiến | Kẹt bánh trên thảm mà không bị coi là kẹt |
+| Circuit breaker mở → trả lỗi nhanh | Hết retries → `ABORTED` | Robot bỏ cuộc vẫn **đang đứng đâu đó** (chắn cửa); trạng thái an toàn phải được định nghĩa (C10.2) | Coi `ABORTED` là hết chuyện |
+| Data contract producer/consumer | `Twist` vs `TwistStamped` trên `cmd_vel` | Jazzy: `diff_drive_controller` nhận `TwistStamped`; Nav2 Jazzy mặc định vẫn publish `Twist`, bật `enable_stamped_cmd_vel: true` để đổi (Kilted mới đổi mặc định) `[spec — tài liệu nav2_util jazzy, thông báo Nav2; tự đo]`. Sai kiểu topic trong ROS 2 **im lặng** | Robot đứng yên, không lỗi, mất nửa ngày |
+
+**Chấm mô hình:**
+- *"Recovery behavior chính là retry."* — **ĐÚNG MỘT PHẦN.** Cấu trúc giống (giới hạn số lần, chuỗi hành động). Gãy ở idempotency và tác dụng phụ vật lý. Phản ví dụ: BackUp 0,30 m khi có người đứng sau.
+- *"SUCCEEDED nghĩa là robot đã tới đích."* — **ĐÚNG MỘT PHẦN.** Nghĩa là *ước lượng* vào vùng dung sai. Phản ví dụ: tag sai yaw (C8.1) → 20/20 SUCCEEDED, thước cho thấy dừng lệch có hệ thống.
+- *"19/20 nghĩa là thành công 95 %."* — **ĐÚNG MỘT PHẦN.** 95 % là ước lượng điểm; với n = 20 khoảng tin cậy rất rộng. Gate 20 lần là gate **khói** (smoke).
+- *Mô hình của bạn ở K3 lượt 21:* "có sẵn các kịch bản/các mode để vận hành chế độ tương ứng". — **ĐÚNG MỘT PHẦN.** Behavior tree chính là "các mode có sẵn". Gãy ở chỗ bốn kịch bản ép hỏng là bốn mẫu từ không gian vô hạn; thứ cứu hệ trong kịch bản thứ năm là **hành vi mặc định khi không khớp mode nào**: dừng, báo lỗi rõ, chờ người. Phản ví dụ: kidnapped không thuộc mode nào của BT mặc định; không thiết kế thì robot đi tiếp với pose sai.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Kidnapped robot | Robot bị dời mà bộ định vị không biết | Kịch bản hiếm, không đáng test |
+| 🟢 | Footprint / `robot_radius` | Hình bao dùng kiểm va chạm trên costmap | Kích thước khung (phải là bao ngoài lớn nhất, kể cả giá camera, dây) |
+| 🟡 | Costmap, inflation | Lưới chi phí: 0 trống, 253 inscribed, 254 chướng ngại, 255 chưa biết; inflation tạo vùng đệm | Bản đồ nhị phân |
+| 🟡 | Planner / controller | Đường toàn cục (NavFn, Smac) / sinh `cmd_vel` bám đường (Jazzy mặc định MPPI) | Một PID |
+| 🟡 | Goal / progress checker | "Tới đích", "còn tiến triển" — trên pose ước lượng | Phép đo thật |
+| 🟡 | Lifecycle node | Node Nav2 phải configure/activate mới chạy | Node "chết" |
+| 🔴 | Nội tại MPPI, Smac Hybrid-A*, SLAM toolbox | Đào sâu thuật toán | Cần cho gate |
+
+### 5. Dự đoán
+
+1. Số lần thành công trên 20.
+2. Sai lệch cuối **đo bằng thước**: median và p95 (gợi ý: `xy_goal_tolerance` + σ định vị tại B; B có thấy tag không?).
+3. Thời gian A→B: median; lần chậm nhất chậm hơn bao nhiêu; phân bố có hai cụm không?
+4. Robot thật thành công 0,90 mỗi lần: xác suất vẫn qua gate ≥19/20? (nhị thức, tính tay trước)
+5. p95 từ 20 mẫu lệch p95 thật tới đâu?
+6. Quãng dừng ở 0,2 và 0,5 m/s với trễ và gia tốc phanh của bạn (đo: lệnh dừng từ 0,3 m/s, quay video cạnh thước).
+7. Mỗi kịch bản ép hỏng (hộp chắn, người cắt ngang, kidnapped, đích không tới được): hành vi theo BT mặc định, thời gian tới khi bỏ cuộc. Đích không tới được: planner trả mã lỗi gì, và `WouldAPlannerRecoveryHelp` có cho recovery chạy không?
+8. Kidnapped với `pose0_rejection_threshold` của C8.3: robot bị nhấc sang chỗ khác và thấy một tag; bộ lọc nhận hay loại? Hệ quả?
+
+**Tham số cần tra:** `ros2 param dump` từng server: `xy_goal_tolerance`, `required_movement_radius`, `movement_time_allowance`, `vx_max` (MPPI), `inflation_radius`, `robot_radius`/`footprint`; file BT đang dùng; σ định vị tại B (C8.3).
+
+```markdown
+# Dự đoán C8.4 — commit trước lần chạy đầu tiên
+controller <…>, xy_goal_tolerance <…>, vx_max <…>, BT <…>, commit nav2_params <hash>
+Thành công <…>/20; sai lệch thước median <…> p95 <…> m (lập luận <…>); thời gian median <…> s, chậm nhất +<…> %
+P(qua gate | p = 0.90) = <…>; p95 từ 20 mẫu lệch tới <…>; quãng dừng 0.2 / 0.5 m/s: <…> / <…> cm
+| Kịch bản | Hành vi dự kiến | Thời gian tới dừng/bỏ cuộc | PASS nếu |
+|---|---|---|---|
+| Hộp chắn | | | |
+| Người cắt ngang | | | |
+| Kidnapped | | | |
+| Đích không tới được | | | |
+```
+
+### 6. Làm
+
+**An toàn trước (không tùy chọn):** mục 1 của chặng; người quan sát cầm E-stop tạm mỗi lần chạy; lần đầu 0,2 m/s.
+
+1. **Bản đồ (Lắp bước 6).** Vẽ occupancy grid từ số đo C8.1: tường, bàn, tủ cố định là đen. Gốc `map` = mốc O, khớp `landmarks.yaml`. Script dưới tạo `map.pgm` + `map.yaml` cho `map_server` và kiểm ngược một điểm; chú ý hai bẫy: PGM có **hàng 0 ở trên** (y lớn nhất), và `origin` là pose của **pixel dưới-trái**.
+
+```python
+# [đã chạy] Vẽ bản đồ occupancy cho Nav2 map_server từ số đo thước (frame map, mét) -> map.pgm + map.yaml
+import numpy as np
+RES = 0.05                                    # m/ô
+X0, Y0, W, H = -0.5, -0.5, 9.0, 7.0           # khung bản đồ trong frame map (m); gốc map = mốc A trên sàn
+FREE, OCC = 254, 0                            # trắng = trống, đen = vật (mode trinary, negate 0)
+walls = [((-0.2, -0.2), (8.2, 0.0)), ((-0.2, -0.2), (0.0, 6.2)),      # (góc dưới-trái, góc trên-phải), m
+         ((-0.2, 6.0), (8.2, 6.2)), ((8.0, -0.2), (8.2, 6.2)),
+         ((3.0, 2.0), (4.6, 2.8)),                                     # bàn cố định đo bằng thước
+         ((6.0, 4.5), (8.0, 6.0))]                                     # tủ
+nx, ny = int(round(W / RES)), int(round(H / RES))
+grid = np.full((ny, nx), FREE, np.uint8)      # grid[j, i]: j = hàng theo trục y của MAP (j=0 ở y nhỏ nhất)
+for (xa, ya), (xb, yb) in walls:
+    i0, i1 = int(np.floor((xa - X0) / RES)), int(np.ceil((xb - X0) / RES))
+    j0, j1 = int(np.floor((ya - Y0) / RES)), int(np.ceil((yb - Y0) / RES))
+    grid[max(j0, 0):j1, max(i0, 0):i1] = OCC
+img = grid[::-1]                              # PGM: hàng 0 ở TRÊN cùng = y LỚN nhất. Quên lật = bản đồ soi gương
+with open("map.pgm", "wb") as f:
+    f.write(f"P5\n{nx} {ny}\n255\n".encode()); f.write(img.tobytes())
+with open("map.yaml", "w") as f:              # origin = pose của pixel DƯỚI-TRÁI trong frame map
+    f.write(f"image: map.pgm\nmode: trinary\nresolution: {RES}\norigin: [{X0}, {Y0}, 0.0]\n"
+            "negate: 0\noccupied_thresh: 0.65\nfree_thresh: 0.25\n")
+
+def cell(x, y):                               # kiểm ngược: điểm (x, y) của map rơi vào pixel nào của ảnh
+    i = int((x - X0) / RES); j = int((y - Y0) / RES)
+    return img[ny - 1 - j, i]
+print("ảnh", nx, "x", ny, "| giữa bàn (3.8, 2.4):", cell(3.8, 2.4), "| lối đi (2.0, 4.0):", cell(2.0, 4.0),
+      "| góc tủ (7.5, 5.5):", cell(7.5, 5.5))
+```
+
+2. **Cảm biến chướng ngại (Lắp bước 5).** Mặc định Nav2 dùng nguồn `scan` (lidar) trong `obstacle_layer`/`voxel_layer`. Với ToF: `sensor_msgs/Range` vào lớp range của costmap (`nav2_costmap_2d::RangeSensorLayer`) và/hoặc làm nguồn của `collision_monitor` `[tự đo — tên plugin, tham số theo bản cài]`. Ghi **vùng mù** (độ cao, góc) vào `decisions.md`. Không có cảm biến chướng ngại thì kịch bản 1–2 vô nghĩa.
+3. **Cấu hình Nav2.** Bắt đầu từ `nav2_params.yaml` của bản Jazzy bạn cài. Mốc tham chiếu (nhánh jazzy của `nav2_bringup`, đã đọc 10/2026) `[spec — tự đo]`: MPPI `vx_max: 0.5`; goal checker 0,25 m / 0,25 rad; progress checker 0,5 m / 10 s; NavFn `tolerance: 0.5`; `inflation_radius: 0.70`, `cost_scaling_factor: 3.0`; `robot_radius: 0.22`; `obstacle_max_range: 2.5`, `raytrace_max_range: 3.0`; `velocity_smoother` `max_velocity: [0.5, 0.0, 2.0]`, `max_accel: [2.5, 0.0, 3.2]`; có `collision_monitor`; file mẫu có `amcl` (lidar) — đường marker **tắt** AMCL vì EKF đã publish `map → odom` (hai publisher một cạnh).
+   - `robot_radius`/`footprint` theo **bao ngoài đo được** (C2.4).
+   - `max_accel` mẫu 2,5 m/s² có thể vượt gia tốc mà khung của bạn chịu được không lật (C2.2): đặt theo số của bạn.
+   - `enable_stamped_cmd_vel: true` cho các node Nav2 publish/subscribe `cmd_vel` nếu controller đòi `TwistStamped`.
+   - Trần **≤0,5 m/s** ở ba tầng: controller, `velocity_smoother`, firmware. Đổi **từng tham số một**, commit `nav2_params.yaml`, ghi ảnh hưởng vào `decisions.md`.
+4. **Đo quãng dừng** (câu 6): robot 0,3 m/s, lệnh dừng (hủy goal, và riêng: nhấn E-stop tạm); video cạnh thước. Tính a và t_trễ; kiểm khoảng trống khu thử theo mục 1.
+5. **Độ lặp lại.** Cùng A, cùng B (băng dính, tọa độ đo trong `map`), **20 lần liên tiếp**. Mỗi lần một dòng `runs.csv` (mục 7 của chặng): kết quả action + mã lỗi, thời gian, pose cuối **tự báo**, pose cuối **đo thước** (tâm robot đánh dấu trên thân, hướng bằng hai dấu), số recovery, MCAP. Robot về A tự đi hay đặt tay: ghi lại (đặt tay đưa sai số đặt vào phép đo). Sai số dụng cụ: ±2–5 mm vị trí, ±1° hướng `[ước lượng]`.
+6. **Phân bố:** scatter 20 điểm dừng với vòng dung sai; median, p95 **và max** kèm câu "n = 20: p95 ≈ phần tử lớn thứ 19–20"; tỉ lệ thành công kèm Wilson CI 95 %; vẽ "sai thật − sai tự báo". Thời gian: phân bố, đánh dấu lần có recovery.
+7. **Ép hỏng, bốn kịch bản** (mỗi cái MCAP + log BT, topic `/behavior_tree_log` `[tự đo]`): **hộp chắn** đặt giữa đường khi robot đang đi (hộp cao hơn đỉnh nón ToF thấp nhất); **người cắt ngang** (người đã được dặn, robot ≤0,2 m/s, mục 1); **kidnapped**: E-stop → nhấc robot sang chỗ khác (hoặc xoay 180°) → đặt → nhả E-stop; **đích không tới được**: đích trong vùng bị hộp bao kín.
+8. **Ghi hành vi phục hồi** mỗi kịch bản: chuỗi behavior, thời gian tới dừng/bỏ cuộc, mã kết quả; so với dự đoán.
+9. **Thiết kế cho kidnapped** nếu bước 7 cho thấy robot đi tiếp với pose sai: bộ phát hiện "lạc", ví dụ N phát hiện tag liên tiếp bị gating loại mà nhất quán với nhau → hủy goal, đặt lại bộ lọc tại pose suy từ tag (`robot_localization` có dịch vụ `set_pose` `[tự đo tên]`), phát sự kiện `relocalization`, replan. Ghi N và lý do.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Ngưỡng của bản gốc (giữ nguyên):**
+
+| Kiểm tra | Ngưỡng |
+|---|---|
+| Tới đích thành công, 20 lần | **≥19/20** |
+| Sai lệch vị trí cuối, p95 | Trong dung sai đã đặt (thường 0,25 m), **đo bằng thước** |
+| Thời gian, độ biến thiên | Ghi lại. Biến thiên lớn = đang phục hồi nhiều |
+| Chắn đường | Lập lại đường hoặc phục hồi, **không đâm** |
+| Kidnapped | Phát hiện khi thấy tag, hoặc thất bại **rõ ràng**, không im lặng đi lung tung |
+| Đích không tới được | Từ bỏ sau N lần, báo lỗi. **Không lặp vô hạn** |
+
+**Quãng dừng** (script, khối lượng 5 kg): ở a = 0,5 m/s², trễ 0,15–0,4 s: **7–12 cm ở 0,2 m/s, 33–45 cm ở 0,5 m/s**; a = 1 m/s²: 5–10 cm và 20–33 cm. Động năng 0,10 J ở 0,2 m/s, 0,62 J ở 0,5 m/s. Quãng dừng tăng gần theo v² khi phanh yếu: từ 0,2 lên 0,5 m/s quãng dừng gấp 3–5 lần. Đó là lý do "người cắt ngang" chỉ làm ở 0,2 m/s, và 0,5 m/s là trần.
+
+**Gate:**
+
+| Kết quả | Wilson CI 95 % | | Tỉ lệ thật | P(qua ≥19/20) |
+|---|---|---|---|---|
+| 20/20 | [0,84; 1,00] | | 0,99 | 0,98 |
+| 19/20 | [0,76; 0,99] | | 0,95 | 0,74 |
+| 18/20 | [0,70; 0,97] | | 0,90 | 0,39 |
+| | | | 0,80 | 0,07 |
+
+p95 thật của |N(0; 8 cm)| = 0,157 m; p95 từ 20 mẫu nằm trong [0,100; 0,192] m ở 90 % số lần lặp. Robot **tốt** (95 %) trượt gate 1/4 số lần; robot **tệ hơn rõ** (90 %) vẫn qua gần 40 %. Gate 20 lần phân biệt "rất tệ" với "khá", không phân biệt 90 % với 95 %; muốn vậy cần hàng trăm lần chạy (K6 Bài 12): việc của sim + CI ở C11.2. Báo cáo trung thực: "19/20, CI95 [0,76; 0,99]", không phải "95 %".
+
+**Sai lệch cuối:** p95 thước ≈ tổng (bình phương) của phần dư goal checker (tới 0,25 m) và σ định vị tại B. B thấy tag gần thì định vị chiếm phần nhỏ; không thì p95 thước có thể vượt dung sai dù 20/20 SUCCEEDED. Hai cụm thời gian (không/có recovery) là bình thường.
+
+**Kidnapped với gating:** số đo tag đúng sau khi bị nhấc có innovation rất lớn → bị **loại** như outlier → bộ lọc tin pose cũ → robot đi tiếp với pose sai, *im lặng*: đúng thất bại bản gốc cấm. Không gating thì bộ lọc nhảy (có thể qua trạng thái trung gian sai). Cả hai cần bộ phát hiện "lạc" ở bước 9.
+
+**Đích không tới được:** planner thất bại → nếu `WouldAPlannerRecoveryHelp` nhận mã lỗi là "có ích" thì round-robin recovery tối đa 6 vòng, rồi `ABORTED`; nếu không, abort sớm. Thời gian phụ thuộc mã lỗi và tham số: đo, ghi, kiểm nó **hữu hạn**.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Robot không nhúc nhích, không lỗi | `Twist`/`TwistStamped` lệch; node chưa active; `collision_monitor` đang chặn | `ros2 topic info -v /cmd_vel`; `ros2 lifecycle get`; log collision_monitor | Thống nhất kiểu; kích hoạt lifecycle; kiểm vùng collision_monitor |
+| Xoay mòng mòng khi bắt đầu | Dấu `cmd_vel` góc hoặc yaw odometry ngược | Teleop quay trái, `/odom` yaw tăng? | Sửa dấu ở hardware interface/firmware |
+| Pose nhảy qua lại liên tục giữa hai giá trị | AMCL và EKF cùng publish `map → odom` | `view_frames` | Tắt AMCL |
+| "Failed to make a plan" ở lối rộng | Inflation/footprint làm kín lối; `origin` sai; đích trong ô chiếm | Global costmap trên Foxglove | Giảm inflation có lý do; sửa `map.yaml` |
+| Bản đồ soi gương/lệch so với thật | Quên lật trục y của PGM; `origin` là góc trên-trái | Đặt robot ở G1–G3 | Script bước 1 |
+| Lắc quanh đích, không SUCCEEDED | Dung sai chặt hơn nhiễu định vị tại B | σ pose tại B | Nới dung sai **hoặc** thêm tag gần B — chọn có lý do |
+| 20/20 SUCCEEDED nhưng thước lệch có hệ thống | Định vị sai (yaw tag, extrinsic) | Sai thật − tự báo theo hướng | Quay lại C8.1/C8.3 |
+| Đâm hộp/chân người | Vật ngoài nón ToF; footprint nhỏ hơn thật; costmap chậm | Vẽ nón nhìn; đo bao ngoài | Sửa footprint; thêm cảm biến; giảm tốc |
+| Bánh trượt mà không bị coi là kẹt | Progress checker dùng pose ước lượng | So `/odom` với marker | Rule odom vs marker (C8.5) |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot, mỗi con 50 lần A→B mỗi ngày. Gate "19/20" còn ý nghĩa? Thay bằng gì?
+<details><summary>Hướng nghĩ</summary>
+
+5000 lần/ngày đủ ước tỉ lệ lỗi với CI hẹp, theo dõi như SLO (→ F7.4): tỉ lệ thành công, phân vị thời gian, recovery/100 lần, phân tầng theo robot/tuyến/giờ. Gate thành alert trên error budget.
+
+</details>
+
+2. **[Failure mode]** 20/20 thành công nhưng lần 13 lâu gấp ba. Chỉ chấm "tới hay không" thì bỏ sót gì?
+<details><summary>Hướng nghĩ</summary>
+
+Recovery thành công vẫn là near miss; hàng không đếm near miss chứ không chỉ tai nạn. C8.5 phải trả lời "vì sao lần 13 lâu" chỉ từ dữ liệu.
+
+</details>
+
+3. **[Vì sao không]** Vì sao không tăng `number_of_retries` lên 50 cho tỉ lệ thành công cao hơn?
+<details><summary>Hướng nghĩ</summary>
+
+Đổi thất bại lấy thời gian và rủi ro (mỗi recovery là hành động vật lý), làm đẹp metric mà robot không tốt hơn: Goodhart (→ F2.8). Đặt metric đi kèm: thời gian, số recovery.
+
+</details>
+
+4. **[Liên ngành]** Phi công coi **go-around** (bỏ hạ cánh, bay vòng lại) là thao tác bình thường, có tiêu chí định lượng. Ánh xạ sang recovery/abort.
+<details><summary>Hướng nghĩ</summary>
+
+Giống: tiêu chí "ổn định" định trước, bỏ cuộc là hành vi được thiết kế. Khác: go-around đưa máy bay về trạng thái an toàn biết trước; robot bỏ cuộc phải có trạng thái an toàn tương tự (dừng sát tường? về A?): C10.2.
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Hệ phân tán — saga:** bước giao dịch dài thất bại thì chạy hành động bù. Giống recovery: chuỗi có thứ tự khi lỗi. Khác: hành động bù được thiết kế để đưa hệ về trạng thái hợp lệ; spin/backup không đảm bảo điều đó.
+- **Thử nghiệm lâm sàng — cỡ mẫu:** không ai công bố thuốc "hiệu quả 95 %" từ 20 bệnh nhân; có CI và kế hoạch cỡ mẫu trước (preregistration = `prediction.md`). Khác: robot rẻ để chạy lại hơn bệnh nhân, nhất là trong sim (C11).
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Mặc định `nav2_params.yaml` jazzy (MPPI `vx_max 0.5`, goal 0,25/0,25, progress 0,5 m/10 s, NavFn 0,5, inflation 0,70, `robot_radius 0.22`, smoother 0,5 m/s và `max_accel` 2,5, có collision_monitor và amcl) | `[spec]` | Đã đọc nhánh jazzy 10/2026; `[tự đo]` bản cài |
+| BT mặc định: 6 retries, recovery có điều kiện `WouldA…RecoveryHelp`, round-robin ClearCostmaps → Spin 1,57 → Wait 5 → BackUp 0,30 @0,15 | `[spec]` | `navigate_to_pose_w_replanning_and_recovery.xml` nhánh jazzy |
+| Jazzy: controller nhận `TwistStamped`; Nav2 mặc định `Twist`, `enable_stamped_cmd_vel` | `[spec]` | Tài liệu nav2_util (jazzy), thông báo Nav2 về TwistStamped |
+| Giá trị costmap 0/253/254/255 | `[spec]` | `nav2_costmap_2d` |
+| `map.yaml`: `origin` = pixel dưới-trái; PGM hàng 0 ở trên | `[spec]` | Tài liệu map_server; script bước 1 kiểm ngược |
+| Tên lớp range, topic log BT, dịch vụ `set_pose` | `[tự đo]` | Theo bản cài |
+
+**Đã sửa so với bản gốc/Gemini:**
+- K7 gốc: `obstacle_range` là tên ROS 1; Nav2 dùng `obstacle_max_range`/`raytrace_max_range` trong từng nguồn quan sát.
+- K7 gốc: "Controller: `max_vel`, `lookahead`": tên phụ thuộc controller (MPPI `vx_max`; RPP `desired_linear_vel`, `lookahead_dist`; DWB `max_vel_x`).
+- K7 gốc: "p95 trong dung sai (thường 0,25 m)": 0,25 m là dung sai goal checker trên pose **ước lượng**; gate đo bằng thước.
+- K7 gốc: đường marker không nói cảm biến chướng ngại; đã thêm (Lắp bước 5, bước 2).
+- Bản nháp 7B: mô tả BT thiếu điều kiện `WouldAControllerRecoveryHelp`/`WouldAPlannerRecoveryHelp` (recovery chỉ chạy theo mã lỗi); đã sửa sau khi đọc XML nhánh jazzy. Thêm: tắt AMCL của file mẫu; `max_accel` mẫu so với chống lật C2.2.
+- Gemini: costmap "0 tới 254" thiếu 253, 255; `publish_rate` của EKF thực ra là `frequency`; chỉ nêu DWB/RPP trong khi Jazzy mặc định MPPI; "p95 < 0,25 m" như ngưỡng cứng — giữ cách viết của bản gốc.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** S. Macenski và cộng sự, "The Marathon 2: A Navigation System", IROS 2020; E. Marder-Eppstein và cộng sự, "The Office Marathon", ICRA 2010.
+- **Giải thích:** docs.nav2.org — Configuration Guide, Behavior Trees, Migration Guides (Iron → Jazzy).
+- **Đào sâu (tùy chọn):** M. Colledanchise & P. Ögren, *Behavior Trees in Robotics and AI*, CRC Press 2018.
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao recovery không phải retry; (2) vẽ lại sơ đồ Nav2, đánh dấu chỗ dùng pose ước lượng; (3) dung sai 0,25 m, định vị tại B σ = 10 cm mỗi trục, không bias: sai thật ở đích có vượt 0,25 m được không, cỡ bao nhiêu trong trường hợp xấu?
+
+<details><summary>Đáp án tự kiểm tra</summary>
+
+(3) Có. Phần dư goal checker có thể gần 0,25 m, cộng sai số định vị 2D cỡ σ√2 ≈ 14 cm điển hình, tới 2–3σ ở đuôi: trường hợp xấu cỡ **0,5 m**. Vì thế gate đo bằng thước, và dung sai phải tính cả định vị.
+
+</details>
+
+---
+
+## Bài C8.5 — Ghi và phân tích session điều hướng (9h)
+
+> **Vị trí:** C8.4 (20+ session MCAP, `runs.csv`) → **C8.5** → Gate chặng 8; về sau → C10.3 (soak), C11.2 (CI) · **Cần trước:** C7.3 (sidecar MCAP, audit), → F3.7 (validate theo vật lý), → F3.4 (ghép luồng), → F2.1 (detector là một phép đo), → F7.5 (dashboard có chủ đích); K2 Bài 11–12 (lớp lỗi, detector + lỗi tiêm vào), K5 Bài 16 (validation theo vật lý) · **Sau bài này bạn quyết định được:** rule vật lý nào đáng chạy tự động trên mọi session, rule nào chỉ là nhiễu, và ghi topic nào ở tần số nào.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Tháng 9/1999, Mars Climate Orbiter tiến vào khí quyển sao Hỏa quá thấp và mất. Báo cáo của ủy ban điều tra: phần mềm mặt đất của nhà thầu xuất xung lực điều chỉnh quỹ đạo theo pound-force·giây, phần mềm điều hướng của JPL đọc như newton·giây `[chuẩn — Mishap Investigation Board, Phase I Report, 11/1999]`. File đúng định dạng, đúng tên trường, đúng kiểu số. Mọi kiểm tra theo schema đều qua. Trong nhiều tháng bay, các đội điều hướng thấy quỹ đạo lệch dần so với dự đoán, nhưng không có quy trình nào biến sự lệch đó thành một cảnh báo phải xử lý.
+
+Session điều hướng của bạn có cùng loại lỗi: pose nhảy 40 cm mà không có lý do, bánh quay mà xe đứng, odometry về 0 giữa chừng. Message vẫn hợp lệ. Thứ bắt được chúng là **rule vật lý**: kiểm một bất biến mà thế giới thật phải tuân theo, dùng một nguồn **độc lập** với thứ đang bị kiểm.
+
+### 2. Mô hình tư duy
+
+```mermaid
+flowchart LR
+  MCAP["20+ session MCAP<br/>+ runs.csv (thước)"] --> EX["trích luồng<br/>(as-of join, F3.4)"]
+  EX --> R["rule vật lý<br/>mỗi rule: bất biến + nguồn độc lập + ngưỡng có sai số"]
+  INJ["session tổng hợp<br/>có lỗi tiêm vào"] --> R
+  R --> REP["báo cáo: rule × session<br/>TP / FP / chưa rõ"]
+  R -.->|"tỉ lệ bắt lỗi tiêm, tỉ lệ báo giả"| META["chất lượng của chính rule (K2 Bài 12)"]
+  REP --> FG["Foxglove: mở đúng đoạn thời gian"]
+```
+
+Ba điều bản chất:
+1. **Một rule là một phép đo có dương tính giả và âm tính giả** (→ F2.1). Nó phải được chấm trên lỗi tiêm vào trước khi được tin trên dữ liệu thật.
+2. **Rule chỉ mạnh bằng tính độc lập của nguồn đối chiếu.** EKF của C8.3 fuse vận tốc odometry, nên quãng đường theo fusion **chứa** quãng odometry: so hai thứ đó để bắt trượt bánh là so một thứ với chính nó. Đối chiếu đúng là odometry vs **marker** (không qua bộ lọc) giữa hai lần thấy tag.
+3. **Bất biến phải là bất biến vật lý thật, không phải trực giác.** "Áp pin giảm đơn điệu" sai: áp đầu cực = OCV − I·R_trong, nên mỗi lần robot dừng (I giảm) áp **tăng lại**. Thứ đơn điệu là điện tích đã xả (coulomb counting) hoặc áp đã bù I·R.
+
+**Mô phỏng — session tổng hợp, 5 lỗi tiêm vào, rule ngây thơ vs rule đã sửa** (R_trong giả định 0,12 Ω; trên robot thật fit nó từ cặp (V, I) của INA226, C1.5). Đoán trước rule nào bắn ở đâu:
+
+```python
+# [đã chạy] Session tổng hợp có lỗi tiêm vào + 5 rule vật lý; so rule "ngây thơ" với rule đã sửa
+import numpy as np
+rng = np.random.default_rng(3); dt = 0.02; t = np.arange(0, 120, dt); n = len(t)
+v_true = np.where((t % 30) < 22, 0.3, 0.0)                 # đi 22 s, dừng 8 s, lặp lại
+v_odom = v_true + rng.normal(0, 0.005, n)
+slip = (t > 40) & (t < 43); v_true[slip] = 0.0; v_odom[slip] = 0.4   # LỖI 1: bánh quay trượt, xe đứng
+v_odom[(t > 70) & (t < 70.1)] = 0.62                        # LỖI 2: vọt tốc > 0,5 m/s
+x_true = np.cumsum(v_true) * dt; x_odom = np.cumsum(v_odom) * dt
+x_odom[t >= 110] -= x_odom[int(110 / dt)]                  # LỖI 4: controller khởi động lại, odom về 0
+seen = (np.arange(n) % 50 == 0) & ((t % 30) > 20)          # thấy tag 1 lần/s, chỉ quanh lúc dừng
+x_marker = np.where(seen, x_true + rng.normal(0, 0.01, n), np.nan)
+corr = np.zeros(n); reloc = np.zeros(n, bool)               # map->odom: nhảy khi thấy tag, CÓ cờ
+for k in np.flatnonzero(seen):
+    corr[k:] += 0.5 * (x_marker[k] - (x_odom[k] + corr[k])); reloc[k] = True
+corr[int(95 / dt):] += 0.4                                  # LỖI 3: nhảy 0,4 m KHÔNG có cờ
+x_map = x_odom + corr
+I = 0.3 + 2.5 * (v_true > 0) + rng.normal(0, 0.05, n)       # dòng pin (A): cao khi chạy
+V = 16.4 - 0.004 * t - 0.12 * I + rng.normal(0, 0.003, n)   # áp = OCV giảm chậm − I·R_trong (0,12 Ω)
+V[t > 100] += 0.3                                            # LỖI 5: thay pin nóng giữa session, không ghi sự kiện
+VMAX, EPS = 0.5, 0.03
+
+def report(name, mask): ks = np.flatnonzero(mask); print(f"{name:42s} bắn {len(ks):4d} mẫu" +
+                                   (f", đầu tiên t={t[ks[0]]:.1f} s" if len(ks) else ""))
+report("R1 tốc độ odom > 0,5 m/s", np.abs(v_odom) > VMAX + EPS)
+report("R2 odom->base_link nhảy > v_max·dt", np.abs(np.diff(x_odom, prepend=0)) > VMAX * dt + 0.005)
+jump = np.abs(np.diff(x_map - x_odom, prepend=0)) > 0.05
+report("R3 map nhảy mà KHÔNG có cờ relocalization", jump & ~reloc)
+ks = np.flatnonzero(seen)                                   # R4: so quãng odom với quãng MARKER (độc lập)
+d_odom = np.diff(x_odom[ks]); d_mark = np.diff(x_marker[ks])
+bad = np.abs(d_odom - d_mark) > 0.15 + 0.1 * np.abs(d_mark)
+print(f"{'R4 odom vs marker giữa hai lần thấy tag':42s} bắn {bad.sum():4d} cửa sổ, t={t[ks[1:]][bad].round(0)}")
+d_fus = x_map[ks[1:] - 1] - x_map[ks[:-1]]                # quãng theo fusion ngay TRƯỚC lần sửa kế tiếp
+bad_n = np.abs(d_odom - d_fus) > 0.15 + 0.1 * np.abs(d_fus)
+print(f"{'R4 ngây thơ: odom vs fusion, cùng cửa sổ':42s} bắn {bad_n.sum():4d} cửa sổ, t={t[ks[1:]][bad_n].round(0)}")
+report("R5 ngây thơ: áp pin tăng > 0,2 V trong 5 s", (V - np.r_[np.full(250, np.inf), V[:-250]]) > 0.2)
+Vc = np.convolve(V + 0.12 * I, np.ones(250) / 250, "valid")            # bù I·R, trung bình trượt 5 s
+report("R5 sửa: (V + I·R) làm mượt tăng > 0,05 V/5 s", np.r_[np.zeros(499, bool), Vc[250:] - Vc[:-250] > 0.05])
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Data quality check (not null, range, unique) | Rule vật lý | Check backend kiểm từng giá trị; rule vật lý kiểm **quan hệ giữa các luồng theo thời gian** (∫v ≈ Δx, áp theo dòng) và cần mô hình vật lý + sai số | Chỉ kiểm range từng trường: 0,4 m/s hợp lệ, trong khi xe đứng yên |
+| Alert rule trên metric | Rule chạy trên session | Alert backend có lịch sử FP/FN từ on-call; rule mới **chưa có số đo chất lượng** cho tới khi bạn tiêm lỗi | Rule báo giả mỗi lần robot dừng: người ta tắt nó, cùng với lần báo thật |
+| Integration test so hai service | So odometry với fusion | Hai service độc lập; fusion **phụ thuộc** odometry | Test luôn xanh vì so một thứ với chính nó |
+| Trace để debug request chậm | Timeline BT + recovery + costmap | Trace backend có span cha–con; session robot phải **ghép theo thời gian** nhiều luồng không có ID chung | Không trả lời được "lần 13 vì sao lâu" |
+
+**Chấm mô hình:**
+- *"Pin giảm đơn điệu"* (K7 gốc Bài 10) và *"áp nhảy tăng > 0,2 V trong < 5 s là bất thường"* (Gemini). — **SAI** như phát biểu. Áp đầu cực phục hồi mỗi khi dòng giảm (dừng, hết tăng tốc); đếm số lần R5 ngây thơ bắn trong mô phỏng trên đoạn chưa có lỗi pin nào. Bản sửa: rule trên (V + I·R) làm mượt, hoặc trên điện tích xả. Phản ví dụ thực tế: robot dừng ở B, áp tăng vài trăm mV trong vài giây.
+- *"Quãng odometry ≈ quãng theo pose fusion, lệch thì bánh trượt"* (K7 gốc, Gemini Rule 3). — **ĐÚNG MỘT PHẦN.** Ý đúng: so hai cách đo quãng đường. Gãy ở chỗ fusion lấy vận tốc từ chính odometry; xem R4 ngây thơ phản ứng thế nào với lỗi trượt trong mô phỏng. Bản sửa so với marker thô.
+- *"Vị trí không nhảy quá v_max·dt, trừ khi có hiệu chỉnh định vị có cờ"* (K7 gốc). — **ĐÚNG**, khi tách làm hai rule: `odom → base_link` **không bao giờ** được nhảy (R2); `map → odom` được nhảy **chỉ khi** có sự kiện relocalization (R3, cần chính sách bước 9 của C8.3).
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Bất biến vật lý (invariant) | Quan hệ thế giới thật luôn thỏa, có sai số biết trước | Ngưỡng chọn cho đẹp |
+| 🟢 | Lỗi tiêm vào (fault injection) | Lỗi biết trước cài vào dữ liệu để đo tỉ lệ bắt của rule | Test đơn vị thường |
+| 🟢 | Tỉ lệ báo giả / bỏ sót | FP rate / FN rate của rule | Chỉ đếm số lần bắn |
+| 🟡 | Coulomb counting | Tích phân dòng để biết điện tích đã xả | Đo áp |
+| 🟡 | Downsampling khi ghi | Ghi topic nặng ở tần số thấp hơn tần số publish | Mất dữ liệu (là quyết định, phải ghi) |
+
+### 5. Dự đoán
+
+1. Chạy mô phỏng trong đầu: mỗi rule (R1–R5, cả bản ngây thơ) bắn ở lỗi nào, bao nhiêu lần?
+2. Dung lượng một giờ session nếu ghi: ảnh nén 640×480 ở 30 Hz; `/odometry/filtered` 30 Hz; `/odom` 50 Hz; TF; global costmap của bản đồ C8.4 ở 1 Hz; local costmap 3 × 3 m ở 2 Hz. Topic nào chiếm phần lớn?
+3. Trên 20 session thật của C8.4, rule nào bắn ít nhất một lần? Ít nhất một bất thường thật bạn đoán sẽ gặp là gì?
+
+**Tham số cần tra:** cỡ một khung JPEG thật của camera bạn (`ros2 topic bw`); kích thước `map.pgm`; `publish_frequency` của hai costmap trong `nav2_params.yaml`; cỡ message (`ros2 topic bw` hoặc `mcap info`).
+
+```markdown
+# Dự đoán C8.5 — commit trước khi chạy rule trên dữ liệu thật
+Mô phỏng: R1 <…> R2 <…> R3 <…> R4 <…> R4 ngây thơ <…> R5 ngây thơ <…> R5 sửa <…>
+Dung lượng/giờ: ảnh <…> MB, odom+filtered <…> MB, costmap <…> MB, tổng <…> MB; lớn nhất: <…>
+20 session thật: rule sẽ bắn <…>; bất thường thật dự đoán <…>
+```
+
+### 6. Làm
+
+1. **Mở rộng sidecar MCAP** (C7.3): pose ước lượng `/odometry/filtered`, `/marker_pose` + `/diagnostics` của marker_node, TF, `/plan`, `cmd_vel` (cả đầu vào và đầu ra `velocity_smoother`), `/tof/range` hoặc `/scan`, log BT + kết quả action, sự kiện `relocalization`, `/battery`, costmap **giảm tần số**. Metadata session: `calibration_id`, commit `nav2_params`, commit `landmarks.yaml`, `run_id` khớp `runs.csv`, cờ `calibration_suspect`.
+2. **Ngân sách dung lượng** (câu 2). Quyết định ghi ảnh hay không. Ảnh camera trong văn phòng là **dữ liệu có người**: mặc định C8 ghi phát hiện tag (góc, ID, pose), **không** ghi ảnh; ảnh chỉ trong phiên chẩn đoán có báo trước, xóa theo hạn. Thiết kế đầy đủ ở C9.1. Ghi vào `decisions.md`.
+3. **Layout Foxglove** `layouts/c08_nav.json` (commit): 3D/2D với bản đồ, TF, `/plan`, vệt pose, tag; biểu đồ `cmd_vel` chồng vận tốc `/odom`; biểu đồ σ tự báo (từ covariance) chồng innovation; biểu đồ V, I pin; bảng sự kiện (goal, recovery, relocalization, rule bắn).
+4. **Viết ≥4 rule** (`rules/nav_physics.py`), mỗi rule ghi rõ: bất biến, nguồn độc lập, ngưỡng **kèm nguồn sai số** của ngưỡng. Bộ tối thiểu: R1 tốc độ ≤ trần + sai số vận tốc odometry; R2 `odom → base_link` liên tục; R3 nhảy `map → odom` phải có cờ; R4 odometry vs marker giữa hai lần thấy tag; R5 pin trên (V + I·R) hoặc điện tích. Rule nên có thêm: NIS của EKF nằm trong dải χ² (C8.3 câu hỏi 1); innovation trung bình theo tag ID (C8.1 câu hỏi 3); `cmd_vel` khác 0 kéo dài mà vận tốc đo ≈ 0 (kẹt).
+5. **Test tổng hợp cho từng rule:** mỗi rule một session có lỗi tiêm vào (bắt được, đúng thời điểm) và một session sạch (không bắn). Dùng cách sinh như mô phỏng ở phần 2, nhưng ghi ra MCAP thật để đi đúng đường đọc của tool (K2 Bài 12). Báo tỉ lệ bắt trên ≥20 lần tiêm ngẫu nhiên mỗi loại lỗi.
+6. **Chạy trên mọi session thật** (20 lần A→B + 4 kịch bản ép hỏng + 20 phút của C8.3). Mỗi lần bắn: mở Foxglove đúng đoạn, phân loại **thật / báo giả / chưa rõ**, ghi nguyên nhân. Báo giả → sửa ngưỡng có lý do (không phải "cho hết đỏ"), ghi vào lịch sử rule.
+7. **Câu hỏi "lần chạy thứ N vì sao lâu"**: chọn lần chậm nhất của C8.4, trả lời chỉ bằng dashboard + log, ghi chuỗi nguyên nhân (ví dụ: tag bị che → σ tăng → … ). Rồi kiểm bằng ghi chép sổ build.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Mô phỏng:**
+
+| Rule | Bắn | Ý nghĩa |
+|---|---|---|
+| R1 tốc độ | 4 mẫu, t = 70,0 s | Bắt vọt tốc (LỖI 2) |
+| R2 odom liên tục | 1 mẫu, t = 110,0 s | Bắt odometry reset (LỖI 4) |
+| R3 nhảy không cờ | 1 mẫu, t = 95,0 s | Bắt nhảy 0,4 m không cờ (LỖI 3); các lần sửa có cờ không bắn |
+| R4 odom vs marker | 2 cửa sổ, kết thúc t = 51 và 111 s | Bắt trượt 40–43 s (LỖI 1) và reset |
+| R4 ngây thơ (odom vs fusion) | **0** | Mù với cả trượt lẫn reset: fusion chứa odometry |
+| R5 ngây thơ (áp tăng > 0,2 V/5 s) | **1399 mẫu**, từ t = 22 s | Báo giả mỗi lần dừng; vô dụng |
+| R5 sửa (V + I·R) | bắn từ t = 101,2 s | Bắt thay pin không ghi sự kiện (LỖI 5); không báo giả lúc dừng |
+
+R4 bắt trượt chậm: chỉ khi thấy tag tiếp theo (t = 51 s, ~8 s sau). Độ trễ phát hiện của rule là một thuộc tính phải báo cùng tỉ lệ bắt.
+
+**Dung lượng/giờ `[ước lượng — kiểm bằng ros2 topic bw]`:** ảnh JPEG 30–60 kB × 30 Hz ≈ **3–6,5 GB/h**; `/odom` + `/odometry/filtered` (~0,7 kB mỗi message vì hai covariance 6×6 kiểu double) ≈ 0,2 GB/h; global costmap 180 × 140 ô ≈ 25 kB × 1 Hz ≈ 90 MB/h; local costmap 60 × 60 ô × 2 Hz ≈ 26 MB/h; TF, ToF, `cmd_vel`, BT log: vài chục MB/h. Ảnh chiếm > 90 %. Không ghi ảnh: cỡ 0,3–0,4 GB/h.
+
+**Thực đo — khoảng chấp nhận (bản gốc):** ≥4 rule vật lý, **mỗi cái có test tổng hợp**; trên session thật **bắt được ≥1 bất thường thật**; dashboard trả lời được "lần chạy thứ N vì sao lâu" chỉ bằng cách nhìn. Bất thường thật hay gặp trên robot mới `[ước lượng]`: một lần `map → odom` nhảy lớn sau đoạn mù, trượt bánh khi Spin trên thảm, trễ camera vọt khi CPU N100 bận, odometry reset khi controller khởi động lại. Không bắt được gì trên 20+ session: nghi rule quá lỏng trước khi kết luận robot hoàn hảo; kiểm bằng lỗi tiêm vào.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| R2 bắn liên tục khi robot chạy bình thường | So pose `map` thay vì `odom`; ngưỡng bỏ quên jitter dt | Rule đọc frame nào; phân bố dt | R2 trên `odom → base_link`, dùng dt thật từng mẫu |
+| R4 bắn mọi session | UMBmark chưa sạch (C6); marker bias theo d (C8.2) | Tỉ lệ d_odom/d_marker theo session | Hiệu chỉnh tham số; ngưỡng theo sai số hai nguồn |
+| Rule không bắn ở lỗi tiêm vào trên MCAP | Đọc sai topic/kiểu; thời gian ghi vs thời gian message lẫn lộn | So log_time với header.stamp | Thống nhất một trục thời gian (→ F3.3) |
+| File MCAP vài GB mỗi lần chạy | Ghi ảnh thô/30 Hz, costmap ở tần số publish | `mcap info` theo channel | Bước 2: không ghi ảnh, giảm tần số costmap |
+| Không trả lời được "vì sao lâu" | Thiếu log BT hoặc kết quả action | Danh sách channel | Bổ sung bước 1, chạy lại một lần |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot × 8 h/ngày. Rule chạy trên robot hay trên server? Rule nào phải chạy **trên robot**, và vì sao?
+<details><summary>Hướng nghĩ</summary>
+
+Rule cần phản ứng (R1 tốc độ, R2 odom nhảy, kẹt) phải chạy trên robot và nối vào state machine (C10.2), vì server biết sau hàng phút. Rule thống kê (innovation theo tag, drift calibration) chạy trên server qua nhiều session, nhiều robot. Chi phí đọc 800 giờ MCAP/ngày là bài toán index và columnar (→ F3.6).
+
+</details>
+
+2. **[Failure mode]** Rule R4 dùng marker làm nguồn độc lập. Khi nào marker **không** còn độc lập với odometry?
+<details><summary>Hướng nghĩ</summary>
+
+Khi `marker_node` dùng pose dự đoán từ odometry để chọn nghiệm PnP (C8.2) hoặc để gating: một odometry sai có thể làm chọn nhầm nghiệm "nhất quán với nó". Độc lập là thuộc tính của **cả đường xử lý**, không chỉ của cảm biến.
+
+</details>
+
+3. **[Phản biện]** Gate đòi "bắt được ≥1 bất thường thật". Nếu robot của bạn thật sự sạch, gate này khuyến khích điều gì?
+<details><summary>Hướng nghĩ</summary>
+
+Khuyến khích nới ngưỡng tới khi rule bắn (Goodhart, → F2.8). Cách đọc đúng: bằng chứng rule hoạt động là **tỉ lệ bắt lỗi tiêm vào**; "bất thường thật" chứng minh rule có ích trên phân bố thật. Robot sạch thì chạy thêm điều kiện khó (thảm, ánh sáng yếu, khoảng mù dài) thay vì nới rule.
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Điện lực — state estimation lưới điện:** trung tâm điều độ ước lượng trạng thái lưới từ hàng nghìn phép đo dư thừa và dùng **phần dư** để phát hiện "bad data" (thiết bị đo hỏng, số đo bị sửa). Giống: kiểm nhất quán giữa các nguồn qua mô hình vật lý (định luật Kirchhoff ↔ ∫v = Δx). Khác: lưới có độ dư thừa cao (nhiều phép đo cho một trạng thái); robot của bạn thường chỉ có hai nguồn, nên phát hiện được là "có gì sai", ít khi định vị được "nguồn nào sai".
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Mars Climate Orbiter: lbf·s vs N·s, mất 9/1999 | `[chuẩn]` | NASA MCO Mishap Investigation Board, Phase I (11/1999) |
+| Áp đầu cực = OCV − I·R_trong; phục hồi khi dòng giảm | `[chuẩn]` | Đo bằng INA226 (C1.5) |
+| Số bắn của R1–R5 | `[đã chạy]` | Mô phỏng phần 2, seed cố định |
+| Dung lượng/giờ | `[ước lượng]` | `ros2 topic bw`, `mcap info` |
+
+**Đã sửa so với bản gốc/Gemini:**
+- K7 gốc Bài 10 rule "pin giảm đơn điệu": sai vật lý (áp phục hồi khi tải giảm). Sửa: (V + I·R) làm mượt hoặc điện tích xả. Gemini Rule 4 (> 0,2 V trong < 5 s) cùng lỗi (mô phỏng phần 2, số ở 🔒).
+- K7 gốc + Gemini Rule 3: "quãng odom ≈ quãng fusion" để bắt trượt: vòng tròn khi EKF fuse vận tốc odom. Sửa: so với marker thô. Gemini câu tự kiểm 2 ("odometry báo 0,4 m/s, EKF báo đứng yên") sai vì cùng lý do: EKF chỉ biết đứng yên khi có marker.
+- K7 gốc: "vị trí không nhảy quá v_max·dt trừ khi có hiệu chỉnh" giữ, tách thành R2 (odom) và R3 (map).
+- Gemini: "dashboard chỉ ra robot phải Spin 2 lần do có người chắn" là kết quả bịa trước khi có dữ liệu; bỏ. Gemini: "báo động giả = 0 trên đoạn thẳng" như tiêu chí: không có trong gate gốc; giữ làm đề xuất (đo FP rate), không thêm vào gate.
+- Thêm: ảnh camera trong session là dữ liệu có người, mặc định không ghi (→ C9.1).
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** NASA, *Mars Climate Orbiter Mishap Investigation Board Phase I Report* (1999); tài liệu MCAP (mcap.dev) về channel, metadata, index.
+- **Giải thích:** tài liệu Foxglove về layout và panel; K5 Bài 16.
+- **Đào sâu (tùy chọn):** A. Abur & A. Gómez Expósito, *Power System State Estimation: Theory and Implementation* (chương bad data detection).
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao rule vật lý cần nguồn độc lập; (2) vẽ lại sơ đồ phần 2; (3) robot dừng ở B, áp pin tăng từ 15,62 lên 15,90 V trong 3 s, dòng giảm từ 2,8 A xuống 0,3 A. Có bất thường không, nếu R_trong ≈ 0,12 Ω?
+
+<details><summary>Đáp án tự kiểm tra</summary>
+
+(3) I·R giảm (2,8 − 0,3) × 0,12 = 0,30 V; áp tăng 0,28 V: khớp phục hồi do tải giảm, **không** bất thường. (V + I·R) trước: 15,62 + 0,336 = 15,96 V; sau: 15,90 + 0,036 = 15,94 V: gần như không đổi.
+
+</details>
+
+---
+
+## Gate chặng 8
+
+Tiêu chí giữ nguyên GATE 7B của K7 gốc; phần chú thích chỉ nói cách đo và cách đọc.
+
+```
+[ ] 1. Hiệu chuẩn camera có reprojection error <0.5px, lưu thành artifact có version
+       (calibration_id; camera_info.yaml + calibration.json có RMS train và giữ kín, hash ảnh, control v4l2)
+
+[ ] 2. Bảng độ chính xác pose từ marker: ≥5 khoảng cách × ≥3 góc, ≥100 mẫu mỗi ô
+       (bias và std tách riêng; kèm fit Z_est = a·Z_thước + b; marker_noise.yaml gắn calibration_id)
+
+[ ] 3. So sánh ba đường (odom / marker / fusion) trên 20 phút chạy thật, có ground truth
+       (ground truth = mốc sàn đo thước, ngân sách sai số ghi trong decisions.md; có cột "bộ lọc trung thực?")
+
+[ ] 4. A→B 20 lần liên tiếp, ≥19 thành công, phân bố pose cuối có p95
+       (pose cuối đo bằng THƯỚC; báo kèm Wilson CI 95 % và max; p95 trong dung sai đã đặt)
+
+[ ] 5. 4 kịch bản ép hỏng, mỗi cái có hành vi xác định và được ghi log
+       (hộp chắn, người cắt ngang, kidnapped, đích không tới được; MCAP + log BT; thời gian tới khi dừng là hữu hạn)
+
+[ ] 6. ≥4 rule validation vật lý, bắt được ≥1 bất thường thật trong 20 session
+       (mỗi rule có test tổng hợp với lỗi tiêm vào; mỗi lần bắn đã phân loại thật/báo giả/chưa rõ)
+
+[ ] 7. Bài viết: "Measuring navigation repeatability on a $200 robot"
+       (số kèm khoảng tin cậy; nói rõ 20 lần là gate khói, không phải phép đo độ tin cậy)
+```
+
+Thêm, bắt buộc vì đây là chặng đầu robot tự đi (an toàn, không thay tiêu chí gốc): kẹp tốc độ firmware và timeout lệnh đã đo trong **mọi** buổi chạy tự động (sổ build); không có near miss nào chưa được phân tích.
+
+**FAIL action (giữ của bản gốc):** chạm 110h chưa PASS → bỏ tiêu chí 5 và 6, giữ 1–4, publish, sang C9. Tiêu chí an toàn ở trên không bỏ được. *Đề xuất (không thay tiêu chí):* vì phần ROS 2/`/odom` và gá cảm biến đã chuyển sang C5, C7, chặng mới là 70h; trần ~100h (cùng tỉ lệ 110/80 của bản gốc) là mốc hợp lý hơn để dừng lại xem xét.
+
+**Gate này không chứng minh:** robot an toàn khi không có người quan sát (đó là C10), hay tỉ lệ thành công thật cao hơn ~76 % (cận dưới CI của 19/20). Hai điều đó là việc của C10.3 và C11.2.

@@ -287,8 +287,8 @@ def pcnt_hw(true_counts, high=32767, low=-32768, accum=False):
     return np.array(out)
 
 # Bánh quay đều về phía trước, 4x quadrature; đọc mỗi 10 ms
-CPR_OUT = 11 * 4 * 30          # 11 xung/vòng trục motor x4 cạnh x tỉ số 30 [ước lượng, JGB37-520 tự đo]
-rev_s = 0.5 / (np.pi * 0.08)   # 0,5 m/s, bánh D = 80 mm [ước lượng]
+CPR_OUT = 11 * 4 * 56          # 11 xung/vòng trục motor x4 cạnh x tỉ số 56 (JGB37-520 1:56, C2.1) [tự đo PPR ở C3.3]
+rev_s = 0.5 / (np.pi * 0.085)  # 0,5 m/s, bánh D = 85 mm (C2.1)
 cps = CPR_OUT * rev_s          # count/giây
 print(f"{CPR_OUT} count/vòng bánh; ở 0,5 m/s: {cps:.0f} count/s, {cps*0.01:.1f} count/chu kỳ 10 ms")
 print(f"thời gian để chạy hết 32767 count: {32767/cps:.1f} s")
@@ -443,11 +443,11 @@ Tạo `lab/c04/c41-prediction.md`, commit trước khi mở 🔒.
 
 <details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
 
-| Câu | Với tham số trong mô phỏng (PPR 11, tỉ số 30, D 80 mm) | Ghi chú |
+| Câu | Với tham số trong mô phỏng (PPR 11, JGB37-520 1:56, bánh 85 mm — mặc định C2.1) | Ghi chú |
 |---|---|---|
-| 1 | 1320 count/vòng bánh; ~2626 count/s ở 0,5 m/s; ~26 count/chu kỳ | Số của bạn khác theo motor; công thức là thứ cần đúng |
-| 2 | ~12,5 s | Robot chạy thẳng 10 m ở 0,5 m/s sẽ tràn hơn một lần |
-| 3 | Trừ thô: 1 chu kỳ sai trong 20 s, lệch 32.767 count (~25 vòng bánh). Trừ int16: **cũng sai** đúng chu kỳ đó, cùng độ lệch. accum_count: 0 | Lỗi hiếm và rất lớn: kiểu lỗi test 5 giây không bắt được, chạy 10 m mới thấy |
+| 1 | 2464 count/vòng bánh; ~4614 count/s ở 0,5 m/s; ~46 count/chu kỳ | Số của bạn khác theo motor; công thức là thứ cần đúng |
+| 2 | ~7,1 s | Robot chạy thẳng 10 m ở 0,5 m/s sẽ tràn hai lần |
+| 3 | Trừ thô: 2 chu kỳ sai trong 20 s, mỗi lần lệch 32.767 count (~13 vòng bánh). Trừ int16: **cũng sai** đúng các chu kỳ đó, cùng độ lệch. accum_count: 0 | Lỗi hiếm và rất lớn: kiểu lỗi test 5 giây không bắt được, chạy 10 m mới thấy |
 | 4 | 80 MHz / 20 kHz = 4000 bước → 11 bit (2048 bước); một bước ≈ 0,05 % | Thừa đủ cho motor; vùng chết C3.4 lớn hơn bước duty hàng chục lần `[ước lượng]` |
 | 5 | Cỡ vài µs hoặc thấp hơn `[ước lượng]`; ≪ 1 % chu kỳ | Độ trễ ngắt không phải nguồn jitter chính; tranh chấp CPU và cache mới là (C4.2) |
 | 6 | Tùy bảng tra. Đáp án đúng về thiết kế: dù có glitch, motor **không** quay nếu DRV_EN có kéo xuống và chỉ lên sau ARM | Lắp bước 5 kiểm bằng đo, không bằng niềm tin |
@@ -1043,7 +1043,7 @@ stateDiagram-v2
 | Lớp trong firmware | Bắt được | Không bắt được |
 |---|---|---|
 | Lease trên mỗi CMD (C4.3) | Host treo, rút USB, hardware interface chết | Host gửi đều lệnh sai |
-| Kẹp từng bánh + gia tốc | Lệnh vượt 0,5 m/s, quay tại chỗ quá nhanh | Encoder sai |
+| Kẹp từng bánh + kẹp gia tốc (tăng tốc và **phanh**, giới hạn phanh chống lật từ C2.2 trong `decisions.md`) | Lệnh vượt 0,5 m/s, quay tại chỗ quá nhanh, lệnh dừng gấp làm robot chúi/lật | Encoder sai |
 | Giám sát tốc độ **đo được** | Windup, dấu sai, lệnh lọt qua kẹp | Encoder chết im (đọc 0) |
 | Kiểm tính hợp lý encoder | Duty cao lâu mà count không đổi (đứt dây, kẹt bánh) | — |
 | Task WDT (`esp_task_wdt_add` cho `control_task`, `trigger_panic`) | Task điều khiển treo → chip reset → chân về cao trở → kéo xuống tắt driver → boot vào DISARMED | Chip treo hẳn mà WDT nội cũng chết (cùng chip) |
@@ -1051,11 +1051,14 @@ stateDiagram-v2
 
 Câu bản chất: **mọi lớp ở bảng trên nằm trên cùng một chip, cùng một nguồn 3,3 V.** Chúng là các tầng 1–2 của bốn tầng an toàn (K7 C10.1); tầng 0 (E-stop cắt động lực) và watchdog **độc lập** với ESP32 không thể nằm ở đây.
 
+**Phanh cũng phải kẹp, không chỉ tốc độ.** Lệnh "về 0 ngay" từ host hay từ hết lease là một cú phanh; C2.2 đã tính gia tốc phanh lớn nhất trước khi robot chúi/lật và ghi vào `decisions.md` — firmware giảm tốc không nhanh hơn số đó. Ngoại lệ có chủ đích: FAULT cắt PWM về 0 ngay (driver ở chế độ **coast**, motor trôi, gia tốc do ma sát); **không** chọn chế độ dòng phanh (H-bridge brake, C3.2) cho FAULT trừ khi C2.2 cho thấy gia tốc phanh đó vẫn dưới ngưỡng lật.
+
 **Kẹp thế nào cũng là quyết định:** kẹp từng bánh độc lập đổi **độ cong** quỹ đạo (C5.3 có mô phỏng); co cả hai bánh cùng tỉ lệ giữ độ cong. Mô hình dưới dùng co tỉ lệ.
 
 ```python
 # [đã chạy] Mô hình failsafe firmware (chạy mỗi 10 ms) — dùng làm oracle cho test trên bàn/HIL
-R, V_MAX, A_MAX, DT = 0.04, 0.5, 1.0, 0.01        # bán kính bánh m, m/s, m/s², s  [ước lượng]
+R, V_MAX, DT = 0.0425, 0.5, 0.01                  # bánh 85 mm (C2.1), m/s, s
+A_ACC, A_BRAKE = 0.5, 1.0   # m/s²: tăng tốc (C2.1) / phanh — lấy từ decisions.md (chống lật C2.2) [ước lượng]
 W_MAX = V_MAX / R                                  # kẹp theo TỪNG bánh (rad/s)
 
 class Firmware:
@@ -1081,9 +1084,10 @@ class Firmware:
         over = max(abs(w) for w in w_meas) > 1.2 * W_MAX
         s.over_t = s.over_t + DT if over else 0.0
         if s.over_t >= 0.1: s.fault("overspeed")   # giám sát tốc độ ĐO được, bất kể lệnh
-        step = A_MAX / R * DT                       # kẹp gia tốc
-        for i in (0, 1):
-            s.out[i] += max(-step, min(step, s.target[i] - s.out[i]))
+        for i in (0, 1):                            # kẹp gia tốc: tăng tốc và PHANH có giới hạn riêng
+            d = s.target[i] - s.out[i]
+            a = A_ACC if abs(s.target[i]) > abs(s.out[i]) else A_BRAKE
+            s.out[i] += max(-a / R * DT, min(a / R * DT, d))
         return tuple(s.out)
 
 def run(name, steps):
@@ -1131,7 +1135,7 @@ Mô hình này là **oracle** cho test trên bàn: cùng kịch bản chạy tr�
 ```markdown
 # C4.4 — dự đoán
 1. Chạy s5_failsafe.py: 5 kịch bản ra trạng thái và lý do gì? (đoán trước)
-2. Lease 200 ms, CMD 100 Hz, rút USB khi bánh 0,5 m/s: PWM về 0 sau ___ ms (công thức: lease + chu kỳ kiểm + thời gian dốc giảm)
+2. Lease 200 ms, CMD 100 Hz, rút USB khi bánh 0,5 m/s: bắt đầu giảm sau ___ ms, đứng yên sau ___ ms (công thức: lease + chu kỳ kiểm + v / a_phanh; a_phanh từ `decisions.md`, C2.2)
 3. Lệnh ωL tương đương 2 m/s, ωR 1 m/s: firmware ra ___ / ___ m/s
 4. Task điều khiển kẹt vòng lặp vô hạn (lệnh test): từ lúc kẹt tới lúc DRV_EN thấp ___ ms (tra timeout TWDT trong sdkconfig)
 5. Sau reset do WDT, bánh làm gì nếu host vẫn gửi CMD? ___
@@ -1148,16 +1152,17 @@ Mỗi bước là một test tự động trong `tests/bench/` (host Python + lo
 5. **Task WDT:** lệnh test làm `control_task` treo; đo tới DRV_EN thấp; STATE đầu tiên sau boot báo `reset_reason = TASK_WDT` và `state = DISARMED`; bánh không quay dù host vẫn gửi CMD.
 6. **ESTOP_SENSE:** mở chuỗi (công tắc thử trên bàn) → FAULT `estop`; đóng lại → vẫn FAULT tới khi RESET.
 7. **Lặp/cũ:** phát lại khung cũ, khung trùng `req_id` → không đổi trạng thái (idempotent).
+8. **Kẹp phanh:** bánh treo ở 0,5 m/s, gửi lệnh 0 đột ngột; gia tốc giảm tính từ encoder (vi phân vận tốc, lọc) không vượt a_phanh trong `decisions.md`. Lặp lại khi chạm đất ở C5.
 
 ### 7. Số phải ra
 
 <details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
 
-**Mô hình (đã chạy):** bình thường → ARMED, bánh trái 0,50 m/s, phải 0,25 m/s (co tỉ lệ 2:1); mất lệnh → ARMED, out 0 (hết lease, dốc về 0); lặp gói → 1 khung `stale` bị bỏ, không đổi; E-stop → FAULT `estop`; encoder hỏng (đọc tốc độ rất lớn) → FAULT `overspeed`.
+**Mô hình (đã chạy):** bình thường → ARMED, bánh trái 0,50 m/s (11,76 rad/s), phải 0,25 m/s (co tỉ lệ 2:1); mất lệnh → ARMED, out 0 (hết lease, dốc về 0); lặp gói → 1 khung `stale` bị bỏ, không đổi; E-stop → FAULT `estop`; encoder hỏng (đọc tốc độ rất lớn) → FAULT `overspeed`.
 
 | Phép thử | Đúng là |
 |---|---|
-| Lease (câu 2) | t ≈ 200 ms + ≤ 10 ms chu kỳ kiểm + dốc giảm (0,5 m/s ở 1 m/s² ≈ 0,5 s) nếu dừng có điều khiển; **tiêu chí theo timeout bạn chọn**, không theo một con số cố định |
+| Lease (câu 2) | t ≈ 200 ms + ≤ 10 ms chu kỳ kiểm tới lúc **bắt đầu** giảm; về 0 thêm v/a_phanh (0,5 m/s ở 1 m/s² ≈ 0,5 s, a_phanh lấy từ `decisions.md`); **tiêu chí theo timeout bạn chọn**, không theo một con số cố định |
 | Kẹp (câu 3) | 0,5 / 0,25 m/s |
 | TWDT (câu 4) | ≈ timeout TWDT (mặc định trong sdkconfig, thường vài giây `[tự đo]`) — **quá dài** cho an toàn motor. Lease mới là tầng phản ứng chính; TWDT bắt trường hợp chính lease cũng không chạy |
 | Sau reset (câu 5) | Không quay: DISARMED tới khi ARM có chủ đích |
@@ -1217,7 +1222,7 @@ Cùng nguyên tắc: lỗi an toàn cần **người xác nhận** để tiếp 
 | MCPWM fault → brake không qua CPU | `[spec]` | ESP-IDF MCPWM; hành vi thật `[tự đo]` bằng logic analyzer |
 | Lease 200 ms | `[ước lượng]` | Đề xuất; chọn theo phân bố đo |
 
-**Đã sửa so với bản gốc/Gemini:** từ K7 gốc Bài 15 chỉ lấy phần firmware (watchdog lệnh, kẹp tốc độ); sửa mâu thuẫn "5 nhịp × 100 ms" với "< 500 ms"; kẹp từng bánh + gia tốc + giám sát tốc độ đo được (Gemini chỉ kẹp `target_vx`); heartbeat phải đi từ chính đường tính lệnh (Gemini dùng task riêng); thêm: reset không tự ARM, kiểm tính hợp lý encoder, MCPWM fault.
+**Đã sửa so với bản gốc/Gemini:** từ K7 gốc Bài 15 chỉ lấy phần firmware (watchdog lệnh, kẹp tốc độ); sửa mâu thuẫn "5 nhịp × 100 ms" với "< 500 ms"; kẹp từng bánh + gia tốc tăng/phanh theo giới hạn chống lật C2.2 + giám sát tốc độ đo được (Gemini chỉ kẹp `target_vx`); heartbeat phải đi từ chính đường tính lệnh (Gemini dùng task riêng); thêm: reset không tự ARM, kiểm tính hợp lý encoder, MCPWM fault.
 
 ### 12. Đọc thêm và tự kiểm tra
 
@@ -1244,7 +1249,7 @@ Giữ tiêu chí jitter của Gate 7A (tiêu chí 3) và ngưỡng K7 gốc Bài
 | 3 | PI trên bàn | Đáp ứng bước: vọt lố < 10 %, xác lập < 200 ms, sai số xác lập ~0 (bánh treo; đo lại khi chạm đất ở Gate C5) | Chỉnh lại; kiểm feedforward, windup |
 | 4 | Encoder | 10 vòng tay khớp công thức; chạy > 3 lần 32767 count không lệch bậc | `accum_count` + watch point |
 | 5 | Giao thức | Fuzz 10⁵ khung: 0 lệnh sai được áp; bộ đếm khớp lỗi cố ý; mở/đóng cổng 20 lần không tăng `boot_count` (hoặc đã có biện pháp ghi rõ) | Sửa framing/cổng |
-| 6 | Failsafe | Mất lệnh (dừng gửi, rút USB, `kill -STOP`): dừng trong ≤ timeout đã chọn + chu kỳ kiểm + 1 chu kỳ PWM (timeout ≤ 500 ms như K7 gốc), 10/10 mỗi kiểu; lệnh 2 m/s → ≤ 0,5 m/s đo bằng encoder, kể cả quay tại chỗ; reset → DISARMED; E-stop sense chốt | **Không** chạy robot bằng pin ở C5 tới khi PASS |
+| 6 | Failsafe | Mất lệnh (dừng gửi, rút USB, `kill -STOP`): dừng trong ≤ timeout đã chọn + chu kỳ kiểm + 1 chu kỳ PWM (timeout ≤ 500 ms như K7 gốc), 10/10 mỗi kiểu; lệnh 2 m/s → ≤ 0,5 m/s đo bằng encoder, kể cả quay tại chỗ; giảm tốc khi lệnh 0 không vượt a_phanh của `decisions.md` (C2.2); reset → DISARMED; E-stop sense chốt | **Không** chạy robot bằng pin ở C5 tới khi PASS |
 | 7 | Hạt giống HIL | `tests/bench/` chạy một lệnh, ra pass/fail/inconclusive cho 2, 5, 6 | Viết lại test cho tới khi chạy không cần tay |
 
 Gate PASS → C5. Tiêu chí 6 là điều kiện cứng trước khi motor nhận điện từ pin.

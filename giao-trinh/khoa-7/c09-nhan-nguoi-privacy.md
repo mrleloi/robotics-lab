@@ -19,7 +19,7 @@ Phần build của chặng nhỏ (một cột gá camera, một công tắc USB 
 
 ## 0. Bức tranh chặng
 
-Robot sau C9: thêm một **cột** đứng trên khung, đầu cột là camera nhận mặt nhìn hơi ngửa lên, cạnh nó là LED đỏ chỉ sáng khi camera có điện. Camera dùng cho marker ở C8 giữ nguyên chỗ cũ. Không có dữ liệu ảnh nào rời khỏi RAM của mini PC.
+Robot sau C9: thêm một **cột** đứng trên khung, đầu cột là camera nhận mặt (độ cao, góc ngửa chọn ở C9.2), cạnh nó là LED đỏ chỉ sáng khi camera có điện. Camera dùng cho marker ở C8 giữ nguyên chỗ cũ. Không có dữ liệu ảnh nào rời khỏi RAM của mini PC.
 
 ```
                  ┌──────── SERVER Ở NHÀ / LAPTOP ─────────────────────────────┐
@@ -30,7 +30,7 @@ Robot sau C9: thêm một **cột** đứng trên khung, đầu cột là camera
                                            │ WiFi: task, kiểm lại trước khi phát, purge(pid) + ack
    [LED đỏ]◄─VBUS sau công tắc             │
    [CAM mặt] ◄─USB─[công tắc VBUS]─┐   ┌───┴──────────── MINI PC N100 ──────────────────────┐
-      │  cột 0,8–1,0 m (C9.2)      └──►│ detect → (chỉ khi có task) align → embed → so 1:1 │
+      │  cột (độ cao: C9.2)        └──►│ detect → (chỉ khi có task) align → embed → so 1:1 │
       │                                │ gallery mã hóa, kho khóa (không backup)            │
    [CAM marker C7/C8]─USB─────────────►│ audit log chuỗi hash · MCAP: chỉ pid + điểm, KHÔNG ảnh│
                                        └───────────────┬────────────────────────────────────┘
@@ -74,7 +74,7 @@ Giá `[ước lượng 10/2026]`, kiểm lại ở cửa hàng. Nguyên tắc mu
 | Camera nhận mặt USB (UVC) | 720p–1080p, HFOV 60–80°, lấy nét cố định, có chỉnh exposure tay qua V4L2 | Mặt cách 1–1,5 m cần ≳30 px giữa hai mắt (mô phỏng ở mục 3) `[ước lượng]`; exposure tay để đo nhòe (C9.2) | 300–800k | `v4l2-ctl --list-formats-ext`, `--list-ctrls` có `exposure_time_absolute` (hoặc tương đương) `[tự đo]` | Dùng chung camera marker C8: rẻ hơn nhưng LED luôn sáng, một luồng ảnh hai mục đích (C9.1, phần 8) |
 | Cáp USB có công tắc trên dây (inline switch), hoặc cáp nối dài để tự cắt | Công tắc cắt **VBUS**, không cắt D+/D− | Bất biến "camera có điện ⇔ LED sáng" cần một điểm cắt nguồn trong tay người (C9.3) | 30–80k | Đo thông mạch VBUS khi bật/tắt | Load switch do ESP32 điều khiển (yếu hơn: phần mềm chạm được) |
 | LED đỏ 3–5 mm + điện trở | Màu khác LED nguồn của robot; điện trở tính ở C9.3 | Người xung quanh phân biệt được "camera có điện" | <10k | Chế độ diode của UT33D+ đo V_f | — |
-| Cột gá | Nhôm định hình 2020 hoặc ống nhựa cứng, 0,6–0,8 m trên mặt khung; ke góc, ốc T | Camera ở 0,9–1,0 m nhìn mặt người ngồi gần chính diện (mục 3) | 80–200k | Thẳng, không ọp ẹp khi lắc | Ống PVC + kẹp |
+| Cột gá | Nhôm định hình 2020 hoặc ống nhựa cứng, 0,6–0,8 m trên mặt khung; ke góc, ốc T | Độ cao camera chọn bằng script mục 3 trước khi mua; cột cho phép thử nhiều độ cao | 80–200k | Thẳng, không ọp ẹp khi lắc | Ống PVC + kẹp |
 | Ngàm camera | Ốc 1/4"-20, có khớp chỉnh nghiêng và khóa | Góc ngửa chỉnh được rồi khóa chặt; lỏng = đổi hình học giữa các buổi đo | 50–150k | Siết xong không tự xoay khi rung | In 3D |
 | Nút bấm lớn "nghe / từ chối" | Nút arcade 30 mm (hai nút hai màu) hoặc một nút + nhấn giữ | Xác nhận thứ hai trước khi đọc nội dung (C9.2 phần 7, C9.4) | 30–80k | Thông mạch khi nhấn | Nút trên điện thoại người nhận |
 | Đo ánh sáng | App lux trên điện thoại, hoặc lux kế rẻ | Chỉ để **phân nhóm** sáng tốt/sáng yếu; sai số có thể vài chục phần trăm `[tự đo]` | 0–400k | So hai thiết bị cùng chỗ | — |
@@ -788,3 +788,625 @@ Domain shift (camera, góc ngửa, ánh sáng văn phòng của bạn) và cơ s
   </details>
 
 ---
+
+## Bài C9.3 — Đăng ký, xóa dữ liệu, audit log (12h)
+
+> **Vị trí:** C9.2 → **C9.3** → C9.4 · **Cần trước:** C9.1 (bản kiểm kê), → F3.1 (log append-only, segment), → F3.5 (idempotency), → F2.5 (canary, fault injection), → F3.8 (lineage), → F7.4 (SLO) · **Sau bài này bạn quyết định được:** cơ chế xóa nào thật sự xóa (xóa bản ghi, dọn ở tầng file, hay hủy khóa); audit log giữ gì, bao lâu, làm sao vừa không sửa được vừa xóa được; LED camera đấu vào đâu.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 2014, Matthew Brocker và Stephen Checkoway công bố *iSeeYou: Disabling the MacBook Webcam Indicator LED* (USENIX Security). Trên MacBook đời cũ, đèn xanh cạnh webcam được coi là "nối cứng". Thật ra đèn do vi điều khiển trong module camera điều khiển, và firmware của nó **nạp lại được từ phía người dùng**; hai tác giả cho camera quay mà đèn tắt `[chuẩn]`. Một chỉ báo mà phần mềm chạm tới được thì không phải chỉ báo phần cứng, dù nó nằm trên bo mạch.
+
+Câu chuyện thứ hai xảy ra ở mọi hệ: người dùng bấm "xóa tài khoản", bản ghi biến khỏi bảng, test PASS, và dữ liệu vẫn nằm trong WAL, trong trang trống của file DB, trong backup đêm qua, trong core dump tuần trước. Ghi đè ở tầng file còn không đảm bảo xóa ô nhớ SSD, vì bộ điều khiển flash ghi sang chỗ khác (Wei et al., *Reliably Erasing Data from Flash-Based Solid State Drives*, FAST 2011) `[chuẩn]`. "Xóa" là thuộc tính phải **thiết kế ra**, không phải một câu lệnh.
+
+### 2. Mô hình tư duy
+
+```mermaid
+flowchart TB
+    subgraph KS["Kho khóa trên robot (KHÔNG backup)"]
+        K1["K_A: khóa riêng của A"]
+        MAP["Bảng ánh xạ pid_7f3a ↔ A"]
+    end
+    subgraph DATA["Dữ liệu (nhiều bản sao)"]
+        G["Gallery: Enc(K_A, template_A)"]
+        WAL["WAL / trang trống"]
+        BK["Backup đêm qua"]
+        AL["Audit log (pid_7f3a, điểm, giờ)"]
+        MC["MCAP: sự kiện với pid_7f3a"]
+    end
+    DEL["Xóa A"] -->|"1. hủy K_A + dòng ánh xạ"| KS
+    DEL -->|"2. xóa bản ghi + reload matcher + ack"| G
+    G -.-> WAL
+    G -.-> BK
+    K1 -. "mở được" .-> G
+    K1 -. "mở được" .-> BK
+    MAP -. "nối pid với người" .-> AL
+    MAP -. "nối pid với người" .-> MC
+```
+
+**Crypto-shredding:** không đuổi theo từng bản sao, mà làm mọi bản sao vô dụng cùng lúc. Mã hóa dữ liệu của mỗi người bằng một khóa riêng, chỉ giữ khóa ở **một nơi nhỏ, không backup, xóa được**. Hủy khóa là WAL, backup, sector SSD còn sót chỉ còn byte mã hóa không mở được.
+
+Ba hệ quả:
+1. **Gallery không cần backup.** Mất gallery thì đăng ký lại, cái giá rẻ. Đây là chỗ thói quen "cái gì cũng backup" của backend phải đảo lại.
+2. **Audit log ghi `pid` (giả danh), không ghi tên.** Log append-only không sửa; khi A bị xóa, dòng ánh xạ bị hủy, log còn lại không nối được về A. Giới hạn: chuỗi sự kiện đủ dài (giờ, vị trí) vẫn suy ngược được, nên log cũng có hạn giữ, xóa theo **segment** ngày như retention của Kafka.
+3. **MCAP không bao giờ chứa embedding hay ảnh**, chỉ `pid` và điểm, nên lệnh xóa không đòi viết lại file MCAP bất biến.
+
+**Tamper-evident bằng chuỗi hash:** mỗi dòng mang hash dòng trước; sửa hay xóa một dòng giữa chuỗi thì mọi hash sau sai. Đó là phát hiện được việc sửa, không phải chặn được: kẻ có quyền ghi viết lại được cả chuỗi, trừ khi hash đầu chuỗi được neo định kỳ ra nơi khác.
+
+**Thí nghiệm trước khi viết code xóa:** `DELETE` trong SQLite có xóa byte khỏi đĩa không? Đoán trước 12 dòng.
+
+```python
+# [đã chạy] DELETE trong SQLite có xóa byte khỏi đĩa không? Tự kiểm.
+import os, sqlite3, tempfile
+print("mặc định của bản build này:", sqlite3.connect(":memory:").execute("PRAGMA secure_delete").fetchone())
+
+MARK = b"USR_0042_NGUYEN_VAN_A"          # chuỗi nhận dạng giả để grep
+
+def trial(secure: bool, wal: bool, cleanup: str) -> dict:
+    d = tempfile.mkdtemp(); path = os.path.join(d, "gallery.db")
+    con = sqlite3.connect(path)
+    if wal:
+        con.execute("PRAGMA journal_mode=WAL")
+    con.execute(f"PRAGMA secure_delete={'ON' if secure else 'OFF'}")
+    con.execute("CREATE TABLE g(id TEXT, emb BLOB)")
+    for i in range(50):                  # 50 người, embedding rút gọn 256 byte
+        uid = MARK if i == 42 else f"USR_{i:04d}".encode()
+        con.execute("INSERT INTO g VALUES(?,?)", (uid, os.urandom(256)))
+    con.commit()
+    con.execute("DELETE FROM g WHERE id=?", (MARK,)); con.commit()
+    if "vacuum" in cleanup:
+        con.execute("VACUUM")
+    if "ckpt" in cleanup:                # chép WAL vào DB rồi cắt WAL về 0 byte
+        con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    found = {}
+    for f in os.listdir(d):              # quét MỌI file cạnh DB: .db, -wal, -shm
+        with open(os.path.join(d, f), "rb") as fh:
+            found[f] = MARK in fh.read()
+    con.close()
+    return found
+
+for secure in (False, True):
+    for wal in (False, True):
+        for cl in ("none", "vacuum", "vacuum+ckpt"):
+            r = trial(secure, wal, cl)
+            print(f"secure={secure!s:5} WAL={wal!s:5} {cl:12} còn dấu vết ở: {[f for f, v in r.items() if v]}")
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| `DELETE FROM users WHERE id=…` | Xóa template | Xóa ở DB là xóa **logic**: byte còn ở trang trống, WAL, backup, sector SSD | Test "không còn nhận diện được" PASS trong khi template khôi phục được |
+| Event sourcing / Kafka log bất biến | Audit log append-only | Quyền xóa đụng tính bất biến; event store thường dùng crypto-shredding | Hoặc sửa log (mất kiểm toán), hoặc giữ tên trong log mãi |
+| Invalidate cache sau khi ghi DB | Reload matcher sau khi xóa | Cache nằm trong RAM **của robot**, robot có thể offline | Người đã xóa vẫn được gọi tên vài giờ |
+| Integration test với fixture | Test xóa đầu–cuối | Phải dùng **canary** có dấu hiệu biết trước và tìm ở mọi kho, kể cả nén/mã hóa | Grep không thấy vì backup nén, kết luận "sạch" |
+| Đèn trạng thái do app điều khiển | LED camera | Thứ phần mềm điều khiển được thì phần mềm bị chiếm cũng điều khiển được | Chỉ báo mất giá trị đúng lúc cần |
+| Backup mọi thứ, 3-2-1 | Kho khóa | **Không backup** kho khóa là tính năng | Backup kho khóa = crypto-shredding vô hiệu |
+
+**Chấm mô hình:**
+- *"Xóa bản ghi và test 'không còn nhận diện được' là đủ."* — **SAI.** Test đó chỉ chứng minh matcher không còn đọc bản ghi. Phản ví dụ: thí nghiệm SQLite ở trên (đếm ở phần 7 số cấu hình còn byte sau `DELETE` đã commit).
+- *"Grep toàn hệ thống không còn dấu vết là chứng minh."* (tiêu chí gốc của K7 gốc Bài 13) — **ĐÚNG MỘT PHẦN.** Grep tìm chuỗi rõ; không tìm được embedding (mảng float), dữ liệu nén hay mã hóa. Phản ví dụ: backup `.tar.gz` chứa nguyên gallery. Sửa: canary có chuỗi đánh dấu **và** ảnh probe; giải nén backup vào sandbox, khôi phục, thử **so khớp** probe; không giải mã được mới là bằng chứng.
+- *Mô hình của bạn ở K3 lượt 6:* "không có forward 100% realtime… luôn có buffer ở giữa… để kiểm soát sự ổn định." — **ĐÚNG** cho luồng thời gian thực. Mặt kia: **mỗi buffer là một bản sao**. Phản ví dụ: tiến trình nhận diện crash, systemd-coredump lưu nguyên heap xuống đĩa, gồm vài frame mặt người lạ; hoặc kernel đẩy trang chứa frame xuống swap.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Crypto-shredding | Mã hóa theo từng chủ thể, xóa bằng cách hủy khóa | Mã hóa toàn đĩa |
+| 🟢 | Dữ liệu canary | Bản ghi giả có dấu hiệu biết trước để kiểm luồng xóa/rò rỉ | Dữ liệu test thường |
+| 🟢 | Append-only, tamper-evident | Chỉ ghi thêm; sửa thì bị phát hiện | Không thể sửa |
+| 🟢 | Retention | Hạn giữ dữ liệu kèm cơ chế xóa khi hết hạn | Xóa tay khi đầy đĩa |
+| 🟡 | Data remanence | Dữ liệu còn sót ở tầng thấp hơn sau khi "xóa" | Chuyện trong phim |
+| 🟡 | `secure_delete`, `VACUUM`, `wal_checkpoint(TRUNCATE)` | Ba công cụ SQLite để byte đã xóa rời file | Một trong ba là đủ |
+| 🟡 | Tombstone | Bản ghi "đã xóa" lan qua các bản sao | Xóa ngay |
+| 🔴 | Xóa an toàn tầng SSD (ATA Secure Erase, TRIM, FTL) | Cần khi thanh lý ổ; không cần nếu đã crypto-shred | — |
+
+### 5. Dự đoán
+
+1. **SQLite:** chạy `python3 -c "import sqlite3; print(sqlite3.connect(':memory:').execute('PRAGMA secure_delete').fetchone())"` để biết mặc định máy bạn, rồi đoán cấu hình nào còn chuỗi `USR_0042…` ở file nào.
+2. **Canary sau xóa ngây thơ** (chỉ `DELETE` + reload matcher): còn sót ở bao nhiêu nơi trong bản kiểm kê C9.1?
+3. **LED:** đo V_f bằng chế độ diode của UT33D+; `R = (V_VBUS − V_f) / I` với I = 5–10 mA; V_VBUS đo thật (thường gần 5 V `[tự đo]`). Đoán LED sáng/tắt trong bốn trạng thái: (a) cáp cắm, công tắc bật, không app nào mở camera; (b) app đang chụp; (c) công tắc tắt; (d) mini PC suspend.
+4. **Retention** audit log (ngày), một câu lý do: ai cần đọc log, để trả lời câu hỏi gì, trong bao lâu sau sự kiện.
+5. **SLO xóa:** thời gian từ lúc bấm tới lúc matcher ack, p95 bạn hứa.
+
+```markdown
+# prediction.md — C9.3
+- secure_delete mặc định: __ ; cấu hình còn dấu vết (file): __
+- Canary còn sót sau DELETE ngây thơ ở __ nơi: __
+- LED: V_f = __ V, V_VBUS = __ V, I = __ mA -> R = __ Ω; (a)(b)(c)(d): __ __ __ __
+- Retention audit log: __ ngày, vì: __
+- SLO xóa: p95 ≤ __ s khi robot online; khi robot offline: hành vi __
+```
+
+### 6. Làm
+
+1. **Luồng đăng ký:** web đơn giản trên LAN, **có xác thực** (chỉ đăng ký chính mình). Chụp **phía server từ camera trên robot**, không cho trình duyệt upload: framework web thường ghi upload ra file tạm khi vượt một ngưỡng kích thước `[tự đo — framework của bạn]`. Tạo embedding, người dùng tự xác nhận đồng ý, ảnh chỉ sống trong RAM.
+2. **Chặn rò xuống đĩa** cho dịch vụ nhận diện và đăng ký: `LimitCORE=0` trong unit systemd; không cho dùng swap (`MemorySwapMax=0`, cần cgroup v2) hoặc mã hóa swap `[spec — systemd.exec(5), systemd.resource-control(5); tự đo]`. Không bao giờ log embedding.
+3. **Template mã hóa, khóa riêng từng người:** template của A mã hóa bằng khóa ngẫu nhiên K_A (ví dụ AES-GCM qua thư viện `cryptography` `[tự đo — API]`); các K_x trong kho khóa nhỏ, quyền 600, **loại khỏi mọi script backup** (kể cả backup của C7.3); khóa chủ ở file riêng hoặc TPM. DB gallery bật `secure_delete`, sau mỗi lần xóa chạy `VACUUM` + `wal_checkpoint(TRUNCATE)`: thừa nếu crypto-shredding đúng, phòng khi bạn sai.
+4. **Nút xóa** (giao diện có xác thực): hủy K_A và dòng ánh xạ → xóa bản ghi → phát `purge(pid)` cho matcher trên robot (ROS 2 service/topic) → matcher reload và **ack**. Idempotent (→ F3.5): bấm hai lần, robot nhận hai lần, không lỗi.
+5. **Test xóa đầu–cuối tự động với canary:** đăng ký canary (ảnh của chính bạn, tên chứa chuỗi đánh dấu duy nhất) → session ngắn: nhận diện, ghi MCAP, audit, chạy script backup → bấm xóa → kiểm: (a) probe không còn khớp trên robot, đo thời gian bấm → ack; (b) K_canary và dòng ánh xạ không còn; (c) quét byte chuỗi đánh dấu trong thư mục dữ liệu, WAL, log, journald, MCAP (giải nén trước nếu nén); (d) giải nén backup vào sandbox, khôi phục gallery, thử so khớp probe → **không giải mã được** bản của canary; (e) dòng audit và sự kiện MCAP của canary còn, nhưng `pid` không nối được với ai. Lặp ≥10 lần, ghi p50/max của (a).
+6. **Audit log:** mỗi lần nhận diện ghi wall + monotonic + `boot_id`, `pid`, điểm, quyết định; chuỗi hash; neo hash cuối ngày về server; segment theo ngày, xóa segment hết hạn; đọc qua một công cụ duy nhất có ghi "ai đọc lúc nào".
+7. **Lắp bước 4 — LED camera nối phần cứng** theo mục 4(A) của chặng (checkpoint ở mục 5). Bất biến: *camera có điện ⇒ LED sáng*, bất kể ai bật. Đo bằng UT33D+: áp trên LED và VBUS camera trong bốn trạng thái ở phần 5; đo dòng LED (nối tiếp) để kiểm điện trở.
+8. Cập nhật `PRIVACY.md`: ràng buộc 3–7 giờ có test hoặc phép đo kèm theo.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**SQLite** (đã chạy lại 10/2026 trên Python hệ thống của máy soạn; bản build bật `SECURE_DELETE` mặc định, máy bạn có thể khác):
+
+| secure_delete | WAL | Dọn dẹp | Còn dấu vết ở |
+|---|---|---|---|
+| OFF | không | không | **.db** |
+| OFF | không | VACUUM (± checkpoint) | sạch |
+| OFF | có | không / VACUUM | **-wal** |
+| OFF | có | VACUUM + checkpoint TRUNCATE | sạch |
+| ON | không | bất kỳ | sạch |
+| ON | có | không / VACUUM | **-wal**: `secure_delete` không xóa bản INSERT đã nằm trong WAL |
+| ON | có | VACUUM + checkpoint TRUNCATE | sạch |
+
+Bài học: ở WAL, **không cấu hình nào sạch nếu thiếu checkpoint**; mặc định phụ thuộc bản build, nên test trên máy thật. "Sạch ở tầng file" chưa phải "sạch ở tầng SSD": crypto-shredding là lớp chính, ba lệnh SQLite là lớp phụ.
+
+**Canary sau xóa ngây thơ:** thường còn ở ≥3 nơi: WAL hoặc trang trống, backup, và log/MCAP nếu có chỗ ghi tên thay `pid`.
+
+| Kiểm tra (bản gốc, sửa tiêu chí) | Kết quả đúng |
+|---|---|
+| Test xóa đầu–cuối | **PASS:** probe không khớp; khóa và ánh xạ đã hủy; không còn chuỗi đánh dấu ở dạng rõ trong mọi file, kể cả backup đã giải nén; bản backup của template **không giải mã được** |
+| Bấm xóa → matcher ack | Có p50/max qua ≥10 lần. Robot offline: hoặc **không nhận diện ai** khi chưa xác nhận danh sách thu hồi mới nhất, hoặc kiểm danh sách thu hồi ngay khi kết nối lại, trước mọi hành động phát; chọn một, ghi `decisions.md` |
+| Ảnh thô sau đăng ký | Không có trong thư mục dữ liệu, `/tmp`, journald; core dump tắt |
+| Người chưa đăng ký | "Một người", **không có embedding nào được lưu** |
+| LED camera | Sáng **khi và chỉ khi** camera có điện. (a) sáng: có điện nhưng chưa chắc đang quay; vì vậy công tắc trong tay người là bắt buộc. (b) sáng. (c) tắt. (d) tùy BIOS có cấp VBUS khi suspend không `[tự đo]` |
+| Ví dụ điện trở | LED đỏ V_f ≈ 2,0 V, I = 5 mA từ 5 V → R ≈ 600 Ω, chọn 680 Ω `[ước lượng — V_f đo thật]`; dòng LED vài mA là không đáng kể so với camera trong power budget (→ C1.2) |
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Chuỗi canary còn trong `.db` | `secure_delete` tắt, chưa VACUUM | Chạy lại thí nghiệm với cấu hình của bạn | Bật, VACUUM sau xóa; gốc là crypto-shredding |
+| Còn trong `-wal` | Chưa checkpoint | `ls -l *.db-wal` sau xóa | `wal_checkpoint(TRUNCATE)` sau mỗi lần xóa |
+| Backup khôi phục ra template canary và **giải mã được** | Kho khóa bị backup cùng | Liệt kê đường dẫn trong cấu hình backup | Loại kho khóa; xoay khóa chủ |
+| Robot vẫn gọi tên canary sau khi xóa | Matcher không reload, robot offline lúc xóa | Log ack của purge | Bắt buộc ack; kiểm danh sách thu hồi khi reconnect |
+| File ảnh trong `/tmp` | Upload qua trình duyệt | `find /tmp -newer <mốc>` | Chụp phía server; hoặc tmpfs + xóa ngay |
+| LED sáng cả khi đã "tắt camera" trong app | LED đúng thiết kế: báo **có điện**, không báo "app mở" | Đo VBUS khi app đóng | Gạt công tắc; ghi rõ ý nghĩa LED trên thân robot |
+| Camera không lên lại sau khi bật công tắc | Re-enumerate USB chậm | Đo thời gian bật → frame đầu | Đưa vào ngân sách latency C9.4, hoặc chỉ tắt khi robot về sạc |
+| Audit log có tên thật | Ghi tên cho dễ debug | Grep một tên đã biết | Chỉ `pid`; công cụ đọc log tra ánh xạ khi có quyền |
+
+### 9. Câu hỏi ngược
+
+1. **[Failure mode]** Kho khóa hỏng (thẻ nhớ lỗi, ghi dở khi mất điện). Hệ quả là gì, vì sao đó là chế độ hỏng **chấp nhận được**?
+<details><summary>Hướng nghĩ</summary>
+
+Mất kho khóa = mọi người đăng ký lại; không ai bị lộ. So với chế độ ngược lại (kho khóa bị copy). Thiết kế tốt chọn "mất tính năng" thay vì "mất quyền riêng tư": đúng nguyên tắc fail-safe ở → K7 C10.1.
+
+</details>
+
+2. **[Quy mô]** 100 robot, mỗi robot giữ gallery của cùng 300 người. Kho khóa ở từng robot hay ở server? Mỗi lựa chọn gãy gì khi mạng chập chờn?
+<details><summary>Hướng nghĩ</summary>
+
+Khóa ở server: xóa một chỗ là xong, nhưng robot offline không nhận diện được ai (có thể là đúng hành vi). Khóa trên robot: nhận diện offline được, nhưng xóa phải lan tới 100 nơi và chờ ack. Đánh đổi tính sẵn sàng với SLO xóa (→ F7.4).
+
+</details>
+
+3. **[Nếu…thì]** Pháp chế muốn giữ audit log một năm để điều tra khiếu nại, người dùng yêu cầu xóa ngay. `pid` + hủy ánh xạ có đáp ứng cả hai không? Còn kẽ hở nào?
+<details><summary>Hướng nghĩ</summary>
+
+Log còn, không nối được về người. Kẽ hở: suy ngược từ mẫu hành vi (giờ, vị trí); giả danh không phải ẩn danh. Làm thô thời điểm/vị trí trong log giữ lâu.
+
+</details>
+
+4. **[Vì sao không]** Vì sao không bật mã hóa toàn đĩa (LUKS) rồi coi xong ràng buộc 4 và 5?
+<details><summary>Hướng nghĩ</summary>
+
+LUKS bảo vệ khi **mất máy**. Khi máy chạy, đĩa đã mở, mọi tiến trình đọc được. Nó không xóa được **một người**: khóa đĩa là của cả đĩa.
+
+</details>
+
+5. **[Phản biện]** LED trên nguồn camera là chỉ báo thật. Robot còn có mic (→ K7 C12.1) và camera marker. Một chỉ báo trung thực cho một cảm biến có làm người xung quanh tin nhầm về cảm biến khác không?
+<details><summary>Hướng nghĩ</summary>
+
+Niềm tin phủ rộng hơn phạm vi chỉ báo. Hoặc mỗi cảm biến một chỉ báo, hoặc ghi rõ trên thân robot chỉ báo nào nói về cái gì.
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Event sourcing và GDPR.** Cộng đồng event sourcing gặp đúng mâu thuẫn "log bất biến vs quyền xóa" và đi tới crypto-shredding. Khác: hệ của bạn còn bản sao vật lý không qua log (WAL, swap, core dump), nên kiểm kê phải rộng hơn.
+- **Công tắc ngắt phần cứng trên một số điện thoại/laptop hướng quyền riêng tư.** Giống: "không có điện thì không thu được" không phụ thuộc phần mềm. Khác: họ cắt **nguồn** bằng công tắc trong tay người dùng; LED của bạn chỉ trung thực ở mức đó khi công tắc cũng nằm trong tay người, không trong tay ESP32.
+- **Hồ sơ ngân hàng.** Giữ hồ sơ nhiều năm theo luật, đồng thời tôn trọng quyền khách hàng: tách "phải giữ" khỏi "xóa được", giới hạn truy cập theo mục đích. Khác: ngân hàng có căn cứ pháp lý rõ để giữ; bạn thì không.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| iSeeYou: LED MacBook đời cũ tắt được bằng firmware | `[chuẩn]` | Brocker & Checkoway, USENIX Security 2014 |
+| Ghi đè tầng file không đảm bảo xóa ô nhớ SSD | `[chuẩn]` | Wei et al., FAST 2011 |
+| Bảng SQLite | `[tự đo]` | Đã chạy lại khi soạn; chạy trên máy bạn |
+| `LimitCORE=`, `MemorySwapMax=` | `[spec]` | systemd.exec(5), systemd.resource-control(5); kiểm phiên bản |
+| Framework ghi upload ra đĩa khi vượt ngưỡng | `[tự đo]` | `find` sau upload |
+| V_f LED, điện trở | `[ước lượng]` | Chế độ diode |
+
+**Đã sửa so với bản gốc/Gemini:** (1) "grep toàn hệ thống" → canary + khôi phục backup + thử so khớp; (2) "không còn dấu vết trong MCAP đã ghi" → thiết kế để MCAP không chứa dữ liệu cần xóa; (3) Gemini: LED nối VBUS cổng USB "khi ngắt driver LED phải tắt" → **sai**, đóng driver không cắt VBUS; LED chỉ trung thực trên đường nguồn có công tắc; (4) Gemini: `find / -name "*.jpg"` trả về rỗng → luôn ra file của hệ điều hành; giới hạn vào thư mục dữ liệu, `/tmp`, journald; (5) Gemini: "không tệp ảnh nào từng xuất hiện trên SSD" nhờ xử lý trong RAM → bỏ qua swap, core dump, file tạm; thêm bước 2; (6) Gemini chỉ xóa bản ghi SQLite + grep → thêm thí nghiệm SQLite và crypto-shredding; (7) thêm SLO xóa đo phân bố, nằm trong thời hạn luật mới (C9.1).
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** tài liệu SQLite về `PRAGMA secure_delete`, chế độ WAL, checkpoint.
+- **Giải thích:** Brocker & Checkoway, *iSeeYou*, USENIX Security 2014.
+- **Đào sâu (tùy chọn):** Wei, Grupp, Spada, Swanson, *Reliably Erasing Data from Flash-Based Solid State Drives*, FAST 2011.
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao kho khóa **không** được backup; (2) vẽ lại sơ đồ kho khóa/dữ liệu; (3) hai câu dưới.
+
+  a. Vì sao chuỗi hash làm audit log tamper-evident mà không tamper-proof, cần thêm gì?
+  <details><summary>Đáp án</summary>
+
+  Ai có quyền ghi tính lại được toàn bộ hash từ dòng bị sửa trở đi. Cần neo hash định kỳ ra ngoài (server khác, kênh người ghi không sửa được); sửa lịch sử sẽ lệch với điểm neo.
+
+  </details>
+
+  b. Robot offline đúng lúc người dùng bấm xóa. Hai hành vi hợp lệ và một hành vi không hợp lệ?
+  <details><summary>Đáp án</summary>
+
+  Hợp lệ: (1) không nhận diện ai khi chưa xác nhận danh sách thu hồi mới nhất; (2) nhận diện nhưng kiểm danh sách thu hồi ngay khi kết nối lại, trước mọi hành động phát, và ghi rõ khoảng thời gian tối đa có thể còn nhận ra người đã xóa. Không hợp lệ: tiếp tục phát tin cho người đó vì "chưa nhận được lệnh xóa".
+
+  </details>
+
+---
+
+## Bài C9.4 — Tích hợp nhận diện vào điều hướng (14h)
+
+> **Vị trí:** C9.3 → **C9.4** → Gate chặng 9 → K7 C12.2 (luồng sản phẩm) · **Cần trước:** K7 C8.4 (Nav2 A→B), K3 Bài 14 (state machine), C9.2 (FRR theo điều kiện, latency), → F1.2 (p99 của ít mẫu), → F3.3 (event time vs processing time), → F4.6 (thời điểm của một phép đo cảm biến), → F3.9 (drop policy) · **Sau bài này bạn quyết định được:** deadline nhận diện bao nhiêu giây và tính từ mốc nào; khi nhiều người trong khung thì kiểm ai, theo thứ tự nào, và có được đọc nội dung to không.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+*Kịch bản* (không phải sự cố có thật): robot dừng ở hành lang trước bàn người nhận. Người nhận cúi xuống bàn phím. Một đồng nghiệp đi ngang, khuôn mặt mới lọt vào khung, và bộ đếm timeout được **khởi động lại**. Người thứ hai đi ngang, lại khởi động lại. Robot đứng chắn lối 11 phút cho tới khi có người bấm E-stop. Log đầy đủ: mỗi khuôn mặt được xử lý đúng, mỗi timeout được đặt đúng. Không dòng nào sai, cả hệ sai.
+
+Lỗi "sự kiện mới làm mất lịch sử" có tiền lệ thật: trong vụ xe tự lái Uber va chạm chết người ở Tempe (3/2018), báo cáo NTSB ghi nhận hệ thống phân loại lại người đi bộ nhiều lần, và mỗi lần đổi lớp thì lịch sử theo dõi dùng để dự đoán quỹ đạo không được giữ `[chuẩn — NTSB HAR-19/03]`. Bài học giữ lại ở đây: **bộ đếm thời gian và lịch sử theo dõi gắn với sự việc đang xảy ra (robot đang chờ người đích), không gắn với từng quan sát.**
+
+### 2. Mô hình tư duy
+
+```mermaid
+sequenceDiagram
+    participant SM as State machine (robot)
+    participant N as Nav2
+    participant B as ESP32 / odometry / nút
+    participant P as Pipeline nhận diện
+    participant S as Server (lớp 2, DND, rate limit)
+    SM->>N: goal = vị trí tiếp cận người đích
+    N-->>SM: tới nơi (hoặc cancel khi đủ gần)
+    SM->>B: chờ |v|, |ω| dưới ngưỡng trong X ms
+    Note over SM: DEADLINE tuyệt đối = t_dừng + T
+    loop mỗi khung, tới DEADLINE
+        P->>P: detect → chọn mặt → align → embed → so 1:1 với người đích
+    end
+    alt khớp trước DEADLINE
+        SM->>B: "có tin cho [tên], bấm nút xanh để nghe"
+        B-->>SM: xanh / đỏ / không bấm trước DEADLINE_NÚT
+        SM->>S: kiểm lại lớp 2 + DND + rate limit
+        S-->>SM: OK / từ chối / không liên lạc được
+        SM->>SM: SPEAKING chỉ khi xanh VÀ OK
+    else hết DEADLINE
+        SM->>SM: RETURNING, lý do TIMEOUT
+    end
+```
+
+1. **Deadline tuyệt đối, không phải timeout bị reset.** Đặt một mốc khi robot đã đứng yên; mọi thứ sau đó không dời mốc. Giống deadline propagation trong RPC: thời hạn đi theo yêu cầu, không theo từng lần thử.
+2. **Thử nhiều khung không phải nhiều phép thử độc lập.** Người cúi đầu ở khung này thì khung sau vẫn cúi. Xác suất "trượt cả k khung" lớn hơn rất nhiều so với `FRR^k` (mô phỏng dưới).
+3. **Mỗi khuôn mặt được kiểm là một lần thử impostor.** Kiểm k khuôn mặt là k cơ hội nhận nhầm: `≈ 1 − (1 − FMR)^k`. Thứ tự (gần nhất trước) và dừng ngay khi khớp giảm k. Nút xác nhận chặn nốt phần còn lại: người không phải A thường không bấm "nghe tin cho A".
+4. **Đo thời gian bằng event time.** T0 là `header.stamp` của khung (thời điểm phơi sáng, → F4.6), không phải lúc callback chạy.
+
+```
+ t_thấy_người ──phanh──► t_dừng ──ổn định──► khung 1 ... khung k (khớp) ──nút──► kiểm server ──► quyết định
+ |◄─ v/a ──────────────►|◄─ X ms ─►|◄─ 1/fps + latency pipeline ─►|◄ người ►|◄── RTT ──►|
+```
+
+```python
+# [đã chạy] Thời gian tới lần khớp đầu: frame độc lập vs frame tương quan (Markov)
+import numpy as np
+rng = np.random.default_rng(1)
+FPS, T_OUT, RUNS = 5, 4.0, 20000     # pipeline 5 khung/s, deadline 4 s
+FRR_FRAME = 0.30                     # tỉ lệ trượt MỖI KHUNG (trung bình dài hạn như nhau)
+STOP = 0.6                           # thời gian phanh + chờ đứng yên trước khung đầu (s)
+
+def run_indep():
+    for k in range(int(T_OUT * FPS)):
+        if rng.random() > FRR_FRAME:
+            return STOP + (k + 1) / FPS
+    return np.inf                    # hết deadline -> đi tiếp
+
+def run_markov(stay=0.95):
+    # trạng thái "xấu" (cúi đầu, quay đi) kéo dài; xác suất giữ trạng thái = stay
+    p_bad = FRR_FRAME                # phân bố dừng: P(xấu) = FRR_FRAME
+    bad = rng.random() < p_bad
+    for k in range(int(T_OUT * FPS)):
+        if not bad:
+            return STOP + (k + 1) / FPS
+        # chuyển trạng thái giữ đúng tỉ lệ dừng p_bad
+        p_bg = (1 - stay) * (1 - p_bad) / p_bad   # xấu -> tốt
+        bad = rng.random() > p_bg if bad else rng.random() < (1 - stay)
+    return np.inf
+
+for name, f in (("độc lập", run_indep), ("tương quan", run_markov)):
+    t = np.array([f() for _ in range(RUNS)])
+    ok = t[np.isfinite(t)]
+    print(f"{name:10}  timeout={np.mean(~np.isfinite(t)):.4f}  "
+          f"p50={np.percentile(ok, 50):.2f}s  p95={np.percentile(ok, 95):.2f}s  "
+          f"p99={np.percentile(ok, 99):.2f}s")
+print("nếu tin độc lập, P(timeout) lý thuyết =", FRR_FRAME ** int(T_OUT * FPS))
+```
+
+Hai mô hình có **cùng** FRR mỗi khung. Đoán: tỉ lệ timeout của mô hình tương quan gấp bao nhiêu lần `0,3^20`?
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Timeout + retry với backoff | Lấy khung tiếp tới deadline | Retry giả định lỗi thoáng qua, độc lập; ở đây "lỗi" là trạng thái của người kéo dài nhiều giây | Tỉ lệ timeout ước lượng thấp hơn thật nhiều bậc |
+| Deadline propagation (gRPC) | Mốc tuyệt đối từ lúc đứng yên | "Yêu cầu" là sự hiện diện vật lý trên hành lang; chi phí chờ trả bằng lối đi của người khác | Timer reset theo từng mặt → robot đứng mãi |
+| Chọn backend theo thứ tự xác định | Thứ tự kiểm khuôn mặt | Thứ tự bbox đổi giữa các khung; phải sắp theo tiêu chí ổn định và track qua khung | "Xác định" trên giấy, giật qua lại giữa hai người |
+| Span trong distributed tracing | Latency đầu–cuối | Đánh dấu bằng thời điểm **sự kiện vật lý**, không phải lúc message tới | Số đẹp hơn thật một khoảng bằng trễ camera + hàng đợi |
+| Re-auth trước thao tác nhạy cảm | Nút xác nhận + kiểm lại server | Kiểm lại cần mạng; mạng có thể mất | Phát tin cho người vừa bật DND |
+
+**Chấm mô hình:**
+- *"Cho pipeline thử thêm vài khung thì xác suất trượt giảm theo hàm mũ."* — **ĐÚNG MỘT PHẦN.** Đúng với nhiễu ngẫu nhiên thật (nhòe, nhiễu cảm biến); sai với phần do trạng thái người. Phản ví dụ: người nhận đang gọi điện, quay mặt ra cửa sổ 20 giây; hai mươi khung trượt vì cùng một lý do.
+- *"Robot đứng yên hẳn rồi mới nhận diện thì tổng thời gian luôn ngắn hơn."* (câu tự kiểm của Gemini coi là hiển nhiên) — **ĐÚNG MỘT PHẦN.** Dừng thêm thời gian phanh và ổn định; nó chỉ rút ngắn tổng khi FRR lúc chạy đủ cao. Phản ví dụ: hành lang sáng, người nhận nhìn thẳng robot đang tới chậm; khớp từ lúc còn cách 2 m. Quyết định dừng vẫn đúng, nhưng lý do chính là **FAR (ít người lạ hơn) và hành vi xác định**, không phải tốc độ.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Deadline vs timeout | Deadline là thời điểm tuyệt đối; timeout là khoảng thường bị đặt lại | Hai cách nói một thứ |
+| 🟢 | Event time / processing time | Lúc sự việc xảy ra / lúc code xử lý | Như nhau nếu máy nhanh |
+| 🟢 | Latency đầu–cuối, p50/p95/p99 | Phân bố thời gian từ T0 tới quyết định | Trung bình |
+| 🟡 | Nav2 action, cancel goal | Giao diện action ROS 2 để gửi/hủy mục tiêu | Gọi hàm đồng bộ |
+| 🟡 | Multi-object tracking | Gán cùng id cho cùng người qua nhiều khung | Detect lại từ đầu mỗi khung |
+| 🟢 | Hysteresis | Hai ngưỡng vào/ra trạng thái, chống giật | Một ngưỡng |
+| 🔴 | Dự đoán quỹ đạo người | → K7 C11.6 (tùy chọn) | — |
+
+### 5. Dự đoán
+
+**Tham số cần tra:** gia tốc hãm của robot (đo bằng odometry khi lệnh vận tốc về 0, → C6); FPS thật và latency từng bước (C9.2); FRR mỗi khung khi đứng yên (C9.2); RTT tới server qua WiFi văn phòng (`ping`, lấy phân bố).
+
+1. Với v = 0,3 m/s (trần gần người của chặng) và gia tốc hãm a: thời gian phanh `v/a`, quãng phanh `v²/(2a)`.
+2. Thời gian tới quyết định p50 và p95 theo hai định nghĩa T0: (A) từ khung đầu thấy người đích khi đang tiếp cận; (B) từ lúc robot đứng yên. Chưa tính thời gian người bấm nút (đo riêng).
+3. Tỉ lệ timeout khi người đích có mặt, với deadline bạn chọn.
+4. Số lần chạy cần để ước lượng p95 và p99 (→ F1.2).
+5. Mô phỏng: tỉ lệ timeout tương quan so với `0,3^20`.
+
+```markdown
+# prediction.md — C9.4
+- a_hãm = __ m/s² -> t_phanh = __ s, quãng phanh = __ m
+- T0 kiểu A: p50 __ s, p95 __ s ; kiểu B: p50 __ s, p95 __ s
+- Deadline: __ s (từ mốc __); DEADLINE_NÚT: __ s; tỉ lệ timeout khi người đích có mặt: __
+- Số lần chạy cần cho p95: __ ; cho p99: __ ; tôi sẽ chạy __ lần
+- Mô phỏng: timeout tương quan / 0,3^20 ≈ __ lần
+```
+
+### 6. Làm
+
+1. **Đi → dừng → nhận diện → xác nhận → hành động.** Node điều phối gửi goal Nav2 tới vị trí tiếp cận (cách bàn người đích 1–1,5 m, hướng về chỗ ngồi, **người nhận không quay lưng ra cửa sổ**, theo bảng lux lắp bước 2); tới nơi hoặc đủ gần thì cancel goal; chờ `|v|`, `|ω|` dưới ngưỡng trong X ms; **lúc này** mới bật embed và đặt deadline.
+2. **Tình huống:**
+   - *Nhiều người trong khung:* sắp theo kích thước (gần nhất trước), track qua khung (IoU hoặc tracker đơn giản) để thứ tự không giật; so **1:1 với người đích**; dừng ngay khi khớp; ghi k vào log. Có >1 người trong khung: **không đọc nội dung to**, chỉ nói "có tin cho [tên], bấm nút xanh để nghe" (quyết định sản phẩm, ghi `decisions.md`).
+   - *Người quay lưng / góc mặt quá lớn:* không embed khung đó (`skip_pose`).
+   - *Người đi ngang:* track có vận tốc ngang lớn → bỏ qua.
+3. **Lắp bước 5 — nút nghe/từ chối** (mục 4(B), checkpoint mục 5). Xanh → sang bước 5; đỏ → **rời đi, không hỏi lại** (Phụ lục A); không bấm trước DEADLINE_NÚT → rời đi, lý do `NO_CONFIRM`.
+4. **Deadline:** không nhận ra người đích trước deadline → đi tiếp/về, **không kẹt**. Deadline không bao giờ bị dời bởi sự kiện mới.
+5. **Kiểm lại lớp 2 + DND + rate limit** với server ngay trước khi phát. Không liên lạc được → không phát. **Test Phụ lục A trên robot thật:** bấm DND khi robot cách người đích 2 m → robot hủy task, quay về; lặp ≥5 lần, ghi khoảng cách thật lúc bấm (đo bằng odometry/map).
+6. **Ghi vào MCAP** `/recognition/event` (schema ở mục 7 của chặng) và chuyển trạng thái, deadline, lý do. Không ảnh, không embedding. Timestamp sự kiện lấy từ `header.stamp` của khung. Hàng đợi khung dài 1 (xử lý khung mới nhất, → F3.9).
+7. **Đo đầu–cuối:** p50/p95/p99 theo hai định nghĩa T0. **≥40 lần thật** cho p95; p99 chỉ báo cáo khi đủ mẫu (vài trăm), nếu không ghi "không đủ mẫu", hoặc ước lượng bằng phát lại log điểm số qua mô phỏng (`test_decision_replay`) và nói rõ là ước lượng.
+8. **Duyệt gate (1h):** gom bằng chứng cho Gate chặng 9 vào `GATE-C9.md`.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Mô phỏng phần 2:**
+
+| Mô hình | Tỉ lệ timeout | p50 | p95 | p99 |
+|---|---|---|---|---|
+| Độc lập | ≈ 0 (lý thuyết 3,5·10⁻¹¹) | 0,8 s | 1,2 s | 1,4 s |
+| Tương quan (giữ trạng thái 95%/khung) | ≈ 2,8% | 0,8 s | 3,0 s | 4,2 s |
+
+Cùng FRR mỗi khung, tỉ lệ timeout chênh khoảng **10⁹ lần**, p95 từ thoải mái thành chạm ngưỡng 3 s. Trung vị không đổi, chỉ đuôi đổi: đo p95 thật, không suy từ FRR.
+
+**Thí nghiệm thật (bản gốc, thêm định nghĩa):**
+
+| Kiểm tra | Ngưỡng |
+|---|---|
+| Thời gian từ thấy người tới quyết định, p95 | **< 3 s**, ghi rõ T0 kiểu A hay B và n; không tính thời gian người bấm nút (báo riêng) |
+| Nhiều người trong khung | Hành vi xác định, ghi rõ trong tài liệu; k mỗi task có trong log |
+| Không nhận ra ai | Đi tiếp sau deadline, **không kẹt**; deadline không bị dời bởi người đi ngang |
+| DND lúc robot cách 2 m | Robot hủy task, không phát |
+| MCAP | Không có topic ảnh, không có embedding |
+
+**Số mẫu:** với 40 lần, p95 là giá trị lớn thứ hai–ba, CI rộng; p99 cần cỡ vài trăm lần. Báo p99 từ 30–40 lần thật là báo giá trị lớn nhất dưới một tên khác.
+
+**Quãng phanh ví dụ:** v = 0,3 m/s, a = 1 m/s² → t = 0,3 s, quãng 4,5 cm `[ước lượng — dùng a đo được]`.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Robot đứng rất lâu khi không nhận ra ai | Timer reset mỗi khi có mặt mới | Log: thời điểm đặt timer có lặp không | Deadline tuyệt đối, đặt một lần |
+| p95 > 5 s | Bật embed khi chưa dừng hẳn; khung xếp hàng sau inference chậm | So timestamp khung với lúc đứng yên; độ sâu hàng đợi | Chờ cờ đứng yên; hàng đợi dài 1; giảm độ phân giải detect |
+| Latency thấp đáng ngờ | Dùng processing time làm T0 | So `header.stamp` với `now()` | Dùng `header.stamp` |
+| Giật qua lại giữa hai người | Thứ tự bbox không ổn định | Ghi thứ tự bbox qua 10 khung | Track + sắp ổn định + hysteresis |
+| Phát tin cho người đứng cạnh | Ngưỡng lỏng, kiểm quá nhiều mặt, bỏ qua nút | Log điểm, k, sự kiện nút | Ngưỡng theo C9.2; giảm k; nút bắt buộc |
+| Robot vẫn phát sau khi người nhận bật DND | Không kiểm lại, hoặc kiểm bằng cache | Test DND ở 2 m | Kiểm trực tiếp; mất mạng thì không phát |
+
+### 9. Câu hỏi ngược
+
+1. **[Failure mode]** Người đích ngồi đúng chỗ nhưng đeo khẩu trang và cúi xuống; robot timeout và đi; ngày mai lặp lại. Hệ "đúng thiết kế" mà người đó không bao giờ nhận tin. Ai phát hiện, bằng chỉ số nào?
+<details><summary>Hướng nghĩ</summary>
+
+Tỉ lệ timeout **theo người**, không theo task. Chỉ số trung bình toàn hệ không lộ nó. Liên hệ "dê" trong Doddington's zoo (C9.2).
+
+</details>
+
+2. **[Quy mô]** 20 robot cùng một tầng, mỗi robot dừng chắn hành lang trung bình 5 s mỗi task. Lúc nào tổng thời gian chắn đường thành vấn đề, đo bằng gì?
+<details><summary>Hướng nghĩ</summary>
+
+Định luật Little (→ F7.1): số robot đang chắn trung bình = tần suất task × thời gian đứng. Nhân với mật độ người qua lại. HRI đo được ở → K7 C10.4 (tùy chọn).
+
+</details>
+
+3. **[Nếu…thì]** Pipeline chạy 5 khung/s nhưng camera xuất 30 khung/s. Xử lý khung nào? Hàng đợi khung có nên dài hơn 1?
+<details><summary>Hướng nghĩ</summary>
+
+Hàng đợi dài tăng latency mà không tăng thông tin: backpressure và drop policy (→ F3.9). Little: độ dài hàng đợi = tốc độ đến × thời gian chờ. Với quyết định thời gian thực, khung mới nhất có giá trị nhất.
+
+</details>
+
+4. **[Vì sao không]** Vì sao không vừa đi vừa nhận diện, chỉ dừng khi đã khớp?
+<details><summary>Hướng nghĩ</summary>
+
+FRR khi chạy (C9.2), nhưng quan trọng hơn: khi chạy, robot đi qua nhiều người không phải đích, mỗi người một lần thử impostor (base rate). Dừng ở vị trí đã biết của người đích giảm số lần thử.
+
+</details>
+
+5. **[Liên ngành]** Hàng không có quy tắc "tiếp cận ổn định": tới một độ cao xác định mà chưa ổn định thì bắt buộc bay vòng lại. Giống deadline ở đây chỗ nào?
+<details><summary>Hướng nghĩ</summary>
+
+Quyết định bỏ cuộc được cam kết **trước**, bằng một mốc khách quan, để không bị áp lực tình huống làm lệch. Khác: phi công có thể ghi đè; robot thì không nên.
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **TCP retransmission timeout.** TCP ước lượng RTO từ phân bố RTT đo được, không đặt cứng. Giống: deadline nên dựa trên phân bố thời gian-tới-khớp đo được. Khác: TCP thử lại với backoff không trần cứng theo nghĩa vật lý; robot trả mỗi giây chờ bằng lối đi của người khác.
+- **Lock wait timeout trong DB.** Transaction chờ khóa quá lâu bị hủy để không giữ tài nguyên chung. Giống: robot chắn hành lang là giữ tài nguyên chung. Khác: DB rollback được; thời gian người khác mất thì không.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Uber Tempe 2018: phân loại lại làm mất lịch sử theo dõi | `[chuẩn]` | NTSB HAR-19/03 |
+| Khung liên tiếp tương quan → không theo `FRR^k` | `[chuẩn]` | Mô phỏng đã chạy; kiểm bằng log điểm theo khung |
+| p95 < 3 s đạt được trên N100 | `[tự đo]` | Phụ thuộc pipeline C9.2 và gia tốc hãm |
+| API Nav2 action/cancel | `[tự đo]` | Theo phiên bản Nav2 Jazzy bạn cài |
+
+**Đã sửa so với bản gốc/Gemini:** (1) bản gốc không định nghĩa T0 → hai định nghĩa, event time; (2) p50/p95/p99 không nói số mẫu, Gemini dùng 30 lần → ≥40 cho p95, p99 chỉ khi đủ mẫu; (3) Gemini "chọn mặt lớn nhất, không khớp thì sang mặt thứ hai" không tính mỗi mặt là một lần thử impostor → thêm `1 − (1 − FMR)^k`, ghi k; (4) Gemini "đứng yên rút ngắn latency" như hiển nhiên → chấm ĐÚNG MỘT PHẦN; (5) thêm kiểm lại lớp 2/DND trên robot thật ở 2 m, quy tắc không đọc to khi nhiều người, và **nút xác nhận** làm tầng thứ hai trước khi phát (bản gốc không có); (6) tốc độ thử gần người hạ về 0,3 m/s (đề xuất của chặng; trần firmware 0,5 m/s giữ nguyên).
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** tài liệu Nav2 về action `NavigateToPose` và hủy goal `[tự đo — theo phiên bản]`.
+- **Giải thích:** Dean & Barroso, *The Tail at Scale*, Communications of the ACM 2013.
+- **Đào sâu (tùy chọn):** NTSB, *Collision Between Vehicle Controlled by Developmental Automated Driving System and Pedestrian*, HAR-19/03.
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao ở đây phải là deadline tuyệt đối; (2) vẽ lại sơ đồ tuần tự từ trí nhớ; (3) câu dưới.
+
+  a. Ba người trong khung, FMR tại ngưỡng 0,1%, robot kiểm cả ba và khớp ở người thứ ba. Xác suất có ít nhất một lần nhận nhầm ở hai người đầu?
+  <details><summary>Đáp án</summary>
+
+  Hai lần thử impostor: 1 − (1 − 0,001)² ≈ 0,2%. Nếu người đích được kiểm đầu tiên thì 0 lần thử impostor: thứ tự kiểm là một biện pháp an toàn, và nút xác nhận là tầng thứ hai.
+
+  </details>
+
+---
+
+## Gate chặng 9 (khung rút gọn)
+
+> **Vị trí:** C9.4 → **Gate chặng 9** → C10 (nếu chưa làm), C11, C12 · **Cần trước:** C9.1–C9.4 · **Sau gate này bạn quyết định được:** giữ nhận diện khuôn mặt, hay đổi sang NFC/QR, và viết được lý do bằng số và bằng văn bản cho phép.
+
+Gate này nhận GATE 7C của K7 gốc và Phụ lục A (→ `_KE-HOACH-K7.md` mục 7). Ngưỡng và tiêu chí giữ nguyên; chỗ sửa là **phương pháp đo và cách đọc tiêu chí**, ghi ở cuối.
+
+### 1. Câu chuyện
+
+Gate này khác các gate trước: hai tiêu chí đầu **không phải kỹ thuật**. Không có văn bản cho phép hoặc không đủ người đồng ý thì không phép đo nào cứu được. Bản gốc nói thẳng: quyết định **không** thu sinh trắc vì thiếu cơ sở pháp lý vững cũng là một câu chuyện phỏng vấn tốt. Meta tắt nhận diện khuôn mặt năm 2021 sau khi đã trả giá (C9.1); bạn có cơ hội ra cùng quyết định đó trước khi trả giá.
+
+### 2. Mô hình tư duy
+
+```mermaid
+flowchart TD
+    A{"Văn bản cho phép<br/>+ ≥10 người đồng ý lớp 1?"} -- "không" --> F["FAIL action: NFC/QR,<br/>ghi lý do vào README"]
+    A -- "có" --> B{"FAR có CI trung thực,<br/>test xóa PASS, test lớp 2 PASS?"}
+    B -- "không" --> R["Quay lại C9.2/C9.3,<br/>KHÔNG triển khai"]
+    B -- "có" --> C{"FAR/CI chấp nhận được<br/>cho số lần thử dự kiến? (base rate)"}
+    C -- "không" --> D["Nút xác nhận bắt buộc<br/>hoặc đổi NFC/QR"]
+    C -- "có" --> P["PASS"]
+```
+
+Gate là **phán quyết có điều kiện dừng cam kết trước**. Thứ tự quan trọng: tiêu chí pháp lý và đồng ý đứng đầu, vì nếu chúng FAIL thì mọi tiêu chí sau vô nghĩa, không phải "tạm bỏ qua".
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Release gate / launch checklist | Gate chặng 9 | Ở backend gate FAIL thì hotfix rồi ship. Hai tiêu chí đầu là **quyền của người khác**, không vá bằng commit | "Chạy thử trước, xin phép sau": đúng thứ tự mà C9.1 viết ra để chặn |
+| CI ba trạng thái | Tiêu chí 3–6 | FAR với 10 người gần như luôn "inconclusive" ở mức phần nghìn. Gate đòi **báo cáo trung thực**, không đòi số đẹp | Ép kết luận PASS từ 0/n |
+
+### 6. Làm — checklist
+
+```
+[ ] 1. PRIVACY.md với 7 ràng buộc, mỗi ràng buộc có cơ chế và test (hoặc phép đo) chứng minh,
+       ghi rõ ràng buộc nào chỉ kiểm được bằng review
+
+[ ] 2. Đồng ý bằng văn bản của ≥10 người (lớp 1; lớp 3 nếu giữ ảnh test), thu qua kênh riêng,
+       và văn bản cho phép của quản lý cho phạm vi robot di động có camera
+
+[ ] 2b. (Phụ lục A — bắt buộc) Hai lớp đồng ý: 3 test PASS
+        (chưa bật lớp 2 → bị từ chối ở server; DND khi robot cách 2 m → hủy task, trên robot thật;
+         vượt giới hạn tần suất → hoãn/từ chối có log)
+
+[ ] 3. Đường ROC + DET; ngưỡng chọn trên tập DEV, báo cáo trên tập REPORT, hai tập tách theo buổi chụp;
+       điểm vận hành có lý do bằng ngôn ngữ chi phí; FAR báo cáo KÈM KHOẢNG TIN CẬY (không báo cáo 0),
+       gồm cận theo cặp danh tính và CI bootstrap theo người
+
+[ ] 4. FAR theo kích thước gallery (5/10/20), ghi rõ chế độ 1:1 hay 1:N, có ngoại suy tới 30
+       và nêu giả định độc lập
+
+[ ] 5. Bảng FRR theo ≥4 điều kiện thật, gồm robot đang chuyển động, mỗi ô có n và khoảng Wilson
+
+[ ] 6. Latency p50/p95/p99 trên thiết bị, ≥2 mức precision, đo cả hai trục (latency và FAR/FRR);
+       p99 chỉ khi đủ mẫu
+
+[ ] 7. Test xóa dữ liệu đầu–cuối PASS với canary (gồm backup khôi phục không giải mã được)
+
+[ ] 8. Bài viết: "Privacy-by-design face recognition on a mobile robot: FAR, FRR, and the law"
+       (ghi cả khung pháp lý cũ — Nghị định 13/2023 — và hiện hành — Luật 91/2025 + NĐ 356/2025)
+
+— Bổ sung của chặng (mới, không thay tiêu chí gốc) —
+[ ] 9. Phần cứng: LED sáng ⇔ camera có điện, đo ở 4 trạng thái; cột qua thử phanh gấp 0,3 m/s không lật;
+       nút nghe/từ chối 20/20 sự kiện đúng; C9.4 p95 < 3 s (T0 ghi rõ, n ≥ 40) — tiêu chí của K7 gốc Bài 14
+```
+
+**FAIL action (giữ nguyên bản gốc):** không xin được phép, hoặc không đủ người tình nguyện → **bỏ hoàn toàn nhận diện mặt**, thay bằng NFC hoặc QR mỗi người tự cầm. Robot vẫn hoạt động đầy đủ, portfolio mất một bài viết nhưng không mất chặng. Ghi lý do đổi trong README. Giữ nguyên hai lớp đồng ý, DND, giới hạn tần suất và nút xác nhận: chúng không phụ thuộc cách nhận người. Tháo camera mặt khỏi cột (hoặc rút cáp) để LED không còn ý nghĩa sai.
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Mọi tiêu chí kỹ thuật PASS, thiếu văn bản quản lý | Xin phép muộn | — | FAIL action. Không có ngoại lệ |
+| Cận trên FAR theo cặp danh tính quá lớn | 10 người là quá ít cho vùng FAR thấp | Tính cận theo P(P−1)/2 | Nút xác nhận bắt buộc trước khi đọc nội dung; ghi giới hạn trong bài viết |
+| Test xóa PASS nhưng backup chưa kiểm | Test chỉ chạy trên robot | Khôi phục backup trong sandbox | Thêm bước (d) của C9.3 |
+| Chạm trần giờ của chặng | C9.2 phình | Đếm giờ trong sổ build | Ưu tiên tiêu chí 1, 2, 2b, 3, 7; cắt bớt 4–6, ghi rõ trong README và bài viết |
+
+### 9. Câu hỏi ngược
+
+1. **[Phản biện]** Tiêu chí 3 đòi FAR kèm CI. Với 10 người, CI trung thực có thể tới mức phần trăm. Nhà tuyển dụng đọc con số đó nghĩ gì, và bạn muốn họ nghĩ gì?
+<details><summary>Hướng nghĩ</summary>
+
+Người đọc kỹ thuật tin con số có CI rộng hơn con số "0%". Cái bạn bán không phải FAR thấp mà là biết mình không biết gì.
+
+</details>
+
+2. **[Quy mô]** Gate thiết kế cho một robot và 10 người. Tiêu chí nào gãy đầu tiên ở 1.000 người, gãy kiểu nào?
+<details><summary>Hướng nghĩ</summary>
+
+Tiêu chí 4 (1:N) và base rate; tiêu chí 2: thu đồng ý của 1.000 người là một quy trình vận hành có SLO, không phải một tờ giấy; tiêu chí 7: SLO xóa trên nhiều robot.
+
+</details>
+
+3. **[Failure mode]** Sau gate, một người rút đồng ý lớp 1. Con số FAR trong bài viết đã đăng có dữ liệu của họ. Làm gì?
+<details><summary>Hướng nghĩ</summary>
+
+Câu 5 của C9.1: thứ gì xóa được, thứ gì chỉ ngừng dùng được. Mẫu đồng ý phải nói trước điều này; nếu chưa nói, đó là lỗi của mẫu.
+
+</details>
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** `khoa-7-robot-hoan-chinh.md` (GATE 7C), `khoa-7-phu-luc.md` mục A.
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao tiêu chí 1–2 đứng trước mọi tiêu chí đo; (2) vẽ lại sơ đồ quyết định.
+
+**Đã sửa so với bản gốc (phương pháp, không đổi ngưỡng):** thêm tiêu chí 2b (Phụ lục A bắt buộc nhưng gate gốc không có dòng nào kiểm); tiêu chí 3 thêm DET, tách DEV/REPORT theo buổi, cận theo cặp danh tính, bootstrap theo người; tiêu chí 4 ghi rõ chế độ 1:1/1:N; tiêu chí 5 thêm n và Wilson; tiêu chí 6 p99 chỉ khi đủ mẫu; tiêu chí 7 thêm canary và backup; tiêu chí 8 cập nhật khung pháp lý; tiêu chí 9 là bổ sung mới của chặng build (ngưỡng p95 < 3 s lấy nguyên từ K7 gốc Bài 14).
