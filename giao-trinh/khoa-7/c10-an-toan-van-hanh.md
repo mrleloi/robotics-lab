@@ -541,12 +541,17 @@ Thời gian tắt tỉ lệ với R2·C2 (τ = 0,1 s) và phụ thuộc Vg lúc 
 | Kết quả mô phỏng xung giữ, quãng dừng | [đã chạy] | Linh kiện và gia tốc là giả định |
 | Bumper < 10 ms; t_relay thật | [tự đo] | Logic analyzer |
 
-\1- Gốc: watchdog "~100 ms" trong bảng nhưng bước làm 5 nhịp × 100 ms, tiêu chí "< 500 ms" → phản ứng ≈ timeout + chu kỳ kiểm; tiêu chí là bất đẳng thức theo timeout chọn ở C4.4 (không đổi ngưỡng gate).
+**Đã sửa so với bản gốc / nguyên liệu cũ / Gemini:**
+- Gốc: watchdog "~100 ms" trong bảng nhưng bước làm 5 nhịp × 100 ms, tiêu chí "< 500 ms" → phản ứng ≈ timeout + chu kỳ kiểm; tiêu chí là bất đẳng thức theo timeout chọn ở C4.4 (không đổi ngưỡng gate).
 - Gốc: FMEA đòi relay "do một đường độc lập điều khiển" nhưng không thiết kế đường đó → thêm watchdog độc lập (ba phương án, mặc định xung giữ) và bẫy LEDC/ISR.
 - Gốc: không phân biệt E-stop với dừng mềm, không nói loại dừng → loại 0/1/2 (IEC 60204-1, ISO 13850); loại 1 chỉ với bộ trễ phần cứng; NC mở cưỡng bức, chốt, reset ba phần.
 - Gốc ngầm lấy "VM về 0" làm mốc → dùng chân 87a; VM bị back-EMF giữ. Phần heartbeat/timeout của nguyên liệu cũ chuyển về C4.4.
+- Mạch C1 (theo review C0–C1): nhả nút là có điện lại, chỉ diode dập cuộn, tiếp điểm đóng vào tụ 1000 µF → chốt RESET + ARM qua xung giữ, diode + Zener có đo, tiền nạp VM qua Q2 + giám sát tiếp điểm bằng 87a (bảng "Ba giới hạn", phần 2).
 - Gemini: "E-stop 2–5 ms theo quán tính nhả" không nhãn → `[tự đo]`; "nice -20" → `chrt -f`; "dừng khựng ngay lập tức" → loại 0 là trôi, quãng trôi là số đo riêng.
-\2 & Turner, *An Investigation of the Therac-25 Accidents*, IEEE Computer, 1993. IEC 60204-1 (mục chức năng dừng, dừng khẩn cấp) và ISO 13850 — đọc tóm tắt của hãng thiết bị an toàn.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Leveson & Turner, *An Investigation of the Therac-25 Accidents*, IEEE Computer, 1993. IEC 60204-1 (mục chức năng dừng, dừng khẩn cấp) và ISO 13850 — đọc tóm tắt của hãng thiết bị an toàn.
 - **Giải thích:** Phil Koopman, *Better Embedded System Software* (2010), chương về watchdog timer.
 - **Đào sâu (tùy chọn):** Nancy Leveson, *Engineering a Safer World* (MIT Press, 2011).
 - **Tự kiểm tra:** (1) giải thích cho một backend engineer trong 5 câu vì sao xung giữ phải đi ra từ task điều khiển; (2) vẽ lại chuỗi FD → nút → cuộn → Q1 và mạch xung giữ từ trí nhớ; (3) câu dưới.
@@ -820,10 +825,14 @@ Chạy hai lần: có guard và `noguard`. Dự đoán trước (phần 5) số 
 | MOSFET hỏng thường ở dạng chập | [chuẩn] | Kiến thức chung về hỏng bán dẫn công suất; vì vậy F11 cần kiểm định kỳ |
 | Thời gian phát hiện từng dòng | [tự đo] | `fmea/results.csv` |
 
-\1- Gốc: "FMEA" theo **thành phần**, thiếu nguyên nhân và S/O/D → theo chế độ hỏng, thêm S/O/D, RPN, tầng test, dòng cho cơ chế phát hiện (F11, F12) và lỗi chung nguồn (F13). Gate (≥8 dòng, mỗi dòng gây lỗi thật) giữ nguyên.
+**Đã sửa so với bản gốc / Gemini (không đổi gate):**
+- Gốc: "FMEA" theo **thành phần**, thiếu nguyên nhân và S/O/D → theo chế độ hỏng, thêm S/O/D, RPN, tầng test, dòng cho cơ chế phát hiện (F11, F12) và lỗi chung nguồn (F13). Gate (≥8 dòng, mỗi dòng gây lỗi thật) giữ nguyên.
 - Gốc: `EMERGENCY_STOP` gộp mọi lỗi → tách `FAULT` (phần mềm phát hiện, người xác nhận) khỏi `EMERGENCY_STOP` (phần cứng, reset tại máy).
 - Gemini: "FMEA loại trừ lỗi im lặng" → SAI (→ F7.6). "Dừng < 500 ms khi mất kết nối/sensor" như tiêu chí chung → không có trong gate; thời gian theo từng dòng, camera dừng theo độ bất định pose như gốc. "Kill switch đưa về EMERGENCY_STOP" → kill switch K3 là dừng mềm nội dung. "Tắt WiFi" ngang hàng lỗi an toàn → F01 không phải sự kiện an toàn.
-\2 & VDA, *FMEA Handbook* (2019), phần Design FMEA và Action Priority (sách trả phí; nhiều tóm tắt công khai).
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** AIAG & VDA, *FMEA Handbook* (2019), phần Design FMEA và Action Priority (sách trả phí; nhiều tóm tắt công khai).
 - **Giải thích:** báo cáo công khai của Cruise về sự cố 2/10/2023 (tóm tắt báo cáo Exponent và Quinn Emanuel, 1/2024).
 - **Đào sâu (tùy chọn):** Nancy Leveson & John Thomas, *STPA Handbook* (MIT, 2018, miễn phí).
 - **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao state machine trên mini PC không được thoát E-stop; (2) vẽ lại ba tầng trạng thái và chiều báo lên; (3) câu hỏi:
@@ -892,7 +901,7 @@ for name, (rate, drop, silent) in cfg.items():
     print(f"{name:<13}{by_seq:>10.3%}{by_wall:>16.3%}{fresh:>28.3%}")
 ```
 
-**Error budget của soak** (→ F7.4): 1% của 72h là **43,2 phút mỗi luồng**. Mỗi lần reboot tiêu một phần (thời gian khởi động tới lúc luồng có lại); mỗi lần cảm biến im tiêu phần còn lại. Budget cho bạn một câu hỏi vận hành cụ thể: "còn bao nhiêu lần reboot nữa thì FAIL?" — không phải để chấp nhận reboot, mà để biết reboot tốn bao nhiêu.
+**Error budget của soak** (→ F7.4): budget = 1% × 72h, **tính riêng cho mỗi luồng** (tự đổi ra phút ở phần Dự đoán). Mỗi lần reboot tiêu một phần (thời gian khởi động tới lúc luồng có lại); mỗi lần cảm biến im tiêu phần còn lại. Budget cho bạn một câu hỏi vận hành cụ thể: "còn bao nhiêu lần reboot nữa thì FAIL?" — không phải để chấp nhận reboot, mà để biết reboot tốn bao nhiêu.
 
 **Dashboard có chủ đích** (→ F7.5): mỗi ô trả lời một câu hỏi viết trước; không có ô nào chỉ vì "có dữ liệu".
 
@@ -978,7 +987,7 @@ Quyết định trước: sạc ban đêm ở đâu ___ ; robot làm gì 19h–7
 | battery 1 Hz (im 3h) | **100,00%** | 95,79% | **95,79%** |
 | state 10 Hz | 99,95% | 99,90% | 99,96% |
 
-Đếm theo `seq` báo luồng pin hoàn hảo trong khi 3 giờ không có số đo pin nào — đúng loại lỗi làm robot không biết mình sắp hết pin. Hai lần reboot × 40 s tiêu ~0,05% (~1,3 phút) budget mỗi luồng; không lớn, nhưng `seq` không thấy nó. Cách viết SLO đúng cho soak: completeness theo `seq` (mất trên đường) **và** freshness (nguồn im), cả hai ≥ 99% theo từng luồng. Ngưỡng 99% của gốc giữ nguyên; chỉ làm rõ cách đếm.
+Đếm theo `seq` báo luồng pin hoàn hảo trong khi 3 giờ không có số đo pin nào — đúng loại lỗi làm robot không biết mình sắp hết pin. Budget 1% × 72h = 43,2 phút mỗi luồng; hai lần reboot × 40 s tiêu ~1,3 phút (~3% budget); không lớn, nhưng `seq` không thấy nó. Cách viết SLO đúng cho soak: completeness theo `seq` (mất trên đường) **và** freshness (nguồn im), cả hai ≥ 99% theo từng luồng. Ngưỡng 99% của gốc giữ nguyên; chỉ làm rõ cách đếm.
 
 **Tiêu chí gốc:**
 

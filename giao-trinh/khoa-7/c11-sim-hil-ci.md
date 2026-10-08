@@ -489,10 +489,8 @@ Lệch khỏi các số này là bình thường; robot, sàn và driver của b
 | Sim mất ổn định ngay khi chạy (QACC NaN) | Bánh nhẹ, actuator cứng, thiếu `armature` | Thêm `armature`, `implicitfast` | Lấy J_rotor·N² từ datasheet hoặc fit bánh nhấc |
 | Quãng dừng sim ngắn hơn thật nhiều | Sim đang phanh, driver thật thả trôi (hoặc ngược lại) | Bảng logic driver (C3.2); log duty sau lệnh dừng | Khai đúng chế độ; fit ma sát ở khớp, không ở `friction` bánh–sàn |
 | Fit khớp 0,3 nhưng lệch > 30 % ở 0,5 m/s | Sai dạng ma sát; pin sụt áp ở dòng lớn | Residual hai dạng; log `v_bat` lúc chạy | Thêm thành phần thiếu; điện áp vào mô hình hoặc vào "chưa kiểm" |
-| Sim đi thẳng tuyệt đối, thật lệch ngang | Hai bánh/motor giống hệt trong sim | So D_L/D_R, hai đường cong motor trong `params.yaml` | Nạp số riêng từng bánh, từng motor, từng chiều |
 | Đáp ứng bước sim đẹp hơn thật | Thiếu trễ, thiếu lượng tử encoder, PI sim khác firmware | Parity PI bước 0 | Ring buffer trễ, lượng tử, code C thật |
 | I_z fit ra âm hoặc nhảy giữa các lần | Fit từ phép thử vòng kín (độ nhạy 0) | Bảng độ nhạy | Con lắc hai dây hoặc bước góc vòng hở |
-| Kết quả đổi sáng/chiều | Nhiệt hộp số, pin | `v_bat`, nhiệt độ trong metadata | Chiều riêng trong `VALIDITY.yaml` |
 
 ### 9. Câu hỏi ngược
 
@@ -503,35 +501,21 @@ Lệch khỏi các số này là bình thường; robot, sàn và driver của b
 
 </details>
 
-2. **[Vì sao không]** Vì sao không bỏ system ID, randomize I_z, τ, ma sát thật rộng (K6 Bài 14)?
-<details><summary>Hướng nghĩ</summary>
-
-K6 Bài 14 và F6.5 đã đo DR mua được gì cho **policy**. Ở đây sim phải **phán quyết giữa các cấu hình**; dải randomize rộng có thể làm mọi cấu hình trông như nhau, hoặc đặt trọng số vào vùng không bao giờ xảy ra. Tâm và độ rộng dải lấy từ đâu, nếu không phải từ phép đo của bài này?
-
-</details>
-
-3. **[Quy mô]** 100 robot cùng mẫu. Một twin chung hay 100 bộ `params.yaml`? Ở 100 robot cái gì gãy trước?
+2. **[Quy mô]** 100 robot cùng mẫu. Một twin chung hay 100 bộ `params.yaml`? Ở 100 robot cái gì gãy trước?
 <details><summary>Hướng nghĩ</summary>
 
 Hai motor cùng lô đã khác nhau (C3). Thứ gãy trước thường là quản lý: `calibration_id` nào trên robot nào, hiệu chuẩn lại khi nào, kết quả CI cũ chạy với bộ nào. Một hướng: CI chạy với **phân bố** tham số đo từ cả đội, và đo lại phân bố đó định kỳ như một SLI.
 
 </details>
 
-4. **[Failure mode]** Trễ τ có thể bị fit "hấp thụ" vào khối lượng không?
+3. **[Failure mode]** Trễ τ có thể bị fit "hấp thụ" vào khối lượng không?
 <details><summary>Hướng nghĩ</summary>
 
 Xem hàng "bước" của bảng độ nhạy: τ và m đẩy vọt lố ngược chiều. Fit chỉ trên vọt lố cho một đường thẳng các cặp (m, τ) cùng khớp. Mô hình đúng ở mọi phép thử cùng cấu trúc, sai khi đổi giới hạn gia tốc hay đổi controller (C11.4). Muốn chặn: đo τ độc lập, nhìn ma trận hiệp phương sai của tham số fit.
 
 </details>
 
-5. **[Phản biện]** "Ba đường gặp nhau" có thể sai cả ba theo cùng một kiểu không?
-<details><summary>Hướng nghĩ</summary>
-
-Công thức và sim cùng dùng `params.yaml`: chung một B sai. Phép đo thật dùng odometry đang kiểm. Đó là lỗi chung nguồn. Đường nào thật sự độc lập? Đặt trọng tài ngoài (thước, marker C8) ở đâu?
-
-</details>
-
-6. **[Liên ngành]** Quant tin Black–Scholes đã hiệu chuẩn ở một strike nhưng không tin ở strike khác. Nối với bước 5.
+4. **[Liên ngành]** Quant tin Black–Scholes đã hiệu chuẩn ở một strike nhưng không tin ở strike khác. Nối với bước 5.
 <details><summary>Hướng nghĩ</summary>
 
 Xem phần 10. Tự nối "volatility smile" với "fit ở 0,3 m/s, sai ở 0,5 m/s".
@@ -542,7 +526,6 @@ Xem phần 10. Tự nối "volatility smile" với "fit ở 0,3 m/s, sai ở 0,5
 
 - **Tài chính: hiệu chuẩn mô hình định giá quyền chọn.** Black–Scholes giả định volatility không đổi. Hiệu chuẩn cho khớp giá ở một strike thì khớp, ở strike khác lệch; đồ thị implied volatility theo strike có hình "nụ cười" `[chuẩn]`. Giống: khớp một điểm không chứng minh dạng mô hình. Khác: giá ở mọi strike quan sát được cùng lúc, miễn phí; mỗi điểm làm việc của robot là một thí nghiệm tốn công.
 - **Dược động học.** Nồng độ thuốc trong máu được fit bằng mô hình ngăn với tham số hấp thu và thải trừ từ vài lần lấy máu. Lấy máu sai thời điểm thì hai tham số không tách được, đúng như τ và m ở câu hỏi 4. Giống: thiết kế thời điểm đo quyết định tham số nào nhận dạng được. Khác: không thể "nhấc bánh" một bệnh nhân để đo riêng từng ngăn.
-- **Hàng không, ống gió và bay thử** (câu chuyện phần 1): ống gió đo riêng hệ số khí động, bay thử kiểm mô hình tổng. Hai tầng ấy chính là bước 2 và bước 3 của bài.
 
 ### 11. Độ tin cậy và sửa lỗi
 
@@ -551,9 +534,7 @@ Xem phần 10. Tự nối "volatility smile" với "fit ở 0,3 m/s, sai ở 0,5
 | Bảng độ nhạy đồ chơi | [đã chạy] | numpy 2.5; tham số giả định, chỉ minh họa cấu trúc độ nhạy |
 | Verification MuJoCo, caster cày sàn khi không có `priority` | [đã chạy] | mujoco 3.15.0; quy tắc max/priority: MuJoCo docs *Contact parameters* `[tự đo theo bản cài]` |
 | Hệ số Smeaton ~0,005 truyền thống, anh em Wright đo ~0,0033 | [chuẩn] | Tài liệu lịch sử, NASA Glenn; con số làm tròn |
-| Thiếu `armature` + actuator `velocity` cứng → mất ổn định | [đã chạy] | Phụ thuộc kv, khối lượng bánh, dt |
 | 0,108 mm/count, 10,8 mm/s mỗi count ở 100 Hz | [ước lượng] | Theo ví dụ C3 (PPR 11 × 56 × 4, bánh 85 mm); thay bằng cpr đo ở C3.3 |
-| LiFePO4: 3,65 V/cell khi sạc đầy | [chuẩn] | Ngưỡng cắt theo BMS |
 | MuJoCo không có trễ thuần cho actuator | [tự đo] | XML reference, mục actuator/`dyntype` |
 
 **Đã sửa so với bản gốc/Gemini và nguyên liệu cũ (`_nguyen-lieu-cu/7e`, chưa qua reviewer):**
@@ -666,8 +647,6 @@ for name, (lt, sp) in cfgs.items():
 |---|---|---|---|
 | Kim tự tháp unit / integration / e2e | SIL / HIL / chạy thật | E2E backend vẫn gần tất định và tăng tốc được. HIL bị khóa vào thời gian thực, chạy thật thì ngẫu nhiên, đắt, có rủi ro vật lý | Dồn kiểm lên tầng trên: CI chậm tới mức không ai đợi. Bỏ tầng giữa: lỗi timing chỉ lộ trên sàn văn phòng |
 | SLO "p99 latency < X" | Ngân sách trễ mỗi tick của cổng HIL | SLO cho phép 1 % vượt; một run HIL **không cho phép lần nào**. Đơn vị cần tính là run, không phải request | Báo "p99 3,5 ms, cổng ổn", trong khi 40 % run dài là ERROR (phần 7) |
-| Mock dependency trong integration test | PIL: số đếm bơm qua UART | Mock không có thời gian; PIL có thời gian thật **và** trễ đường truyền mà robot thật không có | Quy lỗi timing do chính cổng sinh ra cho firmware; hoặc tưởng PIL đã phủ ngoại vi |
-| Canary deploy | Canary regression cố ý chèn để kiểm CI | Canary ở đây kiểm **chính bộ kiểm** (→ F2.5) | Không có canary: không biết CI mù tới đâu |
 | Load test ngắn, nhiều lần | Run HIL ngắn, nhiều lần | Lỗi tích lũy (tràn, rò, buffer đầy dần) cần **một** run dài, không cần nhiều run ngắn | 1000 run × 10 s xanh, robot thật hỏng ở mét thứ 4 |
 
 **Chấm mô hình:**
@@ -784,7 +763,6 @@ UART thuần hai chiều chỉ 0,35 ms. Cách đọc: (1) adapter giữ gói t�
 | Mọi thay đổi INCONCLUSIVE | N nhỏ so với MDE | MDE ở N hiện tại | Tăng N hoặc nới MDE trong README; không hạ chuẩn cổng |
 | Hầu hết run HIL ERROR | Latency timer; host ồn; gói text | Histogram trễ, đếm lỡ hạn | Latency timer 1 ms, gói nhị phân, host yên tĩnh |
 | PCNT trên bàn đếm thiếu | Phát xung bằng phần mềm; lọc glitch dài | Logic analyzer trên chân DUT | RMT/MCPWM; lọc theo C3.3 |
-| HIL báo lỗi mà robot thật không có | Trễ do chính cổng | So trễ cổng với ngân sách | Ghi ngưỡng cổng; không quy cho firmware |
 | Sim PASS, robot thật giật | Thiếu trễ/lượng tử trong sim; kịch bản OUT | Cờ VALIDITY; parity C11.1 | Thêm trễ, lượng tử; đưa vào "chưa kiểm" |
 
 ### 9. Câu hỏi ngược
@@ -810,14 +788,7 @@ Khi đó timer không còn là timer, ISR không cạnh tranh với thời gian 
 
 </details>
 
-4. **[Nếu…thì]** Agent CI được phép đọc kết quả từng kịch bản của tập kín "để debug". Sau 3 tháng tập kín còn giá trị gì?
-<details><summary>Hướng nghĩ</summary>
-
-Nhiễm benchmark (→ F2.8, K6 Bài 18). Chỉ trả một con số tổng và CI của Δ, giới hạn số lần gọi.
-
-</details>
-
-5. **[Liên ngành]** Thiết kế chip: mô phỏng RTL → emulation FPGA → silicon. Tầng nào ứng với bàn HIL của bạn?
+4. **[Liên ngành]** Thiết kế chip: mô phỏng RTL → emulation FPGA → silicon. Tầng nào ứng với bàn HIL của bạn?
 <details><summary>Hướng nghĩ</summary>
 
 Xem phần 10; chú ý cái gì là thật, cái gì là ảo ở mỗi tầng, và vì sao chip có formal verification còn điều hướng thì gần như không.
@@ -943,7 +914,6 @@ print(f"null (thật như nhau, n=20): P(ρ≥0.829) = {np.nanmean(np.array(null
 |---|---|---|---|
 | Metric offline của hệ gợi ý dự đoán kết quả A/B online | p_sim dự đoán p_thật | Ở web bạn có hàng chục thí nghiệm A/B, mỗi cái hàng triệu user. Ở đây 6 điểm, mỗi điểm 20 lần | Đọc ρ của 6 điểm như đọc tương quan của 60 thí nghiệm |
 | Load test ở staging dự đoán prod | Sim dự đoán văn phòng | Staging thiếu traffic thật nhưng cùng code, cùng máy. Sim thiếu cả **cơ chế** (kênh UNTESTED) | Coi khác biệt sim–thật là "hệ số quy đổi" cố định, nhân vào là xong |
-| Shadow traffic: chạy song song, so kết quả từng request | Ghép cặp sim–thật theo kịch bản | Request phát lại tất định; lần chạy thật không phát lại được, người đi lại khác nhau mỗi lần | Kỳ vọng từng lần chạy thật khớp từng episode sim |
 
 **Chấm mô hình:**
 
@@ -1045,7 +1015,6 @@ Cách đọc:
 | Thanh sai số thật chồng lấn hết | Cấu hình quá gần nhau | Độ trải p_sim đã khai ở phần 5 | Làm lại thiết kế; báo INCONCLUSIVE cho loạt này |
 | Một cấu hình lệch xa xu hướng | Kênh OUT/UNTESTED (trượt dọc vật cản, caster kẹt, marker mất) | Cờ bước 1; phân loại thất bại thật vs sim | Dòng mới trong `VALIDITY.yaml`; kịch bản mới cho C11.2 |
 | p_thật trôi dần theo thứ tự chạy | Pin, giờ, người quen robot | p_thật theo khối | Đã xen kẽ thì phân tích có khối; nếu chưa, chạy lại |
-| ρ cao nhưng độ dốc ≈ 0 | Một cấu hình rất tệ kéo cả hai | Bỏ-một-ra (leave-one-out) | Báo cả hai; nói rõ phụ thuộc một điểm |
 
 ### 9. Câu hỏi ngược
 
@@ -1231,7 +1200,6 @@ Bốn ý: (1) MPC mua hai thứ, **nhìn trước** và **biết ràng buộc**;
 |---|---|
 | Controller có sẵn; tham số MPPI (số mẫu, số bước, `model_dt`) | Container Jazzy của bạn; docs.nav2.org mục controller plugins `[tự đo]` |
 | Tải CPU perception chạy cùng | C9.2 (p50/p95/p99 trên N100) |
-| Nhiễu odometry và gia tốc IMU | C6, C7; datasheet IMU |
 
 **Phương pháp cho trục jerk** (khóa trước khi xem dữ liệu): sai phân bậc ba của vị trí có nhiễu trắng σ_x cho độ lệch chuẩn jerk √20·σ_x/Δt³ (hệ số 1, −3, 3, −1); sai phân bậc một của gia tốc IMU cho √2·σ_a/Δt. Thay σ, Δt của bạn, so với mức cần phân biệt (~1 m/s³), rồi chọn tín hiệu, bộ lọc, tần số cắt.
 
@@ -1281,7 +1249,6 @@ Giữ sáu bước của phụ lục B.
 
 | Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
 |---|---|---|---|
-| Ba controller khác hẳn về thời gian ở kịch bản dễ | Giới hạn v/ω/gia tốc không đồng nhất | Diff ba YAML | Đồng nhất, chạy lại |
 | MPPI run rẩy mọi kịch bản | Nhiễu lấy mẫu chưa lọc; ít mẫu | Vẽ `/cmd_vel` | Làm mượt theo docs bản cài; tăng mẫu nếu CPU cho phép |
 | Jerk thật lớn gấp chục lần sim | Đạo hàm của tín hiệu nhiễu | Jerk khi robot đứng yên (phải ~0) | Đổi tín hiệu, lọc đã khóa trước |
 | CPU trung bình 50 % mà robot thỉnh thoảng khựng | Lỡ chu kỳ khi perception chạy đỉnh | Log thời gian từng chu kỳ | Giảm mẫu/horizon, ưu tiên CPU, hoặc controller nhẹ |
@@ -1313,7 +1280,7 @@ Ba giả thuyết, ba thí nghiệm: thay dự đoán bằng **tương lai thậ
 4. **[Phản biện]** Năm trục + Pareto có thể bị dùng để luôn chọn được thứ mình thích không?
 <details><summary>Hướng nghĩ</summary>
 
-Có, nếu chọn trục, cách tổng hợp, trọng số **sau** khi xem kết quả: garden of forking paths (→ F1.5). Vì vậy phần 5 khóa metric.
+Có, nếu chọn trục, cách tổng hợp, trọng số **sau** khi xem kết quả (→ F1.5, garden of forking paths). Vì vậy phần 5 khóa metric.
 
 </details>
 
@@ -1522,10 +1489,16 @@ Lấy số K4 Bài 11 cho inference, nhân với số bước huấn luyện. V�
 
 </details>
 
+4. **[Liên ngành]** Vì sao kiểm toán đòi mọi con số truy được về chứng từ gốc, và lineage của model giống/khác điều đó ở đâu?
+<details><summary>Hướng nghĩ</summary>
+
+Giống: audit trail. Khác: một chứng từ sai thì sửa một dòng; một MCAP sai đã nằm trong trọng số của mọi model sau nó. Lineage cho biết **những model nào** phải huấn luyện lại.
+
+</details>
+
 ### 10. Liên kết ra ngoài
 
 - **Y học: đánh giá đa trung tâm.** Sau các phát hiện như của Zech, đánh giá model y tế chuyển sang kiểm ngoài (external validation) ở bệnh viện không tham gia huấn luyện. Giống: đơn vị độc lập là nơi thu dữ liệu. Khác: họ có ủy ban đạo đức và quy định; bạn có `PRIVACY.md`.
-- **Kiểm toán tài chính: dấu vết kiểm toán.** Mỗi con số trong báo cáo truy được về chứng từ gốc. Lineage của model là audit trail của dữ liệu.
 
 ### 11. Độ tin cậy và sửa lỗi
 
@@ -1666,6 +1639,12 @@ Nhiễu 8 cm ở 10 Hz cho nhiễu vận tốc 2 điểm ~1,1 m/s, cỡ chính t
 
 2. **[Quy mô]** 100 robot ghi tọa độ người cả ngày. Đó còn là "chỉ tọa độ, không ảnh" theo nghĩa privacy không?
 <details><summary>Hướng nghĩ</summary>Quỹ đạo theo thời gian ở nơi làm việc nhận dạng lại được người (bàn ngồi, giờ đến). Cần tổng hợp, hạn lưu, hoặc không lưu ID xuyên phiên; ghi vào `PRIVACY.md`.</details>
+
+3. **[Vì sao không]** Vì sao không dùng dataset người đi bộ công khai thay vì tự thu?
+<details><summary>Hướng nghĩ</summary>Phân bố khác (quảng trường vs hành lang văn phòng, người không né robot). Dùng để tiền huấn luyện được; đánh giá phải trên dữ liệu của văn phòng bạn, chia theo ngày.</details>
+
+4. **[Nếu…thì]** FDE@1 s của bạn nhỏ hơn bán kính inflation của Nav2. Dự đoán còn mua được gì?
+<details><summary>Hướng nghĩ</summary>Ở 1 s gần như không; giá trị nằm ở 2–3 s, nơi FDE lớn. So với oracle ở C11.4 trước khi kết luận.</details>
 
 ### 10. Liên kết ra ngoài
 

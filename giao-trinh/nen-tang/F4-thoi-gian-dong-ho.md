@@ -76,7 +76,7 @@ Thứ tự tối thiểu nếu tuần crunch: F4.1 mục 2 + 6 trước K2 Bài 
 
 Patriot ở Dhahran (1991) đã kể ở K5 Bài 7: mỗi tick 0,1 s thiếu ~9,5×10⁻⁸ s do 0,1 bị cắt trong thanh ghi 24 bit, sau ~100 giờ lệch ~0,34 s [spec: GAO/IMTEC-92-26; Skeel 1992]. Đổi sang đơn vị viên nang này: 9,5×10⁻⁸ / 0,1 ≈ **1 ppm**. Không thạch anh nào hỏng: một đồng hồ lệch 1 ppm, không ai đặt lại, trong một hệ giả định thời gian của mình đúng.
 
-Gần như mọi đồng hồ bạn gặp là thạch anh: lát tinh thể áp điện rung ở tần số do kích thước và góc cắt quyết định [chuẩn]. 32 768 Hz của mọi RTC là 2¹⁵, chia đôi 15 lần ra 1 Hz; thạch anh âm thoa (tuning fork) ở tần số này nhỏ, rẻ, ít điện, đổi lại nhạy nhiệt — chỗ bản Gemini của K5 đã nhầm (mục 6).
+Gần như mọi đồng hồ bạn gặp là thạch anh [chuẩn]. 32 768 Hz của mọi RTC là 2¹⁵ (chia đôi 15 lần ra 1 Hz); thạch anh âm thoa (tuning fork) ở tần số này nhỏ, rẻ, ít điện, đổi lại nhạy nhiệt — chỗ bản Gemini của K5 đã nhầm (mục 6).
 
 ### 2. Mô hình tư duy
 
@@ -99,7 +99,7 @@ offset x(t)
   └──────────────────────────────────► t (từ lần sync cuối)
 ```
 
-Đổi đơn vị phải thuộc: skew `y` ppm nghĩa là mỗi giây lệch `y` µs; một giờ lệch `3,6·y` ms; một ngày lệch `86,4·y` ms [chuẩn]. Bạn đo được luôn là **hiệu** skew của hai đồng hồ, không phải skew của từng cái so với "giờ thật".
+Đổi đơn vị phải thuộc: `y` ppm = `y` µs mỗi giây = `3,6·y` ms mỗi giờ = `86,4·y` ms mỗi ngày [chuẩn]. Thứ đo được luôn là **hiệu** skew của hai đồng hồ, không phải skew so với "giờ thật".
 
 **Skew đến từ đâu.** Một con số ppm trong datasheet là một trong năm thứ khác nhau; tài liệu kém trộn chúng:
 
@@ -295,8 +295,7 @@ Checklist khi đọc một khẳng định về độ chính xác đồng hồ:
 | Patriot: ~0,34 s sau ~100 giờ, 9,5×10⁻⁸ s/tick (≈ 1 ppm) | [spec] | Skeel 1992; GAO/IMTEC-92-26; chi tiết ở K5 Bài 7 |
 | Tuning-fork k ≈ −0,034 ± 0,006 ppm/°C², T₀ = 25 ± 5 °C | [spec] | Datasheet tuning-fork 32,768 kHz (ví dụ Raltron RT2012); có loại −0,036, −0,04 |
 | AT-cut: bậc ba, a₃ ≈ 10⁻⁴ ppm/°C³, a₁ theo góc cắt | [chuẩn] / [ước lượng] cho số | Vig; tra datasheet của bạn |
-| ESP32-S3: thạch anh 40 MHz cho clock chính; RTC slow clock mặc định là RC nội | [spec] | ESP32-S3 TRM, chương clock |
-| Yêu cầu dung sai thạch anh của ESP32-S3 | [tự đo] | Hardware Design Guidelines |
+| ESP32-S3: thạch anh 40 MHz cho clock chính; RTC slow clock mặc định là RC nội; dung sai yêu cầu | [spec] / [tự đo] cho dung sai | ESP32-S3 TRM chương clock; Hardware Design Guidelines |
 | Tolerance ±10…±50 ppm, aging ±1…±5 ppm/năm | [spec] | Datasheet thông dụng; đổi theo hãng |
 | Kết quả mô phỏng mục 5 | [đã chạy] | a₁, a₃ là giả định; reviewer chạy lại khớp |
 
@@ -326,9 +325,9 @@ Reviewer sửa: rút câu chuyện Patriot thành trỏ về K5 Bài 7 (tránh k
 
 ### 1. Câu chuyện
 
-Thập niên 1960, các phòng thí nghiệm so đồng hồ nguyên tử với nhau và gặp một chuyện vô lý: càng ghi dữ liệu lâu, độ lệch chuẩn của tần số đo được càng **lớn**, không hội tụ về con số nào. Lặp lại thí nghiệm với chuỗi dài gấp đôi, "độ chính xác" của cùng một đồng hồ xấu đi. Nguyên nhân: nhiễu tần số của bộ dao động không phải nhiễu trắng; nó có thành phần flicker (1/f) và random walk, mà với các loại nhiễu đó phương sai thông thường phụ thuộc vào độ dài chuỗi — nó không phải một tính chất của đồng hồ mà là của thí nghiệm. David W. Allan (NBS, nay là NIST) đề xuất năm 1966 dùng phương sai của **hiệu hai trung bình liên tiếp** thay cho phương sai quanh trung bình chung [chuẩn: D. W. Allan, *Statistics of Atomic Frequency Standards*, Proc. IEEE 54(2), 1966]. Đại lượng đó hội tụ cho mọi loại nhiễu đồng hồ thực tế, và vẽ theo thang thời gian τ thì cho biết luôn *loại* nhiễu. Nó thành chuẩn ngành (IEEE Std 1139) và được ngành con quay mượn nguyên văn để đặc tả IMU (IEEE Std 952) [chuẩn].
+Thập niên 1960, các phòng thí nghiệm so đồng hồ nguyên tử với nhau và gặp chuyện vô lý: càng ghi lâu, độ lệch chuẩn của tần số đo được càng **lớn**, không hội tụ. Nguyên nhân: nhiễu tần số của bộ dao động không phải nhiễu trắng; nó có thành phần flicker (1/f) và random walk, mà với các loại nhiễu đó phương sai thông thường phụ thuộc vào độ dài chuỗi — nó không phải một tính chất của đồng hồ mà là của thí nghiệm. David W. Allan (NBS, nay là NIST) đề xuất năm 1966 dùng phương sai của **hiệu hai trung bình liên tiếp** thay cho phương sai quanh trung bình chung [chuẩn: D. W. Allan, *Statistics of Atomic Frequency Standards*, Proc. IEEE 54(2), 1966]. Đại lượng đó hội tụ cho mọi loại nhiễu đồng hồ thực tế, và vẽ theo thang thời gian τ thì cho biết luôn *loại* nhiễu. Nó thành chuẩn ngành (IEEE Std 1139) và được ngành con quay mượn nguyên văn để đặc tả IMU (IEEE Std 952) [chuẩn].
 
-Câu chuyện gần bạn hơn: bạn đã có ở K2 Bài 5 một IMU tổng hợp bằng `np.random.normal` và một bias trôi tuyến tính. Dữ liệu đó có std đẹp và ổn định. IMU thật thì không: đặt một gyro MEMS đứng yên một đêm, trung bình 1 phút đầu và 1 phút cuối khác nhau nhiều hơn σ/√N dự đoán, vì bias của nó "đi dạo". Std không thấy chuyện đó; Allan deviation thấy.
+Gần bạn hơn: IMU tổng hợp ở K2 Bài 5 (`np.random.normal` + bias tuyến tính) có std đẹp và ổn định. Gyro MEMS thật đứng yên một đêm thì trung bình phút đầu và phút cuối khác nhau nhiều hơn σ/√N dự đoán, vì bias "đi dạo". Std không thấy chuyện đó; Allan deviation thấy.
 
 ### 2. Mô hình tư duy
 
@@ -403,14 +402,13 @@ Muốn dùng thư viện thay vì tự viết: gói `allantools` (Python) có `o
 | Latency p99 / std trên dashboard 1 giờ | Allan deviation theo τ | Metric backend thường giả định quá trình dừng (stationary): đo lâu hơn thì ước lượng tốt hơn. Đồng hồ/IMU có nhiễu không dừng; std phụ thuộc độ dài cửa sổ | Báo "độ ổn định 0,2 ppm" từ 10 phút dữ liệu, rồi thấy 2 ppm sau một đêm và tưởng phần cứng hỏng |
 | Moving average để làm mượt metric | Ước lượng skew/bias bằng cửa sổ trượt | Ở backend cửa sổ dài chỉ làm chậm phản ứng; ở đây cửa sổ dài hơn điểm cực tiểu Allan làm ước lượng **tệ hơn** (random walk, drift lấn vào) | Chọn cửa sổ ước lượng bias gyro 10 phút "cho chắc", ước lượng còn kém hơn cửa sổ 1 phút |
 | So hai phiên benchmark bằng hiệu trung bình | Allan variance = phương sai của hiệu hai trung bình liên tiếp | Rất gần nhau! Đây chính là "A/A test" ở mọi thang thời gian. Khác: Allan quét mọi τ và đọc độ dốc để biết *loại* nhiễu | Chỉ so ở một thang, bỏ sót trôi chậm (benchmark sáng vs chiều khác nhau vì nhiệt phòng máy) |
-| Log sampling với `rate()` trong Prometheus | Chuỗi tần số = đạo hàm của phase | `rate()` trên counter tương đương lấy tần số từ phase; sai phân bậc hai chính là "đạo hàm của rate" | — (cầu nối này ít gãy; dùng để nhớ công thức) |
 
 **Chấm mô hình:**
 
-- *"Thêm dữ liệu thì ước lượng luôn chính xác hơn."* — **ĐÚNG MỘT PHẦN.** Đúng cho nhiễu trắng (σ/√N). Sai khi nhiễu có thành phần random walk hoặc drift: sau điểm cực tiểu Allan, kéo dài cửa sổ làm ước lượng tệ đi. Phản ví dụ: chuỗi "tổng" ở mục 5 — cửa sổ ~3 phút cho Allan deviation thấp nhất; cửa sổ 1 giờ cao hơn nhiều lần.
+- *"Thêm dữ liệu thì ước lượng luôn chính xác hơn."* — **ĐÚNG MỘT PHẦN.** Đúng cho nhiễu trắng (σ/√N). Sai khi có random walk hoặc drift: sau điểm cực tiểu Allan, kéo dài cửa sổ làm ước lượng tệ đi. Phản ví dụ: một gyro có bias đi dạo — trung bình cả đêm cho bias của *cả đêm*, không phải bias lúc bạn dùng nó.
 - *"Std của gyro đứng yên là chỉ số chất lượng của gyro."* — **SAI** như một chỉ số độc lập. Std phụ thuộc băng thông (bộ lọc DLPF, ODR) và độ dài ghi. Datasheet đặc tả bằng *noise density* (°/s/√Hz) và, với IMU tốt, bằng ARW và bias instability đọc từ đồ thị Allan. Phản ví dụ: đổi DLPF từ 20 Hz sang 200 Hz, std tăng ~√10 lần, gyro vẫn là gyro đó.
 
-**Tên chuẩn của thứ bạn đã làm:** khi bạn để một service chạy "warm" rồi mới đo, hoặc chạy benchmark ở hai thời điểm để xem nó có ổn không, bạn đang tìm thang thời gian mà nhiễu còn trắng. Allan deviation là phiên bản có hệ thống của việc đó; trong đo lường gọi là *stability analysis*. Thứ còn thiếu: đọc độ dốc để biết nhiễu nào trội và cửa sổ nào tối ưu.
+**Tên chuẩn của thứ bạn đã làm:** chạy benchmark ở hai thời điểm để xem có ổn không là đang dò thang thời gian mà nhiễu còn trắng; Allan deviation là phiên bản có hệ thống (*stability analysis*). Thứ còn thiếu: đọc độ dốc để biết nhiễu nào trội và cửa sổ nào tối ưu.
 
 ### 4. Thuật ngữ
 
@@ -542,6 +540,8 @@ Checklist khi đọc một khẳng định về độ ổn định (đồng hồ
 | Kết quả mô phỏng | [đã chạy] | seed 42 |
 
 Đã sửa so với Gemini: (K5 Bài 12) "sai số cửa sổ trượt ≈ 1–2 ppm" không kèm phương pháp → phụ thuộc chỗ đóng dấu, với timestamp ISR nhỏ hơn ba bậc; (K5 Bài 10) "tăng cửa sổ trượt để triệt tiêu jitter" → chọn cửa sổ theo cực tiểu Allan, vì cửa sổ dài làm mờ chính drift theo nhiệt.
+
+Reviewer sửa: phản ví dụ ở Chấm mô hình lộ τ tối ưu của bài tập mục 5 → thay bằng phản ví dụ không lộ số; chạy lại mô phỏng (seed 42), số trong khối 🔒 khớp.
 
 ### 11. Đọc thêm và tự kiểm tra
 
@@ -898,7 +898,7 @@ for name, args in cases.items():
 
 **Chấm mô hình:**
 
-- *"NTP đồng bộ hai máy với sai số bằng jitter mạng."* — **ĐÚNG MỘT PHẦN.** Jitter (phần ngẫu nhiên) bị bộ lọc và vòng điều khiển làm nhỏ đi; phần **cố định** của bất đối xứng thì không giảm chút nào và không hiện trong bất kỳ thống kê nào NTP báo. Phản ví dụ: trường hợp 3 trong mô phỏng — std nhỏ, sai số lớn.
+- *"NTP đồng bộ hai máy với sai số bằng jitter mạng."* — **ĐÚNG MỘT PHẦN.** Jitter (phần ngẫu nhiên) bị bộ lọc và vòng điều khiển làm nhỏ đi; phần **cố định** của bất đối xứng thì không giảm chút nào và không hiện trong bất kỳ thống kê nào NTP báo. Phản ví dụ: cáp quang hai sợi dài khác nhau 40 m (~200 ns mỗi chiều chênh): mọi mẫu lệch cùng một lượng bằng nửa chênh lệch, std của offset vẫn chỉ là jitter.
 - *"Mạng nhanh thì NTP chính xác."* — **ĐÚNG MỘT PHẦN.** δ nhỏ thì cận δ/2 nhỏ, nên mạng nhanh giới hạn sai số tối đa. Nhưng mạng chậm và đối xứng có thể chính xác hơn mạng nhanh mà bất đối xứng; và tầng đóng dấu (phần mềm) đặt sàn bất kể mạng nhanh cỡ nào.
 
 **Tên chuẩn của thứ bạn đã làm:** khi bạn so log giữa hai service và "bù" bằng cách giả định request và response đi mất thời gian như nhau, bạn đang tự chạy thuật toán của Cristian bằng tay. Các hệ tracing (Zipkin, Jaeger) có bước điều chỉnh skew dựa đúng trên ý đó: span con phải nằm trong span cha, nên dịch nó vào trong. Thứ còn thiếu: biết rằng bước dịch đó dựa trên giả định đối xứng, và cận sai số là δ/2.
@@ -976,7 +976,7 @@ Checklist khi đọc một khẳng định về NTP hoặc về độ trễ mộ
 
 (b) **ĐÚNG MỘT PHẦN.** RTT đo được; "chia đôi" là giả định đối xứng của NTP. Trên USB-CDC, chiều OUT (host ghi) và IN (host poll thiết bị) đi qua hai đường code và hai lịch khác nhau, nên bất đối xứng là quy luật chứ không phải ngoại lệ. Cách đúng: báo RTT kèm cận [0, RTT] cho mỗi chiều, hoặc đo một chiều bằng trọng tài (GPIO + logic analyzer), như bài chính K3 Bài 9 đã sửa.
 
-(c) **SAI** như phát biểu. 12 µs là offset ước lượng **so với nguồn** theo giả định đối xứng, tại thời điểm cập nhật cuối. Sai số so với UTC còn gồm bất đối xứng (không thấy), sai số của chính nguồn (root dispersion), và skew tích lũy từ lần cập nhật cuối. Đọc thêm dòng "Root dispersion" và "Root delay": cận lỏng (nhưng trung thực hơn) là root dispersion + root delay/2 [spec: tài liệu chrony, mục `chronyc tracking`].
+(c) **SAI** như phát biểu. 12 µs là offset ước lượng **so với nguồn** theo giả định đối xứng, tại thời điểm cập nhật cuối. Sai số so với UTC còn gồm bất đối xứng (không thấy), sai số của chính nguồn (root dispersion), và skew tích lũy từ lần cập nhật cuối. Cận lỏng (nhưng trung thực hơn) theo tài liệu chrony: |System time| + Root dispersion + ½·Root delay [spec: chrony docs, `chronyc tracking`].
 
 </details>
 
@@ -1038,6 +1038,8 @@ Checklist khi đọc một khẳng định về NTP hoặc về độ trễ mộ
 | Kết quả mô phỏng | [đã chạy] | seed 7 |
 
 Đã sửa so với bản gốc/Gemini: (Roadmap, Gemini K5 Bài 7) "NTP ~1–10 ms trong LAN" → cỡ đó là Internet/WiFi tải nặng; LAN có dây thường tốt hơn nhiều, phải tự đo; (Gemini K3 Bài 9) RTT/2 cho chặng USB → giả định đối xứng không đứng trên USB, báo RTT kèm cận.
+
+Reviewer sửa: cận sai số từ `chronyc tracking` thiếu số hạng |System time| → thêm (theo tài liệu chrony); phản ví dụ ở Chấm mô hình trỏ thẳng vào kết quả bài tập mục 5 → thay bằng ví dụ cáp lệch chiều dài. Chạy lại mô phỏng (seed 7): khớp.
 
 ### 11. Đọc thêm và tự kiểm tra
 
