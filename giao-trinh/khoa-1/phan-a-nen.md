@@ -1,8 +1,12 @@
-# Khóa 1 · Phần A — Nền (6h)
+# Khóa 1 · Phần A — Nền (6h, không cần mua gì)
 
-Ba bài đọc và tính, chưa cần mua gì. Mục tiêu của phần này không phải thuộc công thức mà là có **mô hình đúng** về ba thứ: ai quyết định dòng điện, "0 V" thật ra là gì, và vì sao một sợi dây biết bit nào là bit nào. Cả ba mô hình sẽ bị kiểm bằng số đo ở Phần C–D.
+Ba bài đọc, tính và mô phỏng, làm được ngay tối nay với giấy, bút, laptop và trình duyệt. Mục tiêu của phần này không phải thuộc công thức mà là có **mô hình đúng** về ba thứ: ai quyết định dòng điện, "0 V" thật ra là gì, và vì sao một sợi dây biết bit nào là bit nào. Cả ba mô hình sẽ bị kiểm bằng số đo ở Phần C–D.
+
+Quy tắc của cả khóa (xem `00-tong-quan.md`): mọi bài có mục **5. Dự đoán** — viết số vào `prediction.md`, commit, rồi mới chạy mô phỏng hoặc mở khối 🔒. Thư mục `lab/00-nen/` là bài luyện, không tính vào 5 lab của gate.
 
 Giờ của từng bài là cách chia 6h của bản gốc (bản gốc chỉ ghi giờ cho cả phần): Bài 1 2h · Bài 2 1.5h · Bài 3 2.5h.
+
+Mã liên kết: `→ F1.1` là viên nang nền trong `giao-trinh/nen-tang/`, `→ K3 Bài 4` là bài của khóa khác, `→ K7 C0.3` là bài khái niệm của Khóa 7 mới (`khoa-7/_KE-HOACH-K7.md`).
 
 ---
 
@@ -12,7 +16,7 @@ Giờ của từng bài là cách chia 6h của bản gốc (bản gốc chỉ g
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
-Năm 1827 Georg Simon Ohm, thầy giáo trung học ở Cologne, công bố *Die galvanische Kette, mathematisch bearbeitet*: dòng qua một dây dẫn tỉ lệ với "lực đẩy" của pin và tỉ lệ nghịch với độ dài dây. Giới vật lý Đức khi đó đón nhận lạnh nhạt; phải hơn chục năm sau, khi Royal Society trao ông huân chương Copley (1841), định luật mới được coi là nền [chuẩn]. Thứ khiến nó trở thành công cụ hằng ngày là điện báo: khi dây kéo dài hàng chục, hàng trăm km, kỹ sư cần **tính trước** dòng còn lại ở đầu nhận để chọn pin và chọn rơ-le, thay vì thử rồi đoán. Đó cũng chính là việc bạn sẽ làm ở mọi bài sau: tính trước, rồi đo.
+Năm 1827 Georg Simon Ohm, thầy giáo trung học ở Cologne, công bố *Die galvanische Kette, mathematisch bearbeitet*: dòng qua một dây dẫn tỉ lệ với "lực đẩy" của pin và tỉ lệ nghịch với độ dài dây. Giới vật lý Đức khi đó đón nhận lạnh nhạt; phải hơn chục năm sau, khi Royal Society trao ông huân chương Copley (1841), định luật mới được coi là nền [chuẩn]. Thứ khiến nó trở thành công cụ hằng ngày là điện báo: khi dây kéo dài hàng chục, hàng trăm km, kỹ sư cần **tính trước** dòng còn lại ở đầu nhận để chọn pin và chọn rơ-le, thay vì thử rồi đoán. Đó cũng chính là việc bạn sẽ làm ở mọi bài sau: tính trước, rồi đo. Một chi tiết đáng nhớ: các thí nghiệm đầu của Ohm dùng pin Volta, điện áp trôi trong lúc đo, nên số liệu không thẳng hàng; ông chỉ thấy quan hệ tuyến tính sạch sau khi chuyển sang nguồn cặp nhiệt điện ổn định hơn `[chuẩn — mục History của "Ohm's law" trong các bách khoa vật lý]`. Định luật đúng mà nguồn không ổn định thì vẫn không nhìn thấy định luật — lý do Bài 9 bắt bạn đo lại Vin trước mỗi phép đo.
 
 Người mới từ phần mềm thường không khổ vì thiếu công thức. Họ khổ vì ba mô hình sai mà trông rất hợp lý: "nguồn 3 A sẽ đẩy 3 A vào mạch", "LED cháy vì điện áp", và "đo gì cũng cắm que như nhau". Mô hình thứ ba đứt cầu chì đồng hồ trong mười phút đầu. Hai mô hình đầu đốt linh kiện ở Khóa 3 và Khóa 7.
 
@@ -129,7 +133,8 @@ Không cần phần cứng. Tạo `lab/00-nen/bai01-prediction.md`, điền số
 3. Cùng mạch, mô hình Shockley trong code: dòng sẽ **lớn hơn hay nhỏ hơn** câu 2, vì sao? Ghi hướng và lý do, chưa cần số.
 4. Tăng nguồn thêm 10% (5.0 → 5.5 V). Dòng có điện trở tăng bao nhiêu %: nhỏ hơn 10%, bằng 10%, hay lớn hơn 10%? Lý do bằng một câu.
 5. Bỏ điện trở, điện áp trên LED tăng từ 2.0 V lên 2.2 V. Dòng nhân lên khoảng bao nhiêu lần: 1.1×, 2×, 10×, hay hơn nữa? Chọn bậc độ lớn.
-6. Ba câu khái niệm: vì sao không thể nói "chân GPIO này có điện áp 3.3 V" mà không nói thêm gì; muốn đo dòng qua LED phải làm gì với mạch trước; vì sao nguồn 5 V 3 A nối vào 1 kΩ không cho 3 A.
+6. Giữ nguyên LED đỏ và 330 Ω, đổi nguồn sang **12 V**. Dòng và công suất trên điện trở là bao nhiêu? LED (tra *Absolute Maximum Ratings*, dòng I_F liên tục của LED 5 mm đỏ) và điện trở 1/4 W còn ổn không?
+7. Ba câu khái niệm: vì sao không thể nói "chân GPIO này có điện áp 3.3 V" mà không nói thêm gì; muốn đo dòng qua LED phải làm gì với mạch trước; vì sao nguồn 5 V 3 A nối vào 1 kΩ không cho 3 A.
 
 Phương pháp: câu 1–2 dùng `I = V/R`, `P = I²R` hoặc `V²/R`, `I = (V_nguồn − V_f)/R`. Câu 3–5 nghĩ bằng hình phần 2: đường tải và đường cong cắt nhau ở đâu, dịch đường tải thì điểm cắt chạy thế nào.
 
@@ -143,6 +148,7 @@ Phương pháp: câu 1–2 dùng `I = V/R`, `P = I²R` hoặc `V²/R`, `I = (V_n
 | 3 | Shockley so với câu 2 | lớn hơn / nhỏ hơn | |
 | 4 | Nguồn +10% → I tăng | <10% / =10% / >10% | |
 | 5 | Bỏ R, V_LED 2.0→2.2 V → I nhân | ~... lần | |
+| 6 | 12 V, 330 Ω: I / P_R | ... mA / ... mW | LED ổn? 1/4 W ổn? |
 ```
 
 ### 6. Làm
@@ -151,8 +157,9 @@ Phương pháp: câu 1–2 dùng `I = V/R`, `P = I²R` hoặc `V²/R`, `I = (V_n
 2. Viết và commit `prediction.md` (phần 5).
 3. Chạy mô phỏng phần 2 (`python3 bai1_led.py`). Đổi `V_SUPPLY` thành 9.0 và chạy lại. Đổi `R` thành 1000 và chạy lại. Ghi ba điểm làm việc.
 4. Sửa tham số LED cho khớp datasheet LED bạn có (nếu có `V_f` tại hai dòng khác nhau, giải ngược ra `I_s` và `n_Vt`). Ghi lại khác biệt.
-5. Viết `bai01-analysis.md`: bảng dự đoán / mô phỏng / chênh lệch; một đoạn giải thích vì sao câu 3–5 ra như vậy bằng lời của bạn.
-6. Ghi vào sổ quy tắc an toàn đo dòng: **chế độ A = đồng hồ thành một sợi dây**. Chuyển que đỏ về lỗ VΩmA và núm về V ngay sau mỗi lần đo dòng.
+5. Mở **Falstad Circuit Simulator** (trình mô phỏng mạch chạy trên trình duyệt của Paul Falstad, `falstad.com/circuit`). Dựng nguồn DC 5 V → 330 Ω → LED → về nguồn. Đặt một ampe kế **trước** LED và một **sau** LED: hai số phải bằng nhau (KCL). Đổi chỗ điện trở và LED: dòng có đổi không? Đổi nguồn sang 12 V, rê chuột lên điện trở xem công suất (câu 6).
+6. Viết `bai01-analysis.md`: bảng dự đoán / mô phỏng / chênh lệch; một đoạn giải thích vì sao câu 3–5 ra như vậy bằng lời của bạn.
+7. Ghi vào sổ quy tắc an toàn đo dòng: **chế độ A = đồng hồ thành một sợi dây**. Chuyển que đỏ về lỗ VΩmA và núm về V ngay sau mỗi lần đo dòng.
 
 Sai số ở bài này đến từ mô hình, không từ dụng cụ: mô phỏng chỉ đúng hình dạng, và giá trị `V_f` của datasheet là giá trị điển hình (typ) có dải min–max. Ghi dải đó cạnh mọi số bạn dùng.
 
@@ -167,7 +174,8 @@ Sai số ở bài này đến từ mô hình, không từ dụng cụ: mô phỏ
 | 3 | Lớn hơn một chút: mô phỏng cho khoảng **9.2 mA**, `V_LED ≈ 1.96 V` | Ở 9 mA, V_f thấp hơn giá trị 2.0 V (tham số được chọn tại 20 mA), nên điện áp dư trên điện trở lớn hơn, dòng lớn hơn |
 | 4 | Lớn hơn 10%: mô phỏng cho khoảng **+16%** | Điện áp dư tăng từ ~3.0 V lên ~3.5 V, tức ~+17%; V_f nhích lên một chút nên còn ~+16%. Điện trở khuếch đại thay đổi của nguồn thay vì chặn nó |
 | 5 | Bậc chục lần: mô phỏng cho khoảng **48×** | Hàm mũ: mỗi `n·V_t·ln 10 ≈ 0.12 V` dòng nhân 10. Với LED thật có điện trở nối tiếp bên trong, con số nhỏ hơn nhưng vẫn đủ để cháy |
-| 6 | (a) điện áp là hiệu giữa hai điểm, câu đầy đủ là "3.3 V so với GND"; (b) cắt mạch tại một chỗ trên đường dòng qua LED, nối đồng hồ (chế độ A) vào chỗ cắt; (c) tải 1 kΩ chỉ cho `5/1000 = 5 mA`, 3 A là trần của nguồn | |
+| 6 | `I ≈ (12 − 2.0)/330 ≈ 30 mA`; `P_R ≈ 10²/330 ≈ 0.30 W` | LED 5 mm đỏ thường định mức ~20 mA, tối đa tuyệt đối ~25–30 mA `[ước lượng — tra datasheet]` → quá sức. **Điện trở 1/4 W cũng quá tải** (0.30 W > 0.25 W). Đổi nguồn mà không tính lại là hỏng hai linh kiện một lúc |
+| 7 | (a) điện áp là hiệu giữa hai điểm, câu đầy đủ là "3.3 V so với GND"; (b) cắt mạch tại một chỗ trên đường dòng qua LED, nối đồng hồ (chế độ A) vào chỗ cắt; (c) tải 1 kΩ chỉ cho `5/1000 = 5 mA`, 3 A là trần của nguồn | |
 
 Lệch so với bảng là bình thường nếu bạn chỉnh tham số LED theo datasheet thật: cái phải giữ là **hướng** của câu 3–5, không phải chữ số thập phân. Nếu câu 4 bạn chọn "nhỏ hơn 10%", mô hình "điện trở là rate limiter" vẫn còn trong đầu bạn: đọc lại phần Chấm mô hình.
 
@@ -180,6 +188,8 @@ Lệch so với bảng là bình thường nếu bạn chỉnh tham số LED the
 | Câu 1 ra 22.7 A hay 0.0227 mA | Lẫn đơn vị | Viết đơn vị ở mọi dòng tính | Quy ước: tính bằng V, A, Ω, rồi mới đổi ra mA |
 | Code báo lỗi `brentq` | Khoảng tìm nghiệm không đổi dấu (ví dụ `V_SUPPLY` nhỏ hơn V_f) | In giá trị hàm ở hai đầu khoảng | Nguồn phải lớn hơn V_f; LED không sáng nếu nguồn thấp hơn ngưỡng |
 | Dòng mô phỏng lớn gấp nhiều lần dự đoán | Sửa `n_Vt` hoặc `I_s` sai bậc | So V_f tại 20 mA in ra với datasheet | Giải lại tham số từ hai điểm datasheet |
+| Falstad: ampe kế trước và sau LED khác nhau | Có nhánh rẽ (dây thừa nối vào giữa) | Xóa dây thừa, kiểm mạch là một vòng duy nhất | Mạch nối tiếp không có chỗ cho dòng rẽ |
+| P tính ra lớn hơn đáp án nhiều | Dùng V nguồn thay vì V rơi trên điện trở | KVL: V_R + V_LED = V_nguồn | `P_R = V_R × I` |
 | Dự đoán câu 4 "nhỏ hơn 10%" | Mô hình rate limiter | Tính tay `(5.5 − 2.0)/(5.0 − 2.0)` | Đọc lại Chấm mô hình |
 
 ### 9. Câu hỏi ngược
@@ -211,13 +221,17 @@ Lệch so với bảng là bình thường nếu bạn chỉnh tham số LED the
 | V_f LED đỏ ~1.8–2.2 V; xanh dương/trắng ~2.8–3.4 V | [chuẩn] | Tra datasheet đúng con LED bạn mua; dải phụ thuộc vật liệu bán dẫn |
 | V_f LED xanh lá: GaP kiểu cũ (vàng-xanh) ~2.0–2.2 V; InGaN xanh lá thuần ~2.8–3.3 V | [chuẩn] | Hai loại "xanh lá" khác nhau gần 1 V; nhìn màu không phân biệt được, phải tra hoặc đo |
 | Mô hình Shockley với `n = 2` cho LED đỏ | [ước lượng] | Đồ chơi để thấy hình dạng; LED thật có điện trở nối tiếp nội, `n` từ ~1.5 đến >2 |
+| Ohm chuyển sang nguồn cặp nhiệt điện để có số liệu ổn định | [chuẩn] | Mục History của "Ohm's law" |
+| Dòng định mức LED 5 mm ~20 mA, tối đa ~25–30 mA | [ước lượng] | LED kit thường không có datasheet → giữ ≤10 mA |
 | Điện trở cắm board thường 1/4 W | [chuẩn] | Kiểm kích thước thân và mô tả kit bạn mua |
 | Chế độ đo dòng có điện trở trong rất nhỏ | [chuẩn] | Con số cụ thể (burden voltage) của UT33D+ là `[tự đo]`, xem Bài 5 |
 
 **Đã sửa so với bản gốc:**
 - Bản gốc ghi LED xanh lá ~2.0–2.2 V. Chỉ đúng với LED GaP kiểu cũ; LED xanh lá InGaN phổ biến hiện nay ~2.8–3.3 V. Sửa trong bảng trên.
 - Bản gốc dùng "điện trở = rate limiter" và "công suất = nhiệt" như phép so sánh trọn vẹn. Giữ phép so sánh nhưng chấm ĐÚNG MỘT PHẦN và chỉ chỗ gãy (phần 3).
-- Ba câu tự kiểm tra của bản gốc chuyển thành dự đoán có niêm phong; thêm mô phỏng đường tải để thay phần "Làm" mà bản gốc không có.
+- Ba câu tự kiểm tra của bản gốc chuyển thành dự đoán có niêm phong; thêm mô phỏng đường tải và bước Falstad để thay phần "Làm" mà bản gốc không có.
+- Thêm công suất trên **điện trở** khi đổi nguồn 12 V (bản gốc chỉ tính ở 5 V): cùng 330 Ω, điện trở 1/4 W quá tải.
+- "Hiểu nhầm 3" của bản gốc (cắm que đo dòng/áp) giữ ở phần 2 ý 4 và được thực hành đầy đủ ở Bài 5.
 
 ### 12. Đọc thêm và tự kiểm tra
 
@@ -279,7 +293,7 @@ Bảng số để có trực giác về "dây không lý tưởng" (dùng ở ph
 | Đoạn dây | Điện trở cần tra/ước lượng | Nguồn số |
 |---|---|---|
 | Dây jumper dupont 20 cm, lõi cỡ 26–28 AWG | `ρ` theo bảng AWG × chiều dài | Bảng AWG: 28 AWG ≈ 0.21 Ω/m, 26 AWG ≈ 0.13 Ω/m [chuẩn] |
-| Mỗi điểm tiếp xúc đầu dupont hoặc lỗ breadboard | vài chục mΩ, thay đổi theo độ rão | [ước lượng]; tự đo ở K1 Bài 9 bằng cách đo sụt áp khi có dòng |
+| Mỗi điểm tiếp xúc đầu dupont hoặc lỗ breadboard | vài chục mΩ, thay đổi theo độ rão | [ước lượng]; muốn đo phải cho một dòng biết trước chạy qua rồi đo sụt áp (phương pháp 4 dây/Kelvin — biết tên là đủ ở K1) |
 | Dây nguồn to 18 AWG, 20 cm | ≈ 0.021 Ω/m × 0.2 m | Bảng AWG [chuẩn] |
 
 ### 3. Cầu nối từ backend
@@ -297,6 +311,8 @@ Bảng số để có trực giác về "dây không lý tưởng" (dùng ở ph
 - *"Không chung GND thì mọi thứ vô nghĩa"* (bản gốc) — **ĐÚNG MỘT PHẦN.** Đúng với tín hiệu single-ended, tức gần hết những gì bạn cắm trong Khóa 1–3. Phản ví dụ: hai mini PC nối cáp Ethernet, mỗi máy một adapter riêng, không có dây GND chung, vẫn chạy PTP chính xác tới mức sub-microsecond (K5) vì Ethernet truyền vi sai qua biến áp cách ly.
 - *Mô hình của bạn ở K3 lượt 11:* "mọi thiết bị khi chung nguồn... luôn có trường hợp sụt nguồn... chiếm dụng nguồn chung là xảy ra" — **ĐÚNG MỘT PHẦN.** Đúng: sụt áp do tải chung là hiện tượng thường trực, từ breadboard tới lưới điện gia đình. Gãy ở chữ "chiếm dụng": nó không phải tranh chấp tài nguyên kiểu mutex hay fair-share, nơi thêm trọng tài là giải xong. Nó là `I × Z` của **đoạn đường dùng chung** (dây nguồn, dây GND, nội trở nguồn). Phản ví dụ: hai thiết bị, cùng tổng dòng, cùng một nguồn; nối kiểu nối tiếp nhau (daisy chain) qua jumper mỏng thì thiết bị cuối sụt áp rõ, nối hình sao (mỗi thiết bị một cặp dây to về thẳng cực nguồn) thì sụt áp nhỏ hơn hẳn. Cách sửa là giảm trở kháng dùng chung và đặt tụ làm kho cục bộ (decoupling, → F5.7), không phải "phân xử".
 
+- *"Hai module cùng cắm USB vào một laptop thì đã chung GND, khỏi nối thêm."* — **ĐÚNG MỘT PHẦN.** Hai GND nối nhau qua hai cáp USB và mạch của laptop: một đường về dài, có điện trở, có thể mang dòng của thứ khác. Thường đủ cho tín hiệu chậm, nhưng không phải thứ bạn chọn có chủ đích. Phản ví dụ: rút một cáp, cấp pin cho module đó — đường GND biến mất mà không có triệu chứng nào cho tới khi dữ liệu thành rác. Quy tắc: **có dây tín hiệu giữa hai module thì có một dây GND ngắn đi cùng.**
+
 ### 4. Thuật ngữ
 
 | Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
@@ -308,6 +324,7 @@ Bảng số để có trực giác về "dây không lý tưởng" (dùng ở ph
 | 🟢 | Sụt áp trên dây | `I·R` của dây và điểm tiếp xúc | Chỉ xảy ra với dây dài hàng mét |
 | 🟡 | Single-ended vs differential | Đọc so với GND vs đọc hiệu hai dây | — |
 | 🟡 | Ground loop | Nhiều đường GND song song tạo vòng nhận nhiễu | — |
+| 🟡 | Earth ground vs signal ground | Đất bảo vệ (dây nối đất ổ cắm) khác mốc 0 của mạch | Hai thứ là một |
 | 🟡 | Star ground | Mọi nhánh về một điểm GND chung bằng dây riêng | — |
 | 🔴 | Trở kháng truyền dẫn, điện cảm dây ở tần số cao | Hành vi dây ở MHz–GHz | Cần ở khóa này |
 
@@ -343,9 +360,42 @@ Chưa cần dụng cụ. Giữ nguyên ba bản vẽ của bản gốc và thêm
 2. Vẽ cùng mạch nhưng LED cắm ngược. Ghi dự đoán của câu 1.
 3. Vẽ hai module: một cấp nguồn từ USB, một cấp nguồn từ pin. Vẽ dây tín hiệu giữa chúng. Khoanh dây còn thiếu.
 4. Vẽ lại hình 3 nhưng thêm một amp class-D lấy nguồn từ USB. Vẽ hai phương án đi dây GND: (a) daisy chain qua một jumper, (b) hình sao về cực nguồn. Đánh dấu đoạn dây nào mang dòng của amp.
-5. Tính câu 2–3, commit `prediction.md`, mở khối 🔒, viết `bai02-analysis.md`.
+5. Tính câu 2–3, commit `prediction.md`.
+6. **Sau khi commit**, chạy mô phỏng dưới đây (nó tính sẵn đáp án dạng tổng quát hơn: dây đi + dây về, dây lõi nhôm mạ đồng, và lệch GND ăn vào biên logic). Đổi `awg` từ 28 sang 22 và bỏ `cca=True`; xem điện trở vòng giảm bao nhiêu lần.
+7. Falstad (`falstad.com/circuit`): nguồn 5 V → điện trở 0.1 Ω (dây đi) → tải 5 Ω (≈1 A) → điện trở 0.1 Ω (dây về) → nguồn. Đặt vôn kế ở hai đầu tải và ở hai cực nguồn. So hai số.
+8. Mở khối 🔒, viết `bai02-analysis.md`.
 
-Nếu đã có đồng hồ và breadboard (tức đã sang tuần 2), làm thêm: đo điện trở một sợi jumper bằng thang Ω thấp nhất, rồi chập hai que vào nhau và đo lại. Hiệu hai số mới là điện trở dây; số đọc khi chập que là điện trở của chính que đo cộng sai số zero của đồng hồ. Với một đồng hồ 2000 count, thang 200 Ω có resolution 0.1 Ω và sai số cỡ vài phần mười ohm [spec, kiểm trong manual UT33D+], nên **không đo được** điện trở vài chục mΩ của dây một cách tin cậy. Đó là lý do K1 Bài 9 đo sụt áp khi có dòng thay vì đo Ω trực tiếp.
+```python
+# [đã chạy] "Dây nối là một giả định": sụt áp trên dây jumper và mốc GND bị đẩy lên
+RHO_CU = 1.72e-8                       # điện trở suất đồng, Ω·m [chuẩn]
+AWG_MM2 = {22: 0.326, 24: 0.205, 26: 0.129, 28: 0.081}   # tiết diện, mm² [chuẩn]
+
+def r_wire(awg, length_m, cca=False):
+    r = RHO_CU * length_m / (AWG_MM2[awg] * 1e-6)
+    return r * (1.6 if cca else 1.0)   # dây nhôm mạ đồng (CCA) ~1.6× [ước lượng]
+
+R_CONTACT = 0.02                       # mỗi điểm cắm breadboard/Dupont, Ω [ước lượng]
+loop = 2 * (r_wire(28, 0.20, cca=True) + 2 * R_CONTACT)  # dây đi + dây về, 20 cm mỗi dây
+print(f"Điện trở vòng (2 dây 28AWG CCA 20 cm + 4 tiếp điểm): {loop*1000:.0f} mΩ")
+for i in [0.01, 0.1, 0.5, 1.0]:
+    print(f"  I = {i*1000:6.0f} mA -> sụt trên dây = {i*loop*1000:6.1f} mV,"
+          f" tải nhận {5.0 - i*loop:.3f} V từ nguồn 5.000 V")
+
+# Hai module chung một dây GND; motor kéo dòng qua chính dây GND đó.
+r_gnd = r_wire(28, 0.20, cca=True) + 2 * R_CONTACT
+VIL_MAX = 0.25 * 3.3   # ESP32-S3: bên nhận coi là LOW nếu ≤ 0.25·VDD [spec, kiểm datasheet]
+VOL_MAX = 0.10 * 3.3   # ESP32-S3: bên gửi xuất LOW tối đa 0.1·VDD [spec, kiểm datasheet]
+print(f"\nB gửi LOW cho A; dòng motor chạy qua dây GND chung {r_gnd*1000:.0f} mΩ:")
+for i in [0.1, 1.0, 3.0, 5.0]:
+    seen = VOL_MAX + i * r_gnd          # A nhìn thấy LOW của B cộng thêm lệch GND
+    flag = "  <-- vượt V_IL: A có thể đọc thành không-phải-LOW" if seen > VIL_MAX else ""
+    print(f"  dòng motor {i:4.1f} A -> A thấy 'LOW' = {seen*1000:4.0f} mV"
+          f" (ngưỡng {VIL_MAX*1000:.0f} mV){flag}")
+```
+
+Mô hình này bỏ qua cảm kháng của dây (quan trọng khi dòng đổi nhanh, ví dụ motor PWM) — thực tế còn tệ hơn trong các khoảnh khắc chuyển mạch.
+
+Nếu đã có đồng hồ và breadboard (tức đã sang tuần 2), làm thêm: đo điện trở một sợi jumper bằng thang Ω thấp nhất, rồi chập hai que vào nhau và đo lại. Hiệu hai số mới là điện trở dây; số đọc khi chập que là điện trở của chính que đo cộng sai số zero của đồng hồ. Với một đồng hồ 2000 count, thang 200 Ω có resolution 0.1 Ω và sai số cỡ vài phần mười ohm [spec, kiểm trong manual UT33D+], nên **không đo được** điện trở vài chục mΩ của dây một cách tin cậy. Muốn đo điện trở cỡ mΩ, người ta cho một dòng biết trước chạy qua và đo sụt áp (phương pháp 4 dây/Kelvin), không đo Ω trực tiếp (→ F1.1: resolution vs accuracy vs thứ bạn cần đo).
 
 ### 7. Số phải ra
 
@@ -359,6 +409,8 @@ Nếu đã có đồng hồ và breadboard (tức đã sang tuần 2), làm thê
 | 4 | (a) mạch hở ở đâu đó, thường thiếu dây về GND; (b) LED cắm ngược; (c) điện trở quá lớn (đọc nhầm mã màu, 33 kΩ thay vì 330 Ω) nên dòng quá nhỏ để thấy sáng; (d) nguồn chưa bật hoặc rail breadboard đứt giữa (Bài 6) | |
 | 5 | UART là single-ended: bên nhận so điện áp dây TX với GND của nó. Ethernet truyền vi sai qua biến áp: bên nhận đọc hiệu giữa hai dây của một cặp, không cần mốc chung | |
 
+**Mô phỏng (bước 6):** vòng 2 dây 28 AWG lõi CCA + 4 tiếp điểm ≈ **216 mΩ**; ở 1 A tải chỉ nhận ≈ **4.78 V**. Lệch GND trên một dây ≈ 108 mΩ: "LOW" của B tới A vượt V_IL (825 mV) ở khoảng **5 A** dòng motor (với V_OL xấu nhất 0.33 V) — logic chịu được lâu hơn analog nhiều. Dây 22 AWG đồng thật: vòng giảm còn khoảng 1/3. **Falstad (bước 7):** dòng ≈ 5/5.2 ≈ 0.96 A, tải nhận ≈ 4.81 V trong khi hai cực nguồn vẫn 5.00 V — đo ở nguồn không cho biết tải nhận bao nhiêu.
+
 Vì sao lệch là bình thường: điện trở tiếp xúc thay đổi theo độ rão của lỗ cắm và lực ép của đầu dupont, có thể từ vài mΩ tới vài trăm mΩ. Điều cần giữ là **bậc độ lớn** và kết luận ở câu 3.
 
 </details>
@@ -369,7 +421,7 @@ Vì sao lệch là bình thường: điện trở tiếp xúc thay đổi theo �
 |---|---|---|---|
 | Câu 2 ra vài ohm | Lấy nhầm Ω/km thành Ω/m, hoặc nhầm cỡ AWG | Đơn vị trong bảng AWG | Đọc lại cột đơn vị |
 | Vẽ hai module mà không thấy thiếu gì | Đang nghĩ dây tín hiệu "mang" điện áp tuyệt đối | Tự hỏi: "3.3 V so với cái gì?" ở đầu nhận | Thêm dây GND chung |
-| Đo jumper ra 0.3–0.5 Ω dù dây ngắn | Đó là điện trở que đo + sai số zero của đồng hồ | Chập hai que, đọc số, trừ đi | Chấp nhận giới hạn dụng cụ; đo sụt áp ở Bài 9 |
+| Đo jumper ra 0.3–0.5 Ω dù dây ngắn | Đó là điện trở que đo + sai số zero của đồng hồ | Chập hai que, đọc số, trừ đi | Chấp nhận giới hạn dụng cụ; đo mΩ cần phương pháp sụt áp (4 dây) |
 | Câu 3 kết luận "80 mV không đáng kể" | Chỉ so với biên logic | So thêm với biên độ tín hiệu analog | Ghi cả hai so sánh |
 
 ### 9. Câu hỏi ngược
@@ -385,6 +437,9 @@ Vì sao lệch là bình thường: điện trở tiếp xúc thay đổi theo �
 5. **[Liên ngành]** Trong điện báo thế kỷ 19, earth return tiết kiệm nửa dây nhưng nhận nhiễu từ "đất". Hệ thống nào trong phần mềm tiết kiệm chi phí bằng cách dùng chung một tài nguyên làm "mốc" và trả giá theo cùng kiểu?
    <details><summary>Hướng nghĩ</summary>Một database dùng chung làm nguồn sự thật cho nhiều service: rẻ, nhưng tải của service này làm "mốc" của service kia xê dịch (độ trễ, lock). Chỗ giống: tài nguyên chung truyền nhiễu. Chỗ khác: nhiễu điện là liên tục và tuyến tính theo dòng.</details>
 
+6. **[Nếu…thì]** Nếu nối GND chung *và* nối luôn hai cực + của nguồn USB 5 V và một nguồn pin 5 V với nhau "cho chắc", chuyện gì xảy ra?
+   <details><summary>Hướng nghĩ</summary>Hai nguồn áp không bao giờ bằng nhau tuyệt đối. Nối song song hai nguồn áp = một vòng điện trở rất nhỏ giữa hai điện áp khác nhau → dòng lớn chảy từ nguồn cao sang nguồn thấp, có thể sạc ngược vào pin hoặc vào cổng USB. Chung mốc ≠ chung nguồn.</details>
+
 ### 10. Liên kết ra ngoài
 
 - **Hàng không.** Máy bay có hệ "bonding": mọi tấm kim loại của thân được nối điện với nhau để có một mốc chung, và có bấc xả tĩnh điện ở cánh. Giống: cần một mốc chung cho mọi hệ điện tử. Khác: ở đây mốc là cả khung kim loại lớn với điện trở rất nhỏ, và thứ cần dẫn đi còn là sét và tĩnh điện, không chỉ dòng tín hiệu.
@@ -398,13 +453,16 @@ Vì sao lệch là bình thường: điện trở tiếp xúc thay đổi theo �
 | Steinheil phát hiện earth return năm 1838 | [chuẩn] | Lịch sử điện báo |
 | Bão địa từ 1859 gây dòng cảm ứng trên dây điện báo, có tuyến chạy không cần pin | [chuẩn] | Tài liệu về sự kiện Carrington |
 | 28 AWG ≈ 0.21 Ω/m, 26 AWG ≈ 0.13 Ω/m, 18 AWG ≈ 0.021 Ω/m | [chuẩn] | Bảng AWG đồng ở 20 °C. Jumper rẻ có thể dùng lõi nhôm mạ đồng, điện trở cao hơn `[tự đo]` |
-| Điện trở tiếp xúc dupont/breadboard vài chục mΩ | [ước lượng] | Thay đổi rộng theo độ rão; đo bằng sụt áp ở Bài 9 |
+| Điện trở tiếp xúc dupont/breadboard vài chục mΩ | [ước lượng] | Thay đổi rộng theo độ rão; đo bằng sụt áp khi có dòng biết trước |
+| Dây jumper rẻ có thể lõi CCA, ~1.6× điện trở đồng | [ước lượng] | Đo bằng phương pháp sụt áp nếu muốn |
+| ESP32-S3: V_IL ≤ 0.25·VDD, V_OL ≤ 0.1·VDD | [spec] | *ESP32-S3 Series Datasheet*, DC Characteristics |
 | V_R max của LED thường 5 V | [spec] | Mục Absolute Maximum Ratings của datasheet LED cụ thể |
 | Ethernet cách ly bằng biến áp ở mỗi cổng | [chuẩn] | IEEE 802.3, phần yêu cầu cách ly của PHY |
 
 **Đã sửa so với bản gốc:**
 - Bản gốc ghi "LED cắm ngược: không dẫn, không sáng, không hỏng" như kết quả chắc chắn, và đặt nó ngay trong bước Làm (lộ đáp án). Sửa: đưa vào khối niêm phong, thêm điều kiện "nguồn 5 V nằm ngay ngưỡng V_R max thường gặp".
 - Bản gốc: "không nối GND thì mọi thứ vô nghĩa" như luật tuyệt đối. Sửa: điều kiện của tín hiệu single-ended; tín hiệu vi sai/cách ly là ngoại lệ (quan trọng vì K5 dùng Ethernet).
+- Bổ sung mô phỏng sụt áp/lệch GND có số và bước Falstad (bản gốc chỉ nói "dây có điện trở nhỏ"); phân biệt đất bảo vệ với mốc tín hiệu.
 - Thêm đáp án thứ tư cho câu "LED không sáng": rail breadboard đứt giữa (bản gốc chỉ nêu ở Bài 6).
 
 ### 12. Đọc thêm và tự kiểm tra
@@ -434,6 +492,8 @@ Vì sao lệch là bình thường: điện trở tiếp xúc thay đổi theo �
 **Máy điện báo in chữ.** Hệ thống của Émile Baudot (thập niên 1870) truyền ký tự bằng các bộ phân phối quay ở hai đầu dây, phải quay **đồng bộ** với nhau. Giữ hai motor cơ khí cách nhau hàng trăm km quay khớp nhau lâu dài là việc cực khổ. Lời giải được thương mại hóa đầu thế kỷ 20 trong teleprinter (nhóm Krum/Morkrum ở Mỹ) là **start-stop**: mỗi ký tự mở đầu bằng một bit "start", máy nhận khởi động lại bộ đếm ở cạnh đó, đọc vài bit, rồi dừng chờ ký tự sau [chuẩn]. Sai lệch tốc độ chỉ cần nhỏ trong **một ký tự**, không cần nhỏ mãi mãi. UART trên ESP32 của bạn là hậu duệ trực tiếp, và đơn vị "baud" mang tên Baudot.
 
 **Bức tường công suất.** Đầu những năm 2000, Intel đẩy kiến trúc NetBurst (Pentium 4) theo hướng tần số càng cao càng tốt, chia pipeline rất sâu để mỗi tầng ít logic. Năm 2004 họ hủy các thế hệ kế tiếp (Tejas) vì nhiệt và công suất, rồi chuyển sang đa nhân [chuẩn]. Từ giữa thập niên 2000, xung nhịp CPU phổ thông gần như đứng ở vài GHz. Không ai "cố tình giới hạn": tần số bị chặn bởi thời gian lan truyền qua đường logic dài nhất và bởi công suất tăng theo tần số. Câu chuyện này là phản ví dụ trực tiếp cho một mô hình bạn đã tự xây ở K3 (phần 3).
+
+**Hai clock gặp nhau.** Đầu thập niên 1970, Thomas Chaney và Charles Molnar (Washington University, St. Louis) ghi lại bằng dao động ký một hiện tượng nhiều kỹ sư thời đó không tin: khi tín hiệu từ ngoài đổi mức **đúng lúc** flip-flop đang chốt, đầu ra có thể lơ lửng giữa 0 và 1 trong một khoảng thời gian không chặn trên được rồi mới ngã về một phía. Bài báo "Anomalous Behavior of Synchronizer and Arbiter Circuits" (IEEE Transactions on Computers, 1973) là tài liệu kinh điển về **metastability** `[chuẩn]`. Hệ quả: không có cách nối thẳng hai miền clock an toàn tuyệt đối, chỉ có cách làm xác suất hỏng đủ nhỏ.
 
 ### 2. Mô hình tư duy
 
@@ -561,6 +621,7 @@ Số trong code là đồ chơi, không phải thông số của chip nào. Th�
 | Bản gốc: "có clock = message có delimiter; không clock = fixed-width protocol, lệch một byte là hỏng cả stream" | UART | UART **không** phải fixed-width trên cả stream: start bit đồng bộ lại mỗi khung 10 bit, giống một frame có header ngắn. Lệch tốc độ chỉ tích lũy **trong một khung** | Tin rằng một lần lệch là hỏng vĩnh viễn, nên không hiểu vì sao UART "tự lành" sau một khoảng lặng; hoặc ngược lại, gửi khung rất dài (9 bit dữ liệu + parity) với baud lệch rồi ngạc nhiên vì lỗi tăng |
 | Tick loop của game server / superstep có barrier (BSP) | Thiết kế đồng bộ: mọi flip-flop cập nhật ở cạnh clock | Barrier **đợi** node chậm nhất. Clock **không đợi ai**: đường nào chưa xong thì giá trị chốt sai, không có exception | Tin rằng ép xung quá thì máy "chạy chậm lại"; thực tế là tính sai lác đác, crash ngẫu nhiên, hỏng dữ liệu im lặng |
 | Hàng đợi (Kafka, channel) giữa hai service khác tốc độ | FIFO bất đồng bộ giữa hai miền clock | Trong phần mềm, đọc con trỏ là thao tác nguyên tử. Trong phần cứng, đọc một số nhiều bit đang đổi ở clock khác có thể ra **giá trị chưa từng tồn tại** (đang lật `0111→1000`, đọc được `1111`). Vì vậy con trỏ phải mã Gray (mỗi bước chỉ đổi một bit) và qua bộ đồng bộ 2 flip-flop | Tự viết FIFO với con trỏ nhị phân: mất hoặc lặp dữ liệu với tần suất một lần mỗi vài giờ, không tái lập được |
+| Queue đủ lớn để hấp thụ burst rồi xả | Hai thạch anh "cùng 48 kHz" | Queue backend xả được khi tải giảm. Lệch ppm giữa hai thạch anh là lệch **vĩnh viễn, một chiều**: FIFO cỡ nào cũng tràn (hoặc cạn) sau một thời gian tính được | Tăng buffer để "sửa" tiếng tách mỗi vài phút: chỉ kéo dài chu kỳ lỗi. Cần flow control hoặc resampling (→ K3, F4.1) |
 | HTTP: URL là routing, 200 OK là xác nhận | I2C: địa chỉ là routing, ACK ở nhịp thứ 9 | ACK chỉ nghĩa "có thiết bị kéo SDA xuống ở nhịp 9". Không có checksum, không xác nhận nội dung đúng. NACK sau byte dữ liệu khi **đọc** là master báo "đủ rồi", không phải lỗi | Coi ACK là bảo đảm toàn vẹn; coi mọi NACK là lỗi (Bài 12) |
 | UDP multicast/RTP: bắn đi, không ACK | I2S: stream liên tục, không ACK | Không có header trong khung: **vị trí theo thời gian** là toàn bộ cấu trúc. Lệch một nhịp BCK là mọi mẫu sau đó dịch bit, ra tiếng rè, không có lỗi nào được báo | Đợi một tín hiệu lỗi không tồn tại; debug bằng tai thay vì bằng logic analyzer |
 | Ép kiểu chuỗi sang bool theo ngưỡng | Ngưỡng V_IL/V_IH | Vùng cấm không trả `null`. Hai bộ nhận trên **cùng một dây** có thể đọc ra hai giá trị khác nhau | Logic analyzer đọc "1" (ngưỡng 2.0 V) trong khi ESP32 đọc "0" hoặc không xác định (ngưỡng ~2.5 V): capture "đúng" nhưng thiết bị vẫn lỗi |
@@ -603,6 +664,7 @@ Số trong code là đồ chơi, không phải thông số của chip nào. Th�
 | 🟡 | Clock domain crossing, metastability | Đi qua ranh giới hai clock; flip-flop chốt lơ lửng khi vi phạm setup/hold | "Đang lật thì điện áp ở giữa" (đó là chuyển mức, chưa phải metastability) |
 | 🟡 | FIFO bất đồng bộ, mã Gray, đồng bộ 2 flip-flop | Cách chuẩn để nối hai miền clock | Buffer bình thường |
 | 🟡 | Clock nhúng, clock recovery (CDR/PLL) | Bên nhận dựng lại clock từ cạnh dữ liệu | — |
+| 🟢 | Nyquist, aliasing | Lấy mẫu phải > 2× tần số; dưới đó hiện tần số giả, không báo lỗi | "Lấy mẫu 2× là đủ để đo chính xác" |
 | 🟡 | TDM | Nhiều kênh trên một dây, phân biệt bằng vị trí slot | — |
 | 🟡 | `P ≈ α·C·V²·f` | Công suất động của mạch CMOS | Công suất tuyến tính theo tần số ở mọi điều kiện |
 | 🔴 | STA, cây clock, CDC verification | Công cụ và kỹ thuật thiết kế chip | Cần cho data infra |
@@ -621,11 +683,14 @@ Tạo `lab/00-nen/bai03-prediction.md`. Viết số và lý do, **commit**, rồ
 
 ```
 mức:   ‾‾‾‾|___|‾‾‾|‾‾‾|___|‾‾‾|___|___|‾‾‾|___|‾‾‾|‾‾‾‾
-ô:          S   b0  b1  b2  b3  b4  b5  b6  b7  P
-       (rảnh)                                    (stop)
+ô:          S   b0  b1  b2  b3  b4  b5  b6  b7  Sp
+       (rảnh)  S = start bit                     Sp = stop bit (8N1: không có bit parity)
 ```
 
 8. **Khái niệm.** Vì sao I2C cần địa chỉ mà I2S thì không? Nếu một dây I2S mang 8 kênh (TDM), "địa chỉ" của kênh 5 nằm ở đâu?
+9. **Hai thạch anh.** Producer ghi 48 000 mẫu/s theo thạch anh +20 ppm, consumer đọc 48 000 mẫu/s theo thạch anh −20 ppm. FIFO 256 mẫu, bắt đầu nửa đầy. Sau bao lâu thì tràn hoặc cạn, và là tràn hay cạn? Phương pháp: `chênh tốc độ = Δppm × 10⁻⁶ × 48 000`, `thời gian = chỗ trống / chênh tốc độ` (→ F4.1, F7.1).
+10. **Aliasing.** Analyzer 24 MS/s cắm vào một clock 13 MHz và một clock 15 MHz. Analyzer **hiện** tần số bao nhiêu? Có cảnh báo không? Phương pháp: `f_alias = |f − k·fs|` gần nhất, nằm trong 0…fs/2. (Bài 7 có mô phỏng kiểm câu này.)
+11. **Mức 5 V.** Một chân 5 V của Arduino Uno xuất HIGH vào GPIO của ESP32-S3. Chuyện gì xảy ra? (Tra *Absolute Maximum Ratings* trong ESP32-S3 Datasheet.)
 
 ```markdown
 # Bài 3 — dự đoán (commit trước khi chạy code / mở đáp án)
@@ -639,6 +704,9 @@ mức:   ‾‾‾‾|___|‾‾‾|‾‾‾|___|‾‾‾|___|___|‾‾‾|__
 | 6 | Hình dạng; tỉ số; N_GATES=40 | | |
 | 7 | Byte UART | 0x.. '.' | |
 | 8 | Địa chỉ I2C vs I2S/TDM | | |
+| 9 | FIFO: sau bao lâu, tràn hay cạn | | |
+| 10 | 13 MHz / 15 MHz hiện thành | | |
+| 11 | 5 V vào GPIO ESP32-S3 | | |
 ```
 
 ### 6. Làm
@@ -678,6 +746,9 @@ Ghi chú về dụng cụ: ở bài này "dụng cụ" là mô phỏng. Sai số
 | 6 | (a) **vách đứng**: mô phỏng cho tỉ lệ sai ~8e-5 ở 1.18 GHz, ~3e-2 ở 1.25 GHz, ~0.5 ở 1.33 GHz, ~0.97 ở 1.43 GHz. (b) Thiết kế theo góc xấu ra **0.90 GHz**; lỗi đáng kể bắt đầu quanh 1.15–1.2 GHz: chênh khoảng **1.3×**, không phải 1000×. (c) Đường dài gấp đôi → f_max thiết kế giảm còn khoảng một nửa | Dạng vách đứng giải thích vì sao ép xung "chạy ngon" rồi đột nhiên hỏng: biên 30% là biên cho PVT, không phải tốc độ bị giấu |
 | 7 | Bit b0..b7 = 1,1,0,1,0,0,1,0 → `0b01001011` = **0x4B = 'K'** | LSB gửi trước: đọc ngược khi ghép |
 | 8 | I2C là bus chia sẻ: nhiều thiết bị trên cùng hai dây → cần địa chỉ. I2S thường điểm–điểm. Với TDM, địa chỉ là **vị trí thời gian**: kênh 5 là slot thứ 5 sau cạnh đồng bộ khung | Vì vậy lệch đồng bộ khung trong TDM là "gửi nhầm địa chỉ" mà không ai biết |
+| 9 | Chênh 40 ppm × 48 000 ≈ **1.92 mẫu/s**, producer nhanh hơn → **tràn**. Chỗ trống 128 mẫu → ~**67 s** | FIFO lớn gấp 4 chỉ hoãn tới ~4.4 phút. Buffer không sửa được lệch tần số |
+| 10 | 13 MHz hiện **11 MHz**, 15 MHz hiện **9 MHz** (= 24 − f). **Không có cảnh báo nào** | Cách tự phát hiện: đổi sample rate (tần số thật không đổi, tần số giả đổi theo) hoặc dự đoán trước tần số phải thấy |
+| 11 | Vượt Absolute Maximum (cỡ VDD + 0.3 V `[spec — kiểm datasheet]`) → có thể hỏng chân, ngay hoặc dần | Cần level shifter, hoặc divider cho tín hiệu **chậm một chiều** (Bài 9) |
 
 Vì sao lệch là bình thường: câu 1 phụ thuộc phiên bản driver; câu 5 phụ thuộc bảng DC của đúng chip bạn tra; câu 6 phụ thuộc seed và tham số đồ chơi. Những thứ phải giữ: công thức slot, sai số ±1 mẫu, 9.5 bit, dạng vách đứng.
 
@@ -691,6 +762,8 @@ Vì sao lệch là bình thường: câu 1 phụ thuộc phiên bản driver; c�
 | Câu 3 ra "31 mẫu, đủ chính xác" | Nhầm "thấy rõ" với "đo chính xác" | Tính sai số tương đối của một chu kỳ | Đo qua nhiều chu kỳ (Bài 7, 13) |
 | Câu 4 ra 10% hoặc 0.5% | Quên rằng sai số tích lũy theo số bit tới mẫu cuối, hoặc tính cho cả stream | Vẽ 10 ô bit, đánh dấu điểm lấy mẫu | Dùng 9.5 bit |
 | Byte câu 7 ra 0xD2 | Ghép bit theo thứ tự gửi (MSB trước) | Đọc lại "LSB gửi trước" | Đảo thứ tự |
+| Câu 9 ra "không bao giờ tràn vì cùng 48 kHz" | Coi tần số danh định là tần số thật | Đọc → F4.1 về ppm | Hai thạch anh không bao giờ bằng nhau |
+| Câu 10 nghĩ analyzer sẽ báo lỗi | Mô hình "dụng cụ sẽ cảnh báo khi quá sức" | Chạy mô phỏng ở Bài 7 | Không có cảnh báo; phải tự biết giới hạn |
 | Mô phỏng chạy rất chậm | `TRIALS` quá lớn với máy yếu | Giảm `TRIALS` xuống 50 000 | Chấp nhận sai số thống kê lớn hơn ở đuôi |
 | Đường lỗi trong mô phỏng thoải chứ không đứng | `GATE_SD` quá lớn so với `GATE_MEAN` | In `path.std()` | Trả tham số mặc định; rồi thử lại để thấy SD quyết định độ dốc |
 
@@ -729,6 +802,8 @@ Vì sao lệch là bình thường: câu 1 phụ thuộc phiên bản driver; c�
 | Ép xung kỷ lục ~1.5–2× xung danh định | [ước lượng] | So các kỷ lục ép xung công khai với xung boost danh định cùng dòng CPU |
 | PCM5102A chọn I2S/left-justified bằng chân FMT; chấp nhận nhiều tỉ lệ BCK/LRCK | [spec] | PCM510xA datasheet (TI), mục audio interface — tra lại danh sách tỉ lệ |
 | Tham số mô phỏng setup time | [ước lượng] | Đồ chơi; không đại diện chip nào |
+| Chaney & Molnar 1973, metastability | [chuẩn] | IEEE Transactions on Computers, 1973 |
+| GPIO ESP32-S3 không chịu 5 V | [spec] | ESP32-S3 Datasheet, Absolute Maximum Ratings |
 
 **Đã sửa so với bản gốc:**
 - Ngưỡng "dưới 0.8 V là 0, trên 2.0 V là 1" là của TTL/LVTTL, không phải ngưỡng chung của "digital". ESP32 dùng ngưỡng tỉ lệ VDD chặt hơn (~2.5 V cho mức 1). Sửa bằng bảng theo họ logic.
@@ -736,7 +811,8 @@ Vì sao lệch là bình thường: câu 1 phụ thuộc phiên bản driver; c�
 - "Lệch tốc độ quá 2–3% là hỏng hết": sửa thành "tổng lệch hai bên < ~4.6–5.3% lý thuyết, mỗi bên ~±2% thực hành; chỉ khung đó hỏng".
 - Công thức `BCK = sample_rate × số_bit × số_kênh` chỉ đúng khi slot = độ sâu bit. Sửa thành `× độ_rộng_slot × số_slot`.
 - "Ở Bài 14 bạn sẽ nhìn thấy nó": Bài 14 là gate; bài nhìn I2S là **Bài 13**.
-- "I2S là kết nối điểm–điểm tới đúng một DAC": đúng với cấu hình của khóa; với TDM nhiều kênh chung một dây, địa chỉ là vị trí slot.
+- "I2S là kết nối điểm–điểm tới đúng một DAC": đúng với cấu hình của khóa; nhiều thiết bị có thể chung BCK/LRCK (ví dụ hai amp MAX98357A, mỗi con chọn kênh trái/phải bằng chân cấu hình), và với TDM địa chỉ là vị trí slot. Không cần địa chỉ vì vai trò được chọn bằng phần cứng/slot, không phải vì chỉ có một thiết bị.
+- Thêm hai bẫy có số: FIFO giữa hai thạch anh lệch ppm chắc chắn tràn/cạn; dưới Nyquist analyzer hiện tần số giả mà không báo lỗi.
 - "31 mẫu mỗi chu kỳ, thừa sức nhìn rõ" đúng cho việc **nhìn**; không đủ để **đo** một chu kỳ BCK với sai số <1% (±3.2%). Thêm vào câu 3 và chuyển cảnh báo sang Bài 7, Bài 13.
 - Bổ sung cách thứ ba để định thời (clock nhúng), bị thiếu trong bản gốc.
 

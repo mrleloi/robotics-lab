@@ -30,3 +30,10 @@ Một báo cáo ngắn (≤300 từ), dạng:
 - SỬA LỖI: các lỗi trong bản gốc/Gemini đã sửa (1 dòng mỗi lỗi)
 - CHƯA KIỂM: các khẳng định quan trọng còn `[tự đo]`/chưa chắc
 - GHI CHÚ CHO NGƯỜI ĐIỀU PHỐI: mâu thuẫn, thiếu nguồn, quyết định bạn đã tự đưa ra
+
+## Bổ sung sau đợt 1 (bắt buộc)
+- **Không đổi ngưỡng/tiêu chí gate của bản gốc.** Chỉ được sửa phương pháp đo, cách đọc tiêu chí, hoặc sửa lỗi vật lý rõ ràng (ghi ở phần 11). Muốn đề xuất ngưỡng khác: ghi "đề xuất" tách riêng, không thay tiêu chí.
+- **Mọi khẳng định dạng "mô phỏng/chạy thử sẽ thấy…" phải đã chạy thật.** Không tham chiếu hàm/code ở bài khác mà không kiểm nó tồn tại.
+- **Không hứa bước ở bài khác** ("Bài 9 sẽ đo…") mà không kiểm bài đó có bước ấy.
+- **Bước dùng `data/` (dataset tải về, gitignore)** phải có đường lui khi máy không có thư mục này (lệnh tải, hoặc dữ liệu tổng hợp).
+- Độ dài: bài đầy đủ ≤ ~4.500 từ **tính cả code**; viên nang F ≤ ~3.500 từ.
