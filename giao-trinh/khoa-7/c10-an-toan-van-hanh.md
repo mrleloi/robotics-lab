@@ -256,13 +256,6 @@ Câu hỏi của bài: **khi phần mềm treo, cái gì dừng robot lại?** N
 
 **Nguyên tắc 1 — cấp điện để chạy (energize-to-run).** Motor chỉ có năng lượng khi **mọi** điều kiện trong một chuỗi nối tiếp đang thỏa. Đứt dây, mất nguồn, rút giắc, chết chip — đều làm chuỗi hở, và trạng thái mặc định khi chuỗi hở là "motor không có năng lượng".
 
-| | Cấp điện để chạy (đúng cho E-stop) | Cấp điện để dừng (sai cho E-stop) |
-|---|---|---|
-| Nhấn E-stop | Mở chuỗi → cuộn relay mất điện → VM mất | Đóng một tín hiệu → phần mềm đọc → phần mềm ra lệnh dừng |
-| Đứt dây nút | Motor dừng, lỗi lộ ra ngay | **Không ai biết**, E-stop chết âm thầm |
-| ESP32 treo | Xung giữ mất → relay nhả | Không ai đọc tín hiệu |
-| Mất nguồn điều khiển | Motor dừng | Tùy may rủi |
-
 **Nguyên tắc 2 — bốn tầng, hỏng độc lập.**
 
 | Tầng | Cơ chế | Còn hoạt động khi nào | Kiểu dừng |
@@ -523,6 +516,12 @@ Thời gian tắt tỉ lệ với R2·C2 (τ = 0,1 s) và phụ thuộc Vg lúc 
    Ai kích hoạt, robot ở trạng thái nào, tốc độ, khoảng cách người gần nhất, t_relay đo được (từ RELAY_FB), phiên bản firmware/bo. Chỉ số: phân bố t_relay theo lô relay (relay già nhả chậm dần là lỗi tích lũy → F7.6), tỉ lệ T0b kích hoạt theo phiên bản firmware (watchdog trip là firmware treo), tỉ lệ E-stop do người ngoài nhấn trên giờ chạy (HRI, C10.4).
 
    </details>
+4. **[Vì sao không]** Vì sao không làm E-stop bằng một topic ROS 2 QoS reliable gửi từ nút trên điện thoại?
+   <details><summary>Hướng nghĩ</summary>
+
+   Đếm những thứ phải còn sống để topic đó dừng được motor (điện thoại, WiFi, mini PC, DDS, USB, ESP32) so với chuỗi nút → dây → cuộn. Muốn từ xa thật: bộ phát chuyên dụng mà **mất sóng = dừng** (tín hiệu động).
+
+   </details>
 
 ### 10. Liên kết ra ngoài
 
@@ -550,19 +549,12 @@ Thời gian tắt tỉ lệ với R2·C2 (τ = 0,1 s) và phụ thuộc Vg lúc 
 \2 & Turner, *An Investigation of the Therac-25 Accidents*, IEEE Computer, 1993. IEC 60204-1 (mục chức năng dừng, dừng khẩn cấp) và ISO 13850 — đọc tóm tắt của hãng thiết bị an toàn.
 - **Giải thích:** Phil Koopman, *Better Embedded System Software* (2010), chương về watchdog timer.
 - **Đào sâu (tùy chọn):** Nancy Leveson, *Engineering a Safer World* (MIT Press, 2011).
-- **Tự kiểm tra:** (1) giải thích cho một backend engineer trong 5 câu vì sao xung giữ phải đi ra từ task điều khiển; (2) vẽ lại chuỗi FD → nút → cuộn → Q1 và mạch xung giữ từ trí nhớ; (3) hai câu dưới.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer trong 5 câu vì sao xung giữ phải đi ra từ task điều khiển; (2) vẽ lại chuỗi FD → nút → cuộn → Q1 và mạch xung giữ từ trí nhớ; (3) câu dưới.
 
   a. Robot 6 kg chạy 1,0 m/s. Động năng gấp bao nhiêu lần ở 0,5 m/s? Thời gian phản ứng 0,5 s (lease) thì robot đi thêm bao xa trước khi bắt đầu giảm tốc?
   <details><summary>Đáp án</summary>
 
   Gấp 4 lần (3 J so với 0,75 J). Đi thêm 1,0 × 0,5 = 50 cm trước khi giảm tốc — lý do lease không phải tầng chống va chạm; bumper mới là.
-
-  </details>
-
-  b. Một bạn đề xuất: "bỏ mạch xung giữ, cho mini PC điều khiển relay qua một module relay USB". Chấm đề xuất.
-  <details><summary>Đáp án</summary>
-
-  **SAI** cho mục đích "cắt khi ESP32 treo": thêm mini PC, USB, driver, phần mềm vào đường dừng; mini PC treo thì module relay giữ trạng thái cuối (tín hiệu tĩnh). Nếu module chỉ giữ relay khi nhận lệnh định kỳ (tín hiệu động) thì thành một watchdog **tầng 3**, hữu ích nhưng không độc lập với Linux.
 
   </details>
 
@@ -805,6 +797,12 @@ Chạy hai lần: có guard và `noguard`. Dự đoán trước (phần 5) số 
    Biết phía sau trống (cảm biến phía sau, hoặc chỉ lùi trên đường vừa đi qua và trong cửa sổ thời gian ngắn); phân biệt "chạm vật tĩnh" với "chạm người" (không biết thì coi là người); giới hạn số lần thử rồi dừng chờ người. Khi không chắc, đứng yên là phục hồi an toàn nhất.
 
    </details>
+4. **[Vì sao không]** Vì sao nút "Resume" trên app không được gửi lệnh thoát `EMERGENCY_STOP` xuống ESP32?
+   <details><summary>Hướng nghĩ</summary>
+
+   Reset là hành động **tại máy**, sau khi người thấy nguy cơ đã hết (ISO 13850); app có thể ở phòng khác. Cho tầng 3 quyền thoát tầng 0 là đảo chiều sự thật.
+
+   </details>
 
 ### 10. Liên kết ra ngoài
 
@@ -919,7 +917,6 @@ for name, (rate, drop, silent) in cfg.items():
 | SLO availability 99,9% | "0 sự cố an toàn" | An toàn **không có budget** (→ F7.4): một sự cố là FAIL, không "tiêu budget" | Viết "SLO an toàn 99,9%" |
 | `Restart=always` + alert khi crash loop | Robot tự phục hồi | Restart che lỗi: dashboard xanh, robot đứng yên vì node khởi động lại liên tục. Mỗi restart là một dòng log cần đếm | 0 can thiệp tay nhưng 300 lần restart, không ai thấy |
 | Watchdog phần cứng của server (IPMI) | `RuntimeWatchdogSec` của systemd trên mini PC | Reboot mini PC giữa lúc robot chạy là một sự kiện vật lý: lease ở ESP32 phải dừng robot trước | Bật watchdog mini PC mà chưa test F02/F03 |
-| Dashboard Grafana mọi metric | Dashboard soak theo câu hỏi | Gauge lấy mẫu 60 s bỏ lỡ sự kiện ngắn; sự kiện phải là counter (→ F7.5) | Không thấy 12 lần bumper vì xem gauge "bumper_pressed" |
 
 **Chấm mô hình:**
 - *Bản Gemini K7 (Bài 17): soak 72h là "bộ lọc khắt khe nhằm phát hiện các lỗi tích lũy chậm: rò rỉ bộ nhớ… cho tới khi bị OOM killer giết."* — **ĐÚNG MỘT PHẦN.** Chỉ khi rò đủ nhanh để chạm OOM trong 72h, hoặc khi bạn **báo độ dốc**. Phân tích và phản ví dụ: → F7.6 mục 6, khẳng định (b). Ở robot: dùng `soak_monitor.py` của K3 Bài 17 và fit trong từng `boot_id`.
@@ -1026,6 +1023,12 @@ Quyết định trước: sạc ban đêm ở đâu ___ ; robot làm gì 19h–7
    Đúng nếu định nghĩa viết sau. Hợp đồng commit trước (có hash, ngày) là preregistration (→ F1.7); một người khác đọc log và định nghĩa phải đếm ra cùng số. Đó là oracle độc lập với người chạy thí nghiệm.
 
    </details>
+4. **[Vì sao không]** Vì sao không cho robot sạc tự động qua đêm để soak "liên tục 72h"?
+   <details><summary>Hướng nghĩ</summary>
+
+   Sạc lithium không người trông vi phạm C1.6; trạm sạc tự chế là một nguồn rủi ro mới cần FMEA riêng. Định nghĩa lại trong hợp đồng: 72h chạy tích lũy, đêm đỗ với công tắc chính tắt.
+
+   </details>
 
 ### 10. Liên kết ra ngoài
 
@@ -1129,7 +1132,6 @@ for delta in (0.5, 1.0, 1.5):
 
 **Chấm mô hình:**
 - *Bản Gemini K7: "Đảm bảo khi phát hiện người trong bán kính 2 m, vận tốc xe luôn giảm xuống dưới 0,3 m/s."* — **CHƯA RÕ → ĐÚNG MỘT PHẦN.** Là một **giả thuyết thiết kế** hợp lý, không phải kết luận của bài; gốc yêu cầu **đo** tốc độ trong 2 m và so hai cấu hình. Gãy: "phát hiện người" có FRR (C9.2): người không được phát hiện thì luật không áp. **Phản ví dụ:** người ngồi xổm sau ghế không được detector thấy; robot đi 0,5 m/s qua cách 0,8 m.
-- *"Khảo sát n = 10 cho thấy 60% hài lòng."* — **SAI** như một kết luận. Khoảng Wilson 95% cho 6/10 rộng từ khoảng một phần ba tới hơn bốn phần năm (mô phỏng). Viết: "6/10 người chọn ≥4; với n = 10, khoảng tin cậy rất rộng; đây là tín hiệu định tính", rồi đưa câu trả lời mở nguyên văn.
 
 ### 4. Thuật ngữ
 
@@ -1199,6 +1201,18 @@ for delta in (0.5, 1.0, 1.5):
    <details><summary>Hướng nghĩ</summary>
 
    "Thời gian chắn lối" (phần A.4) và "người né" phải đọc cùng nhau: một robot đứng yên giữa hành lang cũng bị né. Tối ưu một chỉ số (Goodhart, → F2.8) có thể đẩy vấn đề sang chỉ số kia.
+
+   </details>
+3. **[Liên ngành]** William H. Whyte đo hành vi người đi bộ ở quảng trường đô thị bằng quan sát (thập niên 1970). Giống và khác cách bạn đo người quanh robot?
+   <details><summary>Hướng nghĩ</summary>
+
+   Giống: đo hành vi thay vì hỏi ý kiến. Khác: camera trên chính robot là vật người đang phản ứng với — quan sát đổi hành vi được quan sát.
+
+   </details>
+4. **[Phản biện]** "Chọn B vì an toàn hơn về vật lý, khảo sát không cần" — đúng ở đâu?
+   <details><summary>Hướng nghĩ</summary>
+
+   Đúng khi B không tệ hơn ở chỉ số khác (chắn lối, nhiệm vụ trễ). Khảo sát vẫn cho câu mở — loại thông tin không có trong log.
 
    </details>
 

@@ -1551,3 +1551,161 @@ Chưa chắc: vbat là hằng số theo phiên trong dữ liệu này nên vẫn
 </details>
 
 ---
+
+## Bài C11.6 — Dự đoán quỹ đạo người (20h, tùy chọn)
+
+> **Vị trí:** C11.4 → **C11.6** → chạy lại C11.4 với dự đoán · **Cần trước:** → F1.2, F1.6, F2.8; C9.1 (privacy), C8 (định vị), C11.4 · **Sau bài này bạn quyết định được:** có thêm bộ dự đoán người vào local controller hay không, và bộ nào.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 2020, Schöller và cộng sự cho thấy một **mô hình vận tốc không đổi** (CVM), không học gì, vượt nhiều mạng neural dự đoán người đi bộ trên các benchmark công khai thời đó; phân tích của họ gợi ý mạng học các prior của môi trường làm hại khả năng tổng quát hóa `[chuẩn — Schöller, Aravantinos, Lay, Knoll, "What the Constant Velocity Model Can Teach Us About Pedestrian Motion Prediction", IEEE RA-L 2020]`. Phụ lục D của K7 gốc đoán đúng: baseline vận tốc không đổi "mạnh hơn bạn tưởng", và mô hình phức tạp có thể không mua được gì ở 1–2 s.
+
+### 2. Mô hình tư duy
+
+Hai chỉ số chuẩn (phụ lục D): **ADE** (sai số trung bình trên cả quỹ đạo dự đoán) và **FDE** (sai số ở điểm cuối tầm), bằng mét, ở 1, 2, 3 s. Ba điều bản chất: (1) sai số tăng theo tầm vì người rẽ, dừng, nói chuyện; (2) "vận tốc không đổi" không phải một mô hình mà là một họ: vận tốc ước từ đâu quyết định tất cả, vì vị trí quan sát từ camera có nhiễu và đạo hàm khuếch đại nhiễu (giống jerk ở C11.4); (3) dự đoán chỉ đáng giá nếu nó đổi **hành vi** robot (C11.4), không phải nếu ADE đẹp.
+
+```python
+# [đã chạy] C11.6 — ADE/FDE của ba bộ dự đoán đơn giản trên quỹ đạo người TỔNG HỢP (đồ chơi).
+# Người đi ~1.2 m/s, thỉnh thoảng rẽ hoặc dừng nói chuyện; vị trí quan sát có nhiễu như detector từ camera.
+import numpy as np
+rng = np.random.default_rng(6)
+HZ, OBS, SIG = 10, 10, 0.08                      # 10 Hz, 1 s quan sát, nhiễu vị trí 8 cm (giả định)
+
+def walk(n=80):
+    p, h, sp, out = np.zeros(2), rng.uniform(0, 2 * np.pi), rng.normal(1.2, 0.15), []
+    for _ in range(n):
+        if rng.random() < 0.02: h += rng.normal(0, 1.2)          # rẽ
+        if rng.random() < (0.01 if sp > 0 else 0.05): sp = 0.0 if sp > 0 else rng.normal(1.2, 0.15)  # dừng/đi
+        h += rng.normal(0, 0.03); p = p + sp / HZ * np.array([np.cos(h), np.sin(h)]); out.append(p)
+    return np.array(out)
+
+def predict(obs, H, kind):
+    if kind == "đứng yên": v = np.zeros(2)
+    elif kind == "CV 2 điểm": v = (obs[-1] - obs[-2]) * HZ                      # vận tốc từ 2 mẫu cuối
+    else: v = np.polyfit(np.arange(OBS) / HZ, obs, 1)[0]                          # CV fit tuyến tính 1 s
+    start = obs[-1] if kind != "CV fit 1 s" else np.polyval(np.polyfit(np.arange(OBS) / HZ, obs, 1), (OBS - 1) / HZ)
+    return start + v * (np.arange(1, H + 1) / HZ)[:, None]
+
+res = {k: {1: [], 2: [], 3: []} for k in ("đứng yên", "CV 2 điểm", "CV fit 1 s")}
+for _ in range(3000):
+    tr = walk(); t0 = rng.integers(OBS, len(tr) - 30); obs = tr[t0 - OBS:t0] + rng.normal(0, SIG, (OBS, 2))
+    for k in res:
+        for hs in (1, 2, 3):
+            H = hs * HZ; e = np.linalg.norm(predict(obs, H, k) - tr[t0:t0 + H], axis=1)
+            res[k][hs].append((e.mean(), e[-1]))
+print("bộ dự đoán      " + "  ".join(f"ADE/FDE@{h}s" for h in (1, 2, 3)) + "   (m, trung bình | FDE p90@3s)")
+for k, r in res.items():
+    a = {h: np.array(r[h]) for h in r}
+    print(f"{k:14s} " + "  ".join(f"{a[h][:,0].mean():.2f}/{a[h][:,1].mean():.2f}  " for h in (1, 2, 3))
+          + f"  | {np.percentile(a[3][:,1], 90):.2f}")
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Dự báo traffic bằng trung bình trượt | CV với vận tốc lọc | Traffic không phản ứng với dự báo; người phản ứng với robot | Đánh giá dự đoán trên dữ liệu robot **đứng yên** rồi dùng khi robot **di chuyển** |
+| Baseline "naive forecast" trong time series | Đứng yên / CV | Baseline time series ít nhạy nhiễu đo; ở đây vận tốc từ vị trí nhiễu | So mô hình học được với một CV ước vận tốc tệ, tưởng mình thắng |
+
+**Chấm mô hình:** *"Mô hình học sâu dự đoán người tốt hơn vận tốc không đổi."* → **ĐÚNG MỘT PHẦN**: có thể ở tầm dài và cảnh đông; ở 1–2 s trong văn phòng nhỏ, CVM là baseline khó thắng (Schöller 2020). Phản ví dụ: phần 7, chỉ đổi **cách ước vận tốc** đã làm FDE@1 s giảm gần 4 lần.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | ADE / FDE | Sai số trung bình / cuối tầm, mét | Một con số không cần tầm |
+| 🟢 | CVM | Ngoại suy vận tốc ước từ quan sát gần nhất | Mô hình "ngây thơ" luôn thua |
+| 🟡 | Đa phương thức (multimodal) | Dự đoán nhiều khả năng có xác suất (rẽ trái/phải) | ADE của dự đoán trung bình |
+
+### 5. Dự đoán
+
+Trước khi chạy code: xếp hạng ba bộ dự đoán ở 1 s và 3 s; "CV 2 điểm" có thua "đứng yên" không, và vì sao (gợi ý: nhiễu vận tốc ≈ √2·σ·HZ). Với dữ liệu thật: FDE@1 s và @3 s của CV tốt nhất; mô hình học được có thắng CV ở 1–2 s không.
+
+```markdown
+# prediction.md — K7 C11.6
+- thứ hạng @1s ___ @3s ___ ; CV 2 điểm thua đứng yên? ___ vì ___
+- dữ liệu thật: FDE CV @1s ___ m @3s ___ m ; model học thắng ở 1–2 s? ___
+```
+
+### 6. Làm
+
+1. **Thu ground truth từ văn phòng** (phụ lục D): robot đứng yên, nhiều giờ, chỉ lưu **tọa độ theo thời gian**, không lưu ảnh (`PRIVACY.md`, C9.1; `test_no_image_topics` C9 chạy trên MCAP). Thông báo cho người trong văn phòng.
+2. **Ba mô hình:** CVM (thử nhiều cách ước vận tốc), CVM + ràng buộc bản đồ (không đi xuyên tường), một mô hình học được nếu dữ liệu đủ.
+3. **ADE/FDE** ở 1, 2, 3 s trên tập kiểm **chia theo ngày** (F2.8, C11.5), báo trung bình và p90.
+4. **Đưa dự đoán vào local controller**, chạy lại C11.4 với oracle (tương lai thật trong sim) làm trần, đo jerk max và khoảng cách gần nhất.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Kỳ vọng phụ lục D (giữ nguyên):** FDE của CV ở 1 s **nhỏ**; ở 3 s lớn hơn nhiều; mô hình phức tạp **có thể không cải thiện đáng kể ở 1–2 s** (kết quả đáng viết); đưa vào planner: đo bằng CI của C11.4.
+
+**Đồ chơi** (m):
+
+| Bộ dự đoán | ADE/FDE @1 s | @2 s | @3 s | FDE p90 @3 s |
+|---|---|---|---|---|
+| đứng yên | 0,58 / 1,03 | 1,07 / 1,99 | 1,55 / 2,91 | 3,97 |
+| CV 2 điểm | 0,87 / 1,52 | 1,61 / 3,03 | 2,37 / 4,58 | 7,78 |
+| CV fit 1 s | **0,23 / 0,39** | 0,43 / 0,87 | 0,68 / 1,46 | 3,37 |
+
+Nhiễu 8 cm ở 10 Hz cho nhiễu vận tốc 2 điểm ~1,1 m/s, cỡ chính tốc độ đi bộ: "CV 2 điểm" thua cả "đứng yên". Cùng một CV, ước vận tốc trên 1 s cho FDE@1 s nhỏ hơn gần 4 lần. FDE tăng gần tuyến tính theo tầm; đuôi p90 ở 3 s do rẽ và dừng. So mô hình học được với "CV 2 điểm" là thắng một đối thủ tự làm hỏng.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân | Kiểm | Sửa |
+|---|---|---|---|
+| CV thua "đứng yên" | Vận tốc từ vài mẫu nhiễu | Phổ vận tốc ước lượng | Lọc/fit dài hơn, khai trước |
+| Model học thắng trên test, không giúp robot | Dữ liệu thu khi robot đứng yên; người phản ứng khác khi robot đi | So dữ liệu có/không robot di chuyển | Thu thêm khi robot đi; đo bằng C11.4 |
+
+### 9. Câu hỏi ngược
+
+1. **[Failure mode]** Người né robot. Dự đoán học từ dữ liệu robot đứng yên sai theo hướng nào khi robot chạy về phía họ?
+<details><summary>Hướng nghĩ</summary>Hệ thống thay đổi chính thứ nó dự đoán (C11.4, cầu nối autoscaler). Dự đoán quá thẳng; MPPI có thể quá thận trọng hoặc "nhường" mãi.</details>
+
+2. **[Quy mô]** 100 robot ghi tọa độ người cả ngày. Đó còn là "chỉ tọa độ, không ảnh" theo nghĩa privacy không?
+<details><summary>Hướng nghĩ</summary>Quỹ đạo theo thời gian ở nơi làm việc nhận dạng lại được người (bàn ngồi, giờ đến). Cần tổng hợp, hạn lưu, hoặc không lưu ID xuyên phiên; ghi vào `PRIVACY.md`.</details>
+
+### 10. Liên kết ra ngoài
+
+- **Hàng không: tránh va chạm (TCAS).** Ngoại suy tuyến tính vị trí máy bay khác trong vài chục giây để cảnh báo `[chuẩn]`. Giống: CV ở tầm ngắn là xương sống. Khác: máy bay không dừng giữa trời để nói chuyện.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú |
+|---|---|---|
+| Schöller và cộng sự 2020 | [chuẩn] | RA-L 2020, arXiv 1903.07933 |
+| Bảng ADE/FDE | [đã chạy] | Quỹ đạo tổng hợp; tham số đi/dừng/rẽ là giả định |
+
+**Đã sửa so với phụ lục D:** thêm cảnh báo cách ước vận tốc quyết định baseline; chia tập kiểm theo ngày; thêm oracle khi đưa vào planner; thêm rủi ro privacy của quỹ đạo.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Schöller và cộng sự (2020). D. Helbing, P. Molnár, "Social force model for pedestrian dynamics", Physical Review E, 1995.
+- **Tự kiểm tra:** giải thích vì sao CV 2 điểm thua đứng yên trong bảng phần 7, chỉ bằng σ và HZ.
+
+---
+
+## Gate chặng 11
+
+Giữ nguyên tiêu chí 1–7 của **GATE 7E — và gate Khóa 7** (`_KE-HOACH-K7.md` mục 7); tiêu chí 8 (bài viết chính) chuyển sang C12. Cột "Cách đọc" chỉ làm rõ phương pháp đo, **không đổi ngưỡng**.
+
+| # | Tiêu chí (nguyên văn gốc) | Cách đọc / bằng chứng | FAIL action |
+|---|---|---|---|
+| 1 | Model sim dựng từ số đo thật, MỌI tham số truy được về một phép đo | `sim/params.yaml` sinh bằng script từ file hiệu chuẩn; tham số `ASSUMED` liệt kê và nằm trong `VALIDITY.yaml`; verification C11.1 bước 0 đã chạy | Đo bổ sung (C11.1 bước 2); không gắn số tay |
+| 2 | Bảng sim-to-real ≥ 4 hiện tượng, ba đường mỗi hiện tượng, kèm bảng miền hiệu lực có cột "chưa kiểm" | Ghi mỗi hiện tượng kiểm kênh nào; gap kèm độ trải thật; thảm vs gạch | Làm phần thiếu; ngưỡng C11.1 phần 7 giữ nguyên |
+| 3 | Cổng HIL chạy được, bắt được ≥ 1 lớp lỗi mà sim thuần bỏ sót | HIL điện (encoder giả vào PCNT); bảng thật/giả trong `TESTING.md`; canary C3 bị bắt; tỉ lệ run ERROR báo riêng | Dọn host, latency timer; nếu chỉ có PIL, ghi rõ PIL và lớp lỗi nó mù |
+| 4 | CI: 1000 episode < 1 giờ, verdict ba trạng thái, canary regression bị bắt, canary dưới ngưỡng cho INCONCLUSIVE | Cổng K6 Bài 13 (+ ERROR); N theo power, MDE trong README; canary là tỉ lệ qua nhiều lần chạy | Báo cổ chai thông lượng; không hạ chuẩn cổng |
+| 5 ★ | TƯƠNG QUAN SIM–THẬT: 6 cấu hình × (1000 sim + 20 thật), đồ thị có thanh sai số, tương quan hạng báo cáo bằng số | Khai báo trước (C11.3 phần 5); power của thiết kế; ρ + bootstrap; độ dốc logistic; cấu hình xếp sai đối chiếu `VALIDITY.yaml` | Power thấp → báo INCONCLUSIVE kèm số, thiết kế lại độ trải; **không** chỉnh sim rồi tính lại trên cùng dữ liệu |
+| 6 | Vòng đời dữ liệu đầy đủ chạy đầu–cuối < 10 phút tự động | Bấm giờ từng bước; sidecar: kiểm tương đương jitter ESP32 và host | Tối ưu bước lớn nhất; ghi số |
+| 7 | Một vòng fine-tune khép kín, cải thiện đo bằng kỷ luật thống kê | Chia theo phiên/người; CI bootstrap theo phiên; δ khai trước; lineage từ model về MCAP | INCONCLUSIVE trung thực là PASS tiêu chí này; tuyên bố cải thiện không có CI là FAIL |
+| (C12) | Bài viết chính "Does your sim predict reality? Closing the loop on a $300 office robot" | Viết ở C12.3, dùng số của tiêu chí 5 | — |
+
+Thêm hai tiêu chí của chặng mới (không thay tiêu chí gốc):
+- **8 · An toàn chạy loạt:** mọi dòng `real_runs.csv` có người cầm E-stop; không cấu hình nào vượt kẹp firmware; mọi va chạm có dòng `incidents.md`. FAIL → dữ liệu buổi đó giữ, đánh dấu; chạy lại buổi đủ quy trình.
+- **9 · Dự đoán trước, đo sau:** `prediction.md` của C11.1–C11.5 commit trước dữ liệu tương ứng (so thời gian commit với `ts`). FAIL → ghi trung thực vào báo cáo, không viết lại dự đoán.
+
+**Tiêu chí 5 là tiêu chí ★.** Nếu chỉ làm được một thứ trong chặng, làm nó.
+
+**FAIL action chung (gốc):** chạm trần giờ → dừng ở bài đang làm, publish nguyên trạng, viết bài tổng kết nói rõ cái gì xong, cái gì chưa. Với ngân sách K7 mới, "trần" là con số bạn đã ghi trong `decisions.md` (`_KE-HOACH-K7.md` mục 3), không phải 450h của bản gốc.
