@@ -88,7 +88,7 @@ Giá `[ước lượng 10/2026]`, kiểm lại ở cửa hàng. Nơi mua theo `d
 
 | Món | Thông số phải chọn | Vì sao (bằng số) | Giá | Kiểm khi nhận hàng | Thay thế được bằng |
 |---|---|---|---|---|---|
-| **Pack pin dựng sẵn** | 4S LiFePO4 12,8 V, 6–10 Ah (77–128 Wh), **BMS tích hợp** liên tục ≥15 A, ghi rõ ngưỡng quá dòng; dây ra ≥14 AWG | Budget ~34 W TB → ~1,8 h với 77 Wh dùng 80% (Bài C1.2, số ước lượng); BMS phải chịu tổng dòng đỉnh motor + mini PC (Bài C1.2) | 0,9–2tr | Đo điện áp nghỉ (Bài C1.1 bước 2); nhìn: không phồng, vỏ co nhiệt không rách; đọc nhãn: hóa học, S, Ah, dòng xả; hỏi/đòi thông số BMS | 4S2P Li-ion NMC 14,4 V có BMS (Bài C1.1 so sánh); **không** thay bằng LiPo RC trần |
+| **Pack pin dựng sẵn** | 4S LiFePO4 12,8 V, 6–10 Ah (77–128 Wh), **BMS tích hợp** liên tục ≥15 A, ghi rõ ngưỡng quá dòng; dây ra ≥14 AWG | Wh quyết định bằng runtime tính ở Bài C1.2; BMS phải chịu tổng dòng đỉnh motor + mini PC (Bài C1.2) | 0,9–2tr | Đo điện áp nghỉ (Bài C1.1 bước 2); nhìn: không phồng, vỏ co nhiệt không rách; đọc nhãn: hóa học, S, Ah, dòng xả; hỏi/đòi thông số BMS | 4S2P Li-ion NMC 14,4 V có BMS (Bài C1.1 so sánh); **không** thay bằng LiPo RC trần |
 | **Sạc đúng hóa học** | LiFePO4 4S, 14,6 V, 1–3 A, có đèn báo đầy, tự ngắt | Sạc 0,2–0,5C an toàn cho pack 6 Ah `[ước lượng]` (Bài C1.6) | 150–400k | Đo áp ra không tải: phải ≈14,6 V (với pack NMC 4S: 16,8 V) | Nguồn bàn CV/CC đặt 14,6 V + dòng ≤0,5C, **có người trông** |
 | Cầu chì lưỡi ATO/ATC + đế cầu chì inline có nắp | Bộ 1, 2, 3, 5, 7,5, 10, 15 A; đế cho dây 14 AWG | Định mức 32 V DC, cắt được 1000 A `[spec — datasheet Littelfuse 0257/ATO]`, đủ cho pack 4S | 100–200k | Đo thông mạch từng cầu chì; đọc chữ in số ampe | Hộp cầu chì nhiều nhánh (fuse block 4–6 đường) có nắp |
 | Công tắc chính | Ghi định mức **DC** ≥20 A, ≥24 V DC (công tắc ngắt pin xe máy/thuyền) | Nhiều công tắc rocker chỉ ghi định mức AC; ngắt DC khó hơn vì hồ quang không tự tắt ở điểm qua 0 `[chuẩn]` | 100–300k | Đo thông mạch ON/OFF; đọc định mức DC trên thân | Rút XT60 (là "công tắc" an toàn nhất, nhưng không tiện) |
@@ -342,7 +342,7 @@ So ba lựa chọn cho robot này (số cell điển hình `[ước lượng]`; 
 
 **Chấm mô hình:**
 - *"Pack có BMS thì an toàn, cứ cắm vào là được."* — **SAI.** BMS che lỗi về áp và dòng ở cực pack. Phản ví dụ: Note 7 có mạch bảo vệ; burr mối hàn xuyên separator vẫn thành cháy. Gần hơn với bạn: BMS ngưỡng OC 25 A; nhánh 5 V dây 22 AWG chập ở 15 A → BMS không cắt, dây nóng chảy vỏ.
-- *"Áp cao hơn thì nguy hiểm hơn, nên 3S an toàn hơn 4S."* — **ĐÚNG MỘT PHẦN.** Ở dải dưới 60 V DC, rủi ro chính với người là **năng lượng và dòng** (bỏng, cháy), không phải giật `[chuẩn — C0.2]`. Pack 3S cùng Wh có Ah lớn hơn và dòng lớn hơn cho cùng công suất; dây phải to hơn. Phản ví dụ: 3S 65 Wh và 4S 77 Wh chập ngoài đều cho dòng hàng trăm A (phần 7; mô phỏng dây nóng ở → K7 C0.2).
+- *"Áp cao hơn thì nguy hiểm hơn, nên 3S an toàn hơn 4S."* — **ĐÚNG MỘT PHẦN.** Ở dải dưới 60 V DC, rủi ro chính với người là **năng lượng và dòng** (bỏng, cháy), không phải giật `[chuẩn — C0.2]`. Pack 3S cùng Wh có Ah lớn hơn và dòng lớn hơn cho cùng công suất; dây phải to hơn. Phản ví dụ: tính dòng chập cho 3S và 4S ở phần 5 rồi so (mô phỏng dây nóng ở → K7 C0.2).
 
 ### 4. Thuật ngữ
 
@@ -511,7 +511,7 @@ Power budget có **ba con số khác nhau cho mỗi tải**, phục vụ ba quy�
 
 **Chấm mô hình:**
 - *"Power budget = cộng công suất trên nhãn các thiết bị."* — **SAI.** Nhãn adapter 36 W là định mức nguồn, không phải mức ăn; nhãn motor không ghi dòng khởi động/kẹt. Phản ví dụ: adapter mini PC 12 V 3 A, mini PC idle chỉ cỡ 1/5 con số đó `[ước lượng — đo ở phần 6]`; motor "12 V 0,3 A" (dòng không tải) kẹt ăn gấp nhiều lần (C3).
-- *"Lấy tổng các đỉnh là an toàn nhất."* — **ĐÚNG MỘT PHẦN.** Đúng cho ngưỡng cắt (BMS OC) vì đỉnh **tương quan**: robot tăng tốc thì cả hai motor cùng khởi động, và đó cũng là lúc mini PC chạy planner. Sai nếu dùng tổng đỉnh để chọn dây và Wh: dây chọn theo dòng liên tục, Wh theo trung bình. Phản ví dụ: tổng đỉnh ~15 A nhưng chỉ kéo dài 60 ms; chọn dây 12 AWG theo con số đó là phí khối lượng, trong khi BMS cắt sau 100 ms thì vẫn an toàn.
+- *"Lấy tổng các đỉnh là an toàn nhất."* — **ĐÚNG MỘT PHẦN.** Đúng cho ngưỡng cắt (BMS OC) vì đỉnh **tương quan**: robot tăng tốc thì cả hai motor cùng khởi động, và đó cũng là lúc mini PC chạy planner. Sai nếu dùng tổng đỉnh để chọn dây và Wh: dây chọn theo dòng liên tục, Wh theo trung bình. Phản ví dụ: đỉnh trùng hơn chục ampe nhưng chỉ vài chục ms; chọn dây theo con số đó là phí khối lượng, trong khi BMS có trễ cắt dài hơn đỉnh thì vẫn an toàn.
 - Mô hình của bạn ở K3 lượt 11 (sụt áp vì "chiếm dụng nguồn chung") đã được chấm ở → K7 C0.4. Điểm bổ sung ở quy mô pack: "hết quota" có thật ở **hai** chỗ: ngưỡng OC của BMS và giới hạn dòng của từng DC-DC. Chạm giới hạn DC-DC chỉ sập nhánh đó; chạm BMS sập tất cả.
 
 ### 4. Thuật ngữ
@@ -556,14 +556,14 @@ Dụng cụ: nguồn bàn (màn hình V/I: tra độ chính xác trong manual, t
 
 ```python
 # [đã chạy] Power budget: từ bảng số đo -> năng lượng, thời gian chạy, dòng đỉnh xấu nhất, kiểm giới hạn
-import csv
+import csv, sys
 ETA = {"12V": 0.90, "5V": 0.85, "5V_pc": 1.0, "pack": 1.0}   # hiệu suất DC-DC nhánh [ước lượng]
 PACK_WH, USABLE, V_MIN, V_NOM = 77, 0.80, 11.0, 13.2   # Wh nhãn; phần dùng được; V pack lúc cạn dưới tải; V danh định
 # giới hạn [spec: đọc nhãn/datasheet BMS và cầu chì CỦA BẠN]
 BMS_CONT, BMS_OC_TRIP, BMS_OC_DELAY_MS = 15.0, 25.0, 100   # A, A, ms
 FUSE_MAIN = 15.0                                            # A
 
-rows = list(csv.DictReader(open("power_budget.csv", encoding="utf-8")))
+rows = list(csv.DictReader(open(sys.argv[1] if len(sys.argv) > 1 else "power/budget.csv", encoding="utf-8")))
 p_avg = p_idle = i_pk_sum = 0.0; longest_peak = 0
 for r in rows:
     if r["rail"] == "5V_pc":           # ăn qua USB mini PC: đã nằm trong số đo mini_pc
@@ -587,7 +587,7 @@ for k, ok in checks.items():
 print("  (cầu chì với đỉnh ngắn: tra đường cong thời gian–dòng, không so đỉnh với định mức)")
 ```
 
-`power_budget.csv` mẫu (toàn số `[ước lượng]`, thay bằng số của bạn):
+`power/budget.csv` mẫu (toàn số `[ước lượng]`, thay bằng số của bạn); lưu script thành `c12_budget.py`, chạy `python3 c12_budget.py power/budget.csv`:
 ```
 load,rail,v_rail,i_idle,i_avg,i_peak,peak_ms,source
 mini_pc,12V,12.0,0.55,1.10,3.00,3000,"estimate: review N100"
@@ -671,7 +671,7 @@ Số đo của bạn, khoảng hợp lý `[ước lượng]`:
 - **Tự kiểm tra:** (1) giải thích ba con số của một tải và quyết định mỗi số điều khiển; (2) vẽ lại hình dòng theo thời gian ở phần 2; (3) Mini PC 25 W qua DC-DC hiệu suất 90%: dòng phía pack ở 14,4 V và ở 10 V là bao nhiêu?
   <details><summary>Đáp án</summary>
 
-  25/0,9/14,4 ≈ 1,93 A; 25/0,9/10 ≈ 2,78 A (khớp `c14_headroom.py` ở Bài C1.4). Dòng tăng ~44% khi pin cạn.
+  25/0,9/14,4 ≈ 1,93 A; 25/0,9/10 ≈ 2,78 A (khớp các dòng in cuối của code ở Bài C1.4). Dòng tăng ~44% khi pin cạn.
 
   </details>
 
@@ -760,7 +760,7 @@ for name, n, L, i_avg, i_pk, v, r_extra in branches:
 
 **Chấm mô hình:**
 - *"Cầu chì to hơn thì an toàn hơn, khỏi đứt vặt."* — **SAI.** Cầu chì to hơn sức chịu dây biến dây thành cầu chì. Phản ví dụ: F 15 A trên dây 22 AWG; chập ở 12 A: cầu chì sống mãi, dây nóng chảy vỏ.
-- *"Dây chọn theo bảng dòng tối đa là đủ."* — **ĐÚNG MỘT PHẦN.** Bảng nói về nhiệt; sụt áp và **điện trở tiếp xúc** thường quyết định trước. Phản ví dụ: code trên: nhánh 5 V qua Dupont 26 AWG sụt ~4% ở 1 A dù dòng nằm trong "giới hạn" của dây.
+- *"Dây chọn theo bảng dòng tối đa là đủ."* — **ĐÚNG MỘT PHẦN.** Bảng nói về nhiệt; sụt áp và **điện trở tiếp xúc** thường quyết định trước. Phản ví dụ: chạy code trên và nhìn dòng "SAI: 5 V qua Dupont": dòng nằm trong "giới hạn" của dây mà sụt áp vẫn lớn nhất bảng tính theo %.
 
 ### 4. Thuật ngữ
 
@@ -889,7 +889,7 @@ Trước bộ nguồn xung, cách hạ áp phổ biến là ổn áp tuyến tí
 ```
 
 Ba điều bản chất:
-1. **DC-DC giữ công suất, không giữ dòng:** P_vào ≈ P_ra/η. Áp vào giảm → dòng vào tăng. Mini PC 25 W: ~1,65 A ở 16,8 V nhưng ~2,8 A ở 10 V (code dưới). Định mức dòng vào/công tắc của module phải tính ở **Vin thấp nhất**.
+1. **DC-DC giữ công suất, không giữ dòng:** P_vào ≈ P_ra/η. Áp vào giảm → dòng vào tăng. Code dưới in dòng vào của mini PC 25 W ở năm mức áp pack. Định mức dòng vào/công tắc của module phải tính ở **Vin thấp nhất**.
 2. **Buck cần headroom:** Vin phải lớn hơn Vout + dropout (vài trăm mV tới ~1 V tùy module `[ước lượng — tra datasheet IC trên module]`). Áp pack **dưới tải đỉnh** chứ không phải OCV mới là thứ so.
 3. **UVLO (undervoltage lockout):** dưới một Vin nhất định, DC-DC tắt hẳn. Tắt → tải hết dòng → áp pack hồi lên → DC-DC bật lại → tải kéo dòng → sụt → tắt: **dao động bật/tắt**, mini PC reboot liên tục. Phải có ngắt mềm bằng phần mềm ở trên mức đó (C5.4, C10).
 
@@ -933,7 +933,7 @@ for vin in (16.8, 14.4, 13.0, 12.0, 10.0):   # tải công suất không đổi:
 
 **Chấm mô hình:**
 - *"Cần 12 V từ pin 12 V thì khỏi DC-DC."* — **SAI.** 4S LFP đầy 14,6 V, cạn ~10 V; mini PC nhận dải đó trực tiếp là ngoài thông số `[spec — nhãn adapter 12 V; dung sai đầu vào N100 không công bố, tự đo không được: không thử]`. `_KE-HOACH-K7.md` mục 5: không được để mini PC ăn trực tiếp pin không ổn áp.
-- *"Cứ buck là được, pin 4S luôn trên 12 V."* — **ĐÚNG MỘT PHẦN.** Đúng cho 4S NMC nếu ngắt mềm đủ cao (code: buck dùng được phần lớn năng lượng). Sai cho 4S LFP (áp đoạn phẳng ~13,2 V, dưới tải đỉnh không còn đủ headroom) và 3S (luôn dưới). Phản ví dụ: con số buck/LFP ở 🔒.
+- *"Cứ buck là được, pin 4S luôn trên 12 V."* — **ĐÚNG MỘT PHẦN.** Đúng cho 4S NMC nếu ngắt mềm đủ cao (chạy code để biết mất bao nhiêu năng lượng). Sai cho 4S LFP (áp đoạn phẳng ~13,2 V, dưới tải đỉnh không còn đủ headroom) và 3S (luôn dưới). Phản ví dụ: con số buck/LFP ở 🔒.
 
 ### 4. Thuật ngữ
 
@@ -1119,7 +1119,7 @@ plt.savefig("c15_lay_mau.png", dpi=120)        # trong bài có thể dùng plt.
 | Coordinated omission (→ F1.3) | Logger chậm/đầy buffer làm lỡ đúng lúc tải nặng | Lúc motor khởi động cũng là lúc ESP32 bận nhất, USB có thể nghẽn | Mẫu bị lỡ rơi đúng vào đỉnh; đếm `gap_count` |
 
 **Chấm mô hình:**
-- *"Đồng hồ đo dòng 10 A thì đo được dòng đỉnh 8 A."* — **SAI.** Thang đo nói về **biên độ**, không nói về **thời gian**. Phản ví dụ: code trên: đỉnh ~5 A dài vài chục ms, DMM thấy dưới 1 A.
+- *"Đồng hồ đo dòng 10 A thì đo được dòng đỉnh 8 A."* — **SAI.** Thang đo nói về **biên độ**, không nói về **thời gian**. Phản ví dụ: chạy mô phỏng trên và so dòng DMM với đỉnh thật.
 - *"Lấy mẫu càng nhanh càng tốt."* — **ĐÚNG MỘT PHẦN.** Nhanh hơn thì nhiễu mỗi mẫu lớn hơn (t_conv ngắn, ít trung bình), log lớn hơn, I2C/USB dễ lỡ mẫu. Đủ nhanh nghĩa là t_conv ngắn hơn rõ so với độ dài đỉnh cần thấy (vài lần), không phải tối đa. Phản ví dụ: 140 µs chỉ-shunt bỏ mất kênh áp bus, trong khi bạn cần cả hai để tính sụt áp và R pack.
 
 ### 4. Thuật ngữ
@@ -1135,7 +1135,7 @@ plt.savefig("c15_lay_mau.png", dpi=120)        # trong bài có thể dùng plt.
 
 1. Chạy mô phỏng (đề, không phải đáp án): cấu hình nào thấy đỉnh trong khoảng 10% so với thật? Dự đoán trước.
 2. Bóng 21 W: từ R nguội đo ở C1.2, dự đoán dòng đỉnh lúc bật ở 13,2 V (chặn trên: V/R_nguội, chưa tính R dây, pack).
-3. Với cấu hình firmware dưới (332 µs + 332 µs, avg 1): chu kỳ lý thuyết? Ở I2C 400 kHz, một lần đọc thanh ghi 2 byte (ghi con trỏ + đọc) mất ~50 bit-time ≈ 125 µs: mỗi chu kỳ đọc 3 thanh ghi có kịp không?
+3. Firmware dưới cho một cặp kết quả mỗi (t_shunt + t_bus) × avg. Ở I2C 400 kHz, một lần đọc thanh ghi 2 byte (ghi con trỏ + đọc) mất ~50 bit-time ≈ 125 µs: mỗi chu kỳ đọc 3 thanh ghi (cờ, shunt, bus) có kịp không, còn dư bao nhiêu?
 4. R pack từ bước dòng: R = −ΔV_bus/ΔI. Dự đoán từ C1.1.
 
 Mẫu `prediction.md`: bảng 4 dòng (cấu hình → đỉnh thấy), I đỉnh bóng đèn, chu kỳ, thời gian I2C/chu kỳ, R pack.
@@ -1201,6 +1201,20 @@ above = i > thr
 print(f"Thời gian trên {thr:.2f} A: {above.sum() * nominal * 1e3:.1f} ms tổng cộng")
 ```
 
+   Chưa có phần cứng (hoặc để thử script trước): tạo log tổng hợp từ mô hình rồi phân tích nó.
+
+```python
+# [đã chạy] Log tổng hợp (KHÔNG phải số đo): nền 1,3 A + hai cú bật tải 4 A tắt dần 40 ms, ~0,2% mẫu rơi
+import numpy as np
+rng = np.random.default_rng(1); t = np.arange(0, 5, 664e-6)
+i = 1.3 + 0.05 * rng.standard_normal(len(t))
+for t0 in (1.0, 3.0): i += (t >= t0) * 4.0 * np.exp(-(t - t0).clip(0) / 0.04)
+v = 13.2 - 0.06 * i; keep = rng.random(len(t)) > 0.002
+with open("log_c15.csv", "w") as f:
+    f.write("t_us,i_A,v_V\n")
+    for a, b, c in zip(t[keep], i[keep], v[keep]): f.write(f"{int(a*1e6)},{b:.4f},{c:.4f}\n")
+```
+
 7. Lặp bước 5–6 **trên pin thật** ở Lắp bước 8, ở hai mức sạc: đầy và còn ~20%. So I đỉnh, V min, R pack (= −ΔV/ΔI ở cạnh bật đèn). Ghi các `quantity` ở mục 7 đầu chặng vào `measurements.jsonl`; cập nhật `i_peak`, `peak_ms` trong `budget.csv` với `source=measured:<file>`; chạy lại `c12_budget.py`.
 8. **E-stop khi đang có tải:** bấm 20 lần khi bóng sáng; mỗi lần log 12 V/5 V vẫn đúng (ESP32 vẫn in, mini PC ping được), ESP32 không reset (`esp_reset_reason()` → K3 Bài 6).
 
@@ -1219,7 +1233,7 @@ Mô phỏng (đỉnh thật ~5,1 A, dài ~40 ms):
 
 Số DMM phụ thuộc pha của cửa sổ so với đỉnh; con số nhỏ hơn thật nhiều lần là bản chất, không phải lỗi mô phỏng.
 
-- Firmware: chu kỳ ~664 µs (~1,5 kHz). Ba lần đọc ~375 µs ở 400 kHz: kịp, nhưng sát; thêm in serial chậm là bắt đầu lỡ mẫu → `gap_count` > 0. Thêm cờ CVRF bị đọc trễ thì một chu kỳ bị bỏ, không phải đọc trùng.
+- Firmware: chu kỳ 664 µs. Ba lần đọc ~375 µs ở 400 kHz: kịp, dư ~290 µs, nhưng sát; thêm in serial chậm là bắt đầu lỡ mẫu → `gap_count` > 0. Thêm cờ CVRF bị đọc trễ thì một chu kỳ bị bỏ, không phải đọc trùng.
 - Bóng 21 W: đỉnh lúc bật thường gấp nhiều lần dòng sáng ổn định (~1,6 A ở 13,2 V), trong vài chục ms; số thật bị chặn bởi R dây, cầu chì, pack nên thấp hơn V/R_nguội.
 - Log mẫu tổng hợp (`log_c15.csv` tạo bằng mô hình, không phải phần cứng): ~7500 mẫu/5 s, chu kỳ 664 µs, ~15 khoảng trống, max ~5,3 A, p99 ~3,4 A, V min ~12,9 V. p99 thấp hơn max nhiều vì đỉnh chỉ chiếm <1% thời gian: đây là lý do max mới là số cho ngưỡng BMS.
 - R pack đo bằng bước dòng: cùng bậc với C1.1 nhưng chính xác hơn nhiều (LSB bus 1,25 mV so với 10 mV). Ở mức sạc 20% R thường lớn hơn khi đầy `[ước lượng]`: đúng câu chuyện iPhone.

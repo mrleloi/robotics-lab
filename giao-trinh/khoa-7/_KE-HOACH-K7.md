@@ -160,3 +160,10 @@ Giờ của chặng = tổng giờ các bài + giờ lắp. Ghi rõ phân bổ.
 Các agent soạn song song, không đọc được file của nhau lúc viết. Vì vậy: dùng đúng mã bài ở mục 3 khi trỏ sang chặng khác, và **không giả định nội dung chi tiết** của chặng khác ngoài những gì bảng mục 3 và ràng buộc mục 5 nói.
 
 `00-tong-quan.md` của K7 gồm: vì sao thiết kế lại (mục 1), bản đồ chặng (Mermaid), bảng mục 3 + 4, ngân sách giờ và tiền (tổng BOM theo chặng, ước lượng), tác động lên tổng lộ trình, đường lõi tối thiểu, gate tổng, "Cách học khóa này" cho người mới (tuần thường làm gì, tuần crunch làm gì — đọc bài khái niệm, không lắp khi mệt), quy tắc an toàn xuyên suốt, bản đồ vai trò (rút từ Phụ lục mục 4), danh sách sửa lỗi so với K7 gốc và bản Gemini K7.
+
+## 9. Quyết định đã chốt khi soạn (cập nhật 2026-10-08, Claude)
+
+- **Pin mặc định: 4S LiFePO4** (C1.1). Áp đầy 14,6 V gần định mức motor 12 V, ổn định nhiệt hơn NMC. Mini PC bắt buộc qua **buck-boost 12 V ≥5 A** (adapter EQ12 là 12 V 3 A = 36 W; chọn DC-DC theo 36 W + biên).
+- Đo dòng: INA226 + **shunt rời 50 A/75 mV** (module bán sẵn shunt 0,1 Ω chỉ tới ~0,8 A).
+- Cầu chì chính sát pin + cầu chì từng nhánh; cuộn relay E-stop lấy từ pack qua cầu chì 1 A.
+- Màu dây (C0.5): đỏ VBAT, cam 12 V, tím 5 V, đen GND, I2C theo Qwiic (đỏ 3,3 V của Qwiic dán nhãn "3V3").
