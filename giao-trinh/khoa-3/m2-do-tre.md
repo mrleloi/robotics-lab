@@ -4,7 +4,13 @@ Ba bài, một mạch: **Bài 8** đoán trước độ trễ của cả chuỗi
 
 Module này nối thẳng vốn backend của bạn (latency budget, p99, hàng đợi, SLO) vào một hệ có tầng vật lý. Nó cũng là nơi dễ mang theo nhiều mô hình backend chỉ đúng một nửa nhất, nên mỗi bài có phần chấm mô hình.
 
-Gate liên quan: tiêu chí **M4 số 3** (TN-2: ≥5 điểm DMA buffer, mỗi điểm ≥10 phút, latency GPIO→mic độ phân giải ≤1 ms) và **M4 số 6** (bảng latency budget, mọi dòng là số đo, nút thắt được chỉ tên).
+Gate liên quan: tiêu chí **M4 số 3** (TN-2: ≥5 điểm DMA buffer, mỗi điểm ≥10 phút, latency GPIO→mic độ phân giải ≤1 ms) và **M4 số 6** (bảng latency budget, mọi dòng là số đo, nút thắt được chỉ tên). Gate Khóa 3 ở cuối `m4-he-thong-v1.md`.
+
+| Bài | Giờ | Viên nang cần trước | Quyết định ra được |
+|---|---|---|---|
+| 8 — Latency budget: dự đoán trước | 3 | F1.2, F1.7, F7.1 | Tối ưu chặng nào trước; cam kết đầu–cuối bằng percentile nào, đo ở đâu |
+| 9 — TN-2: đo từ phần mềm ra không khí | 7 | F1.1, F1.3, F4.6, F4.7 | Con số độ trễ nào tin được tới mức nào; phương pháp nào làm trọng tài |
+| 10 — Đường cong độ trễ vs underrun | 6 | F1.4, F3.9, F5.3, F7.1 | `dma_frame_num`, `dma_desc_num`, độ sâu ring cho V1, kèm số và khoảng tin cậy |
 
 ```mermaid
 flowchart LR
@@ -22,7 +28,7 @@ flowchart LR
 
 ## Bài 8 — Latency budget: dự đoán trước (3h)
 
-> **Vị trí:** K3 Bài 7 (mic, SNR) → **Bài 8** → K3 Bài 9 (đo chặng vật lý) · **Cần trước:** F1.2 (phân bố, percentile), F1.7 (preregistration = `prediction.md`), K3 Bài 4 (DMA/ring buffer); F6.6 (Monte Carlo) đọc lướt · **Sau bài này bạn quyết định được:** chặng nào đáng tối ưu trước, và SLO "Submit → âm thanh" của V1 nên viết bằng percentile nào, đo ở đâu.
+> **Vị trí:** K3 Bài 7 (mic, SNR) → **Bài 8** → K3 Bài 9 (đo chặng vật lý) · **Cần trước:** F1.2 (phân bố, percentile), F1.7 (preregistration = `prediction.md`), F7.1 (định luật Little), K3 Bài 4 (DMA/ring buffer); F6.6 (Monte Carlo) đọc lướt · **Sau bài này bạn quyết định được:** chặng nào đáng tối ưu trước, và SLO "Submit → âm thanh" của V1 nên viết bằng percentile nào, đo ở đâu.
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
@@ -54,10 +60,11 @@ Mỗi mũi tên là một **biến ngẫu nhiên**, không phải một con số
 | ⑥ DMA | Gần hằng số, cộng một phần lẻ đều trong một descriptor | Phần cứng rút theo clock; thời điểm ghi rơi ngẫu nhiên trong chu kỳ descriptor |
 | ⑧ không khí | Hằng số (phụ thuộc nhiệt độ, khoảng cách) | Vật lý |
 
-Ba câu bản chất:
+Bốn câu bản chất:
 1. **Trung bình cộng được, percentile thì không.** E[X+Y] = E[X] + E[Y] luôn đúng (tuyến tính của kỳ vọng). p99(X+Y) không bằng p99(X)+p99(Y): với các chặng độc lập, cộng p99 thường **ước lượng quá cao** (hiếm khi mọi chặng cùng xấu); nhưng có phân bố mà cộng p99 lại **ước lượng quá thấp** (xem phản ví dụ trong mô phỏng).
 2. Phân bố của tổng là **tích chập** các phân bố (khi độc lập). Không tính tay được thì **mô phỏng Monte Carlo**: rút mẫu từng chặng, cộng, đọc percentile của tổng.
-3. Chặng có **độ rộng** lớn nhất quyết định đuôi của tổng, kể cả khi trung bình của nó không lớn nhất.
+3. Dấu của sai lệch "cộng p99" phụ thuộc **quan hệ** giữa các chặng: độc lập thì cộng p99 thừa; cùng chậm cùng lúc vì một nguyên nhân chung (đồng biến hoàn toàn, *comonotonic*, ví dụ CPU hạ xung đè lên ③④⑤) thì cộng p99 đúng bằng p99 của tổng; gai hiếm thì cộng p99 thiếu. Chặng có **độ rộng** lớn nhất quyết định đuôi của tổng, kể cả khi trung bình của nó không lớn nhất.
+4. **Ở mỗi vùng đệm (⑤, ⑥), độ trễ là mức đầy chia tốc độ rút, không phải dung lượng chia tốc độ rút** (định luật Little, W = L/λ, → F7.1, K3 Bài 4). Dung lượng chỉ là cận trên: ring đầy 30% thì độ trễ ring bằng 30% dung lượng.
 
 Mô phỏng đồ chơi (tham số là ba *hình dạng* trừu tượng, cố ý không gán cho chặng thật nào; bạn thay bằng dự đoán của mình ở mục 5):
 
@@ -82,6 +89,8 @@ for name, x in [("A", A), ("B", B), ("C", C)]:
 print(f"{'cộng số':10s}{A.mean()+B.mean()+C.mean():8.0f}"
       f"{p(A,50)+p(B,50)+p(C,50):8.0f}{p(A,99)+p(B,99)+p(C,99):8.0f}")
 print(f"{'phân bố':10s}{S.mean():8.0f}{p(S,50):8.0f}{p(S,99):8.0f}")
+Sc = np.sort(A) + np.sort(B) + np.sort(C)        # đồng biến hoàn toàn: ba chặng cùng xấu cùng lúc
+print(f"{'đồng biến':10s}{Sc.mean():8.0f}{p(Sc,50):8.0f}{p(Sc,99):8.0f}")
 
 # Phản ví dụ: cộng p99 KHÔNG luôn là cận trên an toàn
 X = np.where(rng.random(N) < 0.006, 1000.0, 0.0)  # 0,6% lần giật 1000 ms
@@ -95,7 +104,7 @@ plt.axvline(p(A,99)+p(B,99)+p(C,99), color="r", label="cộng các p99")
 plt.xlabel("ms"); plt.legend(); plt.show()
 ```
 
-Trước khi chạy, viết vào `prediction.md`: dòng "cộng số" và dòng "phân bố" sẽ khác nhau ở cột nào, theo chiều nào; dòng phản ví dụ in ra gì. Kết quả gập ở mục 7.
+Trước khi chạy, viết vào `prediction.md`: dòng "cộng số" và dòng "phân bố" sẽ khác nhau ở cột nào, theo chiều nào; dòng "đồng biến" so với "cộng số" ra sao; dòng phản ví dụ in ra gì. Kết quả gập ở mục 7.
 
 ### 3. Cầu nối từ backend
 
@@ -112,6 +121,7 @@ Trước khi chạy, viết vào `prediction.md`: dòng "cộng số" và dòng 
 - *"Cộng trung bình các chặng ra trung bình tổng."* — **ĐÚNG**, nhưng gần như vô dụng cho trải nghiệm. Tuyến tính của kỳ vọng không cần độc lập. Chỗ gãy: người nghe không cảm nhận trung bình; họ nhớ lần đợi lâu nhất. Phản ví dụ: hai cấu hình cùng trung bình 3 s, một cái p99 = 3,2 s, một cái p99 = 9 s.
 - *"p99 của tổng = cộng p99 các chặng, và ít nhất nó là cận trên an toàn."* — **SAI.** Với các chặng độc lập có đuôi vừa phải, cộng p99 thường quá cao. Phản ví dụ ngược chiều (chạy mô phỏng): hai chặng mỗi chặng chỉ 0,6% lần giật 1000 ms. p99 mỗi chặng = 0, cộng lại = 0; nhưng xác suất *ít nhất một* chặng giật ≈ 1,2% > 1%, nên p99 của tổng là 1000 ms. Đây là cùng lý do VaR trong tài chính không có tính dưới cộng (mục 10).
 - *"Nút thắt là chặng có trung bình lớn nhất."* — **ĐÚNG MỘT PHẦN.** Cho p50, gần đúng. Cho p99, chặng có độ rộng (phương sai, đuôi) lớn nhất mới quyết định. Và "nút thắt đáng tối ưu" còn phải **kiểm soát được**: chặng ① có thể lớn nhưng bạn không chạm vào được; quyết định đúng có khi là đổi kiến trúc để bỏ hẳn chặng đó.
+- *"Buffer càng lớn thì độ trễ càng lớn, đúng bằng dung lượng / tốc độ."* — **ĐÚNG MỘT PHẦN.** Chiều đúng: thêm buffer thì độ trễ có thể tăng. Chỗ gãy: độ trễ là **mức đầy** / tốc độ (Little). Credit flow control giữ ring gần đầy nên ở đó gần bằng dung lượng; nhưng lần ghi đầu sau khi kênh I2S chạy không (hoặc có preload) có thể ra nhỏ hơn nhiều. Phản ví dụ: cùng `dma_desc_num × dma_frame_num`, sample đầu tiên sau lúc im lặng và một sample giữa luồng liên tục cho hai con số khác nhau `[tự đo, Bài 9]`.
 
 ### 4. Thuật ngữ
 
@@ -191,13 +201,17 @@ Sai số dụng cụ ở bài này: không có dụng cụ, chỉ có giả đ�
 | C (có gai) | 8 | 6 | 62 |
 | cộng số | 847 | 804 | 2011 |
 | phân bố tổng | 847 | 844 | 1669 |
+| đồng biến (sort) | 847 | 804 | 2011 |
 
 - Mean khớp tuyệt đối (tuyến tính).
 - p50 của tổng **lớn hơn** tổng các p50 (vì B lệch phải, mean > median).
 - p99 của tổng **nhỏ hơn** tổng các p99 khoảng 17% ở đây: cộng p99 quá thận trọng khi các chặng độc lập.
-- Phản ví dụ in `p99(X)+p99(Y) = 0.0 | p99(X+Y) = 1000.0`: cộng p99 hở đuôi khi gai hiếm (< 1%) ở nhiều chặng.
+- Dòng đồng biến khớp tuyệt đối với "cộng số" ở cả p50 và p99: quantile cộng được **chỉ** khi các chặng cùng xấu cùng lúc.
+- Phản ví dụ in `p99(X)+p99(Y) = 0.0 | p99(X+Y) = 1000.0`: cộng p99 hở đuôi khi gai hiếm (< 1%) ở nhiều chặng. Đổi 0,006 thành 0,012: mỗi chặng giờ có 1,2% > 1%, p99 từng chặng nhảy lên chứa cú gai, "cộng p99" lại thừa. Percentile là phép đo **không liên tục** đối với đuôi hiếm.
 
 **Nút thắt.** Với kiến trúc poll Sheets, chặng ① + ② (Google + chu kỳ poll) thường chiếm phần lớn cả p50 lẫn p99 của tổng, ở thang **giây**; TTS là thang trăm ms tới giây tùy RTF và độ dài câu; DMA là thang chục tới trăm ms; ④⑦⑧ là thang ms hoặc dưới ms `[ước lượng]` (chỉ là ước lượng bậc độ lớn, số thật là của bạn). Người nền backend hay đoán TTS hoặc DMA vì đó là chỗ có code. Hệ quả quyết định: thu DMA từ 50 ms xuống 10 ms (đổi bằng rủi ro underrun, Bài 10) không đáng nếu chặng ①② cỡ giây; đòn bẩy lớn nhất là webhook thay poll (K3 Bài 14) và streaming TTS (Bài 13).
+
+**Một hệ có nhiều chỉ số độ trễ, mỗi chỉ số một nút thắt.** Độ trễ **dừng** khi bấm kill (K3 Bài 15) chỉ gồm ⑤–⑧: ở chỉ số đó, ring và DMA lại là nút thắt. Bảng theo chặng dùng để **chẩn đoán**; cam kết p99 đầu–cuối phải dựa trên đo trực tiếp đầu–cuối (Bài 9 cho chặng vật lý, Bài 13 cho cả chuỗi).
 
 **Chặng ⑦ không phải "< 1 ms hiển nhiên".** Bộ lọc nội suy của PCM5102A có group delay 20 tS ở chế độ normal và 3,5 tS ở low-latency `[spec: TI SLAS859, bảng Specifications; phần mô tả chi tiết ghi 22 tS cho normal — datasheet tự mâu thuẫn]`. Ở 24 kHz: 20/24000 ≈ 0,83 ms. Amp class-D analog và loa đóng góp cỡ chục–trăm µs `[ước lượng]`. Nếu mic là MEMS số (INMP441), bộ lọc decimation trong mic cũng thêm trễ `[tự đo]` (không tìm thấy con số trong datasheet; đo ở Bài 9).
 
@@ -223,7 +237,9 @@ Sai số dụng cụ ở bài này: không có dụng cụ, chỉ có giả đ�
    <details><summary>Hướng nghĩ</summary>Mất = độ trễ vô hạn; percentile tính trên các mẫu "đã đến" bỏ sót hoàn toàn (survivorship). Cần một chỉ số riêng: tỉ lệ hoàn thành trong X giây. Đây là lý do SLO tốt viết "99% record được phát trong 30 s", gộp cả chậm lẫn mất.</details>
 4. **[Vì sao không]** Vì sao không đơn giản đặt mọi buffer thật lớn cho chắc, khi nút thắt đằng nào cũng ở Google?
    <details><summary>Hướng nghĩ</summary>Vì buffer không chỉ cộng độ trễ một lần: nó quyết định độ trễ của *mọi* thao tác điều khiển đi qua cùng đường (dừng khẩn, tắt tiếng, kill switch K3 Bài 15). Nghĩ về bufferbloat (Bài 10).</details>
-5. **[Liên ngành]** PERT cộng kỳ vọng dọc đường găng. Trong chuỗi của bạn có "nhánh song song gặp nhau" nào không (hai việc phải xong cả hai mới đi tiếp)? Nếu có, tổng không còn là tổng mà là max. Max của hai phân bố cư xử thế nào so với từng cái?
+5. **[Phản biện]** "DMA chỉ 40 ms, chẳng đáng để ý khi Google tốn 2 s." Đúng khi nào, sai khi nào?
+   <details><summary>Hướng nghĩ</summary>Đúng cho độ trễ bắt đầu phát. Sai cho độ trễ **dừng**: khi bấm kill, những gì đã nằm trong DMA (và ring, nếu không xả) vẫn ra loa. 40 ms không sao; ring 2 s chưa xả thì có (K3 Bài 15).</details>
+6. **[Liên ngành]** PERT cộng kỳ vọng dọc đường găng. Trong chuỗi của bạn có "nhánh song song gặp nhau" nào không (hai việc phải xong cả hai mới đi tiếp)? Nếu có, tổng không còn là tổng mà là max. Max của hai phân bố cư xử thế nào so với từng cái?
    <details><summary>Hướng nghĩ</summary>Ví dụ: moderation (K3 Bài 15) và TTS chạy song song, phát khi cả hai xong. max(X, Y) có đuôi nặng hơn cả hai; đây là "Tail at Scale" thu nhỏ.</details>
 
 ### 10. Liên kết ra ngoài
@@ -241,6 +257,8 @@ Sai số dụng cụ ở bài này: không có dụng cụ, chỉ có giả đ�
 | Poll chu kỳ T → trễ đều [0, T] | [chuẩn] | Giả định record đến ngẫu nhiên so với pha poll |
 | USB full-speed frame 1 ms | [spec] | USB 2.0 specification |
 | Group delay bộ lọc PCM5102A (hai chế độ, chọn bằng chân FLT) | [spec] | TI SLAS859; giá trị ở khối 🔒 mục 7. Datasheet ghi hai con số khác nhau cho chế độ normal ở hai bảng — đo ở Bài 9 |
+| Comonotonic ⇒ p99 tổng = tổng p99 | [chuẩn] | Dòng "đồng biến" trong mô phỏng |
+| W = L/λ ở mỗi vùng đệm | [chuẩn] | Little 1961; mô phỏng kiểm chéo ở K3 Bài 4 |
 | Timestamp Google Forms độ phân giải 1 s | [tự đo] | Mở Sheet, xem định dạng cột |
 | Độ trễ Form → Sheet | [tự đo] | Không có cam kết công khai |
 
@@ -249,6 +267,9 @@ Sai số dụng cụ ở bài này: không có dụng cụ, chỉ có giả đ�
 - Gemini và lộ trình ghi chặng ② "poll = T/2": đó chỉ là trung bình; p99 ≈ 0,99·T.
 - Gemini ghi USB "jitter 1–5 ms" như sự thật: không có nguồn, chuyển thành `[tự đo]`.
 - Gemini nói thẳng đáp án nút thắt ngay trong phần dạy; ở đây đáp án được niêm phong.
+- *Gốc:* dùng `desc_num × frame_num / rate` như độ trễ DMA. Đó là cận trên; độ trễ thật là mức đầy / rate (Little).
+- *Gốc:* "1 m = 2,92 ms" chỉ đúng ở 20 °C; văn phòng Việt Nam thường 26–32 °C. Đã thêm công thức theo nhiệt độ (sai số hệ thống ~2%, không phải ngẫu nhiên).
+- *Gốc + Gemini:* coi bảng theo chặng là thứ để cộng ra cam kết. Sửa: bảng để chẩn đoán; cam kết dựa trên đo trực tiếp đầu–cuối.
 - Bổ sung so với gốc: cột hình dạng phân bố, cột độ phân giải phép đo, đồng hồ của mỗi sự kiện, và Monte Carlo. Gốc chỉ có cột "dự đoán" một số.
 
 ### 12. Đọc thêm và tự kiểm tra
@@ -259,7 +280,8 @@ Sai số dụng cụ ở bài này: không có dụng cụ, chỉ có giả đ�
 - **Tự kiểm tra:** (1) giải thích lại cho một backend engineer khác trong 5 câu vì sao không cộng p99; (2) vẽ lại sơ đồ tám chặng và hình dạng phân bố từng chặng từ trí nhớ; (3) hai câu:
   - Poll T = 20 s. p50 và p99 của chặng ② là bao nhiêu?
   - Ba chặng độc lập, mỗi chặng có 0,4% lần trễ thêm 2 s, còn lại 0. p99 của tổng là bao nhiêu?
-  <details><summary>Đáp án</summary>p50 = 10 s, p99 = 19,8 s. Ba chặng: P(ít nhất một gai) = 1 − 0,996³ ≈ 1,2% > 1%, nên p99 của tổng = 2 s, trong khi p99 từng chặng = 0 (P(hai gai) ≈ 0,005% nên không tới 4 s).</details>
+  - Ring ESP32 dung lượng 4800 frame, đang đầy 1200 frame, fs = 24 kHz. Một sample vừa vào ring sẽ rời ring sau bao lâu?
+  <details><summary>Đáp án</summary>p50 = 10 s, p99 = 19,8 s. Ba chặng: P(ít nhất một gai) = 1 − 0,996³ ≈ 1,2% > 1%, nên p99 của tổng = 2 s, trong khi p99 từng chặng = 0 (P(hai gai) ≈ 0,005% nên không tới 4 s). Ring: W = L/λ = 1200 / 24 000 = 50 ms, không phải 200 ms; dung lượng chỉ là cận trên.</details>
 
 ---
 
@@ -308,7 +330,8 @@ Ba câu bản chất:
 | Chi phí lệnh bật GPIO | hệ thống, nhỏ | Đo độ rộng xung lên-xuống liên tiếp trên LA | Ghi thanh ghi trực tiếp |
 | Khoảng cách mic–loa | hệ thống | ±d / c | Đo kỹ, cố định giá |
 | Nhiệt độ không khí | hệ thống | Δc/c × d/c | Ghi nhiệt độ phòng |
-| Group delay mic MEMS | hệ thống, chưa biết | Datasheet nếu có, không thì đo bằng hai khoảng cách | Đo ở hai khoảng cách, ngoại suy về 0 (mục 6) |
+| Group delay mic MEMS | hệ thống, chưa biết | Datasheet nếu có; nếu không, không tách được khỏi phần dư | Gộp vào điểm chặn b của hồi quy nhiều khoảng cách (mục 6), ghi rõ |
+| Vị trí lỗ âm INMP441 | hệ thống | INMP441 là mic lỗ đáy `[spec: kiểm datasheet]`: lỗ ở mặt dưới module, không phải mặt có chip | Đo tới lỗ âm, ghi hướng đặt |
 | Pha DMA lúc ghi | **đặc tính của hệ**, không phải sai số dụng cụ | ~T/√12 nếu đều | Đo ở trạng thái dừng (click giữa luồng liên tục) |
 
 Mô phỏng 1: bộ dò onset có lệch theo âm lượng không? (dự đoán trước khi chạy: phương pháp nào lệch, lệch theo chiều nào khi giảm âm lượng 10 lần, và chuyện gì xảy ra với ngưỡng k = 20 khi âm lượng nhỏ).
@@ -400,6 +423,7 @@ for name, x in [("vòng kín", closed), ("vòng mở", opened)]:
 
 - *Mô hình của bạn ở K3 lượt 3:* "thực tế ESP32 chỉ làm dispatcher/coordinator… chỉ kiểm soát các flag như bật/tắt, âm lượng… không nên là nơi tạo ra âm thanh." — **ĐÚNG MỘT PHẦN.** Đúng: ở V1, ESP32 không sinh âm thanh, TTS ở mini PC. Gãy: ESP32 không phải "forwarder có vài flag". Nó **sở hữu miền thời gian thực**: clock I2S do nó phát ra quyết định tốc độ rút dữ liệu của cả chuỗi; ring buffer của nó hấp thụ jitter của host; và nó là **nơi duy nhất** trong chuỗi có thể đánh dấu một sự kiện phần mềm sát đầu ra vật lý với độ bất định dưới µs. Phản ví dụ: bỏ ESP32, cho mini PC phát qua USB sound card; bạn mất luôn khả năng làm bài này, vì mini PC không có GPIO và mọi vùng đệm nằm trong firmware của sound card.
 - *"RTT/2 là độ trễ một chiều."* — **ĐÚNG MỘT PHẦN.** Đúng khi hai chiều đối xứng. Phản ví dụ: nếu đường IN chịu thêm một khung poll 1 ms mà đường OUT không, RTT/2 lệch 0,5 ms so với cả hai chiều, và lặp bao nhiêu lần cũng không lộ ra.
+- *"Độ phân giải ≤ 1 ms nghĩa là phép đo đúng tới 1 ms."* — **SAI.** Độ phân giải là bước nhỏ nhất phân biệt được (125 ns của LA, 41,7 µs của mẫu mic); độ chính xác là khoảng cách tới giá trị thật, bị chặn bởi sai số hệ thống. Phản ví dụ: đo "30 cm" tới mặt chip trong khi lỗ âm ở mặt dưới, cộng bộ dò ngưỡng trễ vài mẫu: lệch vài trăm µs, std vẫn nhỏ, lặp bao nhiêu lần cũng không giảm. Độ phân giải đạt dễ; độ chính xác mới là bài.
 - *"Lặp 10 lần, báo trung vị ± độ lệch chuẩn là đủ."* — **ĐÚNG MỘT PHẦN.** Đủ để kiểm tiêu chí độ phân giải và để thấy độ phân tán cỡ lớn. Gãy: (1) 10 lần không nói gì về p99 (→ F1.2); (2) lặp không khử sai số hệ thống; (3) std lớn có thể là đặc tính thật của hệ (pha DMA) chứ không phải nhiễu đo.
 
 ### 4. Thuật ngữ
@@ -423,8 +447,9 @@ for name, x in [("vòng kín", closed), ("vòng mở", opened)]:
 2. Độ dốc của đường "độ trễ đo theo tổng số frame DMA": bằng `desc_num × frame_num / fs`, bằng `(desc_num − 1) × frame_num / fs`, hay thứ khác? Nó phụ thuộc vào việc bạn đo **sample đầu tiên sau khoảng lặng** (khởi động lạnh) hay **một click giữa luồng đang chạy** (trạng thái dừng)? Viết giả thuyết cho cả hai.
 3. Độ phân tán (std) giữa 20 lần ở mỗi chế độ.
 4. Phần dư sau khi trừ phần DMA và không khí, tách thành các thành phần bạn biết.
-5. Chặng host: p50, p99, p99.9 của RTT trong 10 phút, đo **vòng kín** và **vòng mở**, ở trạng thái nhàn và khi chạy `stress-ng --cpu 4`.
-6. Ngân sách sai số của phép đo (bảng ở mục 2) và kết luận: độ phân giải ≤1 ms có đạt không, với biên bao nhiêu.
+5. Đo `DOUT → onset mic` ở 5 khoảng cách 10–80 cm rồi fit `t = a·d + b`: dự đoán a (ms/m) và b (ms).
+6. Chặng host: p50, p99, p99.9 của RTT trong 10 phút, đo **vòng kín** và **vòng mở**, ở trạng thái nhàn và khi chạy `stress-ng --cpu 4`.
+7. Ngân sách sai số của phép đo (bảng ở mục 2) và kết luận: độ phân giải ≤1 ms có đạt không, với biên bao nhiêu.
 
 **Tham số cần tra:**
 - Tần số lấy mẫu và số mẫu capture của LA: PulseView cho đặt số mẫu (mặc định thường 1M nhưng đặt được lớn hơn); giới hạn thật của bản clone fx2lafw là **băng thông USB 2.0** của dongle và RAM máy host (tài liệu sigrok, trang thiết bị fx2lafw).
@@ -473,6 +498,11 @@ Mô phỏng 1: phương pháp lệch theo âm lượng là …; k=20 ở âm lư
 | D1 | BCK của **mic** INMP441 |
 | D2 | LRCK (WS) của mic |
 | D3 | SD (data) của mic |
+| D4–D6 (khuyến nghị) | BCK, LRCK, DOUT phía **DAC** (TX của ESP32) |
+
+Với D4–D6, mỗi lần đo tách được ba khoảng: `GPIO↑ → burst trên DOUT` (phần DMA), `DOUT → burst ở mic` (DAC + amp + loa + không khí + mic), `GPIO↑ → GPIO↓` (write bị chặn bao lâu). Nếu mic và DAC dùng chung controller full-duplex (chung BCK/WS), bớt được hai kênh `[tự đo, ESP-IDF I2S docs mục full-duplex]`. Đếm số kênh dùng được của LA clone (thường 8) và kiểm PulseView không báo mất mẫu ở tần số bạn chọn.
+
+**Bước 0 — đo dụng cụ trước (30 phút).** Hai kênh LA cùng nối vào **một** chân GPIO: lệch giữa hai kênh phải ≤ 1 mẫu (skew giữa kênh). Firmware bật–tắt GPIO hai lần liền nhau: độ rộng xung là chi phí một lệnh toggle `[tự đo]`.
 
 **Bước 1 — sửa firmware.** Bật marker **ngay trước** lệnh `i2s_channel_write` cần đánh dấu, hạ marker **ngay sau** khi lệnh trả về. Độ rộng xung khi đó = thời gian lệnh write bị chặn chờ chỗ trống trong DMA, một chẩn đoán miễn phí về trạng thái DMA lúc ghi.
 
@@ -502,9 +532,9 @@ void write_marked(i2s_chan_handle_t tx, const void *buf, size_t len) {
 
 Đo chi phí của chính marker: viết hai lệnh lên/xuống liền nhau, đo độ rộng xung trên LA. Lặp với `gpio_set_level` để so. Ghi cả hai vào mục "sai số của phép đo".
 
-**Bước 2 — đặt mic.** Cách loa **30 cm**, đo bằng thước từ tâm màng loa tới lỗ mic, cố định bằng giá. Ghi khoảng cách, sai số ước lượng của thước, và nhiệt độ phòng vào `setup.md`. **Bước 2b (thêm):** lặp toàn bộ phép đo ở một khoảng cách thứ hai (ví dụ 60 cm). Hiệu hai kết quả phải bằng 0,30 m / c; nếu đúng, ngoại suy về khoảng cách 0 cho bạn tổng "DMA + DAC + loa + mic + bộ dò" mà không cần tin số 0,87 ms.
+**Bước 2 — đặt mic.** Cách loa **30 cm**, đo bằng thước từ tâm màng loa tới lỗ mic, cố định bằng giá. Ghi khoảng cách, sai số ước lượng của thước, và nhiệt độ phòng vào `setup.md`. Đo khoảng cách tới **lỗ âm** (mặt dưới INMP441), trục lỗ hướng vào tâm màng loa.
 
-**Bước 3 — capture.** PulseView. Chọn tần số lấy mẫu của LA theo hai ràng buộc: (a) đủ để decode BCK mic (≥4–10× BCK; BCK 1,536 MHz ở 24 kHz: 8 MHz cho ~5,2 mẫu mỗi chu kỳ, sát ngưỡng; 12 MHz cho ~7,8); (b) dongle stream liên tục được qua USB mà không mất mẫu. Đặt **số mẫu** đủ cho cả độ trễ lớn nhất cộng biên (ví dụ 2 s × 8 MHz = 16M mẫu). Ghi đánh đổi vào lab notebook. Nếu PulseView báo dongle gửi thiếu mẫu, hạ tần số.
+**Bước 3 — capture.** PulseView. Chọn tần số lấy mẫu của LA theo hai ràng buộc: (a) đủ để decode BCK mic (≥4–10× BCK; BCK 1,536 MHz ở 24 kHz: 8 MHz cho ~5,2 mẫu mỗi chu kỳ, sát ngưỡng; 12 MHz cho ~7,8); (b) dongle stream liên tục được qua USB mà không mất mẫu. Đặt **số mẫu** đủ cho cả độ trễ lớn nhất cộng biên (ví dụ 2 s × 8 MHz = 16M mẫu; 1M mẫu ở 8 MHz chỉ được 125 ms, không đủ cho cấu hình DMA 200 ms). Trigger cạnh lên D0, pre-trigger ~10%. Ghi đánh đổi vào lab notebook. Nếu PulseView báo dongle gửi thiếu mẫu, hạ tần số.
 
 **Bước 4 — tín hiệu thử.** Bắt đầu bằng sườn dốc: burst tone (ví dụ 1 kHz, 20 ms, không fade-in) hoặc click. Burst cho cross-correlation tốt hơn click đơn. Làm **hai chế độ**:
 - *Khởi động lạnh:* kênh I2S đang phát im lặng; ghi chunk đầu có burst, marker ở write đó.
@@ -512,13 +542,29 @@ void write_marked(i2s_chan_handle_t tx, const void *buf, size_t len) {
 
 **Bước 5 — đo.** Decode I2S của mic, export giá trị mẫu kèm thời điểm. Tìm onset bằng **hai** cách: ngưỡng năng lượng (như gốc) và cross-correlation với burst tham chiếu. Độ trễ = onset − cạnh lên D0. Báo cả hai, chênh lệch giữa chúng là một dòng trong ngân sách sai số.
 
-**Bước 6 — trừ không khí.** `latency_trước_loa = latency_đo − d/c`, với c tính theo nhiệt độ phòng. Nếu làm Bước 2b, dùng giá trị ngoại suy thay vì trừ.
+**Bước 6 — tách không khí bằng hồi quy (thay cho "trừ 0,87 ms").** Đo `DOUT → mic` (hoặc `GPIO → mic` ở trạng thái dừng) ở 5 khoảng cách (10, 20, 30, 50, 80 cm), mỗi khoảng ≥ 10 lần, fit `t = a·d + b`. Độ dốc a là phép kiểm: nó phải ra tốc độ âm thanh ở nhiệt độ phòng; lệch nhiều thì bạn đang đo sai thứ gì đó (điểm đo khoảng cách, onset nhảy theo âm lượng, phản xạ từ mặt bàn). Điểm chặn b là phần không phụ thuộc khoảng cách (DAC + amp + loa + mic + lệch bộ dò), và không chứa sai số thước của từng lần. Nếu chỉ có một khoảng cách, trừ `d/c` với c theo nhiệt độ phòng và ghi rõ đó là trừ, không phải đo.
+
+```python
+# [đã chạy] Tách không khí bằng hồi quy nhiều khoảng cách. Dữ liệu TỔNG HỢP: thay d, t bằng số đo của bạn.
+import numpy as np
+rng = np.random.default_rng(9)
+c_true, b_true = 347.0, 1.10                         # "sự thật" của kịch bản: m/s ở ~28 °C, ms phần dư
+d = np.repeat([0.10, 0.20, 0.30, 0.50, 0.80], 10)    # 5 khoảng cách × 10 lần (m)
+t = b_true + 1000 * d / c_true + rng.normal(0, 0.03, d.size)   # DOUT→mic (ms), nhiễu onset ~30 µs
+(a, b), cov = np.polyfit(d, t, 1, cov=True)
+sa, sb = np.sqrt(np.diag(cov))
+print(f"a = {a:.3f} ± {1.96*sa:.3f} ms/m → c ≈ {1000/a:.0f} m/s ; b = {b:.3f} ± {1.96*sb:.3f} ms")
+print("residual max:", np.abs(t - (a*d + b)).max().round(3), "ms")
+# Thử sai số hệ thống: đo khoảng cách tới mặt chip thay vì lỗ âm ở mặt dưới (thừa 1,5 mm mọi lần)
+a2, b2 = np.polyfit(d + 0.0015, t, 1)
+print(f"đo thừa 1,5 mm: a = {a2:.3f} ms/m (không đổi), b = {b2:.3f} ms (lệch {b2-b:+.3f})")
+```
 
 **Bước 7 — lặp.** ≥20 lần mỗi (cấu hình × chế độ). Báo trung vị, std, min, max và vẽ dot plot (20 điểm thì vẽ hết, không cần histogram). Kiểm chéo bắt buộc: độ trễ đổi **gần tuyến tính** theo tổng frame DMA; **độ dốc** khớp giả thuyết nào ở mục 5.
 
 **Bước 8 — chặng host (vòng mở).** Host gửi gói echo theo **lịch cố định** (ví dụ mỗi 10 ms), mỗi gói mang số thứ tự và thời điểm *dự định* gửi (`time.monotonic_ns()`); một luồng riêng nhận echo. Độ trễ = lúc nhận − lúc dự định. Chạy 10 phút nhàn, 10 phút với `stress-ng --cpu 4`. Chạy thêm phiên vòng kín để so. Lưu toàn bộ mẫu (không chỉ percentile) để Bài 10 dùng lại. Ghi rõ RTT/2 là ước lượng dựa trên giả định đối xứng.
 
-**Phương pháp dự phòng / kiểm chéo — không cần LA:** mic INMP441 ở **bộ I2S thứ hai** của ESP32-S3. Ghi `esp_timer_get_time()` lúc write chunk có burst, và đếm mẫu nhận được từ mic kể từ đó; onset tính bằng chỉ số mẫu × 41,7 µs (24 kHz). Lưu ý: phép này đo thêm **trễ của đường RX** (DMA nhận của mic) mà LA không đo, nên hai phương pháp lệch nhau một hằng số có thể dự đoán được. Nếu lệch là hằng số ổn định qua mọi cấu hình, cả hai đáng tin; nếu lệch thay đổi theo cấu hình TX, có một vùng đệm ẩn.
+**Phương pháp dự phòng / kiểm chéo — không cần LA:** mic INMP441 ở **bộ I2S thứ hai** của ESP32-S3. Đừng so "timestamp lúc gọi `write`" với "timestamp lúc `read` trả về": cả hai nằm ở ranh giới buffer phần mềm, và phía thu còn có DMA RX đệm thêm ít nhất một descriptor. Thay vào đó đếm **chỉ số frame**: nếu TX và RX chạy chung clock (full-duplex), `latency = (chỉ số frame onset ở RX − chỉ số frame burst ở TX) / fs + hằng số`, độ phân giải một chu kỳ LRCK = 41,7 µs ở 24 kHz. Hằng số đó (gồm trễ đường RX mà LA không đo) hiệu chuẩn **một lần** bằng LA; sau đó phương pháp dự phòng đủ dùng cho Bài 10 và 13 mà không phải cắm LA mỗi lần. Nếu lệch là hằng số ổn định qua mọi cấu hình, cả hai đáng tin; nếu lệch thay đổi theo cấu hình TX, có một vùng đệm ẩn.
 
 **A/A test:** đo lại một cấu hình vào ngày khác, setup tháo ra lắp lại. Khác biệt giữa hai ngày là sàn của mọi so sánh "cấu hình X nhanh hơn Y" (→ F1.3).
 
@@ -549,6 +595,8 @@ p50 và max giống nhau; p99 lệch khoảng 10 lần. Vòng kín vẫn *thấy
 - *Khởi động lạnh:* độ trễ phụ thuộc pha DMA lúc ghi, có thể nằm bất kỳ đâu trong khoảng cỡ một descriptor; std có thể tới T/√12 (T = 16,7 ms → ~4,8 ms). Đây là đặc tính của hệ, không vi phạm "độ phân giải ≤1 ms". Nếu firmware dùng `i2s_channel_preload_data` rồi mới enable kênh, độ trễ lạnh gần như chỉ còn phần dư. Hành vi chính xác phụ thuộc phiên bản ESP-IDF `[tự đo]`.
 - *Phần dư* (sau khi trừ DMA và không khí): ở 24 kHz, group delay bộ lọc PCM5102A ≈ 0,83 ms (normal, 20 tS) hoặc ≈ 0,15 ms (low latency, 3,5 tS) `[spec]`; cộng group delay mic MEMS `[tự đo]`, cộng lệch bộ dò ngưỡng (0,1–0,2 ms trong mô phỏng). Tổng cỡ 1–2 ms là hợp lý `[ước lượng]`. Gốc ghi "1–5 ms = DAC + amp + loa": khoảng thì được, nhưng thành phần sai. Thí nghiệm tùy chọn: đổi chân FLT của PCM5102A, phần dư phải đổi cỡ 0,7 ms; đây là một kiểm chứng rằng phép đo của bạn nhạy dưới 1 ms.
 
+**Hồi quy khoảng cách:** độ dốc a ≈ 2,86–2,92 ms/m (c ở 32 °C → 20 °C); lệch > 5% thì kiểm điểm đo khoảng cách. Điểm chặn b cỡ 0,3–3 ms `[ước lượng]`, chính là "phần dư" ở trên. b **âm** là bất khả về vật lý: có sai số hệ thống lớn hơn chính b.
+
 **Độ phân giải:** tick LA 125 ns (8 MHz); chu kỳ mẫu mic 41,7 µs; với cross-correlation, độ phân giải hiệu dụng cỡ vài chục µs. Tiêu chí ≤1 ms đạt với biên hơn một bậc độ lớn, **nếu** sai số hệ thống (bộ dò, khoảng cách) đã được kiểm.
 
 **Chặng host:** p50 cỡ 1 ms, có đuôi; với `stress-ng`, p99 vòng mở tăng rõ còn p99 vòng kín tăng ít hơn nhiều `[tự đo]`. Nếu vòng mở và vòng kín cho cùng p99 dưới tải, kiểm lại xem lịch gửi có thật sự cố định không.
@@ -564,8 +612,7 @@ p50 và max giống nhau; p99 lệch khoảng 10 lần. Vòng kín vẫn *thấy
 | Std lớn (vài ms) ở chế độ lạnh | Pha DMA ngẫu nhiên, **đúng như mô hình** | So std với T/√12 | Không sửa; báo cáo như đặc tính |
 | Std lớn ở chế độ dừng | Mic xê dịch, tiếng vọng, bộ dò ngưỡng ở âm lượng thấp | So ngưỡng vs xcorr; nghe phòng | Giá cố định, tăng âm lượng burst, dùng xcorr |
 | Hai phương pháp (LA vs I2S thứ hai) lệch nhau không hằng số | Một vùng đệm ở TX phụ thuộc cấu hình mà một phương pháp không thấy | Vẽ chênh lệch theo cấu hình | Tìm vùng đệm; LA là trọng tài |
-| Decoder I2S của PulseView báo lỗi khung | LA lấy mẫu quá thưa so với BCK | Đếm mẫu/chu kỳ BCK | Tăng tần số LA, giảm số mẫu |
-| PulseView dừng sớm, báo thiếu mẫu | Băng thông USB của dongle không theo kịp | Thử tần số thấp hơn | Hạ tần số; đóng ứng dụng USB khác |
+| Decoder I2S báo lỗi khung, hoặc PulseView dừng sớm báo thiếu mẫu | LA lấy mẫu quá thưa so với BCK (sát 5 mẫu/bit), dây dài, hoặc băng thông USB của dongle không theo kịp | Đếm mẫu/chu kỳ BCK; thử tần số khác | Cân bằng: đủ mẫu/bit nhưng stream được; dây ngắn, ít kênh, đóng thiết bị USB khác |
 | Không tìm thấy onset | Fade-in, âm lượng quá nhỏ, ngưỡng quá cao (lỗi im lặng) | Vẽ bản ghi | Burst sườn dốc; xử lý trường hợp "không vượt ngưỡng" thành lỗi rõ ràng |
 | RTT p99 vòng kín đẹp nhưng nghe tiếng tách khi host bận | Coordinated omission | Chạy vòng mở | Báo số vòng mở |
 
@@ -579,8 +626,8 @@ p50 và max giống nhau; p99 lệch khoảng 10 lần. Vòng kín vẫn *thấy
    <details><summary>Hướng nghĩ</summary>Mỗi robot có hằng số lệch riêng (khoảng cách mic–loa do lắp ráp, mic khác lô, phiên bản firmware). Không có trọng tài thì chỉ so được *biến thiên theo thời gian* của từng con, không so tuyệt đối giữa các con. Cần một "golden unit" đo bằng LA để hiệu chuẩn từng loại phần cứng.</details>
 3. **[Vì sao không]** Vì sao không bật GPIO marker từ mini PC qua một USB-GPIO adapter, cho khỏi sửa firmware?
    <details><summary>Hướng nghĩ</summary>Marker phải nằm cùng miền thời gian với sự kiện được đánh dấu. Lệnh từ userspace Linux qua USB có trễ và jitter cỡ ms, đúng bằng thứ bạn đang đo. Dụng cụ đo phải tốt hơn đại lượng đo ít nhất một bậc.</details>
-4. **[Nếu…thì]** Nếu bạn đổi mic sang một mic analog qua ADC của ESP32, phần nào của ngân sách sai số đổi?
-   <details><summary>Hướng nghĩ</summary>Mất group delay decimation của mic MEMS, thêm độ trễ và jitter của ADC + DMA nhận, thêm câu hỏi ADC lấy mẫu có cùng clock với I2S TX không. Ngân sách không biến mất, chỉ đổi dòng.</details>
+4. **[Nếu…thì]** Nếu điểm chặn b của hồi quy khoảng cách ra **âm**?
+   <details><summary>Hướng nghĩ</summary>Âm thanh không thể tới mic trước khi rời DOUT. b âm nghĩa là có sai số hệ thống lớn hơn chính b: thường là khoảng cách đo thừa (tới mặt chip thay vì lỗ), hoặc hai chuỗi DOUT/mic lệch lưới thời gian khi export. Đây là phép kiểm tính hợp lý miễn phí.</details>
 5. **[Liên ngành]** Thí nghiệm đo vận tốc neutrino OPERA (2011) báo hạt nhanh hơn ánh sáng ~60 ns; nguyên nhân sau đó được xác định là một đầu nối cáp quang lỏng trong hệ thống đo thời gian. Map câu chuyện đó vào bảng ngân sách sai số của bạn: dòng nào là "đầu nối lỏng" của bạn?
    <details><summary>Hướng nghĩ</summary>Sai số hệ thống trong chính chuỗi đo thời gian, không lộ ra khi lặp. Ở đây: marker đặt sai dòng, khoảng cách đo sai, bộ dò onset trễ theo âm lượng. Cách bắt: một phép đo độc lập bằng nguyên lý khác (phương pháp dự phòng, hai khoảng cách).</details>
 6. **[Phản biện]** "Chỉ cần tiêu chí ≤1 ms, nên LA 24 MHz hay 8 MHz không quan trọng." Đúng hay sai, và chỗ nào trong chuỗi đo mới là nút thắt của độ phân giải?
@@ -605,13 +652,14 @@ p50 và max giống nhau; p99 lệch khoảng 10 lần. Vòng kín vẫn *thấy
 | c ≈ 331,3 + 0,606·T m/s | [chuẩn] | Xấp xỉ tuyến tính quanh nhiệt độ phòng |
 
 **Đã sửa so với bản gốc/Gemini:**
-- *Gốc + Gemini:* "Buffer 1M mẫu ở 24 MHz chỉ được ~42 ms" như một giới hạn phần cứng. Clone fx2lafw **stream** qua USB; số mẫu là cài đặt trong PulseView. Giới hạn thật là băng thông USB của dongle và RAM host. Lý do hạ tần số là để stream ổn định và đủ thời lượng, không phải "bộ đệm 1M".
+- *Gốc + Gemini:* "Buffer 1M mẫu ở 24 MHz chỉ được ~42 ms" như một giới hạn phần cứng. Clone fx2lafw **stream** qua USB; số mẫu là cài đặt trong PulseView. Giới hạn thật là băng thông USB của dongle và RAM host. Thêm nữa, 1M mẫu ở 8 MHz là 125 ms, vẫn không đủ cho cấu hình DMA 200 ms mà chính bảng "Số phải ra" của gốc yêu cầu.
+- *Gốc:* "trừ 0,87 ms là ra DMA + DAC + amp". Phần còn lại còn chứa trễ mic và lệch bộ dò; thay bằng hồi quy nhiều khoảng cách, độ dốc kiểm chéo tốc độ âm thanh.
+- *Gốc, phương pháp dự phòng:* "timestamp lúc ghi sample phát đầu tiên và lúc nhận từng frame mic" bằng cùng timer. Cả hai ở ranh giới buffer phần mềm, phía thu có thêm DMA RX; sửa: chỉ số frame + hiệu chuẩn một lần bằng LA.
+- *Gemini:* "click cực ngắn khoảng 10 sample biên độ tối đa". Click vài mẫu có ít năng lượng trong dải loa nhỏ phát tốt; dùng tone burst trong dải 1–4 kHz và cross-correlation.
 - *Gốc + Gemini:* cấu hình "DMA 200 ms" ngầm định 3 × 1600 frame (K3 Bài 4). Ở 16-bit stereo, 1 frame = 4 byte, 1600 frame = 6400 byte > 4092 byte/descriptor; driver sẽ hạ xuống ≤1023 frame. Đổi sang 6 × 800 (3200 byte/descriptor) cho 4800 frame = 200 ms. (Ghi chú cho người điều phối: K3 Bài 4 dùng 1600 và 800 frame; 1600 vướng cùng giới hạn.)
 - *Gốc:* "phần dư 1–5 ms là DAC + amp + loa". Thành phần đúng hơn: bộ lọc nội suy của DAC, bộ lọc decimation của mic MEMS, và lệch của bộ dò onset; amp và loa nhỏ hơn nhiều `[ước lượng]`.
 - *Gốc:* "độ trễ ≈ 200 ms + vài ms" (tức đúng desc × frame / fs). Thực tế phụ thuộc chế độ đo (khởi động lạnh vs trạng thái dừng) và vị trí dữ liệu vừa ghi trong vòng descriptor; thêm hai chế độ và kiểm độ dốc (lập luận ở khối 🔒 mục 7).
-- *Gemini:* "phần mềm không tự đo được vì `clock_gettime` tốn chu kỳ CPU". Lý do thật: phần mềm không quan sát được các vùng đệm và bộ chuyển đổi nằm sau dòng code cuối cùng. `clock_gettime` qua vDSO chỉ tốn cỡ chục ns `[ước lượng]`.
-- *Gemini:* "một thạch anh duy nhất → loại bỏ hoàn toàn độ trôi clock". Gần đúng ở thang này (sai số ppm × 200 ms cỡ chục µs) nhưng không phải "hoàn toàn"; ghi vào ngân sách.
-- *Gemini:* "toggle GPIO tốn vài nano-giây": chưa kiểm; đổi thành đo độ rộng xung.
+- *Gemini:* ba khẳng định không đứng: "phần mềm không tự đo được vì `clock_gettime` tốn chu kỳ CPU" (lý do thật: phần mềm không thấy các vùng đệm và bộ chuyển đổi sau dòng code cuối; `clock_gettime` qua vDSO cỡ chục ns `[ước lượng]`); "một thạch anh duy nhất loại bỏ hoàn toàn độ trôi clock" (offset giữa kênh thì đúng, sai số tỉ lệ ppm × 200 ms cỡ chục µs vẫn còn); "toggle GPIO tốn vài nano-giây" (chưa kiểm; đo độ rộng xung).
 - *Gốc:* đo chặng host bằng echo + RTT/2 không nói vòng kín/vòng mở. Thêm vòng mở (coordinated omission) và ghi rõ giả định đối xứng.
 - *Gốc:* "lặp 10 lần" → 20 lần mỗi ô, báo min/max và dot plot; phân biệt độ phân giải dụng cụ với độ phân tán của hệ.
 
@@ -623,7 +671,8 @@ p50 và max giống nhau; p99 lệch khoảng 10 lần. Vòng kín vẫn *thấy
 - **Tự kiểm tra:** (1) giải thích lại cho một backend engineer khác trong 5 câu vì sao RTT/2 vòng kín có thể sai hai cách; (2) vẽ lại timing diagram ở mục 2 từ trí nhớ; (3) hai câu:
   - LA 8 MHz, mic 24 kHz, bộ dò ngưỡng. Thành phần nào của ngân sách quyết định độ phân giải?
   - Xung marker rộng 16 ms ở cấu hình 3 × 400 frame, 24 kHz. Điều đó nói gì về trạng thái DMA lúc ghi?
-  <details><summary>Đáp án</summary>Chu kỳ mẫu mic (41,7 µs) và sai lệch hệ thống của bộ dò (0,1–0,2 ms trong mô phỏng); tick LA 125 ns nhỏ hơn hai bậc. Xung 16 ms ≈ một descriptor (400/24000 = 16,7 ms): write phải chờ gần trọn một descriptor phát xong mới có chỗ, tức mọi descriptor khác đang đầy dữ liệu chờ phát; dữ liệu vừa ghi sẽ ra sau khoảng (desc − 1) descriptor.</details>
+  - Bạn đo `DOUT → mic` = 2,10 ms ở 30 cm và 2,96 ms ở 60 cm. Tốc độ âm thanh suy ra? Điểm chặn?
+  <details><summary>Đáp án</summary>Chu kỳ mẫu mic (41,7 µs) và sai lệch hệ thống của bộ dò (0,1–0,2 ms trong mô phỏng); tick LA 125 ns nhỏ hơn hai bậc. Xung 16 ms ≈ một descriptor (400/24000 = 16,7 ms): write phải chờ gần trọn một descriptor phát xong mới có chỗ, tức mọi descriptor khác đang đầy dữ liệu chờ phát; dữ liệu vừa ghi sẽ ra sau khoảng (desc − 1) descriptor. Hồi quy: độ dốc (2,96 − 2,10)/0,30 = 2,87 ms/m → c ≈ 348 m/s (hợp với ~28 °C); điểm chặn 2,10 − 0,30 × 2,87 ≈ 1,24 ms. Hai điểm thì không có ước lượng sai số; cần ≥ 3 khoảng cách để thấy residual.</details>
 
 ---
 
@@ -712,6 +761,7 @@ plt.ylabel("underrun / giờ (0 vẽ ở 0.5)"); plt.legend(); plt.show()
 - *Mô hình của bạn ở K3 lượt 6:* "không có sự realtime forward 100% nào… luôn có buffer ở giữa… để kiểm soát sự ổn định và tradeoff… phần cứng dùng ram để đánh đổi. tất nhiên latency sẽ giảm nhưng bù lại cho phép khả năng kiểm soát… hai bên phần cứng hiểu giới hạn của nhau." — **ĐÚNG MỘT PHẦN.** Đúng: buffer là cách chuẩn để nối hai miền có nhịp khác nhau; "hai bên hiểu giới hạn của nhau" có tên chuẩn là **flow control** (credit-based ở K3 Bài 4). Gãy một: buffer **tăng** độ trễ, không giảm; thứ đổi được là *tính liên tục dưới jitter*. Gãy hai: buffer chỉ hấp thụ **phương sai**, không hấp thụ **chênh lệch tốc độ trung bình**. Phản ví dụ: nếu nguồn audio là một mic chạy trên clock khác, lệch 100 ppm so với clock I2S, chênh 2,4 frame/s; một buffer 1200 frame giữ ở nửa đầy sẽ cạn (hoặc tràn) sau ~250 s, buffer to hơn chỉ hoãn lại. Chỉ flow control (một bên làm chủ nhịp) hoặc resampling mới sửa được. Ở V1, credit flow control làm clock I2S của ESP32 thành nhịp chủ, nên vấn đề này không xuất hiện; nó sẽ xuất hiện ở K5 khi ghép nhiều cảm biến có clock riêng.
 - *Mô hình K3 lượt 7 (đã ghi ở mục 7 quy chuẩn):* "RAM sinh ra để làm buffer". **SAI**: buffer là một *vai trò*, bộ nhớ là *tài nguyên*; nối hai miền clock trong phần cứng là việc của FIFO bất đồng bộ. Bài này cho thấy cùng một vùng RAM có thể là DMA ring (vai trò: khe dư cho task nạp) hoặc ring buffer (vai trò: khe dư cho host).
 - *"Buffer lớn hơn luôn an toàn hơn."* — **ĐÚNG MỘT PHẦN.** Đúng với underrun. Gãy: (1) bufferbloat cho lệnh điều khiển; (2) buffer sâu che giấu suy giảm phía trên cho tới khi nó cạn một lần là cạn hẳn (bạn mất tín hiệu cảnh báo sớm); (3) RAM ESP32-S3 có hạn. Phản ví dụ: ring 5 s làm kill switch có độ trễ tới 5 s nếu lệnh dừng chỉ được thực thi khi ring rỗng.
+- *"Chạy 10 phút không có underrun nào ⇒ underrun ≈ 0/giờ."* — **SAI.** 0 sự kiện trong t chỉ cho cận trên 95% ≈ 3/t (→ F1.4). Phản ví dụ: một hệ có 6 underrun/giờ thật sự vẫn cho 0 underrun trong 10 phút với xác suất e⁻¹ ≈ 37%.
 
 ### 4. Thuật ngữ
 
@@ -767,10 +817,10 @@ Task chiếm CPU H = … ms: frame nhỏ nhất an toàn = … ; ghim sang core 
 1. **Chọn 5 mức** `dma_frame_num` cách nhau theo cấp số nhân: 80, 160, 320, 640, 1000; `dma_desc_num` = 3 cố định. Nếu muốn một điểm ~160 ms, dùng `dma_desc_num` = 6 × 640 và ghi rõ là đổi hai biến.
 2. **Đọc lại giá trị thật** driver chấp nhận cho từng mức (firmware in ra khi khởi động, host log lại). Giá trị xin ≠ giá trị đọc lại → dừng, sửa trước khi đo.
 3. **Đếm underrun bằng hai nguồn:** bộ đếm trong task phát (mỗi lần thấy ring rỗng khi cần nạp) và callback sự kiện của driver I2S (`on_send_q_ovf` hoặc tương đương theo phiên bản; `[tự đo]`). Hai nguồn lệch nhau thì ghi lại; đó là thông tin về chỗ dữ liệu cạn (ring hay DMA). Gửi bộ đếm lên host kèm timestamp.
-4. **Mỗi điểm phát liên tục ≥10 phút** (tiêu chí M4 số 3), đo độ trễ bằng phương pháp Bài 9 (chế độ trạng thái dừng) ở đầu và cuối phiên.
-5. **Ba kịch bản:** nhàn; tải host (`stress-ng --cpu 4` trên mini PC); tải ESP32 (task WiFi gửi log/UDP liên tục). Ghi core và ưu tiên của từng task.
+4. **Mỗi điểm phát liên tục ≥10 phút** (tiêu chí M4 số 3); ở hai điểm sát vách, chạy **≥60 phút**: đó là nơi số đếm nhỏ và khoảng tin cậy rộng nhất. Đo độ trễ bằng **hai cách**: (a) phương pháp Bài 9 (LA hoặc phương pháp dự phòng đã hiệu chuẩn, chế độ trạng thái dừng) ở đầu và cuối phiên; (b) **telemetry mức đầy** ring + DMA, ESP32 lấy mẫu theo timer phần cứng mỗi 100 ms, suy ra W = L/fs suốt phiên. Hai cách phải khớp (Little); lệch hơn vài ms nghĩa là có vùng đệm chưa đếm (buffer TinyUSB/CDC, buffer phía host). Telemetry 100 ms chỉ thấy trung bình, không thấy các lần tụt ngắn.
+5. **Ba kịch bản:** nhàn; tải host (`stress-ng --cpu 4` trên mini PC: N100 có 4 nhân, không hyperthreading, nên lệnh này chiếm hết nhân; lần hai thêm TTS chạy đồng thời); tải ESP32 (task WiFi gửi log/UDP liên tục). Ghi core và ưu tiên của từng task. WiFi làm ESP32 kéo dòng theo xung `[chuẩn]`, nên underrun ở kịch bản này có thể lẫn với sụt áp (K3 Bài 6): ghi `esp_reset_reason()` và điện áp rail trong lúc chạy để tách hai nguyên nhân.
 6. **Thí nghiệm có tải đã biết (thêm, ~1h):** task "hog" trên ESP32 bận vòng lặp H ms mỗi P ms (ví dụ H = 5, 10, 20 ms; P = 100 ms), cùng core với task phát. Kiểm dự đoán WCET. Rồi ghim hog sang core kia, chạy lại một mức. Đây là phép thử mô hình chứ không chỉ đo: bạn biết đáp án trước nhờ biết H.
-7. **Vẽ:** độ trễ vs `dma_frame_num`; underrun/giờ vs `dma_frame_num` (trục log, điểm 0 vẽ ở đáy có ký hiệu riêng); ba kịch bản chồng lên nhau; mỗi điểm kèm **khoảng tin cậy 95%** cho tỉ lệ (Poisson). Trên trục X ghi cả frame và ms.
+7. **Vẽ:** độ trễ vs `dma_frame_num`; underrun/giờ vs `dma_frame_num` (trục log, điểm 0 vẽ ở đáy có ký hiệu riêng); ba kịch bản chồng lên nhau; mỗi điểm kèm **khoảng tin cậy 95%** cho tỉ lệ: với k sự kiện trong t giờ, khoảng Poisson chính xác `[chi2.ppf(0.025, 2k)/2, chi2.ppf(0.975, 2k+2)/2] / t` (`scipy.stats.chi2`), quy tắc ba khi k = 0. Vẽ dự đoán của mô phỏng lên cùng đồ thị. Trên trục X ghi cả frame và ms.
 8. **Kiểm thời lượng:** với điểm vận hành bạn định chọn, tính thời gian chạy cần để chứng minh tỉ lệ < mục tiêu (quy tắc ba). Nếu dài hơn 10 phút (gần như chắc chắn), chạy riêng điểm đó lâu hơn, hoặc gộp vào soak test K3 Bài 17.
 9. **Chọn điểm vận hành cho V1 và viết `decisions.md`** theo mẫu ở mục 7.
 
@@ -808,8 +858,11 @@ Cột underrun là hình dạng định tính của gốc `[ước lượng]`; s
 
 > **Quyết định:** `dma_frame_num` = X, `dma_desc_num` = Y (đọc lại: X', Y'), độ trễ DMA đo = Z ms (Bài 9, trạng thái dừng), ring ESP32 = W ms.
 > **Lý do:** ở tải dự kiến của V1 (kịch bản …), điểm này cho underrun = a trong b giờ (cận trên 95%: c/giờ), độ trễ DMA chiếm d% của p50 tổng (Bài 8). Điểm thấp hơn (X/2) cho underrun gấp M lần ở cùng tải. Lệnh điều khiển đi kênh riêng, không xếp sau ring.
-> **Điều kiện xem lại:** thêm task trên ESP32 (K7), đổi sample rate, hoặc soak test thấy underrun > c/giờ.
+> **Độ trễ dừng khi kill:** = phần DMA không xả được (+ ring nếu lệnh kill không xả ring), đo ở K3 Bài 15.
+> **Điều kiện xem lại:** thêm task trên ESP32 (K7 C4.1, C12.1), đổi sample rate, hoặc soak test thấy underrun > c/giờ.
 > **Số đo:** [link tới lab/10-…/results.csv]
+
+**Hai SLI, không phải một:** một underrun dài 300 ms và 30 underrun dài 10 ms; đếm theo lần thì cái sau tệ hơn, tai người có thể thấy cái trước tệ hơn. Ghi cả số lần và tổng thời lượng im lặng (hoặc phân bố độ dài) nếu bộ đếm của bạn phân biệt được (→ F7.4, Goodhart).
 
 Gemini đưa một đoạn mẫu có số cụ thể ("160 frame làm tăng underrun gấp 8 lần khi CPU host 80%"): đó là số bịa để minh họa, đừng chép.
 </details>
@@ -835,7 +888,9 @@ Gemini đưa một đoạn mẫu có số cụ thể ("160 frame làm tăng unde
    <details><summary>Hướng nghĩ</summary>Thích nghi đổi độ trễ theo thời gian: hôm nay 50 ms, mai 300 ms, và độ trễ của kill switch đổi theo. Bạn mất một hằng số để kiểm. Thích nghi đáng làm khi đã đo được phân bố tải thật và có tiêu chí khi nào co lại; ở V1 điểm vận hành cố định dễ kiểm hơn.</details>
 4. **[Nếu…thì]** Nếu chuyển sang 48 kHz, giữ nguyên `dma_frame_num`, độ trễ DMA, khe dư và số ngắt/giây đổi thế nào? Đường cong có giữ hình dạng không?
    <details><summary>Hướng nghĩ</summary>Cùng số frame thì thời gian giảm một nửa, khe dư giảm một nửa, số ngắt gấp đôi; byte/descriptor giữ nguyên. Vẽ theo **ms** thì đường cong do tải ESP32 gần như giữ chỗ; vẽ theo frame thì vách dịch phải gấp đôi. Chọn trục là chọn câu chuyện.</details>
-5. **[Liên ngành]** CoDel điều khiển *thời gian lưu*, không điều khiển *độ dài hàng đợi*. Viết lại quyết định ring ESP32 của bạn theo tinh thần đó: biến điều khiển là gì, ngưỡng là gì?
+5. **[Quy mô]** K7: ESP32 vừa phát audio, vừa chạy vòng PID motor 100 Hz, vừa đọc encoder. Đường cong này dịch thế nào, và ai được ưu tiên?
+   <details><summary>Hướng nghĩ</summary>Vòng điều khiển motor là hard real-time, audio là soft: khi tranh chấp, audio phải chịu. Vách của đường tải ESP32 dịch sang phải; DMA phải lớn hơn, hoặc audio tách sang nhân khác/MCU khác (K7 C4.1 kiến trúc firmware, K7 C12.1 gắn chuỗi audio lên robot).</details>
+6. **[Liên ngành]** CoDel điều khiển *thời gian lưu*, không điều khiển *độ dài hàng đợi*. Viết lại quyết định ring ESP32 của bạn theo tinh thần đó: biến điều khiển là gì, ngưỡng là gì?
    <details><summary>Hướng nghĩ</summary>Mục tiêu "mẫu ở trong ring không quá X ms" (Little: L = λX); host giữ mức đầy quanh mục tiêu bằng credit, không lấp đầy hết. Với λ cố định thì hai cách tương đương; khác biệt lộ ra khi λ đổi (đổi sample rate) hoặc khi có nhiều luồng.</details>
 
 ### 10. Liên kết ra ngoài
@@ -854,6 +909,8 @@ Gemini đưa một đoạn mẫu có số cụ thể ("160 frame làm tăng unde
 | ESP32-S3 hai core, FreeRTOS SMP, ghim task được | [spec] | Tài liệu ESP-IDF FreeRTOS; tên API kiểm theo phiên bản |
 | Callback underrun/overflow của driver I2S | [tự đo] | Tên và ngữ nghĩa đổi giữa các phiên bản ESP-IDF |
 | Tải host không ảnh hưởng khi ring đủ sâu | [ước lượng] | Từ mô hình; kiểm bằng kịch bản tải host |
+| WiFi gây xung dòng trên ESP32 | [chuẩn] | Biên độ `[tự đo]`, K3 Bài 6 |
+| Khoảng Poisson chính xác qua χ² | [chuẩn] | k = 2 trong 1 h → [0,24; 7,2]/h (đã tính bằng scipy) |
 
 **Đã sửa so với bản gốc/Gemini:**
 - *Gốc + Gemini:* mức 1280 frame (desc = 3). Ở 16-bit stereo, 1280 × 4 = 5120 byte > 4092; driver hạ về ≤1023 frame và điểm thứ năm trùng gần với giá trị bị ép. Đổi thành 1000 frame (4000 byte), hoặc tăng `dma_desc_num` nếu cần điểm lớn hơn.
@@ -861,6 +918,8 @@ Gemini đưa một đoạn mẫu có số cụ thể ("160 frame làm tăng unde
 - *Gốc:* độ trễ lý thuyết = desc × frame / fs. Thêm cột (desc − 1) × frame / fs và tham chiếu kết quả độ dốc Bài 9.
 - *Gemini:* "bộ đệm trung gian cách ly hai vùng clock". Ring hấp thụ jitter (phương sai), không cách ly clock; nhịp chung có được nhờ credit flow control làm clock I2S thành nhịp chủ.
 - *Gemini:* đoạn `decisions.md` mẫu với số cụ thể ("gấp 8 lần khi CPU host 80%"): số minh họa không có nguồn; bỏ.
+- *Gốc:* "underrun ~0" từ 10 phút đo. Sửa: báo số đếm + thời gian + khoảng tin cậy; chạy ≥ 60 phút sát vách; đo độ trễ thêm bằng telemetry mức đầy để kiểm Little.
+- Thêm: WiFi có thể gây sụt áp, phải tách underrun do phần mềm khỏi reset do nguồn.
 - Thêm: thí nghiệm tải đã biết (hog H ms) để kiểm mô hình thay vì chỉ đo; đếm underrun bằng hai nguồn; khoảng tin cậy trên đồ thị.
 
 ### 12. Đọc thêm và tự kiểm tra
@@ -870,7 +929,7 @@ Gemini đưa một đoạn mẫu có số cụ thể ("160 frame làm tăng unde
 - **Đào sâu (tùy chọn):** Jim Gettys, Kathleen Nichols, "Bufferbloat: Dark Buffers in the Internet", *ACM Queue*, 2011.
 - **Tự kiểm tra:** (1) giải thích lại cho một backend engineer khác trong 5 câu vì sao đường cong underrun là đồ thị đuôi lật ngang; (2) vẽ lại sơ đồ hai vùng đệm, hai nguồn tải từ trí nhớ; (3) hai câu:
   - Ring ESP32 giữ trung bình 7200 byte ở 24 kHz, 16-bit stereo. Độ trễ ring trung bình là bao nhiêu, và đó là định luật gì?
+  - Slot 32-bit stereo ở 24 kHz: `dma_frame_num` tối đa?
+  - Điểm A: 2 underrun trong 60 phút. Điểm B: 0 trong 10 phút. B có tốt hơn A không?
   - Bạn chạy 30 phút ở một điểm, thấy 0 underrun. Cận trên 95% của tỉ lệ là bao nhiêu lần/giờ?
-  <details><summary>Đáp án</summary>7200 byte / 4 = 1800 frame; 1800 / 24 000 = 75 ms; định luật Little W = L/λ. 30 phút = 0,5 giờ → 3 / 0,5 = 6 lần/giờ.</details>
-
----
+  <details><summary>Đáp án</summary>7200 byte / 4 = 1800 frame; 1800 / 24 000 = 75 ms; định luật Little W = L/λ. 30 phút = 0,5 giờ → 3 / 0,5 = 6 lần/giờ. Slot 32-bit stereo: 8 byte/frame → 4092 / 8 = 511 frame (≈ 21,3 ms mỗi descriptor). A vs B: chưa biết; A ước lượng 2/giờ, CI 95% ≈ 0,24–7,2/giờ; B chỉ nói được < 18/giờ; hai khoảng chồng nhau nhiều, chạy B thêm 50 phút.</details>

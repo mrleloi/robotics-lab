@@ -6,12 +6,12 @@
 
 ```mermaid
 flowchart LR
-    S[Google Form → Sheet] -->|push / pull| I[Bài 14<br/>ingest + dedupe<br/>state machine]
-    I --> M[Bài 15<br/>moderation queue<br/>kill switch]
-    M --> D[Bài 16<br/>daemon + firmware<br/>watchdog hai tầng]
-    D --> E[ESP32-S3 → DAC → amp → loa]
-    D --> K[Bài 17 · TN-5<br/>soak 72h]
-    K --> G[Gate Khóa 3<br/>7 tiêu chí M4]
+    S["Google Form → Sheet"] -->|push / pull| I["Bài 14<br/>ingest + dedupe<br/>state machine"]
+    I --> M["Bài 15<br/>moderation queue<br/>kill switch"]
+    M --> D["Bài 16<br/>daemon + firmware<br/>watchdog hai tầng"]
+    D --> E["ESP32-S3 → DAC → amp → loa"]
+    D --> K["Bài 17 · TN-5<br/>soak 72h"]
+    K --> G["Gate Khóa 3<br/>7 tiêu chí M4"]
 ```
 
 | Bài | Giờ | Viên nang nền cần trước | Quyết định ra được |
@@ -19,8 +19,8 @@ flowchart LR
 | 14 — Ingest, dedupe, state machine | 6 | F3.5, F4.3, F2.5 | Push, pull hay lai; crash giữa lúc đang phát thì phát lại, bỏ, hay resume |
 | 15 — Moderation queue và kill switch | 5 | F2.1, F5.2, F5.7 | Nút kill cắt ở tầng nào; khi hỏng thì hệ đứng về phía im lặng hay phía phát |
 | 16 — Daemon, firmware, watchdog hai tầng | 5 | F5.7, F7.5, F7.7 | Watchdog vỗ ở đâu để nó bắt được treo thật; restart vô hạn hay dừng hẳn |
-| 17 — TN-5: 72 giờ không ai trông | 6 + 72 treo máy | F7.6, F1.4, F1.6 | 72h không lỗi cho phép nói gì và không cho phép nói gì; số đầu tiên của power budget |
-| Gate Khóa 3 | 6 | — | PASS / cắt scope |
+| 17 — TN-5: 72 giờ không ai trông | 6 + 72 treo máy | F7.4, F7.6, F1.4, F1.6 | 72h không lỗi cho phép nói gì và không cho phép nói gì; số đầu tiên của power budget |
+| Gate Khóa 3 | 6 | F1.7, F2.3 | PASS / cắt scope (tiêu chí chép từ `00-tong-quan.md`; quy trình làm gate ở cuối file này) |
 
 ---
 
@@ -32,11 +32,11 @@ flowchart LR
 
 Ngành thanh toán khổ vì đúng bài toán này trước bạn. Client gọi API "trừ tiền", mạng đứt **sau** khi server đã trừ nhưng **trước** khi response về. Client không biết lệnh đã chạy chưa, nên retry, và khách bị trừ hai lần. Stripe giải quyết bằng header `Idempotency-Key`: client sinh một khóa cho mỗi ý định, server nhớ kết quả theo khóa, lần gọi lặp lại nhận đúng response cũ. Brandur Leach (khi làm ở Stripe) viết bài *Implementing Stripe-like Idempotency Keys in Postgres* và chỉ ra phần khó nhất: khi một bước gọi ra **hệ bên ngoài** ("foreign state mutation"), không transaction nào của bạn bao được nó, nên phải chia việc thành các pha nguyên tử với *recovery point* giữa chúng [chuẩn].
 
-Hệ của bạn có một hệ bên ngoài không có header nào: **không khí trong văn phòng**. Một confession phát hai lần là một sự cố mọi người cùng nghe thấy. Một confession bị cắt giữa câu rồi phát lại từ đầu thì còn tệ hơn: người nghe biết có trục trặc, và nội dung nhạy cảm được nhắc lại. Bản gốc gọi đúng tên chuyện này: idempotency ở đây có hậu quả vật lý. Bài này đi thêm một bước: chỉ ra rằng **không có cấu hình nào** cho bạn "đúng một lần" trọn vẹn với tác dụng phụ vật lý, và bạn phải chọn kiểu hỏng nào chấp nhận được.
+Hệ của bạn có một hệ bên ngoài không có header nào: **không khí trong văn phòng**. Một confession phát hai lần là một sự cố mọi người cùng nghe thấy; bị cắt giữa câu rồi phát lại từ đầu còn tệ hơn, vì nội dung nhạy cảm được nhắc lại. Bản gốc gọi đúng tên: idempotency ở đây có hậu quả vật lý. Bài này đi thêm một bước: **không có cấu hình nào** cho "đúng một lần" trọn vẹn với tác dụng phụ vật lý; bạn phải chọn kiểu hỏng nào chấp nhận được.
 
 ### 2. Mô hình tư duy
 
-State machine của bản gốc, với những chỗ bản gốc để trống (đường đứt) mà bạn phải tự quyết:
+State machine của bản gốc, cộng những trạng thái bản gốc thiếu (`INTERRUPTED`, `KILLED`). Câu hỏi chính của bài: khởi động lại sau crash mà thấy bản ghi đang `SPEAKING` thì làm gì? Bản gốc không nói.
 
 ```mermaid
 stateDiagram-v2
@@ -47,16 +47,13 @@ stateDiagram-v2
     APPROVED --> QUEUED
     QUEUED --> SPEAKING
     SPEAKING --> DONE
-    SPEAKING --> FAILED
+    QUEUED --> FAILED: TTS lỗi trước khi phát
     FAILED --> QUEUED: retry (giới hạn)
     FAILED --> DEAD
+    SPEAKING --> INTERRUPTED: crash giữa câu
+    INTERRUPTED --> QUEUED: chỉ khi NGƯỜI quyết
     SPEAKING --> KILLED: Bài 15
     QUEUED --> KILLED: Bài 15
-    note right of SPEAKING
-      Khởi động lại sau crash mà thấy
-      bản ghi đang SPEAKING thì sao?
-      Bản gốc không nói. Đây là câu hỏi chính của bài.
-    end note
 ```
 
 Vì sao câu hỏi đó khó: trạng thái nằm trong DB, còn tác dụng phụ nằm ngoài không khí, và **không có transaction nào bao cả hai**.
@@ -107,29 +104,22 @@ for p, c in rows:
           f"{(lost > 0).mean():>8.3f}{lost.mean():>11.2f}{commits:>12d}")
 ```
 
-Chạy nó trước khi đọc tiếp. Bốn điều cần rút ra:
-
-1. Cửa sổ nguy hiểm **không phải** lúc ghi DB (vài ms) mà là lúc **đang phát** (hàng chục giây). Khi crash, gần như chắc chắn nó rơi vào giữa câu.
-2. Ba chính sách là ba điểm trên một đường đánh đổi: phát lại (at-least-once, nghe trùng), bỏ (at-most-once, mất đoạn cuối), checkpoint (trùng tối đa một khoảng checkpoint, đổi lại nhiều lần ghi đĩa hơn). Không có điểm nào trùng = 0 **và** mất = 0.
-3. Checkpoint mịn hơn thì trùng ít hơn nhưng ghi nhiều hơn, và "offset đã phát" phải lấy từ chỗ âm thanh **thật sự** ra loa (ESP32 báo lên), không phải chỗ host đã gửi: giữa hai chỗ đó là ring buffer và DMA buffer của Bài 4.
-4. Dedupe ở cửa vào (UNIQUE) giải quyết một bài toán khác hẳn: **record** trùng. Nó không chạm tới **lần phát** trùng.
+Viết dự đoán P5 (mục 5) trước khi chạy; kết quả và điều cần rút ra nằm trong khối 🔒 ở mục 7.
 
 ### 3. Cầu nối từ backend
 
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
-| `Idempotency-Key` của API thanh toán | `source_id` + ràng buộc UNIQUE ở ingest | Khóa chặn **record** trùng; lần **phát** trùng sinh ra sau đó, ở retry của player, không đi qua ingest | Test "gửi 5 lần" PASS, nhưng crash giữa câu vẫn phát lại cả câu |
-| Kafka consumer commit offset sau khi xử lý (at-least-once) | Commit `DONE` sau khi phát xong | Ở backend, downstream thường idempotent (upsert, khóa tự nhiên), nên xử lý lặp vô hại. Loa không idempotent | Áp nguyên thói quen at-least-once thì mỗi crash là một lần nghe trùng |
-| Kafka exactly-once semantics (transaction read-process-write) | "Exactly-once" cho chuỗi phát | EOS chỉ đúng **bên trong** Kafka. Ra khỏi Kafka (gửi email, gọi API ngoài, phát loa) thì quay về at-least/at-most | Tin rằng chọn đúng công cụ sẽ có "đúng một lần" và không thiết kế chính sách khôi phục |
-| Transactional outbox | Đổi trạng thái + đẩy job vào hàng đợi trong **cùng** một transaction SQLite | Outbox giải bài dual-write DB + broker. Nó không giải DB + thế giới vật lý | Nghĩ rằng outbox đã đóng hết lỗ |
-| Webhook có retry (Stripe, GitHub retry nhiều lần trong nhiều giờ) | Apps Script `onFormSubmit` gọi `UrlFetchApp` tới endpoint của bạn | Trigger Apps Script chạy một lần; endpoint chết thì execution báo lỗi, không có hàng đợi retry phía Google [tự đo: xem tab Executions sau khi cố tình tắt tunnel] | Push thuần + tunnel chết 5 phút = record trong 5 phút đó không bao giờ tới |
-| `created_at` lấy từ DB server | `mono_ns` + `wall` trong log | `CLOCK_MONOTONIC` **về 0 mỗi lần boot**. Bài 17 rút điện 10 lần, tức 11 trục thời gian monotonic khác nhau | So sánh mono_ns qua reboot ra khoảng thời gian âm hoặc vô nghĩa. Phải kèm `boot_id` |
+| `Idempotency-Key` của API thanh toán | `source_id` + ràng buộc UNIQUE ở ingest | Khóa chặn **record** trùng; lần **phát** trùng sinh ra sau đó, ở bước khôi phục của player, không đi qua ingest | Test "gửi 5 lần" PASS, nhưng crash giữa câu vẫn phát lại cả câu |
+| Kafka consumer commit offset sau khi xử lý (at-least-once); Kafka EOS | Commit `DONE` sau khi phát xong | Ở backend downstream thường idempotent (upsert), xử lý lặp vô hại; EOS chỉ đúng **bên trong** Kafka. Loa không idempotent và không nằm trong transaction nào | Mỗi crash là một lần nghe trùng; hoặc tin rằng chọn đúng công cụ sẽ có "đúng một lần" |
+| Webhook có retry (Stripe, GitHub retry nhiều giờ) | Apps Script `onFormSubmit` gọi `UrlFetchApp` qua tunnel | Trigger chạy một lần; endpoint chết thì execution báo lỗi, không có hàng đợi retry phía Google [tự đo: tắt tunnel, xem tab Executions]. Endpoint qua tunnel là **public** | Tunnel chết 5 phút = record trong 5 phút đó không bao giờ tới; không xác thực thì ai biết URL cũng bơm được nội dung vào hàng đợi |
+| `created_at` lấy từ DB server | `mono_ns` + `wall` trong log | `CLOCK_MONOTONIC` **về 0 mỗi lần boot**; Bài 17 rút điện 10 lần = 11 trục monotonic | So mono_ns qua reboot ra khoảng âm hoặc vô nghĩa. Phải kèm `boot_id` |
 
 **Chấm mô hình:**
 
-- *"Có UNIQUE constraint thì không bao giờ phát trùng."* **SAI.** UNIQUE chặn hai **dòng** cùng khóa. Phản ví dụ: bản ghi duy nhất, đã `SPEAKING`, phát được 15 giây thì daemon bị `kill -9`. systemd khởi động lại, code khôi phục thấy `SPEAKING` (hoặc retry thấy `FAILED`) và đẩy lại vào hàng đợi. Chỉ có một dòng trong DB, nhưng người nghe nghe 15 giây đầu hai lần.
-- *Khóa dedupe của bản Gemini: `hash(row_id + nội dung + timestamp submit)`.* **ĐÚNG MỘT PHẦN.** Đúng ở chỗ cần một khóa ổn định. Gãy ở hai chỗ. (a) Số dòng trong Sheet không ổn định: ai đó sort hoặc xóa một dòng là cả bảng đổi số, các dòng cũ thành "record mới". (b) Trộn nội dung vào khóa nghĩa là sửa một dấu chấm trong Sheet cũng sinh ra record mới, và record mới đó lại vào hàng đợi phát. Tách hai vai trò ra: **khóa định danh** sinh ở nguồn và không bao giờ đổi (UUID do Apps Script ghi vào một cột lúc submit, hoặc ID response của Form), và **content_hash** lưu riêng để biết nội dung có đổi sau khi đã duyệt (Bài 15 cần cái này).
-- *"Exactly-once là bài toán đã có lời giải, chỉ cần chọn đúng hạ tầng."* **ĐÚNG MỘT PHẦN.** Đúng cho *hiệu ứng* bên trong một hệ có transaction (Kafka EOS, DB). Phản ví dụ: consumer Kafka EOS gửi email, crash sau khi gửi và trước khi commit, khởi động lại, gửi lần nữa. Email và âm thanh có chung tính chất: không thu hồi được và không có khóa dedupe ở phía người nhận.
+- *"Có UNIQUE constraint thì không bao giờ phát trùng."* **SAI.** UNIQUE chặn hai **dòng** cùng khóa. Phản ví dụ: bản ghi duy nhất, đã `SPEAKING`, phát được 15 giây thì daemon bị `kill -9`; code khôi phục thấy `SPEAKING` và đẩy lại vào hàng đợi. Một dòng trong DB, người nghe nghe 15 giây đầu hai lần.
+- *Khóa dedupe của bản Gemini: `hash(row_id + nội dung + timestamp submit)`.* **ĐÚNG MỘT PHẦN.** Đúng ở chỗ cần một khóa ổn định. Gãy: (a) số dòng Sheet đổi khi ai đó sort hoặc xóa một dòng; (b) trộn nội dung vào khóa thì sửa một dấu chấm sinh record mới, lại vào hàng đợi phát; và hash nội dung thuần gộp nhầm hai confession giống hệt nhau từ hai người. Tách hai vai trò: **khóa định danh** sinh ở nguồn, không bao giờ đổi (UUID do Apps Script ghi vào một cột lúc submit, hoặc ID response của Form), và **content_hash** lưu riêng để biết nội dung đổi sau khi đã duyệt (Bài 15).
+- *"Exactly-once là bài toán đã có lời giải, chỉ cần chọn đúng hạ tầng."* **ĐÚNG MỘT PHẦN.** Đúng cho hiệu ứng bên trong một hệ có transaction. Phản ví dụ: consumer Kafka EOS gửi email, crash sau khi gửi và trước khi commit, khởi động lại, gửi lần nữa. Email và âm thanh cùng tính chất: không thu hồi được, phía nhận không có khóa dedupe. Bạn chỉ chọn được nghiêng về "không lặp" hay "không sót".
 
 ### 4. Thuật ngữ
 
@@ -142,42 +132,35 @@ Chạy nó trước khi đọc tiếp. Bốn điều cần rút ra:
 | 🟢 | Compare-and-set khi chuyển trạng thái | `UPDATE ... WHERE id=? AND state=<cũ>` rồi kiểm số dòng bị ảnh hưởng | `SELECT` rồi `UPDATE` (race giữa hai worker) |
 | 🟢 | Reconciliation | Định kỳ đối chiếu toàn bộ nguồn với đích để vá cái push bỏ sót | Việc chỉ cần khi có bug |
 | 🟢 | `boot_id` | UUID của lần boot hiện tại (`/proc/sys/kernel/random/boot_id`) | Không cần, vì "đã có wall clock" |
-| 🟡 | Transactional outbox | Ghi thay đổi và "việc cần làm" trong cùng transaction, worker đọc ra sau | Cách đạt exactly-once với thế giới bên ngoài |
 | 🟡 | SQLite `journal_mode` / `synchronous` | Chế độ nhật ký (rollback/WAL) và mức fsync khi commit | "WAL là thứ chống hỏng file" (rollback journal cũng chống hỏng; khác nhau ở hiệu năng và durability) |
-| 🟡 | Two Generals problem | Hai bên qua kênh không tin cậy không thể chắc chắn cùng biết một việc đã xong | Chuyện lý thuyết không liên quan |
-| 🔴 | Saga / 2PC | Giao dịch phân tán nhiều bước | Cần cho V1 một máy |
+| 🔴 | Two Generals, saga, 2PC | Lý thuyết đồng thuận và giao dịch phân tán nhiều bước | Cần cho V1 một máy (chỉ cần biết tên) |
 
 ### 5. Dự đoán
 
 Viết vào `lab/14-ingest/prediction.md`, commit, rồi mới làm phần 6.
 
-**P1 — Độ trễ phát hiện.** Với phương án bạn chọn: nếu poll, chu kỳ `T` là bao nhiêu, độ trễ phát hiện *trung bình* và *tối đa* là bao nhiêu (tính theo `T` cộng thời gian một lần gọi API); một ngày bạn tốn bao nhiêu request, và so với quota thì còn bao nhiêu dư. Tra quota ở trang *Usage limits* của Google Sheets API (con số có thể đổi, ghi ngày tra). Nếu push: dự đoán khoảng độ trễ submit → `RECEIVED`, kèm lý do.
+**P1 — Độ trễ phát hiện.** Nếu poll: chu kỳ `T`, độ trễ phát hiện trung bình và tối đa (theo `T` + thời gian một lần gọi API), số request/ngày so với quota (tra trang *Usage limits* của Google Sheets API, ghi ngày tra). Nếu push: khoảng độ trễ submit → `RECEIVED`, kèm lý do.
 
-**P2 — Bắn trúng "giữa lúc ghi DB".** Tiêu chí của bài yêu cầu kill process giữa lúc ghi DB. Tham số cần đo trước: số commit mỗi giây khi hệ chạy bình thường `w` (đếm trong log), thời gian một commit `t_c` (đo bằng `time.perf_counter()` quanh `COMMIT`, hoặc `strace -T -e trace=fsync,fdatasync -p <pid>`). Công thức: tỉ lệ thời gian có transaction đang mở `d = w · t_c`; số lần kill ngẫu nhiên cần để có ≥95% khả năng trúng ít nhất một lần là `n ≈ ln(0.05) / ln(1 − d)`. Tính `n` cho số của bạn và viết ra bạn định trúng cửa sổ bằng cách nào.
+**P2 — Bắn trúng "giữa lúc ghi DB".** Đo trước số commit/giây khi hệ chạy bình thường `w` (đếm trong log) và thời gian một commit `t_c` (`time.perf_counter()` quanh `COMMIT`, hoặc `strace -T -e trace=fsync,fdatasync -p <pid>`). Tỉ lệ thời gian có transaction mở `d = w · t_c`; số lần kill ngẫu nhiên để có ≥95% khả năng trúng ít nhất một lần `n ≈ ln(0.05) / ln(1 − d)`. Tính `n` và viết cách bạn sẽ trúng cửa sổ.
 
-**P3 — Bảng khôi phục.** Trước khi viết code khôi phục, điền bảng: process chết và khởi động lại, tìm thấy bản ghi ở trạng thái X, hệ làm gì, người nghe trải qua gì.
+**P3 — Bảng khôi phục.** Process chết rồi khởi động lại, thấy bản ghi ở trạng thái X: hệ làm gì, người nghe trải qua gì.
 
-**P4 — Mất mạng 5 phút.** Trong 5 phút mất mạng có `k` confession được submit. Với phương án của bạn, bao nhiêu cái tới được hệ sau khi có mạng lại, và vì sao.
+**P4 — Mất mạng 5 phút** với `k` confession được submit trong lúc đó: bao nhiêu cái tới được hệ sau khi có mạng lại, vì sao.
+
+**P5 — Mô phỏng phần 2:** chính sách nào có P(nghe trùng) ≈ 1, chính sách nào có P(mất) ≈ 1, checkpoint 0,5 s tốn bao nhiêu commit mỗi lần phát.
 
 ```markdown
 # prediction.md — Bài 14   (commit: <hash>, ngày: <yyyy-mm-dd>)
-## P1 Độ trễ phát hiện
-- Phương án: push | pull (T = ___ s) | lai
-- Độ trễ TB = ___ s, tối đa = ___ s. Request/ngày = ___ ; quota (tra ngày ___) = ___
-## P2 Kill trúng cửa sổ ghi
-- w = ___ commit/s (đo từ ___), t_c = ___ ms (đo bằng ___) → d = ___ → n = ___
-- Cách tôi sẽ trúng cửa sổ có chủ đích: ___
+## P1 phương án: push | pull (T = ___ s) | lai · độ trễ TB ___ s, max ___ s · request/ngày ___ ; quota (tra ngày ___) ___
+## P2 w = ___ commit/s, t_c = ___ ms → d = ___ → n = ___ · cách trúng có chủ đích: ___
 ## P3 Bảng khôi phục
 | Trạng thái thấy khi restart | Hệ làm gì | Người nghe trải qua |
 |---|---|---|
-| RECEIVED | | |
-| PENDING_MODERATION | | |
-| APPROVED | | |
-| QUEUED | | |
+| RECEIVED / PENDING_MODERATION / APPROVED / QUEUED | | |
 | SPEAKING | | |
 | FAILED | | |
-## P4 Mất mạng 5 phút, k confession
-- Tới được hệ: ___ / k. Lý do: ___
+## P4 tới được hệ: ___ / k vì ___
+## P5 mô phỏng: trùng ≈ 1 ở ___ ; mất ≈ 1 ở ___ ; checkpoint 0,5 s: ___ commit/phát
 ```
 
 ### 6. Làm
@@ -193,6 +176,8 @@ Viết vào `lab/14-ingest/prediction.md`, commit, rồi mới làm phần 6.
 
 Chọn và **ghi lý do vào `decisions.md`** (quyết định kiến trúc số 3). Cả hai đều đúng; không ghi lý do mới sai. Nếu chọn push, viết thêm một dòng trả lời: *"record submit lúc tunnel chết đi đâu?"*. Nhớ rằng độ trễ Form → Sheet nằm ngoài tầm kiểm soát của bạn, và nó cũng có trong latency budget Bài 8.
 
+Chọn cái nào cũng chạy **đối soát** định kỳ (ví dụ mỗi 10 phút đọc toàn bộ ID trong Sheet, so với DB): webhook có thể mất, đối soát là thứ bảo đảm completeness. Nếu dùng webhook, **xác thực** endpoint: chữ ký HMAC trên body bằng secret dùng chung giữa Apps Script và FastAPI, có timestamp trong phần được ký để từ chối request cũ; secret để trong biến môi trường, không commit.
+
 **Bước 2 — Dedupe.** Khóa định danh sinh ở nguồn: thêm một cột trong Sheet do Apps Script điền UUID lúc submit (hoặc dùng ID response của Form). Không dùng số dòng. Lưu `content_hash` (SHA-256 của nội dung) ở cột riêng. SQLite: `PRIMARY KEY`/`UNIQUE` trên khóa định danh, chèn bằng `INSERT ... ON CONFLICT DO NOTHING`, kiểm `rowcount` để biết là mới hay trùng. Bật `PRAGMA journal_mode=WAL` và `PRAGMA synchronous=FULL`, rồi **đọc lại** cả hai pragma và in ra lúc khởi động (thói quen từ Bài 4: đừng tin thứ mình set, đọc lại thứ hệ chấp nhận). Python 3.12 đổi cách module `sqlite3` quản transaction (thuộc tính `autocommit` mới) [tự đo theo phiên bản Python bạn chạy]; cách an toàn là mở với `isolation_level=None` và tự `BEGIN`/`COMMIT`.
 
 **Bước 3 — State machine tường minh.** Một bảng chuyển trạng thái trong code; mọi chuyển ngoài bảng bị từ chối và ghi log. Mỗi chuyển là một compare-and-set trong một transaction, kèm một dòng vào bảng `transition`. Lõi tối thiểu:
@@ -203,8 +188,9 @@ import json, sqlite3, time, uuid, hashlib
 BOOT_ID = open("/proc/sys/kernel/random/boot_id").read().strip()
 ALLOWED = {  # bảng chuyển trạng thái tường minh - thứ không có trong bảng là bị cấm
     "RECEIVED": {"PENDING_MODERATION"}, "PENDING_MODERATION": {"APPROVED", "REJECTED"},
-    "APPROVED": {"QUEUED"}, "QUEUED": {"SPEAKING", "KILLED"},
-    "SPEAKING": {"DONE", "FAILED", "KILLED"}, "FAILED": {"QUEUED", "DEAD"},
+    "APPROVED": {"QUEUED"}, "QUEUED": {"SPEAKING", "FAILED", "KILLED"},
+    "SPEAKING": {"DONE", "INTERRUPTED", "KILLED"}, "FAILED": {"QUEUED", "DEAD"},
+    "INTERRUPTED": {"QUEUED", "DONE"},                    # chỉ do NGƯỜI quyết, không tự động
 }
 db = sqlite3.connect("v1.db", isolation_level=None)      # tự quản transaction bằng BEGIN/COMMIT
 db.execute("PRAGMA journal_mode=WAL"); db.execute("PRAGMA synchronous=FULL")
@@ -252,7 +238,7 @@ print("số dòng:", db.execute("SELECT count(*) FROM confession").fetchone()[0]
 
 Đoạn này **cố ý thiếu** phần khôi phục lúc khởi động. Bạn viết nó theo bảng P3, và ghi chính sách cho `SPEAKING` vào `decisions.md` (phát lại / bỏ / checkpoint, kèm số từ mô phỏng phần 2).
 
-**Bước 4 — Log có cấu trúc.** Mọi chuyển trạng thái ghi một dòng JSON có `mono_ns`, `wall` **và** `boot_id`. Bản gốc ghi "nhớ Bài 3.1 của tài liệu nền", nay là → F4.3: wall clock trả lời "lúc mấy giờ", monotonic đo "bao lâu", và monotonic chỉ so được trong cùng một `boot_id`.
+**Bước 4 — Log có cấu trúc.** Mọi chuyển trạng thái ghi một dòng JSON có `source_id`, `from`, `to`, `actor`, `mono_ns`, `wall` (UTC, ISO 8601) **và** `boot_id` (→ F4.3): wall trả lời "lúc mấy giờ", monotonic đo "bao lâu" và chỉ so được trong cùng một `boot_id`.
 
 **Bước 5 — Test.** Ba test của bản gốc, cộng một test từ bản Gemini:
 
@@ -260,6 +246,8 @@ print("số dòng:", db.execute("SELECT count(*) FROM confession").fetchone()[0]
 2. **Kill giữa lúc ghi DB.** Không trông vào tay bấm (xem P2). Dùng fault injection có chủ đích (→ F2.5): thêm một điểm crash điều khiển bằng biến môi trường, ví dụ `CRASH_AT=after_update_before_commit` thì gọi `os._exit(137)` đúng chỗ đó. Chạy mỗi điểm crash ít nhất một lần, rồi chạy thêm một vòng lặp script kill `-9` ở thời điểm ngẫu nhiên (≥100 lần) với một tiến trình tạo tải ghi liên tục. Sau mỗi lần: `PRAGMA integrity_check`, đối chiếu số record, đối chiếu bảng `transition` không có chuyển trạng thái nào lặp.
 3. **Mất mạng 5 phút:** chặn đường ra Google (`sudo ip link set <iface> down`, hoặc rule firewall chặn riêng), submit vài confession trong lúc đó, mở lại, kiểm tất cả có trong DB.
 4. **Chuyển trạng thái bất hợp pháp** (từ bản Gemini, giữ lại vì tốt): ép `RECEIVED → SPEAKING`, phải bị từ chối và có log.
+5. **Property-based** (Hypothesis, stateful testing → F2.4): sinh chuỗi sự kiện ngẫu nhiên (ingest lặp, duyệt, từ chối, crash, khởi động lại), kiểm hai bất biến sau mỗi bước: (a) không bản ghi nào vào `SPEAKING` quá một lần; (b) không bản ghi chưa `APPROVED` nào từng ở `SPEAKING`.
+6. **Kiểm chính bài test** (→ F2.5): cố ý đổi code sang bản ngây thơ (khôi phục `SPEAKING → QUEUED`, hoặc ghi `DONE` sau khi phát mà không ghi `SPEAKING` trước). Bộ test **phải** trượt. Nếu không, test chưa đo thứ nó định đo. Một test qua 100 lần kill chỉ chặn tỉ lệ lỗi dưới ~3% (quy tắc ba, F1.4) cho **đúng** những điểm crash script của bạn tạo ra.
 
 Sai số dụng cụ đo: độ trễ phát hiện đo bằng hiệu giữa timestamp Google ghi lúc submit (đồng hồ của Google) và `wall` của mini PC, nên có thêm offset NTP giữa hai đồng hồ, thường cỡ ms [ước lượng, xem `chronyc tracking`]. Với độ trễ cỡ giây thì bỏ qua được; với độ trễ dưới 100 ms thì không.
 
@@ -267,35 +255,37 @@ Sai số dụng cụ đo: độ trễ phát hiện đo bằng hiệu giữa time
 
 <details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
 
-**Tiêu chí gốc (giữ nguyên):**
+**Tiêu chí gốc (giữ nguyên) và bổ sung:**
 
 | Kiểm tra | Kết quả đúng |
 |---|---|
 | Gửi lặp 5 lần cùng record | Đúng 1 lần vào `QUEUED` |
-| Kill process giữa lúc ghi DB, khởi động lại | Không mất record, không phát trùng, `integrity_check` = `ok` |
-| Mất mạng 5 phút rồi có lại | Ingest tự phục hồi, không mất record đã có trong Sheet |
+| Kill process giữa lúc ghi DB, khởi động lại | Không mất record, không phát trùng, `integrity_check` = `ok`; một số `INTERRUPTED` (đúng thiết kế) |
+| Mất mạng 5 phút rồi có lại | Ingest tự phục hồi, đối soát lấy đủ record đã có trong Sheet |
 | Ép chuyển trạng thái bất hợp pháp | Bị từ chối, có dòng log |
+| *(bổ sung)* Property test / bản ngây thơ cố ý | Không tìm được phản ví dụ sau số lần sinh bạn đặt (ghi số lần) / ít nhất một test trượt |
 
-**P1.** Poll chu kỳ `T`: trung bình ≈ `T/2` + thời gian gọi API, tối đa ≈ `T` + thời gian gọi API [chuẩn, giả định submit rơi đều trong chu kỳ]. `T = 10 s` tốn 8640 request/ngày chỉ cho việc poll. Push: thường dưới vài giây, nhưng phân bố có đuôi (Apps Script có lúc khởi động chậm) [tự đo: lấy ≥20 mẫu, báo p50 và max, không báo trung bình].
+**Mô phỏng (seed 0):** phát lại có P(nghe trùng) ≈ 1, trùng trung bình ~10 s (nửa câu), tối đa cả câu; at-most-once có P(mất) ≈ 1, mất trung bình ~10 s; checkpoint 2 s và 0,5 s cho trùng tối đa 2 s và 0,5 s, đổi lại 12 và 42 commit mỗi lần phát thay vì 2. Không điểm nào trùng = 0 **và** mất = 0. Ba điều nữa: cửa sổ nguy hiểm **không phải** lúc ghi DB (vài ms) mà là lúc **đang phát** (hàng chục giây), nên crash gần như chắc chắn rơi vào giữa câu; "offset đã phát" của checkpoint phải lấy từ chỗ âm thanh **thật sự** ra loa (ESP32 báo lên), không từ chỗ host đã gửi (giữa hai chỗ là ring và DMA của Bài 4); và dedupe ở cửa vào (UNIQUE) giải bài **record** trùng, không chạm tới **lần phát** trùng.
 
-**P2.** Ví dụ với hệ nhàn: `w = 0.2 commit/s`, `t_c = 5 ms` → `d = 0.001` → cần khoảng 3000 lần kill ngẫu nhiên để có 95% khả năng trúng một lần. Kết luận đúng là **không thể trúng bằng tay**; phải tạo cửa sổ (điểm crash có chủ đích) hoặc phóng to cửa sổ (tiến trình tạo tải ghi liên tục, `d` gần 1). Bài 17 gặp lại đúng bài toán này với việc rút điện.
+**P1.** Poll chu kỳ `T`: trung bình ≈ `T/2` + thời gian gọi API, tối đa ≈ `T` + thời gian gọi API [chuẩn, giả định submit rơi đều]. `T = 10 s` tốn 8640 request/ngày chỉ cho poll. Push: thường dưới vài giây, có đuôi (Apps Script có lúc khởi động chậm) [tự đo: ≥20 mẫu, báo p50 và max].
+
+**P2.** Ví dụ hệ nhàn: `w = 0.2 commit/s`, `t_c = 5 ms` → `d = 0.001` → khoảng 3000 lần kill ngẫu nhiên để có 95% khả năng trúng một lần. **Không thể trúng bằng tay**; phải tạo cửa sổ (điểm crash có chủ đích) hoặc phóng to nó (tải ghi liên tục, `d` gần 1). Bài 17 gặp lại đúng bài toán này với rút điện.
 
 **P3.** Một bảng hợp lý (không phải duy nhất):
 
 | Thấy khi restart | Làm gì | Người nghe |
 |---|---|---|
 | RECEIVED | Đưa tiếp sang PENDING_MODERATION | Không gì |
-| PENDING_MODERATION | Giữ nguyên, chờ người duyệt | Không gì |
+| PENDING_MODERATION / QUEUED | Giữ nguyên | Không gì |
 | APPROVED | Đưa vào QUEUED (idempotent nhờ compare-and-set) | Không gì |
-| QUEUED | Giữ nguyên, player lấy như thường | Không gì |
-| SPEAKING | **Chính sách bạn chọn.** At-most-once: sang `FAILED` với lý do `interrupted`, không tự phát lại, đưa ra UI để người duyệt quyết | Nghe một câu bị cắt, không nghe lặp |
-| FAILED | Retry có giới hạn, có backoff, rồi `DEAD` | Có thể nghe lại cả câu: đó là lý do retry phải có trần |
+| SPEAKING | **Chính sách bạn chọn.** At-most-once: sang `INTERRUPTED`, không tự phát lại, đưa ra UI để người duyệt quyết | Nghe một câu bị cắt, không nghe lặp |
+| FAILED | Retry có giới hạn, backoff, rồi `DEAD`; chỉ cho lỗi **trước** khi phát | Không gì: chưa có âm thanh nào ra loa |
 
-Lập luận cho at-most-once ở V1: một câu bị cắt là sự cố nhỏ; một nội dung nhạy cảm đọc hai lần là sự cố lớn hơn. Lập luận ngược (checkpoint) hợp lệ nếu bạn resume từ **ranh giới câu** chứ không từ giây thứ k, và lấy offset từ phía ESP32 (đã thật sự ra loa), không từ phía host (đã gửi).
+Lập luận cho at-most-once ở V1: một câu bị cắt là sự cố nhỏ; một nội dung nhạy cảm đọc hai lần là sự cố lớn hơn. Trong các `INTERRUPTED`, một phần chưa hề phát và một phần đã phát gần hết; chỉ với cột `state` thì không phân biệt được (đó đúng là chỗ không có transaction), nên ghi thêm tiến độ (frame ESP32 xác nhận đã phát) cho người duyệt. Checkpoint hợp lệ nếu resume từ **ranh giới câu** và lấy offset từ phía ESP32 (đã ra loa), không từ phía host (đã gửi).
 
-**P4.** Pull: cả `k` record tới được, vì chúng nằm trong Sheet và lần poll đầu tiên sau khi có mạng sẽ thấy chúng (miễn là bạn quét lại các dòng chưa thấy, không chỉ "dòng mới hơn con trỏ"). Push thuần: các record submit trong 5 phút đó **mất**, vì trigger gọi endpoint thất bại và không có retry [tự đo: xem tab Executions]. Vì vậy push trong thực tế gần như luôn đi kèm một vòng reconciliation định kỳ kiểu pull. Đó là kiến trúc "lai": push cho độ trễ, pull cho tính đầy đủ.
+**P4.** Pull (quét lại mọi dòng chưa thấy, không chỉ "dòng mới hơn con trỏ"): cả `k` record tới được. Push thuần: các record trong 5 phút đó **mất**, vì trigger không retry [tự đo]. Vì vậy push trong thực tế gần như luôn đi kèm đối soát kiểu pull: push cho độ trễ, pull cho tính đầy đủ.
 
-**Vì sao lệch là bình thường:** độ trễ Apps Script phụ thuộc tải phía Google; thời gian commit phụ thuộc SSD và mức `synchronous`. Trên SSD consumer, `t_c` với `synchronous=FULL` có thể từ dưới 1 ms tới hàng chục ms [ước lượng, tự đo].
+**Vì sao lệch là bình thường:** độ trễ Apps Script phụ thuộc tải phía Google; `t_c` phụ thuộc SSD và mức `synchronous`, từ dưới 1 ms tới hàng chục ms trên SSD consumer [ước lượng, tự đo].
 
 </details>
 
@@ -309,59 +299,55 @@ Lập luận cho at-most-once ở V1: một câu bị cắt là sự cố nhỏ;
 | Sau `kill -9`, `PRAGMA journal_mode` đọc ra `delete` | Pragma WAL chạy trên kết nối khác, hoặc file DB tạo trước khi bật | In pragma đọc lại lúc khởi động | Bật WAL một lần cho file (WAL là thuộc tính lưu trong file); `synchronous` thì phải set lại mỗi kết nối |
 | Mất mạng xong, thiếu record | Push thuần, hoặc pull theo con trỏ "dòng cuối" mà có dòng bị chèn giữa | Đếm dòng Sheet và DB | Reconciliation quét toàn bộ (vài nghìn dòng là rẻ) |
 | Log có khoảng thời gian âm | Trừ `mono_ns` của hai boot khác nhau | Lọc theo `boot_id` | Chỉ trừ monotonic trong cùng `boot_id`; qua boot dùng `wall` |
-| `database is locked` khi tải cao | Transaction dài, nhiều writer | `strace`, log thời gian giữ lock | `BEGIN IMMEDIATE`, transaction ngắn, một writer |
 
 ### 9. Câu hỏi ngược
 
-1. **[Failure mode]** Host bị `kill -9` lúc confession đang phát, nhưng ESP32 vẫn sống và trong ring buffer của nó còn khoảng nửa giây audio. Người nghe nghe gì, và "offset đã phát" mà host checkpoint lần cuối lệch với sự thật bao nhiêu, theo hướng nào?
-   <details><summary>Hướng nghĩ</summary>ESP32 phát nốt buffer rồi gặp underrun; bạn đã thấy ở Bài 4 rằng driver có thể lặp descriptor cũ nếu không bật auto-clear. Offset phía host là offset *đã gửi*, đi trước offset *đã nghe* đúng bằng độ sâu buffer. Resume từ offset đã gửi thì hổng một đoạn; từ offset ESP32 báo thì trùng một đoạn. Chọn hướng nào là một quyết định, không phải chi tiết.</details>
-2. **[Quy mô]** 100 robot trong 100 văn phòng cùng đọc một Sheet. Một confession phải được phát ở đúng một robot (theo văn phòng). Dedupe và state machine nằm ở đâu, một DB trung tâm hay SQLite trên từng robot? Cái gì gãy trước?
-   <details><summary>Hướng nghĩ</summary>Nghĩ về việc ai "nhận" một confession: đó là lease/ownership, và khi robot nhận rồi chết thì lease phải hết hạn, và lúc đó lại quay về câu hỏi phát lại hay bỏ. Quota Sheets API cũng chia cho 100 người poll. Thứ gãy trước thường không phải DB mà là sự đồng ý về "ai sở hữu việc này".</details>
+1. **[Failure mode]** Host bị `kill -9` lúc confession đang phát, ESP32 vẫn sống và ring buffer còn khoảng nửa giây audio. Người nghe nghe gì, và "offset đã phát" mà host checkpoint lần cuối lệch với sự thật bao nhiêu, theo hướng nào?
+   <details><summary>Hướng nghĩ</summary>ESP32 phát nốt buffer rồi underrun; driver có thể lặp descriptor cũ nếu không bật auto-clear (Bài 4). Offset phía host là *đã gửi*, đi trước *đã nghe* đúng bằng độ sâu buffer. Resume từ offset đã gửi thì hổng một đoạn; từ offset ESP32 báo thì trùng một đoạn. Chọn hướng nào là một quyết định.</details>
+2. **[Quy mô]** 100 robot trong 100 văn phòng cùng đọc một Sheet; mỗi confession phải phát ở đúng một robot. Dedupe và state machine nằm ở đâu? Cái gì gãy trước?
+   <details><summary>Hướng nghĩ</summary>Ai "nhận" một confession là bài toán lease/ownership; robot nhận rồi chết thì lease phải hết hạn, và lại quay về câu hỏi phát lại hay bỏ. Quota Sheets API cũng chia cho 100 người poll. Thứ gãy trước thường là sự đồng ý về "ai sở hữu việc này", không phải DB.</details>
 3. **[Vì sao không]** Vì sao không dùng Postgres + Redis + Celery cho V1 như ở công ty?
-   <details><summary>Hướng nghĩ</summary>Đếm số tiến trình phải sống sót qua 10 lần rút điện ở Bài 17, và số chỗ trạng thái có thể nằm. Mỗi thành phần thêm vào là một chỗ trạng thái có thể lệch nhau sau crash. Câu trả lời ngược lại cũng có lý khi có nhiều máy.</details>
-4. **[Nếu…thì]** Nếu người gửi sửa nội dung trong Sheet **sau khi** đã được duyệt nhưng **trước khi** phát, hệ của bạn phát bản nào? Bản đó có phải bản người duyệt đã đọc không?
-   <details><summary>Hướng nghĩ</summary>Đây là TOCTOU (time-of-check to time-of-use). Quyết định duyệt phải gắn với `content_hash` cụ thể; player chỉ phát nội dung có hash trùng với hash đã duyệt. Bài 15 dựa vào điều này.</details>
-5. **[Phản biện]** Có người nói: "Với audio, at-most-once là lựa chọn duy nhất đúng; đừng bao giờ tự phát lại." Tìm một tình huống mà câu đó sai.
-   <details><summary>Hướng nghĩ</summary>Thử một thông báo an toàn (báo cháy, báo sơ tán) thay cho confession. Chi phí của *mất* và của *trùng* đổi chỗ cho nhau, và chính sách đổi theo. Chính sách khôi phục được suy ra từ chi phí của hai kiểu hỏng, không từ công nghệ.</details>
+   <details><summary>Hướng nghĩ</summary>Đếm số tiến trình phải sống qua 10 lần rút điện ở Bài 17 và số chỗ trạng thái có thể nằm; mỗi thành phần thêm vào là một chỗ trạng thái có thể lệch nhau sau crash. Ngược lại, state machine + CAS + property test cho một máy chỉ tốn vài chục dòng; đo bằng chi phí của lỗi, không bằng số máy.</details>
+4. **[Nếu…thì]** Người gửi sửa nội dung trong Sheet **sau khi** đã được duyệt nhưng **trước khi** phát. Hệ phát bản nào? Có phải bản người duyệt đã đọc không?
+   <details><summary>Hướng nghĩ</summary>TOCTOU (time-of-check to time-of-use). Quyết định duyệt phải gắn với `content_hash` cụ thể; player chỉ phát nội dung có hash trùng hash đã duyệt. Bài 15 dựa vào điều này. Cùng tinh thần: người duyệt double-click Approve lúc mạng chậm; duyệt là CAS `PENDING → APPROVED` thì lần hai không làm gì.</details>
+5. **[Phản biện]** "Với audio, at-most-once là lựa chọn duy nhất đúng; đừng bao giờ tự phát lại." Tìm một tình huống mà câu đó sai.
+   <details><summary>Hướng nghĩ</summary>Thử một thông báo an toàn (báo cháy, sơ tán) thay cho confession: chi phí của *mất* và của *trùng* đổi chỗ, và chính sách đổi theo. Chính sách khôi phục suy ra từ chi phí của hai kiểu hỏng, không từ công nghệ.</details>
 
 ### 10. Liên kết ra ngoài
 
-- **Idempotency key trong thanh toán (Stripe).** Giống: khóa đại diện cho ý định, server nhớ kết quả theo khóa. Khác: phía nhận (server thanh toán) *có* bộ nhớ để dedupe; không khí thì không. Vì vậy ở đây việc dedupe phải nằm hoàn toàn ở phía phát, trước khi tác dụng phụ xảy ra.
-- **Máy ATM nhả tiền.** Nhả tiền là tác dụng phụ vật lý không hoàn tác được, đúng như phát loa. Thay vì đòi "đúng một lần", ngành ngân hàng chấp nhận rằng máy có thể hỏng giữa chừng và dựa vào **đối soát** định kỳ: so số giao dịch ghi nhận với số tiền thực còn trong hộc [chuẩn, mức khái quát]. Bài học chung: khi không bảo đảm được tại thời điểm làm, phải có một phép đo độc lập sau đó để phát hiện. Bài 17 dùng mic làm phép đo độc lập này.
-- **Two Generals problem trong mạng máy tính.** Hai bên không thể cùng chắc chắn một việc đã xong qua kênh có thể mất tin. TCP không giải được nó, chỉ đẩy xác suất xuống. Ở đây "kênh" là ranh giới giữa SQLite và loa, và nó không cần mạng mới có vấn đề: chỉ cần một lần mất điện.
+- **Idempotency key trong thanh toán (Stripe) và đối soát cuối ngày.** Giống: khóa đại diện cho ý định, trạng thái "đang xử lý", đối soát với ngân hàng. Khác: phía nhận (server thanh toán) *có* bộ nhớ để dedupe, và tiền trừ nhầm hoàn được; không khí thì không, nên ở đây dedupe phải nằm hoàn toàn ở phía phát và nghiêng hẳn về at-most-once.
+- **Máy ATM nhả tiền.** Tác dụng phụ vật lý không hoàn tác. Ngành ngân hàng không đòi "đúng một lần" mà dựa vào **đối soát** định kỳ: so giao dịch ghi nhận với tiền thực còn trong hộc [chuẩn, mức khái quát]. Bài học: khi không bảo đảm được lúc làm, phải có phép đo độc lập sau đó; Bài 17 dùng mic làm phép đo độc lập này.
+- **Two Generals problem.** Hai bên không thể cùng chắc chắn một việc đã xong qua kênh có thể mất tin; TCP chỉ đẩy xác suất xuống. Ở đây "kênh" là ranh giới SQLite–loa, và chỉ cần một lần mất điện, không cần mạng.
 
 ### 11. Độ tin cậy và sửa lỗi
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| SQLite trên Ubuntu 24.04 mặc định `journal_mode=delete`, `synchronous=FULL` (2) | [tự đo] | Đã chạy trên Ubuntu 24.04 (SQLite 3.45.1): đọc ra `delete` và `2`. Kiểm lại trên máy bạn bằng `PRAGMA` |
-| WAL + `synchronous=NORMAL` có thể mất vài transaction cuối khi mất điện nhưng không hỏng file | [spec] | Tài liệu SQLite, mục PRAGMA synchronous và Write-Ahead Logging |
-| `journal_mode=WAL` lưu bền trong file DB; `synchronous` phải set lại mỗi kết nối | [spec] | Tài liệu SQLite, PRAGMA journal_mode / synchronous |
-| Trigger Apps Script không tự retry khi endpoint lỗi | [tự đo] | Tắt tunnel, submit, xem tab Executions và email báo lỗi |
-| `CLOCK_MONOTONIC` bắt đầu lại sau mỗi lần boot | [chuẩn] | `man clock_gettime`; so `boot_id` trước và sau reboot |
-| Quota Sheets API | [spec, đổi theo thời gian] | Trang Usage limits của Google Sheets API; ghi ngày tra |
-| Thay đổi quản lý transaction của `sqlite3` trong Python 3.12 | [spec] | Python docs, module `sqlite3`, thuộc tính `autocommit` |
+| SQLite trên Ubuntu 24.04 mặc định `journal_mode=delete`, `synchronous=FULL` (2) | [tự đo] | Bản Claude đã chạy trên Ubuntu 24.04 (SQLite 3.45.1): `delete` và `2`. Kiểm lại bằng `PRAGMA` |
+| Process crash (kể cả `kill -9`) không làm hỏng file SQLite ở mọi journal mode | [spec] | SQLite docs, *Atomic Commit*, *How To Corrupt An SQLite Database File* |
+| WAL + `synchronous=NORMAL` có thể mất vài transaction cuối khi mất điện nhưng không hỏng file | [spec] | SQLite docs, PRAGMA synchronous, Write-Ahead Logging |
+| `journal_mode=WAL` lưu bền trong file; `synchronous` phải set lại mỗi kết nối | [spec] | SQLite docs, PRAGMA journal_mode / synchronous |
+| Trigger Apps Script không tự retry khi endpoint lỗi; lấy được ID response của Form | [tự đo] | Tắt tunnel, xem tab Executions; tài liệu Apps Script hiện hành |
+| `CLOCK_MONOTONIC` bắt đầu lại sau mỗi lần boot | [chuẩn] | `man clock_gettime`; so `boot_id` trước/sau reboot |
+| Quota Sheets API; Python 3.12 đổi quản lý transaction của `sqlite3` | [spec, đổi theo thời gian] | Trang Usage limits (ghi ngày tra); Python docs, thuộc tính `autocommit` |
 
 **Đã sửa so với bản gốc/Gemini:**
-- Gốc "dedupe theo row id + hash nội dung" và Gemini `hash(row_id + text + timestamp)`: số dòng Sheet không ổn định và trộn nội dung vào khóa làm một lần sửa chữ thành record mới. Sửa: khóa định danh sinh ở nguồn, `content_hash` lưu riêng.
-- Gemini: "SQLite không hỏng file nhờ chế độ WAL". Sai nguyên nhân: rollback journal mặc định cũng nguyên tử khi crash. WAL đổi hiệu năng và hành vi đọc/ghi đồng thời; durability do `synchronous` và do việc ổ đĩa có tôn trọng lệnh flush hay không quyết định (Bài 17).
-- Gốc "kill process giữa lúc ghi DB" như một thao tác tay: xác suất trúng cửa sổ ghi rất nhỏ (P2). Sửa: điểm crash có chủ đích + vòng kill ngẫu nhiên có tải ghi.
-- Gốc yêu cầu monotonic + wall nhưng thiếu `boot_id`; thêm vào vì Bài 17 có 10 lần reboot.
-- Gốc "Bài 3.1 của tài liệu nền": đổi sang mã cố định → F4.3.
-- State machine gốc không nói gì về bản ghi ở `SPEAKING` khi khởi động lại và chưa có `KILLED`; thêm thành câu hỏi chính và trạng thái cho Bài 15.
+- Gốc "dedupe theo row id + hash nội dung" và Gemini `hash(row_id + text + timestamp)`: số dòng Sheet không ổn định, trộn nội dung vào khóa làm một lần sửa chữ thành record mới. Sửa: khóa định danh sinh ở nguồn, `content_hash` lưu riêng.
+- Gemini: "kill -9 giữa lúc ghi, SQLite không hỏng file nhờ WAL". Sai nguyên nhân: process chết không làm hỏng file ở **bất kỳ** journal mode nào. WAL đổi hiệu năng và đọc/ghi đồng thời; mất điện mới là chuyện của `synchronous` và của ổ đĩa (Bài 17).
+- Gốc "kill process giữa lúc ghi DB" như thao tác tay một lần: xác suất trúng rất nhỏ (P2). Sửa: điểm crash có chủ đích + vòng kill ngẫu nhiên ≥100 lần có tải ghi; thêm property test và kiểm chính bài test bằng bản ngây thơ cố ý.
+- Gốc thiếu trạng thái cho "đang phát thì crash": thêm `INTERRUPTED` (chỉ người đưa lại vào hàng đợi) và `KILLED` cho Bài 15.
+- Gốc yêu cầu monotonic + wall nhưng thiếu `boot_id`; thêm vì Bài 17 có 10 lần reboot. Gốc "Bài 3.1 của tài liệu nền" → F4.3.
+- Thêm: đối soát định kỳ (completeness), xác thực webhook (endpoint public qua tunnel).
 
 ### 12. Đọc thêm và tự kiểm tra
 
 - **Nguồn gốc:** SQLite docs, *Atomic Commit In SQLite* và *How To Corrupt An SQLite Database File* (sqlite.org).
 - **Giải thích:** Brandur Leach, *Implementing Stripe-like Idempotency Keys in Postgres* (brandur.org, 2017): atomic phases, recovery points, foreign state mutations.
 - **Đào sâu (tùy chọn):** Martin Kleppmann, *Designing Data-Intensive Applications*, chương 11 (stream processing, phần exactly-once và idempotence); Tyler Treat, *You Cannot Have Exactly-Once Delivery* (blog Brave New Geek, 2015).
-- **Tự kiểm tra:** (1) giải thích lại cho một backend engineer khác trong 5 câu vì sao UNIQUE không chặn được phát trùng; (2) vẽ lại timeline "commit SPEAKING → phát → commit DONE" từ trí nhớ và đánh dấu ba vùng crash; (3) hai câu dưới.
+- **Tự kiểm tra:** (1) giải thích lại cho một backend engineer khác trong 5 câu vì sao UNIQUE không chặn được phát trùng; (2) vẽ lại timeline "commit SPEAKING → phát → commit DONE" từ trí nhớ và đánh dấu ba vùng crash; (3) câu dưới.
 
-  *a. Bạn đổi chính sách từ "phát lại" sang "checkpoint mỗi 0.5 s". Cái gì tăng, cái gì giảm, và tăng bao nhiêu lần?*
+  *Bạn đổi chính sách từ "phát lại" sang "checkpoint mỗi 0.5 s". Cái gì tăng, cái gì giảm, và tăng bao nhiêu lần?*
   <details><summary>Đáp án</summary>Thời lượng nghe trùng tối đa giảm từ cả câu xuống ≤0.5 s. Số lần ghi đĩa mỗi lần phát tăng từ 2 lên 2 + PLAY/0.5 (với câu 20 s: 42, tức khoảng 20 lần). Mỗi lần ghi có fsync, nên còn tốn thêm độ trễ và độ mòn SSD. Và resume giữa câu nghe vẫn lạ: thường nên lùi về ranh giới câu.</details>
-
-  *b. Vì sao "đọc lại pragma" là một bước của bài này chứ không phải chi tiết vụn?*
-  <details><summary>Đáp án</summary>`synchronous` là thiết lập theo kết nối; một kết nối mở ở chỗ khác (script migrate, tool admin) không set nó sẽ chạy với giá trị mặc định. Đây cùng một bài học với `dma_frame_num` ở Bài 4: giá trị bạn xin không phải giá trị hệ đang dùng cho tới khi bạn đọc lại.</details>
 
 ---
 
@@ -381,19 +367,19 @@ Có bốn tầng có thể làm loa im. Tầng càng thấp thì càng ít thứ
 
 ```mermaid
 flowchart TB
-    subgraph host[Mini PC]
-      UI[Web UI / POST /kill] --> DMN[Daemon: dừng gửi,<br/>QUEUED/SPEAKING → KILLED]
+    subgraph host["Mini PC"]
+      UI["Web UI / POST /kill"] --> DMN["Daemon: dừng gửi,<br/>QUEUED/SPEAKING → KILLED"]
     end
-    subgraph mcu[ESP32-S3 firmware]
-      BTN[Nút: ngắt GPIO] --> TASK[Task ưu tiên cao:<br/>tắt I2S, xả ring buffer,<br/>kéo XSMT xuống]
-      RB[(ring buffer)] --> DMA[(I2S DMA buffer)]
+    subgraph mcu["ESP32-S3 firmware"]
+      BTN["Nút: ngắt GPIO"] --> TASK["Task ưu tiên cao:<br/>tắt I2S, xả ring buffer,<br/>kéo XSMT xuống"]
+      RB[("ring buffer")] --> DMA[("I2S DMA buffer")]
     end
-    subgraph hw[Phần cứng, không cần code]
-      XSMT[Chân XSMT của PCM5102A<br/>LOW = soft mute]
-      PWR[Nguồn amp]
+    subgraph hw["Phần cứng, không cần code"]
+      XSMT["Chân XSMT của PCM5102A<br/>LOW = soft mute"]
+      PWR["Nguồn amp"]
     end
     DMN -->|USB| RB
-    DMA --> DAC[DAC] --> AMP[Amp] --> SPK((Loa))
+    DMA --> DAC["DAC"] --> AMP["Amp"] --> SPK((Loa))
     DMN -.L0: cắt ở đây thì RB + DMA vẫn phát nốt.-> RB
     TASK -.L1: cắt ở đây thì chỉ còn mute ramp.-> DMA
     BTN -.L2: nút NC nối thẳng vào XSMT.-> XSMT
@@ -423,14 +409,12 @@ Ba ý cốt lõi:
 | Feature flag / circuit breaker tắt tính năng | Nút kill | Flag được đọc bởi chính code đang chạy. Code treo hoặc kẹt trong vòng lặp phát thì không đọc flag nữa | "Kill" chỉ hoạt động khi không cần đến nó |
 | Draining một instance trước khi tắt (graceful shutdown) | Dừng phát | Drain = làm nốt request đang chạy. Kill = **bỏ** việc đang chạy, kể cả buffer | Kill được cài như drain, loa đọc nốt câu nhạy cảm |
 | Fail-open của API gateway khi auth service chết (giữ availability) | Moderation không trả lời | Ở đây chi phí của phát nhầm lớn hơn nhiều chi phí của im lặng | Moderation down thì hệ phát mọi thứ, đúng lúc tệ nhất |
-| Review queue / approval workflow (PR cần approve) | Hàng đợi duyệt tay | Approve một PR rồi push thêm commit thì nhiều repo vẫn giữ approve. Ở đây duyệt phải gắn với **đúng** nội dung | Sửa chữ sau khi duyệt, phát nội dung không ai đọc |
 | Spam filter / WAF rule chặn tự động | Filter tên riêng | Chặn sai ở đây là xóa lời của một người thật; lọt sai là quấy rối được khuếch đại. Cả hai chiều đều đắt | Tự động chặn thì người dùng bực và lách; tự động cho qua thì mất ý nghĩa |
-| Audit log | Log quyết định duyệt | Log có nội dung confession và tên người duyệt là dữ liệu cá nhân | Lưu mãi mãi không có lý do, không có quyền truy cập |
+| Audit log, RBAC | Log quyết định duyệt | Người gửi ẩn danh nhưng người duyệt phải truy được trách nhiệm; log chứa nội dung nhạy cảm là dữ liệu cá nhân | Log định danh người gửi (phá ẩn danh), hoặc lưu mãi không có quyền truy cập |
 
 **Chấm mô hình:**
 
 - *Mô hình của bạn ở K3 lượt 3: "thực tế esp32 chỉ làm dispatcher/coordinator ... nó chỉ kiểm soát các flag như khi nào cần bật/tắt, tăng giảm âm lượng ... chứ thực sự nó không nên là nơi tạo ra âm thanh."* **ĐÚNG MỘT PHẦN.** Đúng: ESP32 không nên sinh hay chuyển đổi âm thanh; TTS ở host. Gãy: gọi nó là "dispatcher" làm bạn thiết kế nó như một bộ chuyển tiếp thụ động. Về an toàn, ESP32 là **tác nhân cuối cùng còn hành động được khi host đã chết**, nên nó sở hữu việc im lặng. Phản ví dụ: host treo giữa câu; một bộ chuyển tiếp thụ động không phát hiện được gì, và nếu driver I2S không bật tự xóa buffer (Bài 4) thì DMA lặp lại descriptor cuối, loa kêu một đoạn lặp vô hạn.
-- *Mô hình của bạn ở K3 lượt 6: "luôn phải có buffer ... đánh đổi ... bù lại cho phép khả năng kiểm soát."* **ĐÚNG MỘT PHẦN.** Buffer cho bạn kiểm soát **tính liên tục**, nhưng lấy đi kiểm soát **ngắt**. Phản ví dụ: ring buffer ESP32 cỡ nửa giây và kill ở tầng host: lệnh kill tới tức thì, loa vẫn đọc tiếp nửa giây. Muốn cả hai thì phải có đường cắt nằm *dưới* buffer.
 - *"Endpoint `/kill` phản hồi trong vài ms nên kill phần mềm là đủ."* **SAI** cho đúng trường hợp cần kill nhất. Phản ví dụ: chính daemon đang treo trong vòng gửi (kẹt lock), HTTP handler cùng tiến trình không bao giờ được chạy. Đây là câu chuyện Therac-25 thu nhỏ.
 
 ### 4. Thuật ngữ
@@ -442,68 +426,52 @@ Ba ý cốt lõi:
 | 🟢 | Kill switch / E-stop | Dừng ngay, bỏ việc đang làm, **chốt** (latch) cho tới khi có người chủ động mở lại | Nút pause |
 | 🟢 | Latching | Sau khi kill, thả nút ra **không** tự phát tiếp; phải có hành động "re-arm" riêng | Kill hết hiệu lực khi thả nút |
 | 🟢 | Thường đóng (NC) / thường mở (NO) | Tiếp điểm đóng khi không bấm / mở khi không bấm | Chi tiết đi dây, không liên quan an toàn |
-| 🟢 | Debounce | Lọc các lần nảy cơ học của nút (nhiều cạnh trong vài ms) | Chỉ cần cho bàn phím |
 | 🟢 | TOCTOU | Điều kiện đúng lúc kiểm, sai lúc dùng (duyệt bản A, phát bản B) | Lỗi chỉ có trong hệ điều hành |
 | 🟢 | Precision / recall của filter | Trong số bị gắn cờ, bao nhiêu đúng / trong số đáng gắn cờ, bao nhiêu bị bắt | Một con số "độ chính xác" |
 | 🟡 | Soft mute (XSMT) | Chân của PCM5102A, mức thấp thì DAC giảm dần âm lượng về câm | Ngắt tức thì |
-| 🟡 | Dead man's switch | Hệ chỉ chạy khi có tín hiệu "còn sống" liên tục; mất tín hiệu thì dừng | Nút kill bấm tay (ngược chiều nhau) |
 | 🔴 | Safety PLC, SIL (IEC 61508) | Khung chứng nhận an toàn chức năng công nghiệp | Cần cho V1 |
 
 ### 5. Dự đoán
 
 Viết vào `lab/15-moderation/prediction.md`, commit, rồi mới làm phần 6.
 
-**P1 — Độ trễ kill theo tầng.** Với từng đường kill bạn định làm (ít nhất L0 `POST /kill` và L1 nút GPIO; L2 nếu làm), dự đoán thời gian từ lúc bấm tới khi loa im **trong trường hợp xấu nhất**. Tham số cần tra/đo:
-- độ sâu ring buffer ESP32 và DMA buffer (ms): lấy từ `decisions.md` của Bài 4 và Bài 10 (`dma_desc_num × dma_frame_num / sample_rate`);
-- độ trễ HTTP → daemon → USB tới ESP32: đo bằng round-trip một lệnh `ping` qua USB, lấy p99 chứ không lấy trung bình;
-- độ trễ ISR → task trên ESP32: cỡ µs tới vài ms tùy ưu tiên task [ước lượng], đo bằng GPIO marker;
-- thời gian soft-mute ramp khi XSMT xuống thấp: tra datasheet PCM5102A (TI), mục mô tả soft mute / XSMT.
+**P1 — Độ trễ kill theo tầng, trường hợp xấu nhất** (ít nhất L0 và L1; L2/L3 nếu làm). Công thức: `t_kill ≈ t_phát hiện + t_truyền lệnh + (âm thanh nằm dưới điểm cắt)`; nêu số hạng nào chiếm phần lớn ở mỗi tầng. Tham số: độ sâu ring và DMA (ms) từ `decisions.md` Bài 4 và Bài 10, cộng phần host gửi trước (buffer serial/USB phía host); round-trip USB p99 (Bài 9); ISR → task trên ESP32 (đo bằng GPIO marker); thời gian soft-mute ramp khi XSMT xuống thấp (datasheet PCM5102A, mục soft mute) hoặc thời gian đáp ứng chân mute của amp.
 
-Công thức: `t_kill ≈ t_phát hiện + t_truyền lệnh + (âm thanh nằm dưới điểm cắt)`. Nêu rõ trong mỗi tầng, số hạng nào chiếm phần lớn.
+**P2 — Filter tên riêng.** Viết 50 câu thử **giả định** (không dùng confession thật): 25 câu thật sự nhắm vào một đồng nghiệp (tên không dấu, biệt danh, chức danh như "sếp phòng X"), 25 câu vô hại nhưng chứa từ trùng tên (tên "Hùng" và từ "hùng hồn"). Dự đoán precision và recall của (a) khớp chính xác danh sách tên, (b) chuẩn hóa NFC, chữ thường, bỏ dấu, so theo ranh giới từ.
 
-**P2 — Filter tên riêng.** Viết 50 câu thử: 25 câu thật sự nhắm vào một đồng nghiệp (có câu dùng tên không dấu, biệt danh, chức danh như "sếp phòng X"), 25 câu vô hại nhưng chứa từ trùng tên (ví dụ tên "Hùng" và từ "hùng hồn"). Dự đoán precision và recall của hai cách: (a) so khớp chính xác danh sách tên, (b) chuẩn hóa Unicode NFC, chữ thường, bỏ dấu, so theo ranh giới từ.
-
-**P3 — Khi hỏng thì loa làm gì.** Với thiết kế bạn định đi dây, điền: dây tới nút kill đứt; ESP32 treo (vòng lặp vô hạn, không reset); ESP32 reset; daemon host chết giữa câu; rút cáp USB giữa câu. Mỗi ô: loa im / phát nốt buffer rồi im / lặp tiếng / phát tiếp bình thường.
+**P3 — Khi hỏng thì loa làm gì:** đứt dây nút kill; ESP32 treo (không reset); ESP32 reset; daemon chết giữa câu; rút USB giữa câu. Mỗi ô: im / phát nốt buffer rồi im / lặp tiếng / phát tiếp / rè-pop.
 
 ```markdown
 # prediction.md — Bài 15   (commit: <hash>, ngày: <yyyy-mm-dd>)
-## P1 Độ trễ kill (trường hợp xấu nhất)
+## P1 ring ___ ms · DMA ___ ms · host gửi trước ___ ms · amp ___ (chân mute: có/không)
 | Tầng | t_phát hiện | t_truyền | Âm thanh dưới điểm cắt | Tổng dự đoán | Số hạng lớn nhất |
 |---|---|---|---|---|---|
-| L0 POST /kill | | | ring ___ ms + DMA ___ ms | | |
+| L0 POST /kill, chỉ ngừng gửi | | | | | |
+| L0 POST /kill, ESP32 xả ring | | | | | |
 | L1 nút GPIO | | | | | |
-| L2 XSMT (nếu làm) | | | ramp ___ ms (datasheet trang ___) | | |
-## P2 Filter
-| Cách | Precision dự đoán | Recall dự đoán | Lỗi điển hình dự đoán |
-|---|---|---|---|
-| (a) khớp chính xác | | | |
-| (b) chuẩn hóa + bỏ dấu | | | |
-## P3 Khi hỏng
-| Sự cố | Loa làm gì | Vì sao |
-|---|---|---|
-| Đứt dây nút kill | | |
-| ESP32 treo không reset | | |
-| ESP32 reset | | |
-| Daemon chết giữa câu | | |
-| Rút USB giữa câu | | |
+| L2 XSMT / mute amp | | | ramp ___ ms (datasheet trang ___) | | |
+| L3 cắt nguồn amp | | | | | |
+## P2 precision / recall: (a) ___ / ___ · (b) ___ / ___ · lỗi điển hình: ___
+## P3 đứt dây nút ___ · ESP32 treo ___ · ESP32 reset ___ · daemon chết ___ · rút USB ___
 ```
 
 ### 6. Làm
 
-**Bước 1 — Web UI duyệt tối giản.** Danh sách `PENDING_MODERATION`, nút Approve / Reject, hiển thị **toàn văn** nội dung, thời gian gửi và cờ tên riêng. Quyết định duyệt ghi kèm `content_hash` của đúng nội dung đang hiển thị; player chỉ nhận bản ghi có một lần duyệt khớp `(source_id, content_hash)`. Nếu Bài 14 bạn chọn push qua tunnel: **UI duyệt và `/kill` không được nằm sau tunnel đó.** Chạy chúng trên cổng riêng, bind vào LAN hoặc `127.0.0.1`, có đăng nhập. Một tunnel mở cho webhook mà đồng thời lộ nút Approve ra Internet là biến bài này thành vô nghĩa.
+**Bước 1 — Web UI duyệt tối giản.** Danh sách `PENDING_MODERATION`, nút Approve / Reject, **toàn văn** nội dung, thời gian gửi, cờ tên riêng. Quyết định duyệt ghi kèm `content_hash` của đúng nội dung đang hiển thị; player chỉ nhận bản ghi có một lần duyệt khớp `(source_id, content_hash)`. UI duyệt và `/kill` **có đăng nhập**, bind vào LAN hoặc `127.0.0.1`, và **không** nằm sau tunnel của webhook Bài 14: một tunnel lộ nút Approve ra Internet làm bài này vô nghĩa.
 
-**Bước 2 — Filter tên riêng.** Danh sách tên đồng nghiệp (kèm biệt danh, dạng không dấu). Khớp thì **chuyển sang cần-duyệt-kỹ, không tự động từ chối**: chặn nhầm gây bực và khiến người ta học cách lách; gắn cờ thì người duyệt đọc kỹ hơn. Chuẩn hóa: `unicodedata.normalize("NFC", s)`, chữ thường, một bản bỏ dấu để so; so theo ranh giới từ. Chạy trên 50 câu của P2, ghi bảng nhầm lẫn (confusion matrix). Filter là một phép đo có dương tính giả và âm tính giả (→ F2.1); người duyệt là oracle cuối, và oracle đó cũng có tỉ lệ sai.
+**Bước 2 — Filter tên riêng.** Danh sách tên đồng nghiệp (kèm biệt danh, dạng không dấu). Khớp thì **chuyển sang cần-duyệt-kỹ, không tự động từ chối**: chặn nhầm gây bực và dạy người ta lách; gắn cờ thì người duyệt đọc kỹ hơn. Chuẩn hóa `unicodedata.normalize("NFC", s)`, chữ thường, một bản bỏ dấu để so, theo ranh giới từ. Chạy trên 50 câu của P2, ghi confusion matrix. Filter là một phép đo có dương tính giả và âm tính giả (→ F2.1); người duyệt là oracle cuối, và oracle đó cũng có tỉ lệ sai.
 
-**Bước 3 — Nút kill, hai tầng bắt buộc, tầng thứ ba nên có.**
-- **L0, phần mềm:** endpoint `POST /kill` trên mini PC: ngừng gửi, gửi lệnh `KILL` xuống ESP32, chuyển mọi `SPEAKING` và `QUEUED` sang `KILLED` (xả queue, như bản gốc), ghi log. Đặt handler `/kill` sao cho nó không chờ cùng lock với vòng gửi audio.
-- **L1, nút vật lý trên ESP32:** GPIO có ngắt. Trong ISR chỉ làm việc ngắn: ghi một cờ, kéo chân mute (nếu có) và đánh thức một task ưu tiên cao; các lệnh như `i2s_channel_disable` có lock bên trong, gọi từ task chứ không từ ISR [tự đo theo phiên bản ESP-IDF: đọc mục "ISR-safe" của API]. Task: tắt kênh I2S, xả ring buffer, gửi sự kiện `KILLED` lên host. Có debounce (bỏ các cạnh trong vài chục ms sau cạnh đầu). Trạng thái kill được **chốt**: thả nút không phát tiếp; host phải gửi `REARM` từ UI.
-- **L2, phần cứng không cần code (nên có):** đưa chân XSMT của PCM5102A qua nút **NC**: 3.3 V → nút NC → XSMT, và một điện trở kéo xuống tại XSMT. Bấm nút hoặc đứt dây thì XSMT xuống thấp và DAC tự mute, kể cả khi ESP32 treo. Một chân GPIO của ESP32 có thể đọc song song đường này để báo lên host. Trên module GY-PCM5102, XSMT thường được nối sẵn lên mức cao bằng jumper hàn; muốn đi dây kiểu này phải tách jumper đó [tự đo trên module của bạn, đo bằng multimeter trước khi hàn]. Kiểm ngưỡng mức thấp/cao của XSMT trong datasheet trước khi chọn điện trở.
+**Bước 3 — Nút kill: L0 và L1 bắt buộc, L2 và L3 nên có.**
+- **L0, phần mềm:** `POST /kill` (có xác thực): ngừng gửi, gửi lệnh `KILL` xuống ESP32 (ESP32 kéo mute, xả ring, tắt I2S, bỏ mọi dữ liệu đến sau `KILL`, trả `KILLED` kèm số frame đã bỏ), hủy TTS worker (kiểm CPU về nhàn), chuyển mọi `SPEAKING` và `QUEUED` sang `KILLED` (xả queue như gốc nhưng **không xóa dòng**: giữ audit; muốn phát lại phải duyệt lại), ghi log. Handler `/kill` không chờ cùng lock với vòng gửi audio.
+- **L1, nút vật lý trên ESP32:** GPIO có ngắt và debounce (bỏ các cạnh trong vài chục ms sau cạnh đầu). ISR chỉ làm việc ngắn: ghi cờ, kéo chân mute, đánh thức một task ưu tiên cao; `i2s_channel_disable` có lock bên trong, gọi từ task [tự đo theo phiên bản ESP-IDF, mục Thread Safety]. Task: tắt kênh I2S, xả ring, gửi `KILLED` lên host. Kill được **chốt**: thả nút không phát tiếp, chỉ `REARM` tường minh từ UI mới mở lại.
+- **L2, phần cứng không cần code:** 3,3 V → nút **NC** → XSMT của PCM5102A, điện trở kéo xuống tại XSMT. Bấm hoặc đứt dây thì XSMT xuống thấp, DAC tự mute kể cả khi ESP32 treo; một GPIO đọc song song đường này để báo host. Module GY-PCM5102 thường nối sẵn XSMT lên cao bằng jumper hàn, phải tách [tự đo bằng multimeter trước khi hàn]; kiểm ngưỡng mức của XSMT trong datasheet trước khi chọn điện trở. Amp có chân MUTE/SHUTDOWN (MAX98357A: `SD_MODE`; module PAM8403/TPA3110 có thể đã nối cứng lên VCC [tự đo]) thì dùng cùng nguyên tắc.
+- **L3, cắt nguồn amp:** công tắc ghi nhãn rõ trên dây nguồn amp; không cần phần mềm nào sống; có thể kêu "bụp".
 
-Nút vật lý quan trọng vì lúc cần dừng gấp thì không ai mở laptop.
+Nút vật lý quan trọng vì lúc cần dừng gấp thì không ai mở laptop. **Thử trạng thái an toàn mặc định:** reset ESP32 giữa câu, rút cáp USB giữa câu (ESP32 ăn nguồn USB thì mất nguồn trong khi amp vẫn có nguồn riêng). Nghe và ghi: im, rè hay pop.
 
-**Bước 4 — Audit log.** Mỗi quyết định: ai duyệt, lúc nào (wall + `boot_id`), `source_id`, `content_hash`, quyết định. Ghi thêm lý do nếu reject. Đặt thời hạn lưu và ai được đọc (xem phần 11 về khung pháp lý).
+**Bước 4 — Audit log.** Mỗi quyết định: ai duyệt, lúc nào (wall + `boot_id`), `source_id`, `content_hash`, quyết định, lý do nếu reject. **Không** log định danh người gửi (IP, email) nếu cam kết ẩn danh. Đặt thời hạn lưu và ai được đọc (khung pháp lý ở mục 11). Ràng buộc CHECK ở DB: mọi bản ghi từ `APPROVED` trở đi có `approver_id`, `approved_at` khác NULL.
 
-**Bước 5 — Chứng minh "chưa duyệt thì không bao giờ tới player" bằng test tự động.** "Không bao giờ" không chứng minh được bằng vài test ví dụ. Hai việc: (1) đặt kiểm tra ở **đúng một cổng** (hàm duy nhất gửi audio xuống ESP32 kiểm `(source_id, content_hash)` có trong bảng duyệt); (2) bắn chuỗi thao tác ngẫu nhiên vào hệ và kiểm bất biến sau mỗi bước, rồi **gài một lỗi cố ý** để chứng minh bài test bắt được (→ F2.4, F2.5). Mô hình đồ chơi:
+**Bước 5 — Chứng minh "chưa duyệt thì không bao giờ tới player" bằng test tự động.** "Không bao giờ" không chứng minh được bằng vài test ví dụ. Hai việc: (1) kiểm ở **đúng một cổng** (hàm duy nhất gửi audio xuống ESP32 kiểm `(source_id, content_hash)` có trong bảng duyệt); (2) bắn chuỗi thao tác ngẫu nhiên và kiểm bất biến sau mỗi bước, rồi **gài một lỗi cố ý** để chứng minh bài test bắt được (→ F2.4, F2.5). Mô hình đồ chơi:
 
 ```python
 # [đã chạy] "Nội dung chưa duyệt không bao giờ tới player": kiểm bằng chuỗi thao tác ngẫu nhiên,
@@ -554,9 +522,9 @@ print("hệ đúng       :", fuzz(bug=False))
 print("hệ có đột biến:", fuzz(bug=True))
 ```
 
-Với hệ thật, dùng thư viện property-based (Hypothesis cho Python, stateful testing) thay vòng `random` tự viết, và chạy bất biến trên DB thật.
+Với hệ thật, dùng Hypothesis (stateful testing) thay vòng `random`, và kiểm bất biến trên DB thật.
 
-**Bước 6 — Test kill switch 10 lần, trong đó ≥3 lần đúng lúc đang phát giữa câu.** Đo, đừng ước bằng tai. Logic analyzer: CH0 đường nút kill (hoặc GPIO marker ESP32 bật khi nhận lệnh `KILL` qua USB), CH1 chân XSMT, CH2 `DIN` của I2S. Với L0 và L1, "im" thấy được trên `DIN` (dữ liệu về 0 hoặc dừng clock). Với L2, `DIN` vẫn chạy trong khi DAC đã mute, nên phải đo ở phía âm thanh: dùng mic INMP441 và phương pháp GPIO-marker của Bài 9. Sai số: logic analyzer 24 MHz cho độ phân giải cỡ 42 ns, thừa cho phép đo cỡ ms; với mic, sai số bị chặn bởi chu kỳ lấy mẫu của mic và cách bạn định nghĩa "im" (ngưỡng RMS nào, cửa sổ bao dài). Ghi định nghĩa đó **trước** khi đo. Báo cả 10 giá trị và giá trị lớn nhất, không báo trung bình.
+**Bước 6 — Test kill 10 lần mỗi tầng, ≥3 lần giữa câu.** Đo, đừng ước bằng tai. Logic analyzer: CH0 đường nút kill (hoặc GPIO marker ESP32 bật khi nhận `KILL` qua USB), CH1 XSMT, CH2 `DIN` của I2S. Với L0/L1, "im" thấy trên `DIN` (dữ liệu về 0 hoặc dừng clock). Với L2/L3, `DIN` vẫn chạy trong khi DAC/amp đã im, nên đo phía âm thanh bằng mic INMP441 và phương pháp Bài 9. Sai số: LA 24 MHz phân giải ~42 ns, thừa cho thang ms; với mic, bị chặn bởi chu kỳ mẫu và định nghĩa "im" (ngưỡng RMS nào, cửa sổ bao dài: cùng vấn đề onset ở Bài 9, theo chiều ngược), ghi định nghĩa **trước** khi đo; mốc "bấm" là cạnh đầu (nút nảy vài ms). Lặp thêm với daemon bị `kill -STOP <pid>`: đó mới là ca cần kill. Báo cả 10 giá trị và max, không báo trung bình.
 
 ### 7. Số phải ra
 
@@ -573,10 +541,11 @@ Với hệ thật, dùng thư viện property-based (Hypothesis cho Python, stat
 **P1, ví dụ với số giả định** (thay bằng số của bạn): 24 kHz, `dma_desc_num = 3`, `dma_frame_num = 320` → DMA ≈ 40 ms; ring buffer ESP32 500 ms; round-trip USB p99 vài ms.
 - L0: vài ms truyền lệnh + **tới ~540 ms** âm thanh dưới điểm cắt nếu lệnh `KILL` chỉ làm host ngừng gửi. Số hạng lớn nhất là ring buffer. Nếu lệnh `KILL` xuống tới ESP32 và ESP32 xả buffer, L0 co lại gần bằng L1 cộng độ trễ USB. Đây là lý do L0 không nên chỉ là "ngừng gửi".
 - L1: debounce + ISR→task (µs tới vài ms) + phần DMA còn lại (≤ ~40 ms) hoặc ramp mute, tổng thường dưới 100 ms [ước lượng].
-- L2: chỉ còn thời gian ramp soft-mute của DAC (tra datasheet; cỡ ms tới vài chục ms) [tự đo/tra].
-Cả ba đều dưới 1 s, nhưng chỉ L1/L2 đạt khi **daemon treo**. Tiêu chí "<1 s" của bản gốc vì vậy nên được test thêm trong trạng thái daemon bị `SIGSTOP` (`kill -STOP <pid>`): đó mới là ca cần kill.
+- L2: chỉ còn thời gian ramp soft-mute của DAC hoặc đáp ứng chân mute của amp (tra datasheet; cỡ µs tới vài chục ms) [tự đo/tra].
+- L3: tụ lọc của amp xả, cỡ ms–chục ms, có thể pop [ước lượng].
+Tất cả đều dưới 1 s, nhưng chỉ L1–L3 đạt khi **daemon treo**. Mục tiêu thực tế cho L1 là dưới 100 ms, vì nó không phụ thuộc ring. Tiêu chí "<1 s" của bản gốc vì vậy nên được test thêm trong trạng thái daemon bị `SIGSTOP` (`kill -STOP <pid>`): đó mới là ca cần kill.
 
-**P2:** khớp chính xác thường có precision khá nhưng recall thấp (lọt tên không dấu, biệt danh, chức danh). Chuẩn hóa + bỏ dấu tăng recall nhưng kéo precision xuống (đụng từ thường như "hùng hồn", "an toàn" khi có người tên An). Không cách nào bắt được "sếp phòng X" nếu danh sách không có. Kết luận đúng là bản gốc: filter chỉ **gắn cờ**, người quyết. Con số cụ thể phụ thuộc 50 câu bạn viết; điều cần thấy là đánh đổi precision/recall, không phải một con số đẹp.
+**P2:** khớp chính xác thường có precision khá nhưng recall thấp (lọt tên không dấu, biệt danh, chức danh). Chuẩn hóa + bỏ dấu tăng recall nhưng kéo precision xuống (đụng từ thường như "hùng hồn", "an toàn" khi có người tên An). Không cách nào bắt được "sếp phòng X" nếu danh sách không có. Kết luận của gốc đúng: filter chỉ **gắn cờ**, người quyết; điều cần thấy là đánh đổi precision/recall, không phải một con số đẹp.
 
 **P3, với thiết kế tham chiếu** (L1 có XSMT do firmware chủ động giữ cao + kéo xuống; L2 nút NC; ESP32 có watchdog giao tiếp ở Bài 16):
 
@@ -602,7 +571,6 @@ Cả ba đều dưới 1 s, nhưng chỉ L1/L2 đạt khi **daemon treo**. Tiêu
 | `/kill` không trả lời khi daemon kẹt | Handler cùng tiến trình/lock với vòng gửi | `kill -STOP` daemon rồi gọi `/kill` | Kill bằng đường không qua daemon: lệnh thẳng xuống ESP32 từ tiến trình khác, hoặc nút L1/L2 |
 | Khởi động lại sau kill, câu bị kill phát lại | Trạng thái `KILLED` chưa ghi bền trước khi tắt, hoặc khôi phục coi `SPEAKING` là "phát lại" | Bảng `transition` | Ghi `KILLED` trong transaction trước khi trả lời; xem lại bảng P3 của Bài 14 |
 | Filter gắn cờ quá nhiều, người duyệt bỏ qua cờ | Precision thấp → cờ thành nhiễu | Đếm tỉ lệ cờ bị bỏ qua | Thu hẹp danh sách, hiển thị *từ nào* khớp |
-| UI duyệt mở được từ Internet | App duyệt chung với endpoint webhook sau tunnel | Truy cập từ 4G | Tách app/cổng, bind LAN, có đăng nhập |
 
 ### 9. Câu hỏi ngược
 
@@ -614,14 +582,14 @@ Cả ba đều dưới 1 s, nhưng chỉ L1/L2 đạt khi **daemon treo**. Tiêu
    <details><summary>Hướng nghĩ</summary>Nghĩ theo F2.8: LLM-judge cần hiệu chuẩn so với người trên tập có nhãn, và nội dung quấy rối là đối kháng (người gửi sẽ thử cho tới khi lọt). Base rate thấp làm dương tính giả chiếm phần lớn cờ. LLM hợp làm bộ gắn cờ thứ hai trước mắt người, không hợp làm cổng cuối.</details>
 4. **[Phản biện]** "Người duyệt là oracle hoàn hảo." Làm sao đo recall của chính người duyệt mà không làm hại ai?
    <details><summary>Hướng nghĩ</summary>Canary: thỉnh thoảng chèn một nội dung *giả* rõ ràng phải bị từ chối (đánh dấu nội bộ, không bao giờ phát), đếm tỉ lệ bị approve nhầm. Cùng ý với mutation testing (F2.5): kiểm chính bộ kiểm. Mệt mỏi và thói quen bấm Approve là failure mode thật của mọi hàng đợi duyệt.</details>
-5. **[Nếu…thì]** Nếu thay PCM5102A + amp analog bằng MAX98357A (DAC + amp trong một chip, nhận I2S), tầng L2 của bạn nằm ở đâu?
-   <details><summary>Hướng nghĩ</summary>Tra datasheet MAX98357A, chân SD_MODE: kéo xuống thấp thì chip vào shutdown. Cùng nguyên tắc: một chân "cho phép" được giữ cao chủ động, nút NC trong đường kéo lên.</details>
+5. **[Nếu…thì]** Nếu người duyệt approve nhầm một câu có hại (sai người, không sai máy), hệ của bạn làm được gì?
+   <details><summary>Hướng nghĩ</summary>Hai đường: một khoảng trễ có chủ đích giữa Approve và phát (cửa sổ "hoàn tác", giống broadcast delay ở mục 10), và kill vật lý cho người ngồi cạnh loa. Duyệt hai người cho câu bị gắn cờ là lựa chọn thứ ba. Mỗi cái đổi độ trễ hoặc công sức lấy an toàn; ghi lựa chọn vào `decisions.md`.</details>
 
 ### 10. Liên kết ra ngoài
 
 - **Broadcast delay và nút "dump" của đài phát thanh trực tiếp.** Chương trình gọi điện trực tiếp phát trễ vài giây; người điều phối có nút xóa phần đang nằm trong bộ trễ trước khi nó lên sóng. Giống: kill = **bỏ buffer**, không phải ngừng nạp. Khác: ở đài, buffer được cố ý làm dài để có thời gian người phản ứng; ở hệ của bạn, nội dung đã được duyệt *trước*, nên buffer nên ngắn để kill nhanh.
+- **Hệ cảnh báo công cộng (Hawaii, 13/01/2018).** Một cảnh báo "tên lửa đạn đạo đang bay tới" gửi nhầm tới điện thoại toàn bang; mất khoảng 38 phút mới có đính chính chính thức, một phần vì không có sẵn mẫu hủy để gửi nhanh [chuẩn, theo báo cáo điều tra của FCC]. Giống: khả năng **dừng và đính chính** phải có sẵn và đã diễn tập trước sự cố. Khác: cảnh báo đã gửi không thu hồi được, còn bạn còn cắt được phần đang nằm trong buffer.
 - **E-stop công nghiệp.** Nút dừng khẩn cấp trên máy móc dùng tiếp điểm thường đóng mở cưỡng bức, tự chốt khi bấm, và việc nhả chốt không được tự khởi động lại máy; khởi động lại là một hành động riêng (tinh thần của ISO 13850 và IEC 60204-1) [chuẩn]. Giống: NC, latching, re-arm riêng. Khác: E-stop công nghiệp thường cắt **năng lượng** (tầng L3 của bạn) và được chứng nhận theo mức an toàn; nút của bạn chỉ cần không phụ thuộc phần mềm.
-- **Khóa cửa thoát hiểm: fail-safe vs fail-secure.** Cửa thoát hiểm dùng khóa từ mất điện thì mở; két sắt dùng khóa mất điện thì vẫn khóa. Cùng một câu hỏi "hỏng thì về đâu", hai đáp án ngược nhau vì đối tượng được bảo vệ khác nhau. Hệ của bạn có hai đối tượng: người trong văn phòng (cần im) và người gửi confession (cần được nghe). Khi hai thứ xung đột, bài này chọn im.
 
 ### 11. Độ tin cậy và sửa lỗi
 
@@ -632,29 +600,31 @@ Cả ba đều dưới 1 s, nhưng chỉ L1/L2 đạt khi **daemon treo**. Tiêu
 | Module GY-PCM5102 nối XSMT lên cao bằng jumper hàn | [tự đo] | Đo trên module của bạn, các bản clone khác nhau |
 | `i2s_channel_disable` không gọi từ ISR | [tự đo] | Đọc tài liệu ESP-IDF I2S đúng phiên bản; mặc định coi API có lock là không ISR-safe |
 | Therac-25: bỏ interlock phần cứng, race condition, ít nhất sáu tai nạn | [chuẩn] | Leveson & Turner, IEEE Computer, 1993 |
+| Hawaii 2018: ~38 phút tới đính chính | [chuẩn] | Báo cáo FCC về cảnh báo tên lửa giả ở Hawaii |
 | E-stop: NC, tự chốt, nhả không tự khởi động lại | [chuẩn] | ISO 13850, IEC 60204-1 (tên chuẩn chắc chắn; điều khoản cụ thể chưa đối chiếu) |
-| Khung pháp lý dữ liệu cá nhân ở Việt Nam | [spec, tự kiểm toàn văn] | Xem dưới |
+| Luật BVDLCN 91/2025/QH15 và Nghị định 356/2025/NĐ-CP hiệu lực 01/01/2026, thay Nghị định 13/2023 | [spec] | Người hợp nhất đã đối chiếu qua bản tóm tắt của EY, PwC Việt Nam và trang pháp luật (10/2026); đọc toàn văn trước khi dựa vào |
 
 **Đã sửa so với bản gốc/Gemini:**
-- **Khung pháp lý đã đổi.** Bản gốc dẫn Nghị định 13/2023/NĐ-CP. Luật Bảo vệ dữ liệu cá nhân số 91/2025/QH15 có hiệu lực từ 01/01/2026, và Nghị định 356/2025/NĐ-CP hướng dẫn luật này thay thế Nghị định 13/2023; dữ liệu sinh trắc học vẫn thuộc nhóm dữ liệu cá nhân nhạy cảm [spec, theo tóm tắt của các trang pháp luật; đọc toàn văn trước khi dựa vào]. Ràng buộc của bản gốc giữ nguyên và không đàm phán: nhận diện mặt ở V3 chỉ làm trên chính mình và người tình nguyện có consent bằng văn bản. Lưu ý thêm: có nguồn coi giọng nói là dữ liệu sinh trắc học, nên việc clone giọng ở V2 cũng phải nằm trong cùng nguyên tắc.
+- **Khung pháp lý đã đổi.** Bản gốc dẫn Nghị định 13/2023/NĐ-CP. Luật Bảo vệ dữ liệu cá nhân số 91/2025/QH15 có hiệu lực từ 01/01/2026, và Nghị định 356/2025/NĐ-CP hướng dẫn luật này thay thế Nghị định 13/2023; dữ liệu sinh trắc học vẫn thuộc nhóm dữ liệu cá nhân nhạy cảm [spec]. Ràng buộc của bản gốc giữ nguyên và không đàm phán: nhận diện mặt ở V3 chỉ làm trên chính mình và người tình nguyện có consent bằng văn bản. Lưu ý thêm: có nguồn coi giọng nói là dữ liệu sinh trắc học, nên clone giọng ở V2 cũng phải nằm trong cùng nguyên tắc. Đây không phải tư vấn pháp lý.
 - Gốc "nút vật lý ... ngắt ưu tiên cao, dừng I2S ngay tại MCU": vẫn phụ thuộc firmware còn sống. Thêm tầng L2 (XSMT qua nút NC) và nguyên tắc fail-safe; thêm yêu cầu chốt và re-arm.
 - Gemini: "ISR ... ngắt ngay ngoại vi I2S, xả RingBuffer ... rồi bắn gói tin lên Host" làm hết trong ISR. Sửa: ISR chỉ đặt cờ/kéo chân mute và đánh thức task; việc có lock làm trong task.
 - Gốc chưa nói kill ở tầng host chỉ dừng *nạp*; thêm phân tích âm thanh dưới điểm cắt và test kill khi daemon bị `SIGSTOP`.
 - Gốc "không bao giờ đến player, chứng minh bằng test tự động": thêm cách chứng minh (một cổng duy nhất + bất biến + đột biến) và ràng buộc duyệt với `content_hash` (TOCTOU).
-- Thêm: UI duyệt không được lộ qua tunnel của webhook.
+- Gốc/Gemini "xả queue"/"xóa toàn bộ QUEUED": chuyển sang `KILLED`, không xóa dòng, để giữ audit.
+- Thêm: tầng L3 cắt nguồn amp, chân mute của amp, thử trạng thái an toàn mặc định bằng reset/rút USB; CHECK `approver_id` ở DB; không log định danh người gửi; UI duyệt và `/kill` không lộ qua tunnel của webhook.
 
 ### 12. Đọc thêm và tự kiểm tra
 
-- **Nguồn gốc:** Datasheet PCM5102A (Texas Instruments), mục soft mute/XSMT; datasheet MAX98357A, mục SD_MODE.
+- **Nguồn gốc:** Datasheet PCM5102A (Texas Instruments), mục soft mute/XSMT; datasheet MAX98357A, mục SD_MODE; ESP-IDF Programming Guide — I2S (Thread Safety), GPIO (ISR) `[kiểm theo phiên bản]`.
 - **Giải thích:** Nancy Leveson & Clark Turner, *An Investigation of the Therac-25 Accidents*, IEEE Computer, 1993.
-- **Đào sâu (tùy chọn):** Nancy Leveson, *Engineering a Safer World* (MIT Press), cho cách nhìn an toàn như một bài toán ràng buộc của cả hệ thống, không chỉ của từng thành phần.
-- **Tự kiểm tra:** (1) giải thích lại cho một backend engineer khác trong 5 câu vì sao `/kill` trong cùng tiến trình với vòng phát không phải là kill switch; (2) vẽ lại sơ đồ bốn tầng ở phần 2 và ghi phần âm thanh còn nằm dưới mỗi điểm cắt; (3) hai câu dưới.
+- **Đào sâu (tùy chọn):** Nancy Leveson, *Engineering a Safer World* (MIT Press); K7 C10.1 (an toàn là một tầng phần cứng).
+- **Tự kiểm tra:** (1) giải thích lại cho một backend engineer khác trong 5 câu vì sao `/kill` trong cùng tiến trình với vòng phát không phải là kill switch; (2) vẽ lại sơ đồ bốn tầng ở phần 2, ghi phần âm thanh còn nằm dưới mỗi điểm cắt; (3) hai câu dưới.
 
-  *a. Một đồng nghiệp đề xuất đi dây nút kill kiểu NO kéo GPIO xuống đất, "vì đơn giản hơn". Chỉ ra một failure mode mà kiểu NC phát hiện được còn kiểu NO thì không.*
-  <details><summary>Đáp án</summary>Đứt dây hoặc lỏng đầu nối. Kiểu NO: đứt dây thì chân GPIO giữ mức kéo lên như lúc không bấm, hệ không biết nút đã chết, và lần cần bấm thật thì không có gì xảy ra. Kiểu NC: đứt dây giống như đang bấm, loa im ngay, lỗi lộ ra lúc vô hại.</details>
+  *a. Đồng nghiệp đề xuất đi dây nút kill kiểu NO kéo GPIO xuống đất, "vì đơn giản hơn". Chỉ ra một failure mode mà kiểu NC phát hiện được còn NO thì không.*
+  <details><summary>Đáp án</summary>Đứt dây hoặc lỏng đầu nối. NO: đứt dây thì chân giữ mức kéo lên như lúc không bấm, nút chết âm thầm, lần cần bấm thật không có gì xảy ra. NC: đứt dây giống đang bấm, loa im ngay, lỗi lộ ra lúc vô hại.</details>
 
-  *b. Người duyệt approve một confession, sau đó người gửi sửa một chữ trong Sheet. Hệ của bạn phải làm gì, và bất biến nào bắt được nếu bạn làm sai?*
-  <details><summary>Đáp án</summary>Nội dung đổi thì `content_hash` đổi, bản ghi quay về `PENDING_MODERATION`. Bất biến "mọi `(source_id, content_hash)` gửi ra loa đều có trong bảng duyệt" bắt được lỗi upsert giữ nguyên trạng thái `APPROVED`, đúng như đột biến trong mô hình đồ chơi.</details>
+  *b. Ring mục tiêu 150 ms, DMA 40 ms, host gửi trước 300 ms. Kill L0 chỉ ngừng gửi, không xả ring: loa nói thêm tối đa bao lâu? Và vì sao lệnh mở lại (`REARM`) phải tường minh?*
+  <details><summary>Đáp án</summary>≈ 300 + 150 + 40 = 490 ms (phần host gửi trước có thể nằm ở buffer serial/USB hoặc đã vào ring). Có lệnh KILL xả ring ở ESP32 (và bỏ mọi dữ liệu đến sau KILL) thì chỉ còn phần DMA. `REARM` tường minh: nếu ESP32 tự bỏ mute khi có dữ liệu mới, một bug ở host hoặc dữ liệu cũ trong buffer USB làm loa nói lại ngay sau kill; trạng thái "đã kill" chỉ được thoát bằng một quyết định có chủ đích, như reset E-stop.</details>
 
 ---
 
@@ -664,7 +634,7 @@ Cả ba đều dưới 1 s, nhưng chỉ L1/L2 đạt khi **daemon treo**. Tiêu
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
-Tháng 5/1994, tàu thăm dò **Clementine** đang trên đường từ Mặt Trăng tới tiểu hành tinh Geographos thì máy tính trên tàu treo. Trong lúc treo, nó bật động cơ đẩy và không tắt; khi mặt đất khôi phục được bằng một lệnh reset phần cứng thì nhiên liệu gần như đã hết và tàu quay khoảng 80 vòng/phút. Nhóm thiết kế đã lo đúng chuyện này và viết một **timeout bằng phần mềm** cho động cơ đẩy. Timeout đó chạy trên chính firmware đã treo, nên không bao giờ chạy. Bộ xử lý có sẵn watchdog phần cứng nhưng không được dùng. Theo Jack Ganssle (*Great Watchdog Timers for Embedded Systems*), các kỹ sư tàu NEAR sau đó rút ra bài học "watchdog phải được nối cứng", và khi NEAR gặp một sự cố máy tính tương tự, watchdog còn hoạt động đã cắt từng lần phun ngay lập tức [chuẩn, theo Ganssle và tài liệu lessons-learned của Aerospace Corporation; nguyên nhân gốc của lần treo trên Clementine là suy luận, không phải kết luận chính thức].
+Tháng 5/1994, tàu thăm dò **Clementine** đang trên đường từ Mặt Trăng tới tiểu hành tinh Geographos thì máy tính trên tàu treo. Trong lúc treo, nó bật động cơ đẩy và không tắt; khi mặt đất khôi phục được bằng một lệnh reset phần cứng thì nhiên liệu gần như đã hết và tàu quay khoảng 80 vòng/phút. Nhóm thiết kế đã lo đúng chuyện này và viết một **timeout bằng phần mềm** cho động cơ đẩy. Timeout đó chạy trên chính firmware đã treo, nên không bao giờ chạy. Bộ xử lý có sẵn watchdog phần cứng nhưng không được dùng. Theo Jack Ganssle (*Great Watchdog Timers for Embedded Systems*), nhóm tàu NEAR sau đó nối cứng watchdog, và khi NEAR gặp sự cố tương tự, watchdog đã cắt từng lần phun ngay [chuẩn, theo Ganssle và tài liệu lessons-learned của Aerospace Corporation; nguyên nhân gốc của lần treo trên Clementine là suy luận, không phải kết luận chính thức].
 
 Ví dụ ngược chiều: năm 1997, **Mars Pathfinder** liên tục tự reset trên sao Hỏa. Watchdog làm đúng việc: một task ưu tiên cao không xong việc đúng hạn vì priority inversion (→ F5.3), và hệ reset thay vì treo. Nhưng reset không sửa được nguyên nhân; nó chỉ biến "treo" thành "vòng reset". Nhóm phải tái hiện lỗi dưới đất và gửi lên một bản vá bật priority inheritance cho mutex đó [chuẩn]. Hai câu chuyện cùng nói: watchdog là lớp cuối biến trạng thái không biết thành trạng thái biết, và nó phải độc lập với thứ nó canh. Nhưng nó không thay được việc tìm nguyên nhân.
 
@@ -674,22 +644,22 @@ Ví dụ ngược chiều: năm 1997, **Mars Pathfinder** liên tục tự reset
 
 ```mermaid
 flowchart BT
-    subgraph mini[Mini PC N100]
-      HWD[Watchdog chipset Intel<br/>iTCO_wdt, đếm bằng phần cứng] -->|reset cả máy| OS
-      OS[systemd PID 1<br/>RuntimeWatchdogSec] -->|vỗ /dev/watchdog| HWD
-      OS -->|WatchdogSec: không nhận WATCHDOG=1<br/>thì SIGABRT + restart| DMN[streamer daemon]
+    subgraph mini["Mini PC N100"]
+      HWD["Watchdog chipset Intel<br/>iTCO_wdt, đếm bằng phần cứng"] -->|reset cả máy| OS
+      OS["systemd PID 1<br/>RuntimeWatchdogSec"] -->|vỗ /dev/watchdog| HWD
+      OS -->|WatchdogSec: không nhận WATCHDOG=1<br/>thì SIGABRT + restart| DMN["streamer daemon"]
       DMN -->|WATCHDOG=1, chỉ khi có tiến độ| OS
-      BIOS[BIOS: Restore on AC power loss = On] -->|mất điện rồi có lại| OS
+      BIOS["BIOS: Restore on AC power loss = On"] -->|mất điện rồi có lại| OS
     end
-    subgraph esp[ESP32-S3]
-      TWDT[Task WDT / Interrupt WDT<br/>phần cứng trong chip] -->|reset chip| FW[task phát audio]
+    subgraph esp["ESP32-S3"]
+      TWDT["Task WDT / Interrupt WDT<br/>phần cứng trong chip"] -->|reset chip| FW["task phát audio"]
       FW -->|esp_task_wdt_reset| TWDT
-      CW[Watchdog giao tiếp<br/>do bạn viết] -->|mute + xả buffer| FW
+      CW["Watchdog giao tiếp<br/>do bạn viết"] -->|mute + xả buffer| FW
     end
     DMN -->|USB: audio + heartbeat| CW
 ```
 
-Mô phỏng: một worker kẹt ở giây 20. Hai cách gửi `WATCHDOG=1`.
+Mô phỏng: một worker kẹt ở giây 20, hai cách gửi `WATCHDOG=1` (viết dự đoán P2 trước khi chạy).
 
 ```python
 # [đã chạy] Ai canh người canh: heartbeat từ thread riêng vs heartbeat gắn với tiến độ.
@@ -728,7 +698,6 @@ Bốn câu về bản chất:
 |---|---|---|---|
 | Liveness probe của Kubernetes | `WatchdogSec` + `WATCHDOG=1` | Probe HTTP thường do thread web trả lời, nên deadlock ở worker vẫn "live". Cùng bệnh, nhưng ở đây hậu quả là loa câm hoặc lặp tiếng hàng giờ | Daemon treo mà systemd báo `active (running)` |
 | `restartPolicy: Always` + CrashLoopBackOff (giãn dần, không bỏ cuộc) | `Restart=always` | systemd mặc định **bỏ cuộc**: quá 5 lần start trong 10 s thì unit chuyển `failed` và không tự lên nữa [spec `systemd-system.conf`: `DefaultStartLimitIntervalSec=10s`, `DefaultStartLimitBurst=5`, `DefaultRestartSec=100ms`] | Sau một lần rút điện, daemon khởi động trước khi ESP32 enumerate xong, crash 5 lần trong 1 giây, rồi nằm chết suốt phần còn lại của soak |
-| Health check của load balancer (rút instance khỏi pool) | Watchdog giao tiếp trên ESP32 | Ở backend "loại khỏi pool" là hành động của người khác. Ở đây ESP32 phải tự đổi trạng thái vật lý của chính nó (mute, xả buffer) | ESP32 chờ host "báo dừng" trong khi host đã chết |
 | Gom log về ELK/Loki | JSON lines + journald trên chính máy đó | Không có kho log ở xa; log nằm cùng đĩa có thể đầy; journald mặc định chỉ đẩy xuống đĩa định kỳ [spec `journald.conf`: `SyncIntervalSec=5m`, trừ thông điệp mức CRIT trở lên] | Rút điện, mất đúng mấy phút log trước sự cố, đúng mấy phút bạn cần nhất |
 | logrotate trên server | logrotate + giới hạn journald | logrotate chạy **theo lịch** (timer hằng ngày trên Ubuntu), không theo dung lượng; journald thì áp giới hạn lúc ghi | Tin rằng "đĩa đầy thì logrotate tự kích hoạt" |
 | DNS / service discovery | `/dev/ttyACM0` | Tên thiết bị có thể đổi sau khi cắm lại (`ttyACM1` nếu handle cũ chưa đóng) | Daemon mở lại `ttyACM0` mãi không thấy. Dùng `/dev/serial/by-id/...` |
@@ -748,43 +717,32 @@ Bốn câu về bản chất:
 | 🟢 | Start rate limit | Quá `StartLimitBurst` lần start trong `StartLimitIntervalSec` thì unit `failed` | Chỉ áp cho start bằng tay |
 | 🟢 | Crash loop / backoff | Restart lặp vì lỗi bền; giãn cách để không đốt CPU, đĩa, log | Bằng chứng watchdog hoạt động tốt |
 | 🟢 | Reset reason | Lý do lần boot trước (`esp_reset_reason()`: brownout, task WDT, panic...) | Thông tin chỉ dùng khi debug |
-| 🟢 | Restore on AC power loss | Tùy chọn BIOS: có điện lại thì tự bật máy | Mặc định đã bật (thường không) |
-| 🟢 | `/dev/serial/by-id` | Đường dẫn ổn định theo serial của thiết bị USB, do udev tạo | Giống `ttyACM0` |
 | 🟡 | `RuntimeWatchdogSec` / `iTCO_wdt` | systemd vỗ watchdog phần cứng của chipset Intel qua `/dev/watchdog` | Cùng thứ với `WatchdogSec` của service |
 | 🟡 | TWDT / IWDT (ESP-IDF) | Task watchdog (task đăng ký phải vỗ) / interrupt watchdog (ngắt bị chặn quá lâu) | TWDT mặc định reset chip (mặc định chỉ in cảnh báo) |
 | 🟡 | Watchdog giao tiếp | Bạn tự viết: mất heartbeat của host quá N giây thì vào trạng thái an toàn | Một tính năng có sẵn của ESP-IDF |
-| 🟡 | `SystemMaxUse` / `SystemKeepFree` | Trần dung lượng journal / dung lượng đĩa journald chừa lại | Logrotate |
 | 🔴 | Magic close, pretimeout của watchdog device | Chi tiết giao thức `/dev/watchdog` | Cần biết khi đã để systemd quản |
 
 ### 5. Dự đoán
 
 Viết vào `lab/16-daemon/prediction.md`, commit, rồi mới làm phần 6. Đọc giá trị *thật* của unit bằng `systemctl show confession-streamer -p RestartUSec -p WatchdogUSec -p StartLimitBurst -p StartLimitIntervalUSec`, không đọc từ trí nhớ.
 
-**P1 — `kill -9` daemon.** Thời gian từ lúc kill tới lúc daemon gửi `READY=1` lại. Tham số: `RestartSec` của bạn + thời gian khởi động (đo bằng log: dòng "start" tới dòng "ready", lấy 5 lần).
+**P1 — `kill -9` daemon:** thời gian tới khi daemon gửi `READY=1` lại (`RestartSec` + thời gian khởi động, đo từ log "start" tới "ready", 5 lần).
 
-**P2 — Treo giả lập.** Chèn một `sleep` vô hạn vào vòng chính. Với `WatchdogSec` của bạn và chu kỳ gửi `WATCHDOG=1`, systemd phát hiện sau bao lâu, và tổng thời gian tới khi daemon mới `READY` là bao nhiêu? Dự đoán cho **cả hai** cách vỗ (thread phụ / theo tiến độ). Lưu ý systemd gửi `SIGABRT` trước, có thể kèm core dump.
+**P2 — Treo giả lập** (`sleep` vô hạn trong vòng chính): với `WatchdogSec` và chu kỳ gửi `WATCHDOG=1` của bạn, systemd phát hiện sau bao lâu và bao lâu tới `READY` lại, cho **cả hai** cách vỗ (thread phụ / theo tiến độ). systemd gửi `SIGABRT` trước, có thể kèm core dump.
 
-**P3 — Vòng crash.** Phần 3 đã cho luật start rate limit. Áp nó: daemon crash sau mỗi lần start một khoảng 0.2 s, 2 s, hoặc 30 s. Với cấu hình mặc định (không có dòng `StartLimit*`, `RestartSec` mặc định) và với cấu hình của bạn, kịch bản nào làm unit nằm `failed` vĩnh viễn, sau bao lâu và sau bao nhiêu lần start? Tham số: `man systemd-system.conf` (mục `DefaultStartLimit*`, `DefaultRestartSec`), hoặc bản comment trong `/etc/systemd/system.conf`. Viết lập luận, không chỉ đáp số: biên giới giữa "bỏ cuộc" và "restart mãi" nằm ở đâu theo `crash_after + RestartSec`?
+**P3 — Vòng crash.** Daemon crash sau mỗi lần start 0,2 s, 2 s hoặc 30 s. Với cấu hình mặc định (không có `StartLimit*`, `RestartSec` mặc định) và với cấu hình của bạn, kịch bản nào làm unit nằm `failed` vĩnh viễn, sau bao lâu, bao nhiêu lần start? Tra `man systemd-system.conf` (`DefaultStartLimit*`, `DefaultRestartSec`) hoặc comment trong `/etc/systemd/system.conf`. Viết lập luận: biên giới giữa "bỏ cuộc" và "restart mãi" nằm ở đâu theo `crash_after + RestartSec`?
 
-**P4 — Rút cáp USB giữa câu.** (a) Bao lâu sau khi rút thì loa im? Tham số: timeout watchdog giao tiếp `N` của ESP32, độ sâu ring + DMA buffer, nguồn của ESP32 lấy từ đâu. (b) Cắm lại, thiết bị hiện ra ở tên nào? (c) Bản ghi đang `SPEAKING` đi đâu (theo chính sách Bài 14)?
+**P4 — Rút cáp USB giữa câu:** (a) bao lâu thì loa im (timeout watchdog giao tiếp `N`, độ sâu ring + DMA, ESP32 lấy nguồn từ đâu); (b) cắm lại, thiết bị hiện ra ở tên nào; (c) bản ghi đang `SPEAKING` đi đâu (chính sách Bài 14).
 
-**P5 — Làm đầy 90% đĩa.** (a) journald làm gì với journal hiện có, và journal của bạn chiếm bao nhiêu trước/sau? Tham số: `SystemMaxUse`, `SystemKeepFree` mặc định trong `man journald.conf` (tính theo % dung lượng phân vùng, có trần), `journalctl --disk-usage`, `df`. (b) Nếu đẩy tới 100%, SQLite trả lỗi gì, daemon của bạn làm gì, và tiến trình chạy dưới user thường hết chỗ trước hay sau root? Tham số: số block dành cho root của ext4 (`sudo tune2fs -l /dev/<phân vùng> | grep -i reserved`).
+**P5 — Làm đầy 90% đĩa:** (a) journald làm gì với journal hiện có, journal chiếm bao nhiêu trước/sau (tra `SystemMaxUse`, `SystemKeepFree` trong `man journald.conf`; đo `journalctl --disk-usage`, `df`); (b) ở 100%: SQLite trả lỗi gì, daemon làm gì, tiến trình user thường hết chỗ trước hay sau root (`sudo tune2fs -l /dev/<phân vùng> | grep -i reserved`).
 
 ```markdown
 # prediction.md — Bài 16   (commit: <hash>, ngày: <yyyy-mm-dd>)
-## Giá trị thật đọc từ systemctl show
 RestartUSec=___ WatchdogUSec=___ StartLimitBurst=___ StartLimitIntervalUSec=___
-## P1 kill -9 → READY lại sau ___ s (RestartSec ___ + khởi động ___)
-## P2 Treo: phát hiện sau ___ s (thread phụ) / ___ s (theo tiến độ); READY lại sau ___ s
-## P3 Vòng crash (mặc định / cấu hình của tôi)
-| crash sau | mặc định: failed? sau ___ s, ___ lần start | cấu hình của tôi |
-|---|---|---|
-| 0.2 s | | |
-| 2 s | | |
-| 30 s | | |
-- Biên giới: ___
-## P4 Rút USB: im sau ___ ms (N = ___, buffer ___); tên thiết bị khi cắm lại ___; bản ghi SPEAKING → ___
-## P5 Đĩa 90%: journald ___ (journal trước ___ MB, sau ___ MB) ; ở 100% SQLite báo ___ , daemon ___ , user thường hết chỗ ___ root
+P1 READY lại sau ___ s · P2 phát hiện treo sau ___ s (thread phụ) / ___ s (theo tiến độ), READY sau ___ s
+P3 | crash sau | mặc định: failed? sau ___ s, ___ lần start | cấu hình của tôi |  (0,2 s / 2 s / 30 s) · biên giới: ___
+P4 im sau ___ ms (N = ___, buffer ___) · tên khi cắm lại ___ · SPEAKING → ___
+P5 journald ___ (trước ___ MB, sau ___ MB) · 100%: SQLite ___, daemon ___, user thường hết chỗ ___ root
 ```
 
 ### 6. Làm
@@ -949,7 +907,6 @@ Mặc định: crash sau 0.2 s cho 5 lần start trong khoảng 1.5 s rồi `fai
 | Daemon treo mà `systemctl status` vẫn `active (running)` | `WATCHDOG=1` gửi từ thread phụ, hoặc chưa đặt `WatchdogSec` | `systemctl show -p WatchdogUSec`; đọc chỗ gọi `sd_notify` | Vỗ từ vòng chính, sau đơn vị việc thật |
 | Service bị giết mỗi `WatchdogSec` dù chạy bình thường | Không gửi `WATCHDOG=1` lúc rảnh (vòng chính chặn vô hạn chờ queue) | Log: bị giết đúng các khoảng không có confession | Chờ queue có timeout |
 | Unit `failed` sau khi boot, `start request repeated too quickly` | Start rate limit | `journalctl -b -u <unit>` | `StartLimitIntervalSec=0`, chờ thiết bị bên trong daemon |
-| `Type=notify` mà unit treo ở `activating` rồi timeout | Không bao giờ gửi `READY=1`, hoặc `NotifyAccess` sai khi gửi từ tiến trình con | `systemctl status` | Gửi `READY=1` từ tiến trình chính sau khi khởi tạo |
 | Không có `/dev/watchdog` | BIOS tắt TCO, hoặc driver chưa nạp | `dmesg | grep -i tco`, `modprobe iTCO_wdt` | Bật trong BIOS nếu có mục; nếu không có phần cứng, ghi rõ tầng này thiếu |
 | ESP32 treo task phát mà không reset | `CONFIG_ESP_TASK_WDT_PANIC` tắt (mặc định) | Monitor serial: thấy cảnh báo TWDT lặp lại | Bật panic, hoặc tự gọi `esp_restart()` khi TWDT báo |
 | Sau rút/cắm USB, daemon mở được cổng nhưng không có dữ liệu | Mở nhầm `ttyACM1`/`ttyACM0`, hoặc chưa handshake lại credit | `ls -l /dev/serial/by-id/` | Dùng `by-id`; handshake là bước bắt buộc sau mở cổng |
@@ -971,9 +928,8 @@ Mặc định: crash sau 0.2 s cho 5 lần start trong khoảng 1.5 s rồi `fai
 
 ### 10. Liên kết ra ngoài
 
-- **Dead man's switch trên tàu hỏa.** Người lái phải giữ một tay nắm hoặc bàn đạp; nhả ra thì tàu tự phanh. Giống: im lặng của tín hiệu là lệnh dừng (như watchdog giao tiếp của ESP32). Khác và sâu hơn: một tay nắm có thể bị giữ bởi chính trọng lượng của người lái đã bất tỉnh. Vụ tàu trật bánh ở **Waterfall** (New South Wales, Úc, 2003) được điều tra kết luận là người lái lên cơn đau tim và thiết bị dead man không kích hoạt vì bàn đạp vẫn bị đè [chuẩn, kiểm lại báo cáo điều tra chính thức]. Vì vậy nhiều hệ chuyển sang *vigilance control*: định kỳ đòi một hành động xác nhận mới, không chấp nhận "giữ nguyên". Đó chính xác là khác biệt giữa thread phụ vỗ watchdog và vỗ theo tiến độ.
-- **Watchdog trên tàu vũ trụ.** Clementine và NEAR (phần 1): cùng một loại sự cố, khác nhau ở chỗ watchdog có được nối cứng hay không. Khác với mini PC của bạn: tàu vũ trụ không có người cắm lại dây, nên mọi phục hồi phải tự động, và có thêm chế độ *safe mode* (hướng tấm pin về Mặt Trời, chờ lệnh). Safe mode là phiên bản lớn của trạng thái `WAIT_HOST`.
-- **Supervisor trong Erlang/OTP.** Cây supervisor khởi động lại tiến trình con theo chiến lược, và có cường độ restart tối đa (quá N lần trong T giây thì supervisor tự chết và đẩy lỗi lên cha). Giống start rate limit của systemd: giới hạn này **cố ý** chuyển vòng restart vô ích thành lỗi lớn hơn để tầng trên xử lý. Khác: trong hệ của bạn, "tầng trên" của systemd là watchdog phần cứng, và nó chỉ biết reset cả máy.
+- **Dead man's switch trên tàu hỏa.** Người lái phải giữ tay nắm hoặc bàn đạp; nhả ra thì tàu tự phanh. Giống: im lặng của tín hiệu là lệnh dừng (như watchdog giao tiếp của ESP32). Sâu hơn: tay nắm có thể bị giữ bởi chính trọng lượng của người lái đã bất tỉnh. Vụ trật bánh ở **Waterfall** (New South Wales, Úc, 2003) được kết luận là người lái lên cơn đau tim và thiết bị dead man không kích hoạt vì bàn đạp vẫn bị đè [chuẩn, kiểm lại báo cáo điều tra chính thức]. Vì vậy nhiều hệ chuyển sang *vigilance control*: định kỳ đòi một hành động xác nhận mới. Đó chính xác là khác biệt giữa thread phụ vỗ watchdog và vỗ theo tiến độ.
+- **Supervisor trong Erlang/OTP.** Cây supervisor khởi động lại tiến trình con, với cường độ restart tối đa (quá N lần trong T giây thì supervisor tự chết và đẩy lỗi lên cha). Giống start rate limit của systemd: **cố ý** chuyển vòng restart vô ích thành lỗi lớn hơn để tầng trên xử lý. Khác: "tầng trên" của systemd là watchdog phần cứng, chỉ biết reset cả máy; và tàu vũ trụ (phần 1) có thêm *safe mode*, phiên bản lớn của trạng thái `WAIT_HOST`. Robot K7 dùng cùng chuỗi canh này cho vòng điều khiển motor (→ K7 C4.4, failsafe firmware).
 
 ### 11. Độ tin cậy và sửa lỗi
 
@@ -985,7 +941,6 @@ Mặc định: crash sau 0.2 s cho 5 lần start trong khoảng 1.5 s rồi `fai
 | systemd 255 hỗ trợ `RestartSteps`, `RestartMaxDelaySec` | [spec] | Có trong thư viện systemd 255 (đã kiểm); `man systemd.service` |
 | TWDT của ESP-IDF mặc định chỉ in cảnh báo, không reset | [spec] | ESP-IDF Programming Guide, *Watchdogs*, mục Task Watchdog Timer; `CONFIG_ESP_TASK_WDT_PANIC` |
 | N100/EQ12 có `iTCO_wdt` dùng được | [tự đo] | `wdctl`, `dmesg` |
-| Tên mục BIOS Auto Power On trên EQ12 | [tự đo] | Vào BIOS kiểm |
 | Clementine: watchdog phần cứng không dùng; NEAR: watchdog cắt lệnh phun | [chuẩn] | Jack Ganssle, *Great Watchdog Timers for Embedded Systems*; nguyên nhân gốc trên Clementine là suy luận |
 | Waterfall 2003, bàn đạp dead man bị đè | [chuẩn, chưa đối chiếu báo cáo gốc] | Báo cáo của Special Commission of Inquiry into the Waterfall Rail Accident |
 
@@ -1014,7 +969,7 @@ Mặc định: crash sau 0.2 s cho 5 lần start trong khoảng 1.5 s rồi `fai
 
 ## Bài 17 — TN-5: 72 giờ không ai trông (6h người, 72h treo máy)
 
-> **Vị trí:** Bài 16 (daemon, watchdog) → **Bài 17** → Gate Khóa 3 · **Cần trước:** F7.6 (soak test, chế độ hỏng, FMEA), F1.4 (khoảng tin cậy cho tỉ lệ, rule of three), F1.6 (fit xu hướng), F1.7 (preregistration), F2.1 (oracle độc lập), F4.3 (`boot_id`, đồng hồ qua reboot), K3 Bài 6 (brownout), K3 Bài 10 (đường cong underrun) · **Sau bài này bạn quyết định được:** một lần chạy 72h không lỗi cho phép bạn viết câu nào vào README và cấm câu nào; muốn khẳng định mạnh hơn thì cần bao nhiêu giờ / bao nhiêu lần rút điện; và con số công suất nào đi vào power budget của robot Khóa 7.
+> **Vị trí:** Bài 16 (daemon, watchdog) → **Bài 17** → Gate Khóa 3 (soak 72h làm lại trên robot thật ở K7 C10.3) · **Cần trước:** F7.4 (SLI/SLO/error budget), F7.6 (soak test, chế độ hỏng, FMEA), F1.4 (khoảng tin cậy cho tỉ lệ, rule of three), F1.6 (fit xu hướng), F1.7 (preregistration), F2.1 (oracle độc lập), F4.3 (`boot_id`, đồng hồ qua reboot), K3 Bài 6 (brownout), K3 Bài 10 (đường cong underrun) · **Sau bài này bạn quyết định được:** một lần chạy 72h không lỗi cho phép bạn viết câu nào vào README và cấm câu nào; muốn khẳng định mạnh hơn thì cần bao nhiêu giờ / bao nhiêu lần rút điện; và con số công suất nào đi vào power budget của robot (→ K7 C1.2).
 
 Thí nghiệm bắt buộc số 5, tiêu chí PASS số 7 của M4, và là tiêu chí khắt khe nhất. Câu hỏi của bài: **nó có thật sự chạy được không, hay chỉ chạy được lúc bạn đang nhìn?**
 
@@ -1052,22 +1007,23 @@ plt.legend(); plt.grid(alpha=.3); plt.show()
 
 Nhìn đồ thị: với hệ có MTBF thật vài trăm giờ, một lần soak 72h *thường* kết thúc với 0 lỗi. "0 lỗi" vì vậy là một kết quả rất hay gặp ở cả hệ tốt lẫn hệ chỉ tạm được. Câu hỏi đúng không phải "có lỗi không" mà là "**0 lỗi trong T giờ loại bỏ được những giá trị λ nào**". Đó là rule of three (→ F1.4), và bạn sẽ tự tính nó ở phần Dự đoán.
 
+**Soak là một phép đo SLO, không phải một nghi thức** (→ F7.4, F7.6). Hợp đồng soak ở bước 0 chính là một bảng SLI/SLO viết trước: SLI "phát đúng" (đo bằng oracle độc lập), SLI "mất dữ liệu đã commit mỗi lần mất điện", SLI "can thiệp tay", SLI "underrun theo giờ phát", mỗi cái một mục tiêu và một cách đếm. Khác với SLO dịch vụ: mẫu số ở đây nhỏ (72 giờ, 10 lần rút), nên kết luận phải đi kèm cận trên của khoảng tin cậy, không phải một tỉ lệ "0%". Cùng hợp đồng này sẽ được dùng lại khi soak robot thật ở K7 C10.3 và cho luồng sản phẩm ở K7 C12.
+
 ### 3. Cầu nối từ backend
 
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
 | Soak/endurance test trên staging | TN-5 | Ở backend soak thường đi với tải cao và nhiều instance. Ở đây tải thấp, một thiết bị (n = 1), cộng lỗi vật lý (mất điện, nhiệt) | Coi 72h trên một máy là bằng chứng như 72h trên 50 pod |
-| SLO 99.9% và error budget | "0 lần can thiệp tay", "0 mất dữ liệu" | SLO có mẫu số lớn. Ở đây mẫu số nhỏ (72 giờ, 10 lần rút), nên "0" có khoảng tin cậy rất rộng | Viết "hệ bền với mất điện" khi bằng chứng chỉ loại được tỉ lệ hỏng trên khoảng một phần tư |
+| SLO 99.9% và error budget (→ F7.4) | "0 lần can thiệp tay", "0 mất dữ liệu" | SLO có mẫu số lớn. Ở đây mẫu số nhỏ (72 giờ, 10 lần rút), nên "0" có khoảng tin cậy rất rộng | Viết "hệ bền với mất điện" khi bằng chứng chỉ loại được tỉ lệ hỏng trên khoảng một phần tư |
 | Chaos engineering: giết instance | Rút điện | Giết VM/process không động tới cache ghi của ổ SSD, firmware ổ, đồng hồ RTC, BIOS. Rút điện thì có | Test `kill -9` PASS rồi tin rằng rút điện cũng PASS |
 | `fsync` và durability của Postgres | `PRAGMA synchronous` | Dưới DB còn ổ đĩa. Ổ SSD consumer không có tụ bảo vệ mất điện có thể báo "đã ghi" khi dữ liệu còn trong cache tạm [chuẩn: Zheng và cộng sự, FAST 2013, rút điện 15 ổ SSD và thấy phần lớn có lỗi] | Đổ lỗi cho cấu hình SQLite khi thủ phạm là ổ, hoặc ngược lại |
 | Dashboard Prometheus scrape mỗi 15–60 s | `soak_monitor.py` lấy mẫu mỗi 60 s | Một đợt hạ xung 5 s nằm gọn giữa hai mẫu thì gauge không thấy. Bộ **đếm** tích lũy thì thấy (→ F5.5, aliasing) | Báo "không throttle" dựa trên gauge nhiệt độ/tần số |
-| Postmortem dựa trên log tập trung | Log trên chính máy bị rút điện | Mấy phút log cuối có thể chưa xuống đĩa (Bài 16: `SyncIntervalSec`) | Không tái dựng được chuyện gì xảy ra ngay trước lần rút |
 
 **Chấm mô hình:**
 
 - *Bản Gemini: "72 giờ (3 ngày đêm) là khoảng thời gian chuẩn để bộc lộ mọi điểm yếu tiềm ẩn."* **SAI.** 72h không có gì đặc biệt về mặt thống kê; nó là một ngân sách thời gian hợp lý. Với lỗi ngẫu nhiên, 0 lỗi trong 72h chỉ loại được những tỉ lệ đủ cao (P1). Với lỗi theo thời điểm, nó không nói gì. Phản ví dụ: bộ đếm tick 32-bit ở 1 kHz tràn sau khoảng 49.7 ngày (2³² ms); soak 72h không bao giờ chạm tới.
 - *"10 lần rút điện không mất dữ liệu nghĩa là hệ bền với mất điện."* **ĐÚNG MỘT PHẦN.** Đúng là bằng chứng; sai ở độ mạnh. Hai chỗ gãy: cận trên của xác suất hỏng mỗi lần rút với n = 10 vẫn lớn (P1), và phần lớn lần rút bằng tay không trúng lúc đang ghi (P2), nên chúng kiểm một thứ dễ hơn thứ bạn nghĩ. Phản ví dụ: một hệ mất dữ liệu với xác suất 15% mỗi lần rút trúng giữa transaction vẫn có khả năng cao qua được 10 lần rút ngẫu nhiên.
-- *Bản gốc: "SQLite với WAL mode và `synchronous=FULL` sẽ sống sót; SQLite mặc định thì có thể không."* **ĐÚNG MỘT PHẦN.** Trên Ubuntu 24.04, SQLite mặc định đã là rollback journal + `synchronous=FULL` (đã đọc lại ở Bài 14), vốn nguyên tử và bền khi mất điện, *với điều kiện ổ đĩa tôn trọng lệnh flush*. Cấu hình rủi ro thật là WAL + `synchronous=NORMAL` (mất vài transaction cuối, không hỏng file), `synchronous=OFF`, hoặc tầng dưới SQLite nói dối. Phản ví dụ: cùng một file cấu hình đúng, chạy trên ổ có cache ghi tạm không được bảo vệ, vẫn có thể mất transaction đã báo commit.
+- *Bản gốc: "SQLite với WAL mode và `synchronous=FULL` sẽ sống sót; SQLite mặc định thì có thể không."* **ĐÚNG MỘT PHẦN.** Trên Ubuntu 24.04 mặc định đã là rollback journal + `synchronous=FULL` (đọc lại ở Bài 14), nguyên tử và bền khi mất điện *nếu ổ tôn trọng lệnh flush*. Rủi ro thật: WAL + `NORMAL` (mất vài transaction cuối, không hỏng file), `OFF`, hoặc tầng dưới SQLite nói dối. Phản ví dụ: cấu hình đúng trên ổ có cache ghi không được bảo vệ vẫn có thể mất transaction đã báo commit.
 
 ### 4. Thuật ngữ
 
@@ -1076,11 +1032,7 @@ Nhìn đồ thị: với hệ có MTBF thật vài trăm giờ, một lần soak
 | 🟢 | Soak test | Chạy dài ở tải vận hành để lộ lỗi cộng dồn và lỗi hiếm | Stress test (tải cực đại, ngắn) |
 | 🟢 | Rule of three | Thấy 0 lỗi trong n lần thử (hoặc T giờ) thì cận trên 95% của tỉ lệ lỗi ≈ 3/n (3/T) | "0 lỗi = tỉ lệ lỗi bằng 0" |
 | 🟢 | MTBF | Thời gian trung bình giữa hai lần hỏng, có nghĩa khi tỉ lệ hỏng gần như không đổi | Tuổi thọ của thiết bị |
-| 🟢 | Lỗi cộng dồn (aging) | Đại lượng tăng dần tới ngưỡng: bộ nhớ, fd, đĩa, sai số đồng hồ | Lỗi ngẫu nhiên hiếm |
-| 🟢 | Thermal throttling | CPU tự hạ xung khi quá nhiệt hoặc chạm giới hạn công suất | Máy chậm do phần mềm |
 | 🟢 | Power budget | Bảng công suất trung bình và đỉnh của từng khối, theo chu kỳ hoạt động (duty) | Tổng TDP ghi trên hộp |
-| 🟢 | Oracle độc lập | Một cách kiểm kết quả không đi qua chính hệ đang kiểm (mic nghe loa, máy khác ghi seq) | Log của chính hệ |
-| 🟡 | Software rejuvenation | Khởi động lại có kế hoạch để xóa trạng thái cộng dồn | Thừa nhận thất bại |
 | 🟡 | Power-loss protection (PLP) | Tụ trên SSD đủ để ghi nốt cache khi mất điện | Có trên mọi SSD |
 | 🟡 | Crash consistency | Sau mất điện, dữ liệu trên đĩa là một trạng thái hợp lệ nào đó | Durability (không mất cái đã commit) |
 | 🟡 | FMEA | Bảng liệt kê chế độ hỏng, hậu quả, cách phát hiện, mức ưu tiên | Danh sách bug |
@@ -1090,61 +1042,49 @@ Nhìn đồ thị: với hệ có MTBF thật vài trăm giờ, một lần soak
 
 Viết vào `lab/17-soak/prediction.md`, commit **trước khi** bắt đầu đồng hồ 72h.
 
-**P1 — Bạn sẽ được phép nói gì nếu mọi thứ PASS.** Giả định 0 lỗi. Tính cận trên 95% cho: (a) tỉ lệ lỗi theo giờ sau 72h, quy ra MTBF tối thiểu; (b) xác suất mất dữ liệu mỗi lần rút điện sau 10 lần; (c) cùng câu hỏi chỉ với 3 lần rút "đúng lúc đang ghi". (d) Muốn khẳng định MTBF ≥ 1000 h ở mức 95% thì cần soak 0 lỗi trong bao nhiêu giờ? Công thức: Poisson, `P(0 lỗi) = e^(−λT)`, đặt bằng 0.05 rồi giải λ; Bernoulli, `(1 − p)^n = 0.05` rồi giải p. So với xấp xỉ 3/T và 3/n.
+**P1 — Được phép nói gì nếu mọi thứ PASS (0 lỗi).** Cận trên 95% cho: (a) tỉ lệ lỗi theo giờ sau 72h, quy ra MTBF tối thiểu; (b) xác suất mất dữ liệu mỗi lần rút điện sau 10 lần; (c) như (b) chỉ với 3 lần "đúng lúc đang ghi"; (d) số giờ soak 0 lỗi cần để khẳng định MTBF ≥ 1000 h. Công thức: Poisson `P(0 lỗi) = e^(−λT) = 0,05`; Bernoulli `(1 − p)^n = 0,05`; so với xấp xỉ 3/T và 3/n.
 
-**P2 — Rút điện "đúng lúc đang ghi DB".** Dùng `w` và `t_c` đã đo ở Bài 14 (P2). Rút tay ngẫu nhiên thì xác suất mỗi lần trúng cửa sổ ghi là bao nhiêu, và bao nhiêu lần rút để trúng ≥3 lần? Viết ra quy trình bạn sẽ dùng để **chắc chắn** trúng, và bằng chứng nào cho thấy một lần rút đã trúng.
+**P2 — Rút điện "đúng lúc đang ghi DB".** Dùng `w`, `t_c` đo ở Bài 14 (P2): xác suất mỗi lần rút tay trúng cửa sổ ghi, số lần rút để trúng ≥3 lần, quy trình để **chắc chắn** trúng, và bằng chứng một lần rút đã trúng.
 
-**P3 — Công suất.** Dự đoán công suất mini PC lúc nhàn và lúc TTS chạy, ESP32 + amp lúc nghỉ và lúc phát, rồi công suất trung bình 72h theo tỉ lệ thời gian (`P_avg = Σ duty_i × P_i`). Tham số: TDP của N100 (trang thông số Intel ARK), nhãn adapter 12 V của EQ12, số đo nguồn amp từ Bài 5–6. Đo ở ổ cắm AC hay ở dây 12 V DC thì số nào lớn hơn, lớn hơn khoảng bao nhiêu, và số nào mới đúng cho power budget của robot chạy pin ở Khóa 7?
+**P3 — Công suất.** Mini PC lúc nhàn và lúc TTS chạy, ESP32 + amp lúc nghỉ và lúc phát, trung bình 72h `P_avg = Σ duty_i × P_i`. Tham số: TDP N100 (Intel ARK), nhãn adapter 12 V của EQ12, số đo nguồn amp Bài 5–6. Đo ở ổ cắm AC hay dây 12 V DC thì số nào lớn hơn, khoảng bao nhiêu, và số nào đúng cho robot chạy pin ở K7 C1.2?
 
-**P4 — Nhiệt và xung.** Nhiệt độ CPU tối đa trong 72h, và có hạ xung kéo dài không. Tham số: nhiệt độ phòng, mức tải TTS (Bài 12), Tjunction max của N100 (Intel ARK).
+**P4 — Nhiệt và xung:** nhiệt độ CPU tối đa trong 72h, có hạ xung kéo dài không (nhiệt độ phòng, tải TTS Bài 12, Tjunction max của N100 trên Intel ARK).
 
-**P5 — Underrun.** Từ đường cong Bài 10 tại điểm vận hành bạn chọn (underrun/giờ **phát**), nhân với **số giờ thật sự phát** trong 72h (không phải 72h). Dự đoán tổng số underrun.
+**P5 — Underrun:** tỉ lệ ở điểm vận hành Bài 10 (underrun/giờ **phát**) × số giờ thật sự phát trong 72h.
 
-**P6 — Brownout ESP32.** Dự đoán số brownout reset trong 72h, dựa trên cấu hình nguồn bạn chốt ở Bài 6.
+**P6 — Brownout ESP32** trong 72h, theo cấu hình nguồn chốt ở Bài 6.
 
 ```markdown
 # prediction.md — Bài 17   (commit: <hash>, ngày: <yyyy-mm-dd>, giờ bắt đầu soak dự kiến: ___)
-## P1 Nếu 0 lỗi thì được nói
-- (a) λ ≤ ___ /h → MTBF ≥ ___ h     (b) 10 lần rút: p ≤ ___     (c) 3 lần trúng ghi: p ≤ ___
-- (d) Để nói MTBF ≥ 1000 h cần ___ h soak 0 lỗi
-## P2 Rút điện trúng cửa sổ ghi
-- w = ___ /s, t_c = ___ ms → P(trúng mỗi lần) = ___ → số lần rút để trúng ≥3: ___
-- Quy trình chắc chắn trúng: ___      Bằng chứng một lần rút đã trúng: ___
-## P3 Công suất
-| Khối | Nhàn (W) | Tải (W) | Duty tải | Trung bình (W) |
-|---|---|---|---|---|
-| Mini PC (đo ở ___ ) | | | | |
-| ESP32 + amp | | | | |
-- AC so với DC: ___ lớn hơn khoảng ___ % vì ___ . Số dùng cho Khóa 7: ___
-## P4 Nhiệt: max ___ °C ở phòng ___ °C; hạ xung kéo dài: có/không vì ___
-## P5 Underrun: ___ /giờ phát × ___ giờ phát = ___
-## P6 Brownout ESP32: ___
+P1 (a) λ ≤ ___ /h → MTBF ≥ ___ h · (b) 10 lần rút: p ≤ ___ · (c) 3 lần trúng ghi: p ≤ ___ · (d) cần ___ h
+P2 w = ___ /s, t_c = ___ ms → P(trúng mỗi lần) = ___ → số lần rút để trúng ≥3: ___ · quy trình: ___ · bằng chứng: ___
+P3 | Khối | Nhàn (W) | Tải (W) | Duty tải | Trung bình (W) |  (mini PC đo ở ___; ESP32 + amp) · AC vs DC: ___ · số cho K7 C1.2: ___
+P4 max ___ °C ở phòng ___ °C; hạ xung kéo dài: có/không vì ___
+P5 ___ /giờ phát × ___ giờ phát = ___ · P6 ___
 ```
 
 ### 6. Làm
 
-**Bước 0 — Hợp đồng soak (viết cùng `prediction.md`, commit trước khi bắt đầu).** Định nghĩa **trước** thì lúc 2h sáng ngày thứ hai bạn không thể tự đổi luật:
-- *Can thiệp tay* = bất kỳ hành động nào ngoài giao diện vận hành bình thường: SSH để sửa, restart service, cắm lại dây, sửa DB/config. **Không** tính: bấm Approve/Reject trên UI duyệt (đó là thiết kế của Bài 15), và các lần phá có lịch đã ghi trong hợp đồng (rút điện, làm đầy đĩa). Có can thiệp thì ghi trung thực; tiêu chí trượt.
-- *Phát đúng* = câu được phát đủ, một lần, không vỡ. Oracle phải **độc lập với log của daemon** (→ F2.1): khuyến nghị dùng mic INMP441 trên bộ I2S thứ hai của ESP32, tính RMS mỗi 100 ms trong lúc phát và gửi lên host thời lượng "nghe thấy"; so với thời lượng audio TTS (ví dụ khớp trong ±10%). Mic nằm trên cùng ESP32 nên không độc lập hoàn toàn; ghi giới hạn đó.
-- Lịch 10 lần rút điện (giờ dự kiến), ≥3 lần trong cửa sổ "bão ghi" (bước 3); lịch làm đầy đĩa; giờ bắt đầu và kết thúc.
+**Bước 0 — Hợp đồng soak** (viết cùng `prediction.md`, commit trước khi bắt đầu; đây là bảng SLI/SLO của bạn). Định nghĩa **trước** thì lúc 2h sáng ngày thứ hai không thể tự đổi luật:
+- *Can thiệp tay* = mọi hành động ngoài giao diện vận hành bình thường: SSH để sửa, restart service, cắm lại dây, sửa DB/config. **Không** tính: bấm Approve/Reject trên UI duyệt (thiết kế của Bài 15) và các lần phá có lịch trong hợp đồng (rút điện, làm đầy đĩa). Có can thiệp thì ghi trung thực; tiêu chí trượt.
+- *Phát đúng* = câu được phát đủ, một lần, không vỡ, theo một oracle **độc lập với log của daemon** (→ F2.1): khuyến nghị mic INMP441 trên bộ I2S thứ hai của ESP32, tính RMS mỗi 100 ms trong lúc phát, gửi lên host thời lượng "nghe thấy", so với thời lượng audio TTS (ví dụ khớp ±10%). Mic trên cùng ESP32 nên không độc lập hoàn toàn; ghi giới hạn đó.
+- Lịch 10 lần rút điện (≥3 lần trong "bão ghi", bước 3), lịch làm đầy đĩa, giờ bắt đầu và kết thúc.
 
-**Bước 1 — Chạy liên tục 72 giờ, trong đó ≥20 confession thật được phát đúng.** Cần người gửi thật; báo trước cho đồng nghiệp (hoặc người nhà, nếu chạy ở nhà) rằng tuần đó cần ít nhất 20 lời gửi.
+**Bước 1 — Chạy liên tục 72 giờ, ≥20 confession thật được phát đúng.** Báo trước cho đồng nghiệp (hoặc người nhà, nếu chạy ở nhà) rằng tuần đó cần ít nhất 20 lời gửi.
 
 **Bước 2 — 0 lần can thiệp tay** theo định nghĩa ở bước 0.
 
-**Bước 3 — Rút điện đột ngột 10 lần, trong đó ≥3 lần đúng lúc đang ghi DB. Bật lại. Kiểm dữ liệu.** Rút tay mà trông vào may mắn thì không trúng được (P2), nên làm như sau:
-- Một script "bão ghi" chạy trên mini PC: liên tục mở transaction, chèn một dòng có số thứ tự `seq` tăng dần, `COMMIT`; **sau khi `COMMIT` trả về**, gửi `seq` qua UDP tới một máy khác trên LAN (laptop) làm **nhân chứng**. Nhân chứng ghi `seq` kèm giờ nhận.
-- Ba lần rút được làm trong lúc bão ghi đang chạy. Bằng chứng trúng: luồng `seq` ở nhân chứng dừng đột ngột trong vài ms quanh thời điểm rút, và file `-wal` (nếu dùng WAL) khác rỗng sau khi lên lại.
-- Sau mỗi lần lên lại: `PRAGMA integrity_check` phải ra `ok`; `max(seq)` trong DB phải **≥** `seq` cuối nhân chứng đã nhận (mọi thứ đã báo commit đều còn); các dòng sau đó có hay không đều hợp lệ. Kiểm bảng `confession`: không mất record, không có record nào đổi trạng thái sai (dùng bảng khôi phục Bài 14). Ghi thời gian từ lúc cắm điện tới khi daemon `READY`.
-- Tùy chọn mạnh hơn (ngoài tiêu chí): dùng ổ cắm thông minh **thương mại** có API nội bộ, điều khiển từ laptop, để rút tự động hàng trăm lần trong lúc bão ghi. **Không tự đấu relay vào điện lưới 220 V.** Nhớ rằng rút điện lặp lại cũng là thử độ bền của chính ổ SSD.
-- Mini PC tắt thì ESP32 (lấy nguồn USB) cũng tắt; amp nguồn riêng thì có thể kêu "bụp". Ghi lại.
+**Bước 3 — Rút điện đột ngột 10 lần, ≥3 lần đúng lúc đang ghi DB. Bật lại. Kiểm dữ liệu.** Rút tay trông vào may mắn thì không trúng (P2), nên:
+- Script "bão ghi" trên mini PC: liên tục mở transaction, chèn một dòng có `seq` tăng dần, `COMMIT`; **sau khi `COMMIT` trả về**, gửi `seq` qua UDP tới một máy khác trên LAN (laptop) làm **nhân chứng**, nhân chứng ghi `seq` kèm giờ nhận. Ba lần rút làm trong lúc bão ghi chạy; bằng chứng trúng: luồng `seq` ở nhân chứng dừng đột ngột quanh thời điểm rút.
+- Sau mỗi lần lên lại: `PRAGMA integrity_check` = `ok`; `max(seq)` trong DB **≥** `seq` cuối nhân chứng nhận (mọi thứ đã báo commit đều còn); bảng `confession` không mất record, không có chuyển trạng thái sai (bảng khôi phục Bài 14). Ghi thời gian từ lúc cắm điện tới khi daemon `READY`.
+- Tùy chọn mạnh hơn: ổ cắm thông minh **thương mại** điều khiển từ laptop để rút tự động hàng trăm lần. **Không tự đấu relay vào điện lưới 220 V.** Rút điện lặp lại cũng là thử độ bền của chính ổ SSD. Mini PC tắt thì ESP32 (nguồn USB) cũng tắt; amp nguồn riêng có thể kêu "bụp", ghi lại.
 
-**Bước 4 — Chứng minh log rotation bằng cách cố tình làm đầy đĩa** (theo lịch hợp đồng): `fallocate -l <dung lượng> /var/tmp/junk.img` tới khoảng 90% (Bài 16), quan sát `journalctl --disk-usage`, `df`, log của daemon. Xóa file rác theo lịch, không phải khi thấy hệ có vấn đề (đó sẽ là can thiệp).
+**Bước 4 — Chứng minh log rotation bằng cách cố tình làm đầy đĩa** theo lịch: `fallocate -l <dung lượng> /var/tmp/junk.img` tới ~90% (Bài 16), quan sát `journalctl --disk-usage`, `df`, log daemon. Xóa file rác theo lịch, không phải khi thấy hệ có vấn đề (đó là can thiệp).
 
-**Bước 5 — Theo dõi nhiệt độ CPU suốt 72h, vẽ đồ thị**, kèm tần số và **bộ đếm** throttle. Chạy `soak_monitor.py` như một systemd service riêng (nó sống qua reboot và ghi `boot_id` để bạn nối 11 đoạn thời gian lại):
+**Bước 5 — Theo dõi nhiệt độ CPU suốt 72h, vẽ đồ thị**, kèm tần số và **bộ đếm** throttle. Chạy `soak_monitor.py` như một systemd service riêng (sống qua reboot, ghi `boot_id` để nối 11 đoạn thời gian):
 
 ```python
-# [đã chạy] Ghi "sinh hiệu" của hệ mỗi INTERVAL giây ra CSV (append, sống qua reboot).
+# [đã chạy, thử 2 s trên Linux không có sysfs nhiệt: các cột nhiệt/xung để trống] Ghi "sinh hiệu" mỗi INTERVAL giây ra CSV (append, sống qua reboot).
 # Dùng: python3 soak_monitor.py <pid_file> <db_path> <out.csv>   (chạy như một systemd service riêng)
 import csv, glob, os, sys, time, datetime
 pid_file, db, out = sys.argv[1:4]
@@ -1190,14 +1130,14 @@ with open(out, "a", newline="") as fh:
         time.sleep(INTERVAL)
 ```
 
-Các đường dẫn sysfs (`x86_pkg_temp`, `thermal_throttle/package_throttle_count`) có trên CPU Intel với driver thông thường [tự đo trên N100: `ls /sys/devices/system/cpu/cpu0/thermal_throttle/`]. `scaling_cur_freq` là ước lượng của kernel, không phải tần số đo; nếu cần chính xác, chạy thêm `sudo turbostat --quiet --interval 60` (cột `Bzy_MHz`, `PkgTmp`) [tự đo]. Bộ đếm throttle là thứ bắt được đợt hạ xung ngắn nằm giữa hai mẫu.
+Đường dẫn sysfs (`x86_pkg_temp`, `thermal_throttle/package_throttle_count`) có trên CPU Intel với driver thông thường [tự đo trên N100]. `scaling_cur_freq` là ước lượng của kernel; cần chính xác thì chạy thêm `sudo turbostat --quiet --interval 60` (cột `Bzy_MHz`, `PkgTmp`) [tự đo]. Bộ đếm throttle bắt được đợt hạ xung ngắn nằm giữa hai mẫu.
 
-**Bước 6 — Đo công suất** trung bình của mini PC và của ESP32 + amp. **Số đầu tiên trong power budget của robot Khóa 7.**
-- Mini PC, cách tốt nhất trong ngân sách: đồng hồ điện ổ cắm có bộ đếm năng lượng (Wh/kWh). Ghi số năng lượng lúc bắt đầu và lúc kết thúc; `P_avg = ΔE / Δt`. Tích phân của đồng hồ tốt hơn nhiều so với đọc số W tức thời rồi tự trung bình. Sai số: đọc độ phân giải bộ đếm năng lượng và cấp chính xác trong tài liệu của đồng hồ; đồng hồ rẻ thường kém chính xác ở công suất thấp [tự đo, so với một tải biết trước như bóng đèn sợi đốt nếu có].
-- Số đo ở ổ cắm **gồm cả tổn hao của adapter**. Robot Khóa 7 cấp 12 V DC từ pin qua mạch DC-DC, nên số cần là phía DC. Đo phía DC bằng multimeter mắc nối tiếp trên dây 12 V (vài lần, lúc nhàn và lúc TTS chạy). Đọc giới hạn thời gian của dải 10 A trong manual UT33D+ trước khi để que đo lâu [tự đo]; burden voltage của dải dòng làm sụt áp cấp cho mini PC một chút.
-- ESP32 + amp: USB power meter trên đường 5 V của ESP32; amp có nguồn riêng (Bài 5–6) thì đo riêng nguồn amp. Ghi lúc nghỉ và lúc phát to.
+**Bước 6 — Đo công suất** trung bình mini PC và ESP32 + amp: **số đầu tiên trong power budget của robot** (→ K7 C1.2: power budget là một bảng số đo).
+- Mini PC: đồng hồ ổ cắm có bộ đếm năng lượng; `P_avg = ΔE / Δt` từ số đầu và cuối (tích phân của đồng hồ tốt hơn tự trung bình số W tức thời). Sai số: độ phân giải bộ đếm và cấp chính xác trong tài liệu đồng hồ; đồng hồ rẻ kém ở công suất thấp [tự đo, so với một tải biết trước].
+- Số ở ổ cắm **gồm tổn hao adapter**. Robot K7 cấp 12 V DC từ pin qua DC-DC (K7 C1.4), nên số cần là phía DC: multimeter mắc nối tiếp trên dây 12 V, lúc nhàn và lúc TTS chạy. Đọc giới hạn thời gian dải 10 A trong manual UT33D+ trước khi để que đo lâu [tự đo]; burden voltage làm sụt áp cấp cho mini PC một chút.
+- ESP32 + amp: USB power meter trên đường 5 V của ESP32; amp nguồn riêng (Bài 5–6) thì đo riêng. Ghi lúc nghỉ và lúc phát to.
 
-**Bước 7 — Phân tích sau 72h.** Nối các đoạn theo `boot_id`. Vẽ RSS, số fd, kích thước WAL, % đĩa trống, nhiệt độ, tần số theo thời gian, đánh dấu 10 lần rút điện. Tính độ dốc của các đại lượng cộng dồn và **đơn vị** của độ dốc (theo giờ hay theo sự kiện):
+**Bước 7 — Phân tích sau 72h.** Nối các đoạn theo `boot_id`; vẽ RSS, số fd, kích thước WAL, % đĩa trống, nhiệt độ, tần số theo thời gian, đánh dấu 10 lần rút điện. Tính độ dốc của các đại lượng cộng dồn và **đơn vị** của độ dốc (theo giờ hay theo sự kiện). Mỗi lần reboot xóa trạng thái cộng dồn, nên chỉ fit trong từng `boot_id`; đoạn dài nhất giữa hai lần rút điện có giá trị nhất. Trước khi chạy mô phỏng dưới, dự đoán: hồi quy theo thời gian có phân biệt được rò theo giờ (A) với rò theo sự kiện (B) không? (Kết quả ở mục 7.)
 
 ```python
 # [đã chạy] Rò rỉ bộ nhớ có lộ ra trong 72 h không, và đo theo đơn vị nào? Dữ liệu giả lập.
@@ -1225,9 +1165,7 @@ for name, y in (("A theo giờ", rss_a), ("B theo sự kiện", rss_b)):
 # CI ở đây giả định mẫu độc lập; răng cưa làm mẫu liền kề tương quan -> coi CI là lạc quan.
 ```
 
-Chạy nó và để ý: cả hai kịch bản đều cho độ dốc "rõ ràng" theo cả hai đơn vị. Một hồi quy không phân biệt được rò theo giờ với rò theo sự kiện; phải nhìn residual hoặc so một đoạn đêm (không có confession) với một đoạn ngày. Đơn vị sai thì ngoại suy sai khi lượng confession mỗi ngày thay đổi. Lưu ý: mỗi lần reboot xóa trạng thái cộng dồn, nên chỉ fit trong từng `boot_id`; đoạn dài nhất giữa hai lần rút điện là đoạn có giá trị nhất.
-
-**Bước 8 — Báo cáo.** Bảng "Số phải ra" bên dưới, cộng một đoạn "Được phép nói / Không được phép nói" viết bằng số từ P1, và một bảng FMEA ngắn (→ F7.6): mỗi chế độ hỏng đã gặp hoặc đã nghĩ tới, hậu quả, cách phát hiện, đã có biện pháp chưa.
+**Bước 8 — Báo cáo.** Bảng "Số phải ra", một đoạn "Được phép nói / Không được phép nói" viết bằng số từ P1, và một bảng FMEA ngắn (→ F7.6): mỗi chế độ hỏng đã gặp hoặc đã nghĩ tới, hậu quả, cách phát hiện, đã có biện pháp chưa.
 
 ### 7. Số phải ra
 
@@ -1273,13 +1211,15 @@ Câu được phép viết vào README: *"72h, 0 can thiệp; 10 lần mất đi
 
 **P2.** Với hệ nhàn (0.2 commit/s × 5 ms), mỗi lần rút tay trúng cửa sổ ghi với xác suất khoảng 0.1%; cần cỡ 3000 lần rút để trúng một lần. Ba lần trúng bằng tay là không thực tế. Bão ghi đưa duty lên gần 1, nên mỗi lần rút trong lúc bão gần như chắc chắn trúng. Bằng chứng: luồng `seq` ở nhân chứng dừng trong vài ms quanh lần rút.
 
-**P3.** [ước lượng, tự đo] Mini PC N100 lúc nhàn cỡ vài W tới khoảng 10 W ở ổ cắm; khi TTS chạy hết 4 nhân cao hơn nhiều lần; TDP 6 W của N100 [spec, Intel ARK] chỉ là của SoC, không gồm RAM, SSD, quạt, adapter, và không phải giới hạn công suất tức thời. Số AC lớn hơn số DC đúng bằng phần tổn hao adapter (adapter nhỏ thường hiệu suất khoảng 80–90% ở tải vừa, kém hơn ở tải rất nhẹ) [ước lượng]. Số dùng cho Khóa 7 là số **DC**, cộng biên cho đỉnh. Vì phần lớn thời gian hệ nhàn, `P_avg` gần với công suất nhàn hơn công suất tải: duty quan trọng hơn đỉnh khi tính dung lượng pin (Wh), còn đỉnh quyết định dòng tối đa của mạch DC-DC.
+**P3.** [ước lượng, tự đo] Mini PC N100 nhàn cỡ vài W tới ~10 W ở ổ cắm; TTS chạy hết 4 nhân thì cao hơn nhiều lần. TDP 6 W [spec, Intel ARK] chỉ là của SoC, không gồm RAM, SSD, quạt, adapter, và không phải giới hạn công suất tức thời. AC lớn hơn DC đúng bằng tổn hao adapter (adapter nhỏ thường 80–90% hiệu suất ở tải vừa, kém hơn ở tải rất nhẹ) [ước lượng]. Số cho K7 C1.2 là số **DC**, cộng biên cho đỉnh. Vì phần lớn thời gian nhàn, `P_avg` gần công suất nhàn: duty quyết định dung lượng pin (Wh), đỉnh quyết định dòng tối đa của DC-DC.
 
 **P4.** Với TTS chạy theo đợt ngắn và tản nhiệt của EQ12, nhiệt độ thường dưới Tjunction max khá xa và không hạ xung kéo dài; nếu có, bộ đếm throttle tăng trong các đợt TTS [tự đo]. Kết luận phải dựa trên bộ đếm, không chỉ trên đồ thị nhiệt độ lấy mẫu 60 s.
 
 **P5.** Nhầm phổ biến: nhân tỉ lệ underrun với 72h. Exposure đúng là giờ **phát**: 20–40 confession × 20–60 s chỉ là cỡ 10–40 phút phát trong 72h. Nếu điểm vận hành của bạn có underrun ~0 ở Bài 10 thì dự đoán đúng là 0, và một underrun nào đó xuất hiện đáng điều tra (tải TTS song song? nhiệt?).
 
 **P6.** 0 nếu nguồn amp tách riêng, chung GND, có tụ đúng như cấu hình tốt nhất ở Bài 6. Một brownout duy nhất trong 72h là FAIL và là tín hiệu quay lại Bài 6, không phải xui.
+
+**Mô phỏng rò rỉ:** cả hai kịch bản đều cho độ dốc "rõ ràng" theo cả hai đơn vị; một hồi quy không phân biệt được rò theo giờ với rò theo sự kiện. Phải nhìn residual hoặc so đoạn đêm (không có confession) với đoạn ngày. Đơn vị sai thì ngoại suy sai khi lượng confession mỗi ngày thay đổi.
 
 **Về việc rút điện (giữ nguyên tinh thần bản gốc):** đây là bài test mà phần lớn hệ tự chế trượt. Nếu bạn mất dữ liệu, **đó là kết quả tốt**: nó dạy bạn về durability ở tầng mà backend thường được framework và ổ đĩa của server (có PLP) che cho. Khi mất, khoanh vùng theo thứ tự: pragma thật của *mọi* kết nối → code có trả lời "đã xong" trước `COMMIT` không → ổ đĩa có tôn trọng flush không.
 
@@ -1292,11 +1232,9 @@ Câu được phép viết vào README: *"72h, 0 can thiệp; 10 lần mất đi
 | Sau một lần rút điện, máy không tự lên | BIOS Auto Power On chưa bật, hoặc adapter cần vài giây xả | Rút, chờ 10 s, cắm lại | Bật trong BIOS (Bài 16 bước 7) |
 | Máy lên nhưng daemon `failed` | Start rate limit lúc boot (Bài 16 P3) | `journalctl -b -u confession-streamer` | `StartLimitIntervalSec=0`, chờ thiết bị trong daemon |
 | `max(seq)` trong DB < seq cuối nhân chứng | Mất transaction đã báo commit: `synchronous` không phải FULL trên kết nối đó, hoặc ổ không tôn trọng flush | Đọc pragma của script bão ghi; lặp lại với `synchronous=FULL` + rollback journal; tra xem ổ có PLP không | Sửa pragma; nếu vẫn mất, ghi rõ giới hạn phần cứng, cân nhắc tắt cache ghi của ổ (`hdparm -W 0`, đổi hiệu năng) [tự đo] |
-| `integrity_check` khác `ok` | Hỏng file: cấu hình `synchronous=OFF`/`journal_mode=OFF|MEMORY`, hoặc tầng dưới | Giữ lại bản DB hỏng để phân tích | Xem "How To Corrupt An SQLite Database File" |
 | Log trống mấy phút trước mỗi lần rút | journald chưa sync (`SyncIntervalSec`) | So giờ dòng log cuối với giờ nhân chứng | Giảm `SyncIntervalSec` cho soak, hoặc ghi sự kiện quan trọng ở mức ưu tiên được sync ngay |
 | RSS hoặc số fd tăng đều | Rò theo giờ hoặc theo sự kiện | Fit theo hai đơn vị, so đoạn đêm và ngày | Tìm nguồn; nếu chưa sửa kịp, ghi rõ và tính thời gian tới ngưỡng |
-| File `-wal` phình không ngừng | Checkpoint bị chặn bởi một transaction đọc kéo dài | `PRAGMA wal_checkpoint(TRUNCATE)` trả về bao nhiêu trang chưa checkpoint được | Không giữ transaction đọc mở lâu; checkpoint định kỳ |
-| Bộ đếm throttle tăng | Nhiệt hoặc giới hạn công suất trong đợt TTS | Đối chiếu thời điểm với log TTS | Ghi lại; cải thiện tản nhiệt/vị trí đặt máy; số này đi vào thiết kế Khóa 7 |
+| Bộ đếm throttle tăng | Nhiệt hoặc giới hạn công suất trong đợt TTS | Đối chiếu thời điểm với log TTS | Ghi lại; cải thiện tản nhiệt/vị trí đặt máy; số này đi vào thiết kế K7 (C1.2, C10.3) |
 | Brownout ESP32 ≥1 | Cấu hình nguồn Bài 6 chưa đủ ở âm lượng thật | Reset reason + V_rail lúc phát to | Quay lại Bài 6 |
 | Can thiệp tay ≥1 | Thiếu hành vi xác định cho một tình huống | Ghi tình huống | Thêm vào bảng Bài 16 bước 6, chạy lại soak |
 
@@ -1309,52 +1247,44 @@ Câu được phép viết vào README: *"72h, 0 can thiệp; 10 lần mất đi
 3. **[Vì sao không]** Vì sao không nén 72h thành 7h bằng cách tăng tốc độ gửi confession lên 10 lần?
    <details><summary>Hướng nghĩ</summary>Tăng tốc (accelerated life testing) có ích cho lỗi theo sự kiện: 10 lần nhiều lần phát thì 10 lần nhiều cơ hội cho lỗi theo mỗi lần phát. Nó vô ích cho lỗi theo thời gian (trôi đồng hồ, bộ đếm, chứng chỉ) và có thể tạo lỗi không có thật (nhiệt cao hơn vận hành thật). Bài tập: phân từng chế độ hỏng trong FMEA của bạn vào hai nhóm này.</details>
 4. **[Nếu…thì]** Nếu soak thấy đúng **1** lỗi trong 72h, khoảng tin cậy 95% cho λ là gì? Bạn có được phép gọi đó là "flaky, bỏ qua"?
-   <details><summary>Hướng nghĩ</summary>Với Poisson, 1 sự kiện cho khoảng 95% hai phía cỡ 0.025/T tới 5.6/T; bằng 0 lỗi thì cận trên một phía là 3/T. Một lỗi không làm hệ "tệ hơn nhiều" so với 0 lỗi về mặt thống kê, nhưng nó là một **mẫu** của cơ chế hỏng: có log thì đó là thông tin quý nhất của cả 72h. Xem F2.3 về phán quyết ba trạng thái.</details>
+   <details><summary>Hướng nghĩ</summary>Poisson, 1 sự kiện: khoảng 95% hai phía cỡ 0,025/T tới 5,6/T. Về thống kê, một lỗi không làm hệ "tệ hơn nhiều" so với 0 lỗi; nhưng nó là một **mẫu** của cơ chế hỏng, và có log thì đó là thông tin quý nhất của cả 72h (F2.3, phán quyết ba trạng thái).</details>
 5. **[Phản biện]** Một đồng nghiệp nói: "Restart theo lịch mỗi đêm là giải pháp sạch, khỏi lo rò rỉ." Patriot đã có khuyến cáo khởi động lại. Restart theo lịch là kỹ thuật đúng hay là che lỗi?
    <details><summary>Hướng nghĩ</summary>Software rejuvenation là kỹ thuật có tên và có lý thuyết. Nó đúng khi bạn đã **đo** độ dốc và biết thời gian tới ngưỡng dài hơn chu kỳ restart với biên rộng. Nó là che lỗi khi chưa đo, vì khi đó bạn không biết chu kỳ đủ ngắn chưa, như "định kỳ" không rõ bao lâu của Patriot.</details>
 
 ### 10. Liên kết ra ngoài
 
 - **Thử nghiệm lâm sàng và rule of three.** Một thuốc thử trên n bệnh nhân không thấy tác dụng phụ nghiêm trọng nào; người ta không được viết "an toàn" mà viết cận trên ≈ 3/n. Hanley và Lippman-Hand đặt tên cho phép tính này trong bài *If nothing goes wrong, is everything all right?* (JAMA, 1983) [chuẩn]. Giống: cùng phép tính, cùng cám dỗ đọc "0" thành "không". Khác: y khoa có hàng nghìn bệnh nhân độc lập; bạn có một máy, nên mọi lỗi phụ thuộc chính máy đó (ổ SSD cụ thể, nhiệt độ phòng) không tổng quát hóa được.
-- **Burn-in trong sản xuất điện tử và đường cong bồn tắm.** Linh kiện điện tử được chạy nóng một thời gian trước khi xuất xưởng để lọc ra các con hỏng sớm (infant mortality), vì tỉ lệ hỏng cao lúc đầu, thấp và đều ở giữa đời, rồi tăng lại khi lão hóa [chuẩn]. Giống: soak cũng lọc lỗi "sớm" của một hệ mới ghép. Khác: phần mềm không mòn như linh kiện; lỗi cuối đời của phần mềm là lỗi cộng dồn (bộ đếm, đĩa), và chúng tới đúng hẹn chứ không ngẫu nhiên.
 - **Kiểm thử crash consistency của hệ file.** Pillai và cộng sự (*All File Systems Are Not Created Equal*, OSDI 2014) ghi lại chuỗi system call của các ứng dụng như SQLite, LevelDB, Git, rồi mô phỏng mất điện ở mọi điểm có thể giữa các lệnh ghi, và tìm ra nhiều lỗi ứng dụng phụ thuộc vào hành vi hệ file mà không ai nói ra [chuẩn]. Giống: thay vì rút điện ngẫu nhiên và trông vào may mắn, liệt kê **mọi** điểm cắt (như điểm crash có chủ đích ở Bài 14). Khác: họ mô phỏng hệ file, không kiểm được việc ổ SSD có nói dối hay không; rút điện thật thì kiểm được.
 
 ### 11. Độ tin cậy và sửa lỗi
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| Rule of three: 0 lỗi trong T → cận trên 95% ≈ 3/T (chính xác −ln 0.05/T ≈ 2.996/T) | [chuẩn] | Đã tính bằng code; F1.4 |
-| Patriot Dhahran 1991: sai số đồng hồ cộng dồn ~0.34 s sau ~100 h | [chuẩn] | GAO, IMTEC-92-26 |
-| Boeing 787: bộ đếm tràn sau 248 ngày cấp điện liên tục | [chuẩn] | FAA Airworthiness Directive 2015-09-07 |
-| SSD dưới mất điện: nhiều ổ trong thử nghiệm có mất/hỏng dữ liệu | [chuẩn] | Zheng, Tucek, Qin, Lillibridge, *Understanding the Robustness of SSDs under Power Fault*, FAST 2013; con số chính xác đọc trong paper |
-| Ổ SSD của EQ12 có PLP hay không | [tự đo] | Tra model ổ (`lsblk -o NAME,MODEL`), datasheet; ổ consumer thường không có |
+| Rule of three: 0 lỗi trong T → cận trên 95% ≈ 3/T (chính xác −ln 0,05/T ≈ 2,996/T) | [chuẩn] | Đã tính bằng code; F1.4 |
+| Patriot Dhahran 1991: sai số đồng hồ ~0,34 s sau ~100 h; Boeing 787: bộ đếm tràn sau 248 ngày | [chuẩn] | GAO IMTEC-92-26; FAA AD 2015-09-07 |
+| SSD dưới mất điện: nhiều ổ trong thử nghiệm mất/hỏng dữ liệu | [chuẩn] | Zheng và cộng sự, FAST 2013; con số chính xác đọc trong paper |
+| Ổ SSD của EQ12 có PLP; công suất EQ12 nhàn/tải; sysfs nhiệt/throttle trên N100; giới hạn thời gian dải 10 A của UT33D+ | [tự đo] | `lsblk -o NAME,MODEL` + datasheet; bộ đếm năng lượng; `ls` trước soak; manual đồng hồ |
 | TDP N100 6 W | [spec] | Intel ARK, Processor N100 |
-| Công suất EQ12 nhàn/tải | [ước lượng, tự đo] | Đo bằng bộ đếm năng lượng |
-| Đường dẫn sysfs nhiệt/throttle trên N100 | [tự đo] | `ls` trước khi bắt đầu soak |
-| Giới hạn thời gian dải 10 A của UT33D+ | [tự đo] | Manual của đồng hồ |
 
 **Đã sửa so với bản gốc/Gemini:**
-- Gemini: "72 giờ là khoảng thời gian chuẩn để bộc lộ mọi điểm yếu tiềm ẩn": sai; thay bằng phân loại bốn loại lỗi và rule of three.
-- Gốc: "SQLite mặc định thì có thể không [sống sót]": trên Ubuntu 24.04 mặc định là rollback journal + `synchronous=FULL`, vốn bền khi mất điện nếu ổ tôn trọng flush. Rủi ro thật nằm ở `NORMAL`/`OFF` trên WAL, ở kết nối không set pragma, và ở ổ đĩa.
-- Gốc: "≥3 lần đúng lúc đang ghi DB" mà không có phương pháp: rút tay gần như không trúng; thêm bão ghi + nhân chứng `seq` ngoài máy làm bằng chứng và oracle.
-- Gốc ở phần "Số phải ra" lộ con số "N100 nhàn cỡ vài W": chuyển vào khối niêm phong và thêm phân biệt AC/DC.
-- Gemini: "đồng hồ đo điện ổ cắm hoặc USB power meter" cho mini PC: USB power meter không đo được đầu vào 12 V của EQ12. Tách: ổ cắm (AC, có tổn hao adapter) và nối tiếp trên dây 12 V (DC, số đúng cho Khóa 7).
-- Gemini: theo dõi tần số bằng `turbostat` mỗi 60 s: lấy mẫu thưa bỏ sót đợt hạ xung ngắn; thêm bộ đếm throttle.
-- Lộ trình gốc (bản Pi): "làm đầy thẻ" và "thẻ SD hỏng vì ghi nhiều": với mini PC là SSD; đổi thành "đĩa".
-- Thêm: định nghĩa "can thiệp tay" và "phát đúng" trước khi chạy; underrun tính theo giờ phát.
+- Gemini: "72 giờ là khoảng thời gian chuẩn để bộc lộ mọi điểm yếu tiềm ẩn": sai; thay bằng bốn loại lỗi và rule of three.
+- Gốc: "SQLite mặc định thì có thể không [sống sót]": trên Ubuntu 24.04 mặc định là rollback journal + `synchronous=FULL`, bền khi mất điện nếu ổ tôn trọng flush. Rủi ro thật nằm ở `NORMAL`/`OFF` trên WAL, ở kết nối không set pragma, và ở ổ đĩa.
+- Gốc: "≥3 lần đúng lúc đang ghi DB" không có phương pháp: rút tay gần như không trúng; thêm bão ghi + nhân chứng `seq` ngoài máy.
+- Gốc lộ con số "N100 nhàn cỡ vài W" ở phần "Số phải ra": chuyển vào khối niêm phong, thêm phân biệt AC/DC.
+- Gemini: "đồng hồ ổ cắm hoặc USB power meter" cho mini PC: USB power meter không đo được đầu vào 12 V của EQ12. Tách AC (có tổn hao adapter) và DC trên dây 12 V (số đúng cho K7 C1.2).
+- Gemini: `turbostat` mỗi 60 s bỏ sót đợt hạ xung ngắn; thêm bộ đếm throttle.
+- Lộ trình gốc (bản Pi): "làm đầy thẻ", "thẻ SD hỏng vì ghi nhiều": với mini PC là SSD, đổi thành "đĩa".
+- Thêm: hợp đồng soak như một bảng SLI/SLO viết trước (→ F7.4); định nghĩa "can thiệp tay" và "phát đúng"; underrun tính theo giờ phát. Liên kết K7 gốc "Bài 15–17" đổi sang mã mới K7 C10.3 (soak), K7 C1.2 (power budget), K7 C12 (sản phẩm).
 
 ### 12. Đọc thêm và tự kiểm tra
 
 - **Nguồn gốc:** GAO, *Patriot Missile Defense: Software Problem Led to System Failure at Dhahran, Saudi Arabia* (IMTEC-92-26, 1992); SQLite docs, *Atomic Commit In SQLite*.
 - **Giải thích:** J. A. Hanley, A. Lippman-Hand, *If nothing goes wrong, is everything all right? Interpreting zero numerators* (JAMA, 1983).
 - **Đào sâu (tùy chọn):** Mai Zheng và cộng sự, *Understanding the Robustness of SSDs under Power Fault* (USENIX FAST 2013); T. S. Pillai và cộng sự, *All File Systems Are Not Created Equal* (OSDI 2014).
-- **Tự kiểm tra:** (1) giải thích lại cho một backend engineer khác trong 5 câu vì sao "72h không lỗi" chỉ nói được MTBF ≥ một con số, và con số đó cỡ nào; (2) vẽ lại bảng bốn loại lỗi ở phần 2 từ trí nhớ, mỗi loại một ví dụ trong hệ của bạn; (3) hai câu dưới.
+- **Tự kiểm tra:** (1) giải thích lại cho một backend engineer khác trong 5 câu vì sao "72h không lỗi" chỉ nói được MTBF ≥ một con số, và con số đó cỡ nào; (2) vẽ lại bảng bốn loại lỗi ở phần 2 từ trí nhớ, mỗi loại một ví dụ trong hệ của bạn; (3) câu dưới.
 
-  *a. Bạn chạy soak lần hai, lại 72h, 0 lỗi. Gộp hai lần thì được nói gì? Có điều kiện gì để được gộp?*
+  *Bạn chạy soak lần hai, lại 72h, 0 lỗi. Gộp hai lần thì được nói gì? Có điều kiện gì để được gộp?*
   <details><summary>Đáp án</summary>Gộp thành 144h, 0 lỗi: λ ≤ ~3/144 ≈ 0.021/h, MTBF ≥ ~48 h. Điều kiện: cùng phiên bản phần mềm/firmware và cùng điều kiện vận hành (nếu bạn đã sửa code giữa hai lần thì lần một không còn là bằng chứng cho phiên bản mới), và giả định tỉ lệ lỗi đều. Lỗi cộng dồn có ngưỡng dài hơn 72h vẫn không lộ ra vì mỗi lần chạy bắt đầu lại từ 0.</details>
-
-  *b. Vì sao nhân chứng `seq` phải nằm trên một máy khác chứ không ghi vào một file khác trên chính mini PC?*
-  <details><summary>Đáp án</summary>File trên cùng máy chịu cùng lần mất điện và cùng ổ đĩa có thể nói dối, nên nó hỏng cùng kiểu với thứ nó đang kiểm và không phát hiện được chính lỗi đó. Đây là bài toán oracle (F2.1): bộ kiểm phải độc lập với chế độ hỏng mà nó kiểm.</details>
 
 ---
 
@@ -1372,17 +1302,17 @@ Mỗi tiêu chí là một mệnh đề nhị phân, mỗi mệnh đề phải t
 
 ```mermaid
 flowchart LR
-    C1[1. Không cloud TTS] --> E1[CI job + log egress]
-    C2[2. TN-1 BCK <1%] --> E2[prediction.md commit trước file .sr]
-    C3[3. TN-2 latency vs underrun] --> E3[CSV + đồ thị, 5 điểm × 2 tải × ≥10 phút]
-    C4[4. TN-3 nguồn] --> E4[bảng ≥3 cấu hình + reset reason]
-    C5[5. TN-4 F0 + SNR] --> E5[notebook: sin số + giọng thật]
-    C6[6. Latency budget] --> E6[bảng, mọi dòng trỏ tới lab/NN]
-    C7[7. TN-5 soak] --> E7[CSV monitor + nhân chứng seq + hợp đồng soak]
+    C1["1. Không cloud TTS"] --> E1["CI job + log egress"]
+    C2["2. TN-1 BCK <1%"] --> E2["prediction.md commit trước file .sr"]
+    C3["3. TN-2 latency vs underrun"] --> E3["CSV + đồ thị, 5 điểm × 2 tải × ≥10 phút"]
+    C4["4. TN-3 nguồn"] --> E4["bảng ≥3 cấu hình + reset reason"]
+    C5["5. TN-4 F0 + SNR"] --> E5["notebook: sin số + giọng thật"]
+    C6["6. Latency budget"] --> E6["bảng, mọi dòng trỏ tới lab/NN"]
+    C7["7. TN-5 soak"] --> E7["CSV monitor + nhân chứng seq + hợp đồng soak"]
     E1 & E2 & E3 & E4 & E5 & E6 & E7 --> G{7/7?}
-    G -->|có| P[PASS → Khóa 4]
-    G -->|không, chưa chạm 140h| F[Sửa đúng tiêu chí trượt]
-    G -->|không, đã chạm 140h| X[Cắt scope theo cam kết]
+    G -->|có| P["PASS → Khóa 4"]
+    G -->|không, chưa chạm 140h| F["Sửa đúng tiêu chí trượt"]
+    G -->|không, đã chạm 140h| X["Cắt scope theo cam kết"]
 ```
 
 Ba câu về bản chất: gate là phép đo cuối của một khóa học, nên nó có cùng yêu cầu như mọi phép đo trong khóa (dự đoán commit trước, sai số ghi rõ). Một tiêu chí "gần đạt" là **trượt**, không có ô thứ ba trong gate này; ô "chưa rõ" (F2.3) chỉ dùng để ghi chú vì sao trượt. Và PASS gate chứng minh bạn đã **đo được** chuỗi audio, không chứng minh chuỗi đó tốt; đó là điều bạn được phép nói trong phỏng vấn.
@@ -1402,39 +1332,42 @@ Ba câu về bản chất: gate là phép đo cuối của một khóa học, n�
 
 ### 6. Làm
 
-**Bước 1 (1h) — Gom bằng chứng.** Mỗi tiêu chí một dòng trong `GATE.md`: mệnh đề, đường dẫn bằng chứng, commit hash, PASS/FAIL. Không có đường dẫn thì là FAIL.
+**Bước 1 (1h) — Gom bằng chứng.** Mỗi tiêu chí một dòng trong `GATE.md`: mệnh đề, đường dẫn bằng chứng, commit hash, PASS/FAIL. Không có đường dẫn thì là FAIL. Tiêu chí 1 có ba lớp bằng chứng: CI grep, lần chạy offline + rút mạng ở Bài 12, log egress bị chặn trong soak Bài 17.
 
-**Bước 2 (3h) — Đối chiếu đúng 7 tiêu chí PASS của M4.** Nhị phân, không chấm bằng cảm giác. Tiêu chí giữ nguyên bản gốc; chỗ có chữ *(sửa)* là chỗ quy chuẩn bắt buộc sửa, lý do ở cuối mục này.
+**Bước 2 (3h) — Đối chiếu đúng 7 tiêu chí PASS của M4.** Nhị phân, không chấm bằng cảm giác. Tiêu chí giữ nguyên bản gốc, chép đúng như `00-tong-quan.md` (mục Gate); chỗ có **[sửa]** là chỗ quy chuẩn bắt buộc sửa hoặc phép đo của gốc không kiểm được, lý do ở cuối mục này.
 
 ```
 [ ] 1. Không còn lời gọi cloud TTS nào trong chuỗi
-       → grep repo, chứng minh bằng CI check
-       → (thêm, nên có) trong soak Bài 17, firewall chỉ cho phép ra Google Sheets/Apps Script
-         và log mọi kết nối ra ngoài bị chặn: 0 kết nối tới dịch vụ TTS
+       → grep repo, chứng minh bằng một CI check
+       → (thêm, nên có) trong soak tiêu chí 7, firewall chỉ cho ra những đích được phép
+         và log mọi kết nối bị chặn: 0 kết nối tới dịch vụ TTS                          [sửa nhỏ]
 
-[ ] 2. TN-1: BCK đo được sai <1% so với dự đoán, ở 2 sample rate khác nhau
-       → file .sr commit sau prediction.md, kèm bảng dự đoán vs đo
-       → tần số đo trên nhiều chu kỳ (ví dụ ≥1000), không đo một chu kỳ
+[ ] 2. TN-1: BCK (và LRCK) đo được lệch < 1% so với dự đoán, ở 2 sample rate khác nhau,
+       đo QUA NHIỀU CHU KỲ (≥ 100 chu kỳ LRCK, BCK suy ra bằng đếm cạnh hoặc đo qua ≥ 32 chu kỳ),
+       không đo một chu kỳ                                                              [sửa]
+       → file .sr commit SAU prediction.md, kèm bảng dự đoán vs đo và sai số của analyzer
 
-[ ] 3. TN-2: đường cong latency vs underrun ≥5 điểm dma_frame_num, ≥2 kịch bản tải,
-       mỗi điểm ≥10 phút chạy; latency GPIO→mic đo được với độ phân giải ≤1ms
+[ ] 3. TN-2: đường cong latency vs underrun ≥ 5 điểm dma_frame_num (giá trị ĐỌC LẠI từ driver),
+       ≥ 2 kịch bản tải, mỗi điểm ≥ 10 phút; latency GPIO→mic đo với độ phân giải ≤ 1 ms   [sửa nhỏ]
 
-[ ] 4. TN-3: bảng ≥3 cấu hình nguồn, mỗi dòng có V_rail lúc nghỉ và lúc phát,
+[ ] 4. TN-3: bảng ≥ 3 cấu hình nguồn, mỗi dòng có V_rail lúc nghỉ và lúc phát,
        số brownout reset của ESP32, mô tả tiếng
+       (khuyến nghị thêm: R_s đo được, V thấp nhất từ ADC min-hold)
 
-[ ] 5. TN-4: F0 giọng mình bằng số;                                              (sửa)
-       đồ thị SNR đo vs lý thuyết 6.02×bits+1.76 ở 4 mức bit depth (16/12/8/4),
-       sai lệch <3dB, đo trên SIN SỐ full-scale tạo bằng code (không qua mic);
-       với giọng thật qua mic: chỉ kiểm XU HƯỚNG ở 8 và 4 bit
-       (nhiễu lượng tử lấn nhiễu mic), không áp ngưỡng <3dB
+[ ] 5. TN-4: F0 giọng mình bằng số (3 lần ghi lệch < 10%);
+       đồ thị SNR đo vs lý thuyết 6,02·N + 1,76 dB ở 4 mức bit depth (16/12/8/4), sai lệch < 3 dB,
+       đo trên SIN SỐ full-scale tạo bằng code (không qua mic), làm tròn chứ không cắt bit;
+       giọng thật qua mic: chỉ kiểm XU HƯỚNG ở 8 và 4 bit (nhiễu lượng tử lấn nhiễu mic) —
+       SNR (e = x_n − x_16) giảm ≈ 4 × 6,02 dB ± 3 dB từ 8 xuống 4 bit; không áp ngưỡng < 3 dB
+       tuyệt đối cho giọng                                                              [sửa]
 
-[ ] 6. Bảng latency budget: MỌI DÒNG là số đo, không dòng nào là ước tính,
-       nút thắt được chỉ tên
-       → kể cả dòng "Form → Sheet" (không kiểm soát được nhưng đo được)
+[ ] 6. Bảng latency budget: MỌI DÒNG là số đo, không dòng nào là ước tính, nút thắt được chỉ tên
+       → kể cả dòng "Form → Sheet" (không kiểm soát được nhưng đo được);
+         dòng "không khí" = khoảng cách đo bằng thước / tốc độ âm thanh là chấp nhận được
 
-[ ] 7. TN-5 soak 72h: ≥20 confession phát đúng, 0 lần can thiệp tay,
-       log rotation đã chứng minh bằng cách cố tình làm đầy đĩa,               (sửa: "thẻ" → "đĩa")
-       ≥3 lần rút điện đúng lúc đang ghi DB mà dữ liệu còn nguyên
+[ ] 7. TN-5 soak 72h: ≥ 20 confession phát đúng, 0 lần can thiệp tay,
+       log rotation đã chứng minh bằng cách cố tình làm đầy ĐĨA (lộ trình tổng ghi "thẻ")   [sửa nhỏ]
+       ≥ 3 lần rút điện đúng lúc đang ghi DB mà dữ liệu còn nguyên
        → "đúng lúc đang ghi" có bằng chứng (bão ghi + nhân chứng seq, Bài 17)
        → README ghi cận trên 95% tương ứng, không ghi "bền với mất điện"
 ```
@@ -1448,17 +1381,19 @@ Ba câu về bản chất: gate là phép đo cuối của một khóa học, n�
 **Nhắc từ bản gốc:** nếu Khóa 2 vẫn chưa xong khi bạn tới gate này, dừng Khóa 3 lại và đóng Khóa 2 trước. Khóa 3 là thứ khiến bạn không bị loại; Khóa 2 là thứ khiến bạn được gọi. Harness benchmark ở Bài 11 dùng lại được gần như nguyên vẹn cho Khóa 4, chỉ đổi payload từ TTS sang VLA.
 
 **Đã sửa so với bản gốc/Gemini:**
-- Tiêu chí 5 (lỗi đã biết, mục 7 quy chuẩn): công thức `6.02·bits + 1.76` giả định sin full-scale và nhiễu lượng tử phân bố đều. Kiểm nó trên giọng thật qua mic ở 16/12/8/4 bit là sai phương pháp, vì ở 16 và 12 bit nhiễu của mic và đường analog lớn hơn nhiễu lượng tử nhiều, và giọng nói không phải sin full-scale. Sửa: ngưỡng <3 dB áp cho sin số; giọng thật chỉ kiểm xu hướng ở 8 và 4 bit. Bản Gemini lặp lại nguyên lỗi này ở gate.
+- Tiêu chí 5 (lỗi đã biết, mục 7 quy chuẩn): công thức `6,02·N + 1,76` giả định sin full-scale và nhiễu lượng tử đều. Kiểm trên giọng thật qua mic ở 16/12/8/4 bit là sai phương pháp: ở 16 và 12 bit nhiễu mic và đường analog lớn hơn nhiễu lượng tử nhiều, và giọng nói không phải sin full-scale. Sửa: ngưỡng < 3 dB của gốc giữ nguyên nhưng áp lên sin số (làm tròn, không cắt bit); giọng thật chỉ kiểm xu hướng ở 8 và 4 bit. Con số thực tế khi cài đúng nằm trong khối 🔒 của `00-tong-quan.md` và Bài 7; mọi lệch > 1 dB trên sin số phải giải thích. Bản Gemini lặp nguyên lỗi này ở gate.
 - Tiêu chí 7: lộ trình tổng ghi "làm đầy thẻ" (di sản bản Pi/thẻ SD); với mini PC là đĩa SSD.
 - Tiêu chí 1: thêm kiểm ở mức mạng, vì grep không thấy lời gọi lúc chạy.
-- Tiêu chí 2: thêm "đo trên nhiều chu kỳ": logic analyzer 24 MHz có bước lấy mẫu khoảng 42 ns; với BCK 768 kHz (chu kỳ khoảng 1.3 µs), đo một chu kỳ có sai số lượng tử cỡ vài phần trăm, lớn hơn chính ngưỡng 1% [ước lượng: 42 ns / 1302 ns ≈ 3%]. Đo trên N chu kỳ thì sai số này chia cho N.
+- Tiêu chí 2: thêm "đo qua nhiều chu kỳ" (≥ 100 chu kỳ LRCK): LA 24 MHz có bước lấy mẫu ~42 ns; với BCK 768 kHz (chu kỳ ~1,3 µs), đo một chu kỳ có sai số lượng tử cỡ vài phần trăm, lớn hơn chính ngưỡng 1% [ước lượng: 42 ns / 1302 ns ≈ 3%]. Đo trên N chu kỳ thì sai số này chia cho N.
+- Tiêu chí 3: "giá trị ĐỌC LẠI từ driver": ở 16-bit stereo `dma_frame_num` > 1023 bị ép (điểm 1280 frame của gốc ở Bài 10 không hợp lệ).
+- Tiêu chí 6: dòng "không khí" = khoảng cách đo bằng thước / tốc độ âm thanh là chấp nhận được (hoặc độ dốc hồi quy nhiều khoảng cách, Bài 9).
 - Tiêu chí 7: thêm yêu cầu bằng chứng "đúng lúc đang ghi" và báo cận trên, theo Bài 17.
 
 ### 8. Nếu ra khác
 
 | Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
 |---|---|---|---|
-| BCK lệch 2–4% ở một sample rate | Đo trên một chu kỳ (lượng tử của logic analyzer), hoặc driver chọn clock nguồn khác giá trị xin | Đo tần số trên ≥1000 chu kỳ; đọc lại cấu hình thật từ ESP32 | Đo lại đúng cách; nếu vẫn lệch, đó là số thật, ghi lý do (bẫy số 7 của khóa) |
+| BCK lệch 2–4% ở một sample rate | Đo trên một chu kỳ (lượng tử của logic analyzer), hoặc driver chọn clock nguồn khác giá trị xin | Đo qua ≥ 100 chu kỳ LRCK; đọc lại cấu hình thật từ ESP32 | Đo lại đúng cách; nếu vẫn lệch, đó là số thật, ghi lý do (bẫy số 7 của khóa) |
 | SNR của sin số lệch >3 dB ở 4 bit | Sin không full-scale, có dither, hoặc đo SNR gồm cả hài | Kiểm biên độ và cách tính (cửa sổ FFT, dải tích phân nhiễu) | Xem lại cách tính theo F5.5; không chỉnh ngưỡng |
 | Một dòng latency budget vẫn là "ước tính" | Chặng đó khó đo (Form → Sheet) | Dùng timestamp của Google vs thời điểm phát hiện, kèm offset NTP | Đo; nếu thật sự không đo được thì tiêu chí 6 FAIL, ghi lý do |
 | Không tìm được file `.sr` của TN-1 | Không lưu lúc đo | — | Đo lại (TN-1 lặp lại được); bài học cho các thí nghiệm không lặp lại được |
