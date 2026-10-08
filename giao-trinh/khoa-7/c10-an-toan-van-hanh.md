@@ -59,7 +59,6 @@ Dòng dữ liệu mới: sự kiện an toàn (`estop`, `bumper`, `wd_trip`, `re
 3. **Lật/rơi:** bậc cửa, cầu thang, mép bàn khi chạy thử trên bàn.
 4. **Tiếp điểm relay dính** (hồ quang DC khi cắt dòng lớn): E-stop nhấn mà VM còn.
 5. **Quá áp VM khi relay mở lúc motor đang quay** (motor thành máy phát, nạp tụ đầu vào driver qua diode thân MOSFET).
-6. **Pin trong soak:** sạc ngoài giờ, robot nằm trong văn phòng ban đêm có pack lithium.
 
 **Quy tắc cứng** (cộng thêm quy tắc C0, C1, C4, C5):
 - KHÔNG gây lỗi (fault injection) nào khi E-stop cứng chưa PASS bước kiểm ở Lắp bước 7. Thứ tự là C10.1 trước C10.2, không đảo.
@@ -100,6 +99,7 @@ Phần lớn đã có (relay K1 và nút E-stop từ C1, opto từ C4, bumper n�
 | Nút RESET | Nút nhấn NO nhỏ, gắn cạnh E-stop, có nắp hoặc lõm để không chạm nhầm | Khởi động lại là hành động có chủ đích, tại robot `[spec — IEC 60204-1 9.2.3.4 / ISO 13850: reset không tự khởi động lại]` | 20–50k | Đo NO | Nút trên app teleop (kém hơn: không tại máy) |
 | Cầu phân áp đo | 47 kΩ / 10 kΩ ×3 (VM_SENSE, RELAY_FB, COIL_SENSE) + tụ 100 nF | 14,6 V → ≈2,6 V, an toàn cho ESP32 và logic analyzer | <20k | Đo tỉ số trên nguồn bàn | Opto PC817 |
 | TVS trên VM driver | Đơn hướng, áp đánh thủng trên áp pack đầy (ví dụ dòng SMBJ 18–20 V; tra datasheet) | Kẹp xung khi relay mở lúc motor quay | 10–30k | Đúng cực | Tụ bulk lớn hơn (không thay được hoàn toàn) |
+| Tiền nạp VM | P-MOSFET (Vds ≥30 V) + NPN lái + 100 Ω 3 W + 1N4007 | Tránh tiếp điểm K1 đóng vào tụ rỗng (hàn dính, C10.1) | 20–50k | Đo Ω đường tiền nạp khi Q2 tắt: hở | Relay/contactor có định mức inrush lớn (vẫn nên tiền nạp) |
 | Biển báo, dây buộc, băng dính sàn | In A5 ép plastic | Người lạ biết đây là gì và dừng nó thế nào | 30–50k | — | — |
 
 **Tổng C10 `[ước lượng]`:** ~0,7–1,5tr (không tính MCU thứ hai, cảm biến vực).
@@ -112,7 +112,6 @@ Phần lớn đã có (relay K1 và nút E-stop từ C1, opto từ C4, bumper n�
 | Gắn nút E-stop trên thân: khoan lỗ 22 mm, chống xoay | Lắp bước 2 | Lỗ trên tấm phế liệu cùng vật liệu | Nút không xoay khi vặn nhả; đầu nấm cao hơn mọi thứ xung quanh; với được từ phía sau và hai bên |
 | Cơ khí bumper: hành trình, điểm kích | Lắp bước 3 | Gá một công tắc trên tấm gỗ, ấn bằng cân | Kích ở lực nhỏ (ghi N) **trước** khi thân robot chạm vật; nhả về đúng vị trí |
 | Logic analyzer 6 kênh, trigger theo cạnh, đọc thời gian giữa hai cạnh | C10.1 | K5 Bài 8, C4.2 | Biết sai số mỗi cạnh; biết định nghĩa "cạnh" khi tiếp điểm rung |
-| Gây lỗi có kịch bản (fault injection) | C10.2 | — | Mỗi lần có: trạng thái robot, tay ở nút E-stop, ghi trước kết quả mong đợi |
 
 **Đo trên chuỗi có tiếp điểm cơ khí:** khi nút E-stop mở, tiếp điểm **rung** (bounce) vài trăm µs tới vài ms `[ước lượng — đo]`. Logic analyzer 24 MHz thấy từng lần rung. Quy ước của chặng: thời điểm kích hoạt là **cạnh đầu tiên** chuỗi hở; thời điểm kết thúc là **cạnh đầu tiên** của tín hiệu đích sau đó ổn định ≥10 ms. Ghi quy ước này vào `captures/c10/README.md` để mọi số đo cùng nghĩa.
 
@@ -142,6 +141,7 @@ Mở rộng chuỗi cuộn của C1 (FD 1 A → nút E-stop NC → cuộn K1 →
 
   BUMPER_L/R: COM ─ GND ; NC ─ GPIO39/40 (kéo lên trong + 4,7k ngoài, 100 nF sát chân) — đứt dây = chân cao = "va"
   RESET: nút NO giữa GPIO rảnh và GND (kéo lên) — gán chân trong firmware/PINS.md
+  TIỀN NẠP: COIL_SENSE ─[Q2 phía cao, lái bởi GPIO PRECHARGE, kéo về tắt]─[100 Ω 3 W]─[1N4007 →]─ VM driver
   Logic analyzer: D0 COIL_SENSE (qua cầu chia) · D1 RELAY_HOLD · D2 RELAY_FB · D3 DRV_EN · D4 ENC_L_A · D5 BUMPER_L
 ```
 
@@ -180,7 +180,7 @@ Thứ tự: hiểu → lắp phần cứng an toàn → kiểm trên giá → đ
 5. **Lắp bước 4 — Nối bo an toàn vào robot**: chuỗi cuộn của C1 đi qua Q1; RELAY_HOLD, RELAY_FB, VM_SENSE, ESTOP_SENSE vào ESP32 theo `PINS.md` đã sửa.
    - ✅ Checkpoint trước khi cấp điện: Ω VM driver ↔ GND không gần 0 Ω; Ω mọi chân ESP32 ↔ VBAT: OL; cầu chì FD là 1 A, không lớn hơn.
 6. **Lắp bước 5 — Firmware**: đảo RELAY_HOLD **trong task điều khiển** sau khi mọi kiểm tra của chu kỳ đạt (Bài C10.1 phần 6 bước 2); đọc ESTOP_SENSE, RELAY_FB, VM_SENSE vào STATE; chốt `ESTOP_LATCHED` (Bài C10.1).
-7. **Lắp bước 6 — RESET có chủ đích**: robot chỉ đảo RELAY_HOLD lại khi (a) chuỗi E-stop đóng (ESTOP_SENSE), (b) nút RESET trên thân vừa được nhấn, (c) host gửi `ARM`. Nhả nút E-stop thôi thì relay không hút.
+7. **Lắp bước 6 — RESET có chủ đích**: robot chỉ đảo RELAY_HOLD lại khi (a) chuỗi E-stop đóng (ESTOP_SENSE), (b) nút RESET trên thân vừa được nhấn, (c) host gửi `ARM`; rồi tiền nạp VM qua Q2 tới ≥95% VBAT, mới phát xung giữ. Nhả nút E-stop thôi thì relay không hút.
    - ✅ Checkpoint (trên giá, bánh không chạm đất): nhấn E-stop khi bánh quay → relay nhả; xoay nhả nút → **relay không hút**, bánh không quay; nhấn RESET + ARM → relay hút, bánh vẫn đứng (lệnh 0) tới khi có lệnh mới.
 8. **Lắp bước 7 — Kiểm trước khi chạy** (làm lại trước mỗi buổi thử lỗi và mỗi ngày soak; in thành checklist 2 phút): nhấn E-stop trên giá → relay nhả (nghe "tách", RELAY_FB lên); giữ nút RESET của ESP32 (chân EN) khi bánh quay → relay nhả; rút USB mini PC khi bánh quay → bánh dừng trong thời gian lease (C4.4), relay vẫn giữ nếu ESP32 sống; ấn bumper → bánh dừng.
 9. **Học Bài C10.1 phần 6–12**: đo thời gian phản ứng từng tầng, 20 lần E-stop, quãng dừng.
@@ -330,6 +330,14 @@ Ba điều mô phỏng buộc bạn nghĩ (đáp án số ở phần 7): mạch 
 | Timeout | RC, chỉnh bằng linh kiện, trôi theo nhiệt/dung sai tụ | Đặt bằng code | Cố định theo datasheet; TPS3823 điển hình 1,6 s, tối thiểu 0,9 s `[spec — TI SLVS165; kiểm bảng thông số]` |
 | Bẫy | Xung phải phát từ đúng chỗ (phần 3) | Nguồn chung với ESP32 = hỏng chung; tự nó cũng treo được | **WDI để hở có thể làm vô hiệu watchdog** `[spec — kiểm mục WDI của datasheet]`: ESP32 reset → chân cao trở → watchdog tắt. Phải kéo chân hoặc chọn IC khác |
 | Hợp với | Người mới, robot một bo | Khi cần giám sát tốc độ độc lập (giống thang máy) | Khi timeout ~1 s chấp nhận được |
+
+**Ba giới hạn của mạch E-stop ở C1 và cách bài này đóng chúng.** Mạch C1 (cuộn K1 ăn từ pack qua FD 1 A, nút NC nối tiếp, diode song song cuộn) là **điểm cắt** đúng hướng, chưa phải chức năng dừng khẩn cấp đầy đủ:
+
+| Giới hạn ở C1 | Hậu quả | Xử lý ở C10.1 | Còn lại (ghi vào FMEA) |
+|---|---|---|---|
+| (1) Nhả nút là cuộn có điện lại ngay | VM trở lại không cần thao tác nào; trái ISO 13850 (reset không được tự khởi động lại) | Q1 nối tiếp cuộn chỉ dẫn khi có xung giữ; firmware chỉ phát xung sau **RESET trên thân + ARM** (Lắp bước 6). Kiểm bằng checkpoint "nhả nút, relay không hút" | Chốt nằm ở firmware: một bug phát xung sớm làm mất chốt. Phương án chặt hơn: mạch tự giữ phần cứng (relay tín hiệu nhỏ K0 có tiếp điểm tự giữ song song nút RESET, nối tiếp trong chuỗi cuộn) |
+| (2) Chỉ có diode dập cuộn → nhả chậm | t_relay dài hơn, quãng trôi dài hơn | Diode + Zener (hoặc TVS) song song cuộn; **đo cả hai** cấu hình (phần 6 bước 6) | Q1 phải chịu V_pack + V_Z |
+| (3) Tiếp điểm đóng vào tụ 1000 µF của driver | Dòng nạp tụ chỉ bị giới hạn bởi điện trở dây và tiếp điểm (rất nhỏ) → đỉnh hàng chục tới hàng trăm A trong µs `[ước lượng: ΔV / R_vòng]` → tiếp điểm có thể **hàn dính**: E-stop hỏng ở trạng thái đóng, im lặng | **Tiền nạp**: trước khi phát xung giữ, firmware bật Q2 (công tắc phía cao: P-MOSFET + NPN lái, kéo về tắt) nối **nút COIL_SENSE** (sau nút E-stop) qua 100 Ω 3 W + diode vào VM; chờ VM_SENSE ≥ 95% VBAT (τ = R·C ≈ 0,1 s với 1000 µF) rồi mới đóng K1, tắt Q2. Nguồn tiền nạp lấy **sau nút**, nên nhấn E-stop cắt cả đường này. Chọn relay có định mức dòng khởi động/DC đủ `[spec — datasheet relay, mục inrush]`. **Giám sát tiếp điểm** bằng 87a (RELAY_FB) như một tiếp điểm phụ: cuộn mất điện mà 87a không đóng → `relay_weld`, chặn ARM | Q2 kẹt dẫn để lại đường ≤0,15 A vào VM khi watchdog cắt (không khi nhấn nút): dòng F15 trong FMEA C10.2, kiểm bằng VM_SENSE khi DISARMED |
 
 **Đo cái gì, chính xác:** "thời gian phản ứng" là một khoảng giữa **hai cạnh có định nghĩa** trên logic analyzer. Với tầng 0: cạnh đầu COIL_SENSE xuống (chuỗi hở) → cạnh đầu RELAY_FB lên (87a đóng). Không dùng "VM về 0": motor đang quay phát ngược vào tụ VM qua diode thân của driver. "Robot dừng" là một đại lượng khác: quãng từ kích hoạt tới khi encoder hết xung, đo bằng encoder (vẫn có điện từ buck 5 V khi VM mất).
 
@@ -509,13 +517,7 @@ Thời gian tắt tỉ lệ với R2·C2 (τ = 0,1 s) và phụ thuộc Vg lúc 
    Trạng thái an toàn là thuộc tính của hệ trong bối cảnh. Thang máy, tay máy dùng phanh **lò xo đóng, điện mở**: mất điện thì phanh giữ. Hộp số trục vít tự hãm là phương án khác. Câu hỏi đi kèm: robot có được phép tới vùng dốc không — đó là quyết định ở bản đồ (C8), không ở relay.
 
    </details>
-3. **[Vì sao không]** Vì sao không làm E-stop bằng topic ROS 2 QoS reliable, ưu tiên cao, gửi từ nút trên điện thoại?
-   <details><summary>Hướng nghĩ</summary>
-
-   Liệt kê mọi thứ phải còn sống để topic đó dừng được motor: điện thoại, WiFi, router, mini PC, DDS, node, USB, ESP32. So với chuỗi: nút → dây → cuộn. "E-stop từ xa" có giá trị như tầng 3; muốn từ xa thật thì dùng bộ phát vô tuyến chuyên dụng mà **mất sóng = dừng** (tín hiệu động, giống xung giữ).
-
-   </details>
-4. **[Quy mô]** 100 robot, mỗi robot có E-stop, watchdog độc lập, bumper. Sự kiện an toàn thành một luồng dữ liệu. Bạn ghi gì mỗi sự kiện, và chỉ số nào cho thấy một **thiết kế** (không phải một robot) có vấn đề?
+3. **[Quy mô]** 100 robot, mỗi robot có E-stop, watchdog độc lập, bumper. Sự kiện an toàn thành một luồng dữ liệu. Bạn ghi gì mỗi sự kiện, và chỉ số nào cho thấy một **thiết kế** (không phải một robot) có vấn đề?
    <details><summary>Hướng nghĩ</summary>
 
    Ai kích hoạt, robot ở trạng thái nào, tốc độ, khoảng cách người gần nhất, t_relay đo được (từ RELAY_FB), phiên bản firmware/bo. Chỉ số: phân bố t_relay theo lô relay (relay già nhả chậm dần là lỗi tích lũy → F7.6), tỉ lệ T0b kích hoạt theo phiên bản firmware (watchdog trip là firmware treo), tỉ lệ E-stop do người ngoài nhấn trên giờ chạy (HRI, C10.4).
@@ -697,7 +699,6 @@ Chạy hai lần: có guard và `noguard`. Dự đoán trước (phần 5) số 
 | Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
 |---|---|---|---|
 | 🟢 | State machine toàn phần | Mọi cặp (trạng thái, sự kiện) có kết quả định nghĩa | Vẽ được sơ đồ |
-| 🟢 | Guard | Điều kiện phải đúng để một chuyển được phép | Một `if` trong callback |
 | 🟢 | Chế độ hỏng (failure mode) | Một cách cụ thể thành phần không làm đúng chức năng | Tên linh kiện |
 | 🟢 | S/O/D, RPN | Nghiêm trọng, xảy ra, khó phát hiện; RPN = tích | Một số khách quan |
 | 🟢 | Fault injection | Cố ý gây lỗi để kiểm phát hiện và phản ứng | Test thường |
@@ -744,6 +745,7 @@ Chạy hai lần: có guard và `noguard`. Dự đoán trước (phần 5) số 
 | F10 | Mất định vị | Không thấy marker lâu | Covariance pose (C8.3) | Dừng, chờ thấy tag; không tự xoay tìm khi có người gần | Che marker; đưa robot vào vùng không tag |
 | F11 | **Mạch xung giữ hỏng: Q1 chập D–S** | MOSFET hỏng thường ở dạng chập | Không tự phát hiện được bằng xung. Kiểm định kỳ: ngừng đảo → RELAY_FB phải lên | Kiểm ở Lắp bước 7 mỗi ngày; E-stop vẫn hoạt động (nút nối tiếp) | Nối tắt D–S bằng dây (trên giá) → kiểm hàng ngày phải FAIL |
 | F12 | Relay K1 dính tiếp điểm | Hồ quang DC | RELAY_FB không lên khi COIL_SENSE xuống (C10.1) | ESP32 giữ driver tắt, chặn ARM, FAULT `relay_weld` | Không gây thật được an toàn → giả lập bằng rút dây RELAY_FB; ghi D cao hơn |
+| F15 | Q2 tiền nạp kẹt dẫn | MOSFET chập, GPIO kẹt cao | VM_SENSE > ngưỡng khi DISARMED và K1 nhả | FAULT `precharge_stuck`, chặn ARM; nhấn nút vẫn cắt đường này | Nối tắt Q2 bằng dây (trên giá), quan sát VM_SENSE |
 | F13 | **Sụt áp chung** (common cause) | Dòng khởi động motor + pin yếu | INA226, `boot_count` cả hai máy | Không cả hai cùng reset rồi tự chạy; DISARMED, chờ người | Nguồn bàn thay pin, hạ áp từ từ (trên giá) |
 | F14 | Kill switch K3 / moderation không phản hồi | Daemon chết | Healthcheck daemon | Không phát nội dung chưa duyệt (K3 Bài 15) | `kill -9` daemon |
 
@@ -779,7 +781,6 @@ Chạy hai lần: có guard và `noguard`. Dự đoán trước (phần 5) số 
 |---|---|---|---|
 | Rút encoder khi chạy, robot quay vòng 1–3 s rồi mới dừng | PID windup; chỉ có giám sát ở mini PC | Log `u_l`, `w_l` 100 Hz | Kiểm tính hợp lý trong firmware: \|u\| lớn mà count không đổi > X ms → FAULT; kẹp tích phân |
 | State machine crash khi nhiều sự kiện dồn | Nhiều callback cùng ghi trạng thái | Log có hai chuyển cùng timestamp từ hai luồng | Hàng đợi sự kiện, một vòng xử lý |
-| `kill -9` PASS, `kill -STOP` FAIL | Tiến trình bị dừng vẫn giữ cổng serial mở; driver USB không báo lỗi; chỉ lease bắt được | So hai cách | Không tin "tiến trình chết thì cổng đóng"; lease là cơ chế chính |
 | Robot dừng oan khi WiFi chập chờn | F01 được nối nhầm với dừng | Log chuyển trạng thái quanh lúc mất WiFi | Tách: mất WiFi không phải sự kiện an toàn |
 | Sau mất camera robot "về trạm" và lạc | Degraded mode dùng odometry quá xa | Quãng đường từ lúc mất camera | Giới hạn quãng đường chạy mù theo sai số C6.3; quá thì dừng, chờ |
 | Sau sụt áp, ESP32 và mini PC cùng reset, robot tự chạy tiếp nhiệm vụ | Nhiệm vụ được khôi phục từ đĩa và tự ARM | Log boot hai máy | Sau boot luôn DISARMED; khôi phục nhiệm vụ cần người xác nhận |
@@ -792,19 +793,13 @@ Chạy hai lần: có guard và `noguard`. Dự đoán trước (phần 5) số 
    Kẹt ở một trạng thái vì sự kiện ra không bao giờ tới (thiếu timeout trong trạng thái — `IDENTIFYING` chờ mãi); trạng thái lệch với ESP32 sau khi node khởi động lại; hàng đợi sự kiện đầy và drop `estop`. Mỗi trạng thái nên có thời gian tối đa và sự kiện `timeout` của nó.
 
    </details>
-2. **[Vì sao không]** Vì sao không để state machine trên mini PC gửi lệnh "thoát E-stop" xuống ESP32 khi người dùng bấm "Resume" trên app?
-   <details><summary>Hướng nghĩ</summary>
-
-   Reset phải là hành động **tại máy**, sau khi người đã nhìn thấy nguy cơ đã hết (ISO 13850). App có thể ở phòng khác. Mini PC là tầng 3; cho tầng 3 quyền thoát tầng 0 là đảo ngược chiều sự thật.
-
-   </details>
-3. **[Quy mô]** 100 robot, mỗi tuần mỗi robot vài chục sự kiện FAULT. Bạn biến `fmea/results.csv` và log chuyển trạng thái thành gì để cập nhật cột O bằng số đo thay vì đoán?
+2. **[Quy mô]** 100 robot, mỗi tuần mỗi robot vài chục sự kiện FAULT. Bạn biến `fmea/results.csv` và log chuyển trạng thái thành gì để cập nhật cột O bằng số đo thay vì đoán?
    <details><summary>Hướng nghĩ</summary>
 
    O trở thành **tỉ lệ đo được** theo chế độ hỏng trên giờ chạy, có khoảng tin cậy (→ F1.4), theo phiên bản firmware/phần cứng. FMEA thành một bảng sống nối với dữ liệu đội xe; chế độ hỏng mới (không khớp dòng nào) là tín hiệu đáng nhất — lỗi bạn chưa nghĩ tới.
 
    </details>
-4. **[Nếu…thì]** Nếu bumper chạm và state machine chọn "lùi 20 cm rồi đi vòng" làm hành vi phục hồi, cần điều kiện gì để lựa chọn đó không lặp lại bài học Cruise?
+3. **[Nếu…thì]** Nếu bumper chạm và state machine chọn "lùi 20 cm rồi đi vòng" làm hành vi phục hồi, cần điều kiện gì để lựa chọn đó không lặp lại bài học Cruise?
    <details><summary>Hướng nghĩ</summary>
 
    Biết phía sau trống (cảm biến phía sau, hoặc chỉ lùi trên đường vừa đi qua và trong cửa sổ thời gian ngắn); phân biệt "chạm vật tĩnh" với "chạm người" (không biết thì coi là người); giới hạn số lần thử rồi dừng chờ người. Khi không chắc, đứng yên là phục hồi an toàn nhất.
@@ -1009,7 +1004,6 @@ Quyết định trước: sạc ban đêm ở đâu ___ ; robot làm gì 19h–7
 | Node restart hàng trăm lần, dashboard vẫn xanh | Restart policy che crash | Counter restart theo node | Alert theo tốc độ restart; tìm nguyên nhân; mỗi restart tính vào hợp đồng nếu ảnh hưởng nhiệm vụ |
 | Completeness theo seq ~100% nhưng có lỗ trên đồ thị | Nguồn im (driver treo) | Freshness theo luồng | Healthcheck driver; SLI freshness |
 | Robot đứng yên hàng giờ, không lỗi | Kẹt trạng thái thiếu timeout (C10.2 câu 1) | Thời gian ở mỗi trạng thái | Timeout cho mọi trạng thái chờ |
-| Đồng nghiệp nhấn E-stop vì "đi sát quá" | Tốc độ/khoảng cách gần người | Log khoảng cách, tốc độ quanh sự kiện | C10.4 (A/B tốc độ, khoảng dừng); **không** chỉ tăng `inflation_radius` (phần 11) |
 | Mini PC reboot ban đêm | Watchdog phần cứng quá chặt, hoặc BMS cắt khi pin cạn | `journalctl -b -1`, log INA226 | Nới `RuntimeWatchdogSec`; quy trình đỗ/sạc ban đêm |
 
 ### 9. Câu hỏi ngược
@@ -1036,7 +1030,6 @@ Quyết định trước: sạc ban đêm ở đâu ___ ; robot làm gì 19h–7
 ### 10. Liên kết ra ngoài
 
 - **Hàng không — thử nghiệm bay tuyến (route proving).** Trước khi một hãng khai thác loại máy bay mới, nhà chức trách có thể yêu cầu các chuyến bay chứng minh trên tuyến thật, với tổ bay và quy trình thật. Giống: môi trường thật lộ lỗi mà thử nghiệm nhà sản xuất không thấy. Khác: hàng không có tiêu chí và giám sát viên độc lập; bạn có hợp đồng commit trước thay cho giám sát viên.
-- **Dược — thử nghiệm giai đoạn IV (hậu mãi).** Thuốc đã được duyệt vẫn được theo dõi tác dụng phụ hiếm trên dân số lớn, vì thử nghiệm trước duyệt không đủ cỡ mẫu để thấy chúng. Giống: soak 72h chỉ loại được lỗi thường gặp; lỗi hiếm chỉ lộ ra ở quy mô (câu 1). Khác: thuốc có hệ thống báo cáo bắt buộc; robot của bạn cần tự dựng luồng sự kiện an toàn.
 
 ### 11. Độ tin cậy và sửa lỗi
 
@@ -1060,7 +1053,6 @@ Quyết định trước: sạc ban đêm ở đâu ___ ; robot làm gì 19h–7
 
 - **Nguồn gốc:** *The Site Reliability Workbook* (O'Reilly, 2018), chương "Data Processing Pipelines" (freshness, coverage).
 - **Giải thích:** K3 Bài 17 (soak đầu tiên của bạn) và → F7.6, F7.4.
-- **Đào sâu (tùy chọn):** Brendan Gregg, phương pháp USE (→ F7.3) áp cho từng tài nguyên của robot (pin, CPU, đĩa, USB).
 - **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao "0 can thiệp" phải đi kèm SLI tiến triển; (2) vẽ lại dashboard sáu ô từ trí nhớ, mỗi ô một câu hỏi; (3) câu hỏi:
 
   Soak 72h, robot chạy được 9 km, 0 sự cố. Cận trên 95% của tỉ lệ sự cố theo km là bao nhiêu? Muốn nói "dưới 1 sự cố / 100 km" với 95% tin cậy cần bao nhiêu km không sự cố?
@@ -1134,7 +1126,6 @@ for delta in (0.5, 1.0, 1.5):
 |---|---|---|---|
 | A/B test UI với hàng triệu user | A/B tốc độ robot với ~10 người | Không có cỡ mẫu; người học dần robot (hiệu ứng mới lạ giảm theo ngày); cùng người lặp lại nhiều lần | Tuyên bố "B giảm 43% số người né" từ 14 vs 8 |
 | NPS / khảo sát hài lòng | Likert 1–5 | Thang thứ bậc: trung bình "3,6" không có nghĩa số học vững; n = 10 cho khoảng rất rộng | Báo "điểm thoải mái 3,5/5" như số đo |
-| Session replay để hiểu user | Quỹ đạo người từ camera robot | Người không đồng ý bị quay; privacy C9 áp đầy đủ | Lưu video "để phân tích sau" |
 
 **Chấm mô hình:**
 - *Bản Gemini K7: "Đảm bảo khi phát hiện người trong bán kính 2 m, vận tốc xe luôn giảm xuống dưới 0,3 m/s."* — **CHƯA RÕ → ĐÚNG MỘT PHẦN.** Là một **giả thuyết thiết kế** hợp lý, không phải kết luận của bài; gốc yêu cầu **đo** tốc độ trong 2 m và so hai cấu hình. Gãy: "phát hiện người" có FRR (C9.2): người không được phát hiện thì luật không áp. **Phản ví dụ:** người ngồi xổm sau ghế không được detector thấy; robot đi 0,5 m/s qua cách 0,8 m.

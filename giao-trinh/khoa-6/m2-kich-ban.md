@@ -283,6 +283,7 @@ Hệ quả: sweep "ma sát của vật 0.1→1.0" trên bàn robosuite mặc đ�
 - Bản gốc/Gemini: `object_pose` cho LIBERO → tham chiếu `.pruned_init` + hash + chỉ số; tên task rút gọn → tên thật.
 - Gemini: `json.dumps(sort_keys=True)` là đủ → thiếu ép kiểu, NaN, quyết định nguồn/hiệu lực. Pydantic dùng `Any` không import (`NameError`). "Loader raise khi code ghi đè" → loader không thấy ghi đè sau nó; đọc ngược sau mỗi `reset()`.
 - Gemini dùng `solver_type: "PGS"`, `cone: "elliptic"` mà không nói đó không phải mặc định (Newton, pyramidal).
+- Reviewer sửa: Chấm mô hình 2 và "Tham số cần tra" lộ đáp án dự đoán mục 2–3 (kiểu YAML đoán, hai hash) ở thân bài → chuyển thành chỉ dẫn tự chạy; rút gọn bài (bỏ câu hỏi ngược 5, liên kết 3, câu tự kiểm tra 2).
 
 ### 12. Đọc thêm và tự kiểm tra
 

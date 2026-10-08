@@ -31,7 +31,7 @@ flowchart LR
 
 **Volkswagen, 2015** [chuẩn]. Ngày 18/9/2015, Cơ quan Bảo vệ Môi trường Mỹ (EPA) gửi thông báo vi phạm cho Volkswagen. Phần mềm điều khiển động cơ diesel nhận ra khi xe đang chạy chu trình thử khí thải chuẩn và chỉ bật đầy đủ hệ thống xử lý NOx trong lúc đó. Trên đường thật, theo EPA, lượng NOx lên tới khoảng 40 lần giới hạn. Người phát hiện là một nhóm ở Đại học West Virginia làm cho ICCT, gắn thiết bị đo lên xe và **chạy ngoài chu trình thử**. Bài thử cố định, công khai, lặp lại hoàn hảo, nên bị tối ưu tới mức không còn đo thứ nó sinh ra để đo.
 
-Bản ở quy mô nhỏ hơn đang xảy ra mỗi ngày. Hai báo cáo năm 2025 ghi nhận agent lập trình viết code xử lý riêng cho các ca test (trả thẳng giá trị test chờ đợi), hoặc sửa chính test hay code chấm điểm, để điểm lên mà bài toán không được giải: system card của Claude 3.7 Sonnet (Anthropic, 2/2025) mô tả hành vi "special-casing" test trong môi trường lập trình agent; bài *Recent Frontier Models Are Reward Hacking* của METR (6/2025) mô tả mô hình sửa test/scoring code và lục call stack để lấy đáp án mà bộ chấm đã tính sẵn [chuẩn]. Bạn đã có pipeline agent tự chạy, tự test, tự sửa, tự deploy. Khi bạn nối pipeline đó vào CI đánh giá của khóa này, CI trở thành chu trình thử của Volkswagen. Agent không cần gian lận. Nó chỉ cần thử đủ nhiều biến thể rồi giữ lại cái có điểm cao nhất.
+Hai báo cáo năm 2025 ghi nhận agent lập trình viết code xử lý riêng cho các ca test (trả thẳng giá trị test chờ đợi), hoặc sửa chính test hay code chấm điểm, để điểm lên mà bài toán không được giải: system card của Claude 3.7 Sonnet (Anthropic, 2/2025) mô tả hành vi "special-casing" test trong môi trường lập trình agent; bài *Recent Frontier Models Are Reward Hacking* của METR (6/2025) mô tả mô hình sửa test/scoring code và lục call stack để lấy đáp án mà bộ chấm đã tính sẵn [chuẩn]. Nối pipeline agent tự sửa của bạn vào CI đánh giá của khóa này, CI thành chu trình thử của Volkswagen. Agent không cần gian lận; chỉ cần thử đủ nhiều biến thể rồi giữ cái điểm cao nhất.
 
 ### 2. Mô hình tư duy
 
@@ -69,27 +69,27 @@ flowchart LR
 
 Bốn ý bản chất:
 
-1. **Verdict là một phép đo, và nó có tỉ lệ sai** (→ F2.1). Cùng một PR, chạy lại với seed root khác, có thể ra verdict khác. "Ba PR giả cho verdict đúng" là một câu về **tỉ lệ**, không phải về một lần chạy. Bạn phải biết mỗi loại PR ra PASS, FAIL, INCONCLUSIVE với xác suất bao nhiêu, và các con số đó phải khớp với thiết kế (α, power, MDE).
+1. **Verdict là một phép đo có tỉ lệ sai** (→ F2.1). Cùng PR, seed root khác, có thể ra verdict khác; "ba PR giả cho verdict đúng" là câu về **tỉ lệ**, và các tỉ lệ đó phải khớp thiết kế (α, power, MDE).
 2. **Định nghĩa PASS quyết định PR không đổi gì sẽ ra gì.** Bản gốc (Bài 13): PASS là "không tệ hơn baseline một cách có ý nghĩa". Khi viết thành quy tắc trên CI 95% của hiệu Δ = p_PR − p_base, cách đúng là **đúng quy tắc của Bài 13**: FAIL khi cận trên < 0, PASS khi cận dưới ≥ −MDE (biên non-inferiority δ, ở đây chọn bằng MDE), còn lại INCONCLUSIVE; cộng ERROR khi phép so không hợp lệ. CI tính bằng **Newcombe** (ghép hai khoảng Wilson), cùng hàm với Bài 13, để một PR cho cùng verdict ở cả hai nơi. Với quy tắc này, một PR không đổi gì ra PASS với xác suất bao nhiêu? Bạn sẽ tính ở phần 5, và con số đó quyết định N.
-3. **Vòng kín cộng với một bộ tối ưu sinh ra áp lực Goodhart** (→ F2.8). Mỗi lần gọi gate làm rò một ít thông tin về bộ eval. Thử K biến thể vô dụng rồi giữ cái tốt nhất thì bộ eval đã biến thành dữ liệu huấn luyện qua phép chọn lọc. Không cần dòng code gian lận nào.
-4. **Determinism vừa giúp vừa hại.** CRN (cùng seed cho baseline và PR) cho phép so sánh có power cao (Bài 1). Nhưng seed cố định cũng có nghĩa là bài thi cố định, và bài thi cố định thì học thuộc được. Lời giải: dùng CRN **bên trong** một lần gate, và lấy seed **mới** cho mỗi lần gate. Seed dẫn xuất từ một bí mật nên ghi được vào provenance sau khi chạy, tức là vẫn tái lập được nhưng không đoán trước được.
+3. **Vòng kín cộng một bộ tối ưu sinh áp lực Goodhart** (→ F2.8). Mỗi lần gọi gate rò một ít thông tin; thử K biến thể vô dụng rồi giữ cái tốt nhất là biến bộ eval thành dữ liệu huấn luyện qua chọn lọc, không cần dòng code gian lận nào.
+4. **Determinism vừa giúp vừa hại.** CRN cho so sánh power cao (Bài 1), nhưng seed cố định là bài thi cố định, học thuộc được. Lời giải: CRN **bên trong** một lần gate, seed **mới** cho mỗi lần gate, dẫn xuất từ một bí mật và ghi vào provenance sau khi chạy: tái lập được nhưng không đoán trước được.
 
 ### 3. Cầu nối từ backend
 
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
-| Unit test CI xanh/đỏ | Verdict ba trạng thái | Unit test trên code tất định cho cùng kết quả mỗi lần. Verdict là biến ngẫu nhiên; chạy lại với seed khác có thể đổi kết quả | Retry tới khi xanh, tức là thêm một vòng chọn lọc trên nhiễu |
-| Retry flaky test, quarantine | INCONCLUSIVE → chạy thêm | Retry flaky chỉ tìm một lần pass. Chạy thêm episode rồi kiểm lại là **nhìn trộm** (peeking): mỗi lần nhìn lại tốn thêm α | FAIL giả và "cải thiện" giả tăng lên mà báo cáo vẫn ghi α = 0.05 |
-| Pipeline agent tự test → sửa → deploy (vốn của bạn) | Agent tối ưu theo eval của CI | Unit test là đặc tả chính xác: gian lận hiện ra trong diff. Eval là proxy có nhiễu: agent "cải thiện" được bằng cách khai thác nhiễu và lỗi của sim mà diff trông hoàn toàn sạch | Baseline bị đẩy lên dần bằng nhiễu (ratchet); policy học khai thác creep, ma sát của sim (Bài 17) |
-| Phân tích canary tự động khi deploy (Kayenta của Netflix và Google) | Gate thống kê trước merge | Canary đo trên traffic thật, tức là đúng miền ứng dụng. Gate đo trong sim, nên chỉ có giá trị trong miền của Bài 17 | Đọc PASS trong sim như "an toàn ngoài đời" |
+| Unit test CI xanh/đỏ | Verdict ba trạng thái | Unit test tất định; verdict là biến ngẫu nhiên, chạy lại với seed khác có thể đổi | Retry tới khi xanh: thêm một vòng chọn lọc trên nhiễu |
+| Retry flaky test, quarantine | INCONCLUSIVE → chạy thêm | Chạy thêm rồi kiểm lại là **peeking**: mỗi lần nhìn tốn thêm α | FAIL giả và "cải thiện" giả tăng mà báo cáo vẫn ghi α = 0.05 |
+| Pipeline agent tự test → sửa → deploy (vốn của bạn) | Agent tối ưu theo eval của CI | Unit test là đặc tả chính xác, gian lận hiện ra trong diff. Eval là proxy có nhiễu: agent "cải thiện" bằng khai thác nhiễu và lỗi sim với diff hoàn toàn sạch | Baseline bị đẩy lên dần bằng nhiễu (ratchet); policy khai thác creep của sim (Bài 17) |
+| Canary analysis khi deploy (Kayenta của Netflix và Google) | Gate thống kê trước merge | Canary đo trên traffic thật, đúng miền ứng dụng; gate đo trong sim, chỉ có giá trị trong miền Bài 17 | Đọc PASS trong sim như "an toàn ngoài đời" |
 
-**Tên chuẩn của thứ bạn đã làm:** script chấm pass/fail/inconclusive của bạn là một *three-way decision rule*. Đo trên host yên tĩnh là giảm phương sai để tăng power. Phần còn thiếu có tên riêng: *adaptive overfitting* (tối ưu theo bộ test qua nhiều lần hỏi), *winner's curse* (cái thắng trong K lần thử bị ước lượng cao hơn thật), *sequential testing* (cách chạy thêm mà không làm phồng α).
+**Tên chuẩn của thứ bạn đã làm:** script pass/fail/inconclusive là một *three-way decision rule*; đo trên host yên tĩnh là giảm phương sai để tăng power. Phần còn thiếu có tên: *adaptive overfitting* (quá khớp bộ test qua nhiều lần hỏi), *winner's curse* (cái thắng trong K lần thử bị ước lượng cao), *sequential testing* (chạy thêm mà không phồng α).
 
 **Chấm mô hình:**
 
-- *"Agent tự sửa cho tới khi CI xanh là một tự động hóa an toàn"* (suy từ vốn pipeline agent của bạn). **ĐÚNG MỘT PHẦN.** An toàn khi oracle là đặc tả chính xác và agent không sửa được oracle. Gãy khi oracle là phép đo thống kê: K lần thử biến thể vô dụng, mỗi lần so với một lần chạy baseline riêng, cho xác suất ít nhất một lần báo "cải thiện có ý nghĩa" khoảng `1 − (1 − α/2)^K`; so với **cùng** một lần chạy baseline thì xác suất đó thấp hơn nhưng mức "cải thiện" của cái thắng vẫn bị thổi phồng. Phản ví dụ: `b18_verdict.py` phần (2).
-- *"INCONCLUSIVE thì chạy thêm episode cho tới khi có kết luận."* **ĐÚNG MỘT PHẦN.** Hướng đúng, cách làm sai. Kiểm định lặp lại ở 5 lần nhìn, mỗi lần với ngưỡng danh nghĩa 5%, cho tỉ lệ dương tính giả tổng khoảng 14% (Armitage, McPherson & Rowe, 1969) [chuẩn]. Cách đúng là thiết kế tuần tự (group sequential, alpha spending) khai báo trước, hoặc một bước hai có n cố định khai trước. Phản ví dụ: A/A, cứ INCONCLUSIVE là thêm 200 episode rồi kiểm lại, tối đa 5 lần. Tỉ lệ FAIL giả cao hơn hẳn mức 2.5% bạn tưởng.
-- *"Có bộ giữ kín là hết Goodhart."* **ĐÚNG MỘT PHẦN.** Mỗi lần dùng bộ giữ kín làm nó rò một ít, nên phải xoay vòng và giới hạn số lần hỏi. Quan trọng hơn: bộ giữ kín vẫn nằm **trong sim**, nên tối ưu theo nó vẫn là tối ưu theo lỗi của sim. Phản ví dụ: một policy học dựa vào creep của tiếp xúc mềm qua cả bộ công khai lẫn bộ giữ kín, và chỉ cờ UNTESTED_CHANNEL của Bài 17 hoặc robot thật mới lộ ra điều đó. Recht và cộng sự (2019) dựng lại tập test ImageNet và thấy độ chính xác giảm khoảng 11–14 điểm, phần lớn do lệch phân bố chứ không do tái dùng tập test [chuẩn]: lệch miền thường lớn hơn rò qua tái dùng.
+- *"Agent tự sửa cho tới khi CI xanh là tự động hóa an toàn"* (suy từ vốn của bạn). **ĐÚNG MỘT PHẦN.** An toàn khi oracle là đặc tả chính xác và agent không sửa được oracle. Gãy khi oracle là phép đo thống kê: K biến thể vô dụng, mỗi cái so với một lần chạy baseline riêng, cho xác suất ít nhất một lần báo "cải thiện có ý nghĩa" ≈ `1 − (1 − α/2)^K`; so với **cùng** một baseline thì xác suất thấp hơn nhưng "cải thiện" của cái thắng vẫn bị thổi phồng. Phản ví dụ: `b18_verdict.py` phần (2).
+- *"INCONCLUSIVE thì chạy thêm episode cho tới khi có kết luận."* **ĐÚNG MỘT PHẦN.** Hướng đúng, cách sai: kiểm định lặp ở 5 lần nhìn, mỗi lần ngưỡng 5%, cho dương tính giả tổng ~14% (Armitage, McPherson & Rowe, 1969) [chuẩn]. Cách đúng: thiết kế tuần tự khai trước, hoặc bước hai có n cố định khai trước. Phản ví dụ: mô phỏng peeking của Bài 13 (×4 cả hai tỉ lệ sai).
+- *"Có bộ giữ kín là hết Goodhart."* **ĐÚNG MỘT PHẦN.** Mỗi lần dùng làm nó rò một ít, nên phải xoay vòng và giới hạn số lần hỏi; và bộ giữ kín vẫn nằm **trong sim**, tối ưu theo nó vẫn là tối ưu theo lỗi sim. Phản ví dụ: policy dựa vào creep tiếp xúc mềm qua cả hai bộ; chỉ cờ UNTESTED của Bài 17 hoặc robot thật mới lộ. Recht và cộng sự (2019) dựng lại tập test ImageNet: độ chính xác giảm ~11–14 điểm, phần lớn do lệch phân bố chứ không do tái dùng tập test [chuẩn].
 
 ### 4. Thuật ngữ
 
@@ -130,7 +130,7 @@ p0 = ___  MDE = ___  α = ___  power = ___  → N mỗi arm = ___
 
 ### 6. Làm
 
-**Bước 1. Ghép mọi thứ** theo sơ đồ của bản gốc. Mỗi tầng gọi lại đúng module đã làm: power analysis (Bài 12), runner song song (Bài 8), loader và checker hiệu lực (Bài 5, 17), verdict theo task có hiệu chỉnh bội so sánh (Bài 13), artifact và MCAP thất bại (Bài 9), báo cáo (Bài 10), provenance (Bài 7). Thêm vào báo cáo tỉ lệ `sim_unstable` **theo từng arm** (Bài 11) và số kịch bản theo cờ IN/OUT/UNTESTED (Bài 17).
+**Bước 1. Ghép mọi thứ** theo sơ đồ bản gốc, mỗi tầng gọi đúng module đã làm: power analysis (Bài 12), runner (Bài 8), loader và checker hiệu lực (Bài 5, 17), verdict theo task + bội so sánh (Bài 13, cùng hàm Newcombe), artifact và MCAP thất bại (Bài 9), báo cáo (Bài 10), provenance (Bài 7). Báo cáo thêm `sim_unstable` **theo arm** (Bài 11) và số kịch bản theo cờ IN/OUT/UNTESTED (Bài 17).
 
 ```yaml
 # [chưa chạy] Khung GitHub Actions — kiểm cú pháp, runner, giới hạn thời gian theo tài liệu hiện hành
@@ -208,10 +208,10 @@ print(f"P(≥1 biến thể vô dụng báo 'cải thiện có ý nghĩa'): base
 
 **Bước 3. Dựng ranh giới thông tin** (bổ sung, theo sơ đồ phần 2):
 - Seed gate = `HMAC(GATE_SECRET, pr_id ‖ attempt)`, ghi vào provenance **sau** khi chạy. Kết quả vẫn tái lập được (`reproduce.py`, Bài 7) mà không đoán trước được.
-- Gate chỉ trả về verdict, CI của Δ theo task và các cờ; **không** trả kết quả từng episode của bộ giữ kín. Episode thất bại của bộ giữ kín vẫn lưu ra MCAP để bạn xem khi debug, nhưng agent không được đọc.
+- Gate chỉ trả verdict, CI của Δ theo task và các cờ; **không** trả kết quả từng episode của bộ giữ kín (MCAP thất bại vẫn lưu cho bạn debug, agent không được đọc).
 - Đếm số lần gọi gate mỗi PR, in vào báo cáo, đặt trần (ví dụ 3 lần mỗi PR mỗi ngày).
 - PASS kèm "cải thiện có ý nghĩa" **chưa** được nâng thành baseline. Phải qua một **lần chạy xác nhận** trên seed mới. Cập nhật baseline là hành động tường minh có ghi lý do (Bài 13).
-- PR có cùng hash đầu vào với baseline (policy, scenario set, image digest, config sim) thì dùng lại kết quả, không chạy. Viết test cho nhánh này: đổi một trường config sim phải làm hash đổi.
+- PR cùng hash đầu vào với baseline (policy, scenario set, image digest, config sim) thì dùng lại kết quả; test: đổi một trường config sim phải làm hash đổi.
 
 **Bước 4. Canary Goodhart** (bổ sung, → F2.5): viết một "agent" giả, gửi K = 10 biến thể vô dụng (chỉ đổi seed nhiễu hành động của policy) qua gate. Kiểm: trần số lần gọi có chặn không; biến thể "thắng" qua lần chạy xác nhận với tỉ lệ ≤ α không.
 
@@ -231,12 +231,12 @@ print(f"P(≥1 biến thể vô dụng báo 'cải thiện có ý nghĩa'): base
 | −MDE/2 | ≈28% | ≈29% | ≈43% | 0% |
 | +MDE/2 | ≈99% | ≈0% | ≈1% | ≈28% |
 
-- **A/A chỉ ra PASS khoảng 80%**, đúng bằng power của thiết kế, vì `P(cận dưới ≥ −MDE | Δ = 0)` đối xứng với `P(cận trên < 0 | Δ = −MDE)`. Muốn A/A PASS ≥95% thì N ≈ 624 mỗi arm (cùng công thức với z_β = 1.645; mô phỏng Newcombe ở N = 624: A/A PASS 95.0%). Đây là quyết định thiết kế bạn phải ghi vào README: hoặc chấp nhận ~1/5 PR không đổi gì ra INCONCLUSIVE, hoặc trả thêm khoảng 65% episode.
+- **A/A chỉ ra PASS khoảng 80%**, đúng bằng power của thiết kế, vì `P(cận dưới ≥ −MDE | Δ = 0)` đối xứng với `P(cận trên < 0 | Δ = −MDE)`. Muốn A/A PASS ≥95% thì N ≈ 624 mỗi arm (cùng công thức với z_β = 1.645; mô phỏng Newcombe ở N = 624: A/A PASS 95.0%). Quyết định ghi vào README: chấp nhận ~1/5 PR không đổi gì ra INCONCLUSIVE, hoặc trả thêm ~65% episode.
 - Thay đổi "nhỏ hơn ngưỡng" chỉ ra INCONCLUSIVE **khi nó âm**; nếu dương thì ra PASS. Hàng thứ tư trong bảng của bản gốc chỉ đúng một chiều.
-- Hỏng thật −MDE vẫn lọt PASS khoảng 2.6% (danh nghĩa α/2 = 2.5%). Gate không phải bộ lọc tuyệt đối. Đây là lý do có nightly với N lớn hơn.
-- PR sửa comment, cùng seed, harness bit-exact: Δ̂ = 0 chính xác, CI suy biến, PASS. Lần chạy đó kiểm được đường ống (plumbing) và cache; nó **không** kiểm được tính chất thống kê nào. A/A thật phải dùng seed root khác.
+- Hỏng thật −MDE vẫn lọt PASS ~2.6% (danh nghĩa α/2 = 2.5%): lý do có nightly N lớn hơn.
+- PR sửa comment, cùng seed, harness bit-exact: Δ̂ = 0 chính xác, PASS. Nó kiểm được plumbing và cache, **không** kiểm được tính chất thống kê nào.
 
-**Goodhart** (K = 30 biến thể vô dụng, bộ 200 kịch bản, 300 lần lặp): biến thể thắng "cải thiện" ≈ +6.2 ± 3.6 điểm trên bộ công khai, nhưng ≈ −0.4 ± 4.5 điểm trên bộ giữ kín. Với K = 30, xác suất ít nhất một biến thể vô dụng được báo "cải thiện có ý nghĩa" ≈ 53% nếu mỗi lần so với một lần chạy baseline riêng (công thức), ≈ 26% nếu cả 30 so với **cùng** một lần chạy baseline (mô phỏng): các phép so tương quan qua nhiễu chung của baseline, nên ít lần "thắng" hơn, nhưng khi baseline xui thì nhiều biến thể thắng cùng lúc. Vì sao không phải `σ·√(2 ln K)` ≈ +12 điểm (σ ≈ 0.045 là độ lệch chuẩn của Δ̂ một biến thể): baseline **chung** cho cả 30 biến thể nên chỉ nhiễu riêng của biến thể (≈ σ/√2) được chọn lọc, và kỳ vọng max của 30 biến chuẩn ≈ 2.04 lần độ lệch chuẩn, không phải √(2 ln 30) ≈ 2.61 (cận trên). 2.04 × 0.045/√2 ≈ +6.5 điểm, khớp mô phỏng.
+**Goodhart** (K = 30 biến thể vô dụng, bộ 200 kịch bản, 300 lần lặp): biến thể thắng "cải thiện" ≈ +6.2 ± 3.6 điểm trên bộ công khai, nhưng ≈ −0.4 ± 4.5 điểm trên bộ giữ kín. Xác suất ít nhất một biến thể vô dụng được báo "cải thiện có ý nghĩa": ≈ 53% nếu mỗi lần so với một lần chạy baseline riêng (công thức), ≈ 26% nếu cả 30 so với **cùng** một lần chạy baseline (mô phỏng; các phép so tương quan qua nhiễu chung của baseline). Vì sao không phải `σ·√(2 ln K)` ≈ +12 điểm (σ ≈ 0.045 là SD của Δ̂ một biến thể): baseline chung nên chỉ nhiễu riêng của biến thể (≈ σ/√2) được chọn lọc, và kỳ vọng max của 30 biến chuẩn ≈ 2.04 (√(2 ln 30) ≈ 2.61 chỉ là cận trên): 2.04 × 0.045/√2 ≈ +6.5 điểm, khớp mô phỏng.
 
 **Bảng của bản gốc**, đọc theo nghĩa tỉ lệ:
 
@@ -266,11 +266,11 @@ Tỉ lệ R = 20 lần của bạn sẽ tản: với tỉ lệ thật 80%, 20 l�
 ### 9. Câu hỏi ngược
 
 1. **[Quy mô]** 20 kỹ sư và 5 agent cùng gửi PR, mỗi ngày 60 lần gọi gate, cùng một bộ giữ kín dùng trong 3 tháng. Thứ gì gãy trước: ngân sách GPU/CPU, sức chứa thông tin của bộ giữ kín, hay độ tin vào baseline?
-   <details><summary>Hướng nghĩ</summary>Đếm tổng số lần hỏi so với cỡ bộ giữ kín. Xoay seed giải quyết được phần rò qua seed, nhưng không giải quyết phần rò qua **kịch bản** nếu bộ kịch bản cố định. Nghĩ về việc sinh kịch bản gate từ phân bố (Bài 6) thay vì dùng một danh sách.</details>
+   <details><summary>Hướng nghĩ</summary>Đếm tổng số lần hỏi so với cỡ bộ giữ kín. Xoay seed chặn rò qua seed, không chặn rò qua **kịch bản** nếu bộ kịch bản cố định; sinh kịch bản gate từ phân bố (Bài 6).</details>
 2. **[Failure mode]** Kể ba cách một agent làm verdict tốt lên mà không có hành vi robot nào tốt lên, kể cả khi gate dùng bộ giữ kín.
    <details><summary>Hướng nghĩ</summary>Khai thác lỗi của sim (creep, xuyên thấu) có mặt ở mọi bộ; làm tăng `sim_unstable` ở những episode sắp thất bại để chúng bị loại khỏi mẫu số (Bài 11); sửa config của sim, hoặc sửa `depends_on` cho kịch bản rơi vào IN. Mỗi cách cần một canary riêng.</details>
 3. **[Liên ngành]** Kaggle có bảng xếp hạng công khai (tính trên một phần tập test) và bảng riêng (phần còn lại, công bố cuối cuộc thi). Đội đứng đầu bảng công khai thường tụt hạng khi bảng riêng mở ra. Đó là cơ chế nào trong bài này, và Kaggle giới hạn nó bằng gì?
-   <details><summary>Hướng nghĩ</summary>Winner's curse cộng với adaptive overfitting lên phần công khai. Kaggle giới hạn số lần nộp mỗi ngày (trần số lần gọi) và giữ bảng riêng tới cuối (chạy xác nhận). Khác: đội thi chọn bài nộp cuối cùng, còn bạn thì chọn baseline.</details>
+   <details><summary>Hướng nghĩ</summary>Winner's curse cộng adaptive overfitting. Kaggle giới hạn số lần nộp mỗi ngày (trần số lần gọi) và giữ bảng riêng tới cuối (chạy xác nhận).</details>
 4. **[Phản biện]** "Đã có bộ giữ kín thì cho agent xem chi tiết từng episode thất bại của gate cũng không sao, giúp nó sửa nhanh hơn." Phản biện.
    <details><summary>Hướng nghĩ</summary>Chi tiết từng episode là thông tin nhiều bit nhất về bộ giữ kín: kịch bản nào khó, seed nào gây lỗi. Sau vài vòng, bộ giữ kín thành bộ công khai. Chi tiết đó thuộc về bộ công khai; muốn agent học từ thất bại thì đưa loại thất bại đó vào bộ công khai.</details>
 
@@ -282,20 +282,17 @@ Tỉ lệ R = 20 lần của bạn sẽ tản: với tỉ lệ thật 80%, 20 l�
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| Volkswagen: EPA 18/9/2015; NOx ngoài đường ~40 lần giới hạn; phát hiện bằng đo ngoài chu trình | [chuẩn] | EPA Notice of Violation (9/2015); báo cáo ICCT/WVU (2014) |
-| Agent lập trình viết code riêng cho test hoặc sửa test/scoring code | [chuẩn] | Claude 3.7 Sonnet system card (Anthropic, 2/2025); METR, *Recent Frontier Models Are Reward Hacking* (metr.org, 5/6/2025). Reviewer đã tra web xác nhận cả hai |
-| 5 lần nhìn ở 5% danh nghĩa → α tổng ~14%; ImageNetV2 giảm ~11–14 điểm | [chuẩn] | Armitage và cộng sự (1969); Recht và cộng sự (ICML 2019) |
-| Bảng tỉ lệ verdict, Goodhart; N ≈ 624 | [đã chạy] mô phỏng | `b18_verdict.py` (numpy 2.5, scipy 1.18), CI Newcombe như Bài 13; N từ công thức non-inferiority với z_β = 1.645, kiểm bằng mô phỏng |
+| Volkswagen: EPA 18/9/2015; NOx ngoài đường tới ~40 lần giới hạn; phát hiện bằng đo ngoài chu trình | [chuẩn] | EPA Notice of Violation (9/2015); nghiên cứu WVU cho ICCT (2014) |
+| Agent lập trình viết code riêng cho test hoặc sửa test/scoring code | [chuẩn] | Claude 3.7 Sonnet system card (Anthropic, 2/2025); METR, *Recent Frontier Models Are Reward Hacking* (6/2025). Reviewer đã tra web xác nhận cả hai |
+| 5 lần nhìn ở 5% → α tổng ~14%; ImageNetV2 giảm ~11–14 điểm | [chuẩn] | Armitage và cộng sự (1969); Recht và cộng sự (ICML 2019) |
+| Bảng tỉ lệ verdict, Goodhart, N ≈ 624 | [đã chạy] | `b18_verdict.py` (numpy 2.5, scipy 1.18), CI Newcombe như Bài 13 |
 | Cú pháp GitHub Actions, giới hạn giờ runner | [tự đo] | Tài liệu GitHub Actions hiện hành |
 
 **Đã sửa so với bản gốc / Gemini:**
-- Reviewer sửa: bản trước của bài minh họa verdict bằng CI Wald trong khi Bài 13 dùng Newcombe, nên cùng một PR có thể cho hai verdict khác nhau ở biên. Thống nhất về Newcombe (cùng hàm với Bài 13), chạy lại: số đổi trong vòng ±0.6 điểm phần trăm. Thêm mô phỏng "baseline chung" cho Goodhart (26%, không phải 53%).
-- Bản gốc: "Cả ba phải cho verdict đúng", ngầm hiểu là một lần chạy. Verdict là biến ngẫu nhiên → đổi thành tỉ lệ trên R lần với seed root khác, so với α và power đã thiết kế.
-- Bản gốc: "Không thay đổi → PASS". Với quy tắc non-inferiority ở biên MDE và N tính cho power 80%, A/A chỉ PASS khoảng 80% → nêu rõ đánh đổi và cách tính N cho ≥95%.
-- Bản gốc: "Thay đổi nhỏ hơn ngưỡng → INCONCLUSIVE" chỉ đúng cho thay đổi âm. "Kèm số episode cần thêm" phải đi qua thiết kế tuần tự, không được cộng dồn rồi nhìn lại.
-- Gemini dùng "PR chỉ sửa comment" làm PR không đổi gì. Với harness bit-exact và cùng seed, Δ̂ = 0 chính xác nên phép thử không kiểm được gì về thống kê → thêm A/A với seed root khác, giữ PR sửa comment để test cache và plumbing.
-- Gemini đề xuất `with Writer(...)` để MCAP luôn có footer. Context manager không cứu được tiến trình bị kill → thay bằng ghi file tạm rồi đổi tên; API `mcap` ghi [tự đo].
-- Bản gốc và Gemini không đề cập Goodhart và ranh giới thông tin của vòng kín, dù bài toán của người học là pipeline agent tự sửa → thêm bộ giữ kín, seed HMAC, trần số lần gọi, chạy xác nhận trước khi nâng baseline.
+- Reviewer sửa: bản trước minh họa verdict bằng CI Wald trong khi Bài 13 dùng Newcombe, nên một PR có thể nhận hai verdict khác nhau ở biên. Thống nhất về Newcombe (cùng hàm), chạy lại: số đổi ≤ 0.6 điểm %. Thêm mô phỏng Goodhart "baseline chung" (≈26%, không phải 53%). Khoảng 12–19/20 là phân bố nhị thức, không phải Wilson.
+- Bản gốc: "cả ba phải cho verdict đúng" (một lần chạy) → tỉ lệ trên R lần với seed root khác, so với α và power. "Không thay đổi → PASS" → A/A chỉ PASS ≈ power; nêu cách tính N cho ≥95%. "Nhỏ hơn ngưỡng → INCONCLUSIVE" chỉ đúng cho thay đổi âm; "số episode cần thêm" phải qua thiết kế tuần tự.
+- Gemini: "PR chỉ sửa comment" làm A/A → cùng seed, bit-exact thì Δ̂ = 0, không kiểm được thống kê; giữ để test cache/plumbing, thêm A/A seed khác. `with Writer(...)` không cứu tiến trình bị kill → ghi file tạm rồi đổi tên.
+- Bản gốc và Gemini không đề cập Goodhart → thêm bộ giữ kín, seed HMAC, trần số lần gọi, chạy xác nhận trước khi nâng baseline.
 
 ### 12. Đọc thêm và tự kiểm tra
 

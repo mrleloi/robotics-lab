@@ -863,3 +863,691 @@ Xem phần 10; chú ý cái gì là thật, cái gì là ảo ở mỗi tầng, 
 </details>
 
 ---
+
+## Bài C11.3 — Sim có dự đoán được thực tế không ★ (16h)
+
+> **Vị trí:** C11.2 (CI ba trạng thái) và C11.4 → **C11.3** → C11.5 · **Cần trước:** → F6.5 (đặc biệt khẳng định (c) ở mục 6), F1.4, F1.5, F2.8; K6 Bài 12 (Wilson), Bài 15 (mức đo 4 "chuyển giao hiệu năng", để dành cho K7); C11.1 `VALIDITY.yaml` · **Sau bài này bạn quyết định được:** sim của bạn có được dùng để **chọn cấu hình** thay cho chạy thật không, cho loại thay đổi nào, với độ tin bao nhiêu; và khi kết quả yếu, nó yếu vì sim hay vì phép đo chưa đủ mạnh.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 2019–2020, nhóm Kadian và cộng sự (Georgia Tech, Facebook AI Research) hỏi đúng câu của bài này cho cả một lĩnh vực: các model điều hướng thắng trong simulator Habitat có thắng trên robot thật không? Họ dựng bản quét 3D của một phòng lab, chạy 9 model trong sim và trên robot LoCoBot thật trong chính phòng đó. Hệ số tương quan sim–thật trên tỉ lệ thành công ban đầu là **0,18**. Nguyên nhân lớn: agent học cách khai thác động lực va chạm của sim, **trượt dọc tường** để đi tắt qua chỗ ngoài đời không đi được. Chỉnh tham số sim (bỏ trượt), tương quan lên **0,844** `[chuẩn — Kadian và cộng sự, "Sim2Real Predictivity: Does Evaluation in Simulation Predict Real-World Performance?", IEEE RA-L 2020; kiểm định nghĩa hệ số trong paper]`.
+
+Hai điều đáng giữ. Thứ nhất, cả một cuộc thi đã xếp hạng model bằng sim trước khi ai đó đo xem thứ hạng ấy có nghĩa không. Thứ hai, câu trả lời không phải "sim tốt/xấu" mà là **một con số có thể đo, có thể sửa**. Bản gốc K7 gọi đây là gate cuối và câu hỏi hay nhất của khóa. Bài này thêm thứ bản gốc chưa có: với 6 cấu hình và 20 lần thật mỗi cấu hình, con số đó **nhìn thấy được gì**, trước khi bạn bỏ ra 120 lần chạy.
+
+### 2. Mô hình tư duy
+
+```
+ p_thật ▲            y = x (sim đúng tuyệt đối)
+   1.0  │           ╱
+        │         ╱       ● C5   thanh dọc: Wilson 95 %, n = 20 (rộng ±15–20 điểm)
+        │       ╱   ● C4  ┃      thanh ngang: Wilson, n = 1000 (hẹp)
+        │     ╱  ● C3 ┃   ┃
+        │   ╱ ● C2┃   ┃         sim lạc quan: điểm nằm DƯỚI đường y = x — bình thường
+        │ ╱●C1 ┃             thứ hạng giữ: điểm đi lên theo trục x — điều cần đo
+        ╱──┃──────────────► p_sim
+       0.5                1.0
+```
+
+Bốn ý bản chất:
+
+1. **Câu hỏi là quyết định, không phải giá trị tuyệt đối.** Sim gần như luôn lạc quan (không có bụi, lốp mòn, người bất ngờ). Thứ cần là: nếu sim nói A tốt hơn B, ngoài đời A có tốt hơn B không. Đó là mức đo 4 của K6 Bài 15.
+2. **Với 6 cấu hình, ρ Spearman là một biến rời rạc thô.** Chỉ có 720 thứ tự; ρ nhảy theo bước 0,057; ngưỡng một phía 5 % cho n = 6 là ρ ≥ 0,829 (bảng chính xác), và ρ = 0,8 thậm chí không phải giá trị đạt được. "ρ ≥ 0,80 là mạnh" (Gemini) không phải tiêu chí.
+3. **Power phải tính trước khi chạy thật.** n = 20 cho thanh sai số ±15–20 điểm. Nếu 6 cấu hình chỉ cách nhau vài điểm trong sim, thứ hạng thật là **không xác định** bất kể sim tốt cỡ nào, và ρ thấp không nói gì về sim. Thứ bạn kiểm soát được là **độ trải** của cấu hình trong sim và n thật. Mô phỏng dưới đây cho một sim **xếp hạng đúng hoàn toàn**, thật kém hơn sim một khoảng cố định trên thang logit, và hỏi bạn thấy gì.
+4. **Có ước lượng tốt hơn ρ trên 6 điểm.** Hồi quy logistic số lần thành công thật theo logit(p_sim) dùng cả 120 lần chạy, không chỉ 6 thứ hạng; độ dốc > 0 nghĩa là sim mang thông tin dự đoán. Báo cả hai: ρ (bản gốc yêu cầu) và độ dốc có CI.
+
+```python
+# [đã chạy] C11.3 ★ — 6 cấu hình × 20 lần thật: ρ Spearman nhìn thấy được gì?
+# Giả định: sim xếp hạng ĐÚNG HOÀN TOÀN, thật = sim lệch lạc quan (logit dịch xuống), rồi tung đồng xu n=20.
+import numpy as np
+from scipy.stats import spearmanr, norm
+from scipy.special import logit, expit
+rng = np.random.default_rng(20)
+REPS, N_SIM = 4000, 1000
+RHO_CRIT = 0.829          # ngưỡng một phía α=0.05 cho n=6 (bảng chính xác) — tra lại, xem phần 11
+
+def logit_slope(k, n, x):                   # hồi quy logistic số đếm thật theo logit(p_sim), Newton 20 bước
+    X = np.c_[np.ones_like(x), x]; b = np.zeros(2)
+    for _ in range(20):
+        p = expit(X @ b); W = n * p * (1 - p)
+        H = X.T @ (X * W[:, None]); b += np.linalg.solve(H, X.T @ (k - n * p))
+    return b[1], np.sqrt(np.linalg.inv(H)[1, 1])
+
+def study(p_sim_true, n_real, shift=-0.7):
+    p_real = expit(logit(p_sim_true) + shift)              # thật kém hơn sim, nhưng CÙNG thứ tự
+    out = []
+    for _ in range(REPS):
+        ps = rng.binomial(N_SIM, p_sim_true) / N_SIM      # sim cũng có nhiễu (n = 1000)
+        k = rng.binomial(n_real, p_real)
+        rho = spearmanr(ps, k).statistic
+        b, se = logit_slope(k, n_real, logit(np.clip(ps, 1e-3, 1 - 1e-3)))
+        out.append((rho, b - norm.ppf(0.95) * se > 0))    # độ dốc > 0 ở mức một phía 5%
+    rho, slope_ok = np.array(out).T
+    return np.nanmean(rho >= RHO_CRIT), np.nanmean(rho <= 0), np.nanmedian(rho), slope_ok.mean()
+
+designs = {"hẹp 0.80–0.95": np.linspace(.80, .95, 6), "rộng 0.55–0.95": np.linspace(.55, .95, 6)}
+print(f"{'dải p_sim':16s} {'n thật':>6s} {'P(ρ≥0.829)':>11s} {'P(ρ≤0)':>8s} {'ρ trung vị':>10s} {'P(dốc>0)':>9s}")
+for name, ps in designs.items():
+    for n in (20, 50):
+        a, z, med, s = study(ps, n)
+        print(f"{name:16s} {n:6d} {a:11.1%} {z:8.1%} {med:10.2f} {s:9.1%}")
+# phân bố null: sim KHÔNG liên quan gì tới thật (mọi cấu hình thật như nhau)
+null = [spearmanr(np.arange(6), rng.binomial(20, 0.7, 6)).statistic for _ in range(REPS)]
+print(f"null (thật như nhau, n=20): P(ρ≥0.829) = {np.nanmean(np.array(null) >= RHO_CRIT):.1%}")
+```
+
+(Khi 6 số đếm thật trùng hết, ρ không xác định; `nanmean` bỏ qua các lần đó. scipy có thể in cảnh báo.)
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Metric offline của hệ gợi ý dự đoán kết quả A/B online | p_sim dự đoán p_thật | Ở web bạn có hàng chục thí nghiệm A/B, mỗi cái hàng triệu user. Ở đây 6 điểm, mỗi điểm 20 lần | Đọc ρ của 6 điểm như đọc tương quan của 60 thí nghiệm |
+| Load test ở staging dự đoán prod | Sim dự đoán văn phòng | Staging thiếu traffic thật nhưng cùng code, cùng máy. Sim thiếu cả **cơ chế** (kênh UNTESTED) | Coi khác biệt sim–thật là "hệ số quy đổi" cố định, nhân vào là xong |
+| Shadow traffic: chạy song song, so kết quả từng request | Ghép cặp sim–thật theo kịch bản | Request phát lại tất định; lần chạy thật không phát lại được, người đi lại khác nhau mỗi lần | Kỳ vọng từng lần chạy thật khớp từng episode sim |
+
+**Chấm mô hình:**
+
+- *Gemini K7 Bài 20: "Tương quan mạnh (ρ ≥ 0,80): thứ tự được bảo toàn."* → **SAI** như một tiêu chí. Với n = 6, ρ = 0,8 không đạt được; giá trị gần nhất dưới 0,829 là 0,771, mà phân bố null cho P(ρ ≥ 0,771) ≈ 5,1 %. Ngưỡng không gắn power cũng vô nghĩa: phản ví dụ ở phần 7, sim xếp hạng đúng hoàn toàn, thiết kế "hẹp" với n = 20 chỉ đạt ρ ≥ 0,829 khoảng một phần ba số lần.
+- *Gemini: "Nếu thanh sai số của hai cấu hình chồng lấn, không được kết luận chúng khác nhau."* → **ĐÚNG MỘT PHẦN.** Không chồng lấn là điều kiện đủ cho khác biệt; chồng lấn **không** chứng minh giống nhau, và hai CI 95 % chồng lấn một phần vẫn có thể có hiệu khác 0 có ý nghĩa. Phản ví dụ: kiểm hiệu bằng CI của hiệu (Newcombe, K6 Bài 13), không bằng mắt nhìn hai thanh.
+- *Gemini: "ρ ≤ 0 → mô hình trễ hoặc động học bánh sai dạng."* → đã chấm ở → F6.5 mục 6 (c), **ĐÚNG MỘT PHẦN**: kiểm power và CI của ρ trước. Phần 7 cho số: với sim đúng hoàn toàn, thiết kế hẹp, n = 20, P(ρ ≤ 0) ≈ 2 %.
+- *Gemini: "Sim gần như luôn lạc quan hơn thực tế."* → **ĐÚNG MỘT PHẦN.** Thường đúng cho tỉ lệ thành công khi sim thiếu nhiễu. Sai khi sim **khắt khe** hơn: va chạm trong sim tính theo footprint hình học, ngoài đời robot cạ nhẹ không ai ghi; người trong sim đi theo quỹ đạo không né robot, người thật né. Phản ví dụ: kịch bản có người cắt ngang dày, sim có thể bi quan hơn.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Tương quan hạng Spearman ρ | Tương quan của thứ hạng hai dãy | Đo độ khớp giá trị tuyệt đối |
+| 🟢 | Phân bố null, giá trị tới hạn | Phân bố của ρ khi không có liên hệ; ngưỡng cắt α | "0,8 là mạnh" |
+| 🟢 | Power của một nghiên cứu xác nhận | Xác suất thấy liên hệ khi liên hệ có thật | Chỉ có trong A/B |
+| 🟢 | Độ dốc hiệu chuẩn (calibration slope) | Hồi quy kết quả thật theo dự đoán; dốc 1 = dự đoán đúng thang, > 0 = có thông tin | Pearson của 6 điểm |
+| 🟢 | Xen kẽ khối (blocked interleaving) | Thứ tự chạy cấu hình được xáo theo khối để pin, giờ, người không trùng cấu hình | Chạy hết cấu hình này rồi tới cấu hình kia |
+| 🟡 | Kendall τ | Tương quan hạng dựa trên cặp cùng chiều/ngược chiều; dễ diễn giải hơn với n nhỏ | Thay thế bắt buộc cho Spearman |
+| 🟡 | Parametric bootstrap | Lấy mẫu lại số đếm thật từ Binomial(n, p̂) để có phân bố của ρ̂ | Bootstrap 6 cấu hình |
+
+### 5. Dự đoán
+
+**Khai báo trước (preregistration, → F1.7), commit trước lần chạy thật đầu tiên:**
+1. **6 cấu hình** khác nhau đáng kể (tham số Nav2, giới hạn tốc độ dưới kẹp firmware, controller từ C11.4, inflation). Ghi `config_hash` từng cái.
+2. **p_sim** của từng cấu hình (từ CI đêm, 1000 episode, trên **đúng tuyến** sẽ chạy thật: bản đồ văn phòng, điểm A và B của C8.4). Nếu 6 giá trị trải hẹp hơn ~15 điểm, đổi cấu hình **trước** khi chạy thật.
+3. **Power:** chạy code phần 2 với 6 giá trị p_sim của bạn và độ lệch (shift) bạn đoán. Ghi P(ρ ≥ 0,829) và P(dốc > 0) ở n = 20. Dưới ~50 % thì tăng n cho cấu hình nào, hoặc đổi cấu hình.
+4. **Đoán:** ρ, độ dốc, cấu hình nào bị xếp sai nếu có, và vì sao (kênh nào trong `VALIDITY.yaml`).
+5. **Phân tích khóa trước:** Spearman + parametric bootstrap; hồi quy logistic + CI độ dốc; với mỗi cặp có CI sim tách nhau: chiều chênh lệch ngoài đời cùng dấu không.
+
+```markdown
+# prediction.md — K7 C11.3 (commit TRƯỚC lần chạy thật đầu tiên)
+| config_id | mô tả | config_hash | p_sim [Wilson] | cờ VALIDITY trên tuyến thật | p_thật đoán |
+|---|---|---|---|---|---|
+- độ trải p_sim: ___ điểm ; shift đoán (logit): ___
+- power ở n=20: P(ρ≥0.829) ___ ; P(dốc>0) ___ → n thật chọn: ___
+- ρ đoán ___ ; dốc đoán ___ ; cấu hình dễ bị xếp sai: ___ vì kênh ___
+- thứ tự chạy (khối xen kẽ, seed ___): ___
+```
+
+### 6. Làm
+
+Giữ đủ sáu bước của bản gốc; thêm bước 0 và chi tiết đo.
+
+**Bước 0 — khai báo trước** như phần 5. Không đổi cấu hình, n hay phương pháp phân tích sau khi đã chạy thật lần đầu; nếu buộc phải đổi, ghi lý do và báo cả hai.
+
+**Bước 1 — 6 cấu hình.** Ưu tiên khác nhau về cơ chế: controller (C11.4), giới hạn tốc độ/gia tốc, inflation, tham số recovery. Cấu hình nào dựa vào kênh OUT/UNTESTED trên tuyến thật (checker C11.1) vẫn được chọn, nhưng **đánh dấu trước**: đó là giả thuyết cho bước 6.
+
+**Bước 2 — 1000 episode sim mỗi cấu hình** qua tầng đêm của C11.2, cùng kịch bản và seed cho cả 6 (K6 Bài 1), kịch bản lấy mẫu từ phân bố **của văn phòng thật**: cùng bản đồ, cùng A–B, mật độ người như giờ bạn sẽ chạy thật. Tỉ lệ thành công + Wilson.
+
+**Bước 3 — 20 lần thật mỗi cấu hình**, cùng định nghĩa thành công (K6 Bài 11) áp lên MCAP thật, không phán bằng mắt. Thứ tự **xen kẽ theo khối**: 20 khối, mỗi khối 6 cấu hình theo thứ tự xáo, để pin, giờ trong ngày, mật độ người không trùng với cấu hình. Ghi `real_runs.csv` ngay sau mỗi lần. Lần nào dùng E-stop: ghi `failure_class`, không xóa.
+
+**Bước 4 — đồ thị** p_sim (x) vs p_thật (y), 6 điểm, thanh sai số Wilson **hai trục**, đường y = x đứt nét. Vẽ thêm đường hồi quy logistic.
+
+**Bước 5 — con số.** ρ Spearman (bản gốc) kèm phân bố từ parametric bootstrap (lấy mẫu lại k_i ~ Binomial(20, p̂_i), p_sim ~ Binomial(1000, p̂_sim,i), 2000 lần): báo trung vị và khoảng 2,5–97,5 %. Kendall τ. Độ dốc logistic + CI. Lệch tuyệt đối trung bình p_sim − p_thật.
+
+**Bước 6 — điều tra chỗ xếp sai.** Cấu hình nào lệch khỏi xu hướng nhiều nhất (residual hồi quy)? Nó có dựa vào kênh OUT/UNTESTED không (đã đánh dấu ở bước 1)? Mở MCAP các lần thất bại thật: phân loại thất bại có khác sim không (ví dụ sim thất bại vì timeout, thật thất bại vì marker mất)? Mỗi giả thuyết thành một dòng mới trong `VALIDITY.yaml` hoặc một kịch bản mới cho C11.2. Không chỉnh sim **rồi tính lại ρ trên cùng 120 lần chạy**: đó là calibration trên tập kiểm, mất validation duy nhất bạn có (F6.2). Sim sửa xong thì cần một loạt thật mới, dù nhỏ.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Bảng của bản gốc (giữ nguyên):**
+
+| Kiểm tra | Kết quả đúng |
+|---|---|
+| Tỉ lệ tuyệt đối sim vs thật | **Sim thường lạc quan hơn.** Bình thường, ghi lại độ lệch |
+| Thứ hạng | **Nên tương quan mạnh.** Đây là điều thực sự quan trọng |
+| Cấu hình bị xếp hạng sai | Nếu có, kiểm nó có nằm ngoài miền hiệu lực không |
+| Tương quan yếu | **Vẫn là kết quả, và là kết quả quan trọng**: sim chưa dùng được để ra quyết định |
+
+Thêm một dòng đọc: "tương quan yếu" chỉ được viết **sau** khi đã báo power của thiết kế. Nếu power thấp, kết luận đúng là INCONCLUSIVE, không phải "sim không dự đoán được".
+
+**Mô phỏng phần 2** (sim xếp hạng đúng hoàn toàn, thật lệch logit −0,7, 4000 lần lặp):
+
+| Dải p_sim | n thật | P(ρ ≥ 0,829) | P(ρ ≤ 0) | ρ trung vị | P(độ dốc > 0) |
+|---|---|---|---|---|---|
+| hẹp 0,80–0,95 | 20 | 32,5 % | 2,1 % | 0,75 | 69,5 % |
+| hẹp 0,80–0,95 | 50 | 57,9 % | 0,1 % | 0,89 | 96,3 % |
+| rộng 0,55–0,95 | 20 | 74,1 % | 0,0 % | 0,93 | 99,8 % |
+| rộng 0,55–0,95 | 50 | 93,7 % | 0,0 % | 0,99 | 100 % |
+
+Null (thật như nhau, n = 20): P(ρ ≥ 0,829) = 2,1 % (thấp hơn 5 % danh nghĩa vì số đếm trùng nhau).
+
+Cách đọc:
+- Với thiết kế hẹp và n = 20 của bản gốc, **một sim hoàn hảo** chỉ vượt ngưỡng ρ khoảng 1/3 số lần; ρ trung vị 0,75. Kết luận "sim yếu" từ một lần như vậy là sai trong phần lớn trường hợp.
+- Độ trải của cấu hình mua nhiều hơn n: đi từ hẹp sang rộng ở n = 20 tốt hơn giữ hẹp và tăng lên n = 50, và rẻ hơn 2,5 lần về giờ chạy thật.
+- Độ dốc logistic có power cao hơn hẳn ρ ở cùng dữ liệu, vì nó dùng số đếm chứ không chỉ thứ hạng.
+- ρ ≤ 0 với sim hoàn hảo hiếm (≤ 2 %) nhưng không bằng 0. Gặp nó: kiểm power và bootstrap trước, rồi mới nghi sim (F6.5).
+
+**Câu bạn được phép viết** khi tương quan mạnh: *"Trên 6 cấu hình × (1000 sim + 20 thật), xếp hạng sim tương quan với xếp hạng thật ρ = __ [khoảng bootstrap __, __], độ dốc hiệu chuẩn __ [CI __]; thiết kế có power __ % để thấy một sim xếp hạng đúng; các cấu hình dựa vào kênh __ nằm ngoài miền đã kiểm."* Khi yếu và power đủ: *"Sim không dự đoán được thứ hạng trên tuyến này, và đây là kênh nghi ngờ."* Cả hai đều là kết quả. Chỉ có "tôi không đo" là thất bại.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Mọi cấu hình sim ~100 %, thật 60–70 % | Kịch bản sim không giống tuyến thật (trần của eval) | So phân bố kịch bản sim với điều kiện lúc chạy thật | Lấy mẫu kịch bản từ văn phòng thật; **không** thêm nhiễu trượt bánh trước khi đo gap theo kênh (F6.5) |
+| Thanh sai số thật chồng lấn hết | Cấu hình quá gần nhau | Độ trải p_sim đã khai ở phần 5 | Làm lại thiết kế; báo INCONCLUSIVE cho loạt này |
+| Một cấu hình lệch xa xu hướng | Kênh OUT/UNTESTED (trượt dọc vật cản, caster kẹt, marker mất) | Cờ bước 1; phân loại thất bại thật vs sim | Dòng mới trong `VALIDITY.yaml`; kịch bản mới cho C11.2 |
+| p_thật trôi dần theo thứ tự chạy | Pin, giờ, người quen robot | p_thật theo khối | Đã xen kẽ thì phân tích có khối; nếu chưa, chạy lại |
+| ρ cao nhưng độ dốc ≈ 0 | Một cấu hình rất tệ kéo cả hai | Bỏ-một-ra (leave-one-out) | Báo cả hai; nói rõ phụ thuộc một điểm |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot ở 20 văn phòng. Sim dự đoán thứ hạng ở văn phòng thứ 21 không? Đơn vị độc lập là gì?
+<details><summary>Hướng nghĩ</summary>
+
+Văn phòng, không phải lần chạy (F2.8, câu quy mô). Có 20 văn phòng × 6 cấu hình thì ước lượng được ρ **theo văn phòng** và độ biến thiên của nó. Văn phòng nào sim dự đoán kém là văn phòng nào có kênh UNTESTED.
+
+</details>
+
+2. **[Failure mode]** Agent của bạn chọn cấu hình bằng sim suốt 3 tháng. ρ đo ở tháng đầu còn đúng không?
+<details><summary>Hướng nghĩ</summary>
+
+Câu chuyện Habitat: tối ưu trong sim đẩy cấu hình về đúng chỗ sim sai. ρ đo trên 6 cấu hình "tự nhiên" không áp cho cấu hình đã được tối ưu theo sim. Cần lặp lại C11.3 định kỳ với cấu hình **đã được chọn bởi sim**.
+
+</details>
+
+3. **[Vì sao không]** Vì sao không chạy 6 cấu hình × 100 lần thật cho chắc?
+<details><summary>Hướng nghĩ</summary>
+
+Tính giờ người và rủi ro: 600 lần chạy có người cầm E-stop. So với mua độ trải cấu hình (phần 7). Và nếu chạy thật 100 lần mỗi cấu hình thì bạn cần sim để làm gì?
+
+</details>
+
+4. **[Phản biện]** "Sim dự đoán đúng thứ hạng 6 cấu hình" có đủ để dùng sim cho cấu hình thứ 7 không?
+<details><summary>Hướng nghĩ</summary>
+
+Chỉ khi cấu hình thứ 7 đi qua cùng các kênh và cùng miền. Một cấu hình mới đi qua kênh mới là ngoại suy (K6 Bài 17). Checker là thứ trả lời, không phải ρ.
+
+</details>
+
+5. **[Liên ngành]** Dự báo thời tiết kiểm tra "dự báo 70 % mưa" thế nào khi mỗi ngày chỉ mưa hoặc không?
+<details><summary>Hướng nghĩ</summary>
+
+Xem phần 10: gom nhiều dự báo cùng mức xác suất, so tần suất thật, vẽ reliability diagram. Độ dốc hiệu chuẩn của bạn là phiên bản 6 điểm của nó.
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Khí tượng: kiểm định dự báo xác suất.** Dịch vụ khí tượng đánh giá dự báo bằng reliability diagram (dự báo 70 % thì có mưa khoảng 70 % số ngày không) và skill score so với dự báo khí hậu `[chuẩn]`. Giống: đánh giá một mô hình bằng kết quả nhị phân ngoài đời, cần nhiều lần mới nói được gì. Khác: họ có hàng nghìn ngày mỗi năm; bạn có 120 lần chạy.
+- **Hệ gợi ý: tương quan offline–online.** Đội recsys đo xem metric offline có dự đoán kết quả A/B không, vì chọn model bằng metric offline rẻ hơn hàng trăm lần. Giống: đúng câu hỏi của bài. Khác: mỗi điểm của họ là một A/B triệu user, thanh sai số gần như không có.
+- **Habitat** (phần 1): sim được sửa sau khi đo predictivity, không phải trước.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Kadian và cộng sự: 9 model, tương quan 0,18 → 0,844 sau chỉnh sim | [chuẩn] | RA-L 2020, arXiv 1912.06321; họ định nghĩa hệ số riêng (SRCC), đọc định nghĩa |
+| n = 6: ngưỡng một phía 5 % là ρ ≥ 0,829; P(ρ ≥ 0,771) ≈ 5,1 %; P(ρ = 1) = 1/720 | [đã chạy] | Liệt kê đủ 720 hoán vị khi soạn; khớp bảng Spearman thông dụng |
+| Bảng power | [đã chạy] | Giả định shift logit −0,7 và p_sim đều; thay bằng số của bạn |
+
+**Đã sửa so với bản gốc/Gemini:**
+- Bản gốc: "tính tương quan hạng" không kèm power hay CI. Thêm phân tích power trước khi chạy, bootstrap tham số, độ dốc logistic; giữ ρ vì bản gốc yêu cầu.
+- Gemini: "ρ ≥ 0,80 = mạnh" → ngưỡng gắn với phân bố null n = 6 (0,829) **và** power của thiết kế.
+- Gemini: thanh sai số chồng lấn → "không được kết luận khác nhau" → dùng CI của hiệu.
+- Gemini: "sim gần như luôn lạc quan" → thường, không luôn.
+- Gemini: "tự tin dùng CI để merge mà không cần thử nghiệm ngoài sàn" khi ρ cao → chỉ trong miền đã kiểm, và phải lặp lại khi cấu hình được chọn bởi sim (câu hỏi 2).
+- Gemini: "ρ ≤ 0 → mô hình sai dạng; tăng n lên 40–50 cho 2 cấu hình dẫn đầu" → kiểm power trước (F6.5); thiết kế lại độ trải thường rẻ hơn tăng n.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** A. Kadian và cộng sự, "Sim2Real Predictivity: Does Evaluation in Simulation Predict Real-World Performance?", IEEE Robotics and Automation Letters, 2020.
+- **Giải thích:** → F6.5 mục 6; → F1.4 (Wilson, bootstrap); K6 Bài 15 (bốn mức đo gap).
+- **Đào sâu (tùy chọn):** D. S. Wilks, *Statistical Methods in the Atmospheric Sciences*, chương kiểm định dự báo.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác vì sao ρ = 0,6 trên 6 cấu hình chưa nói "sim tệ"; (2) vẽ lại đồ thị phần 2; (3) câu dưới.
+
+<details><summary>Câu 3: p_sim của 6 cấu hình: 0,91 0,92 0,93 0,93 0,94 0,95. Bạn sắp chạy thật. Làm gì?</summary>
+
+Dừng. Độ trải 4 điểm, nhỏ hơn nhiều thanh sai số ±15–20 điểm của n = 20: thứ hạng thật gần như ngẫu nhiên bất kể sim. Thay cấu hình để trải rộng (khác controller, giới hạn tốc độ, inflation); hoặc chuyển sang kịch bản khó hơn để p_sim xuống vùng giữa, nơi khác biệt lộ ra. Ghi lý do vào `prediction.md` trước khi chạy.
+
+</details>
+
+---
+
+## Bài C11.4 — Controller tầng giữa: đo MPC mua được gì (12h)
+
+> **Vị trí:** C11.2 (CI) → **C11.4** → C11.3 (dùng các controller này làm cấu hình) · **Cần trước:** → F5.8, F1.2, F1.5; K4 Bài 9 (mặt Pareto); K6 Bài 1 (CRN, ghép cặp); C4.2 (PI 100 Hz), C9.2 (tải CPU perception trên N100) · **Sau bài này bạn quyết định được:** controller Nav2 nào (Regulated Pure Pursuit, DWB hay MPPI) cho robot này ở tốc độ này, với lý do bằng số trên năm trục, kể cả khi kết luận là "MPC không đáng".
+
+> MPC và lý thuyết điều khiển là 🔴 với bạn (`robotics-data-infra-roadmap.md`): chỉ đủ từ vựng. Bài này **không** dạy viết MPC. Nó dạy **đo** một tính năng đắt tiền xem nó mua được gì: việc của người làm eval, và là 🟢.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+MPC sinh ra ở nhà máy lọc hóa dầu cuối thập niên 1970: DMC của Shell (Cutler, Ramaker) và IDCOM của nhóm Richalet `[chuẩn — S. J. Qin, T. A. Badgwell, "A survey of industrial model predictive control technology", Control Engineering Practice, 2003]`. Nhà máy kiếm tiền bằng cách chạy **sát ràng buộc**. PID chỉ thấy sai số hiện tại, không biết ràng buộc, nên phải đặt điểm làm việc xa giới hạn. MPC cuộn một mô hình vài phút tới, tối ưu cả chuỗi lệnh dưới ràng buộc, thực thi bước đầu, rồi làm lại (receding horizon). Nhà máy có vài phút mỗi chu kỳ. Robot có 50–100 ms. MPPI (Williams và cộng sự, Georgia Tech, 2016–2017) lấy mẫu hàng nghìn chuỗi lệnh mỗi chu kỳ, và Nav2 có một controller MPPI `[tự đo — danh sách controller theo bản Jazzy cài]`. Một bản review trong phụ lục K7 gốc viết: *"Robot giờ không xử lý realtime mà xử lý trước tương lai."* Câu đó sai, và bài này bắt đầu từ chỗ sửa nó.
+
+### 2. Mô hình tư duy
+
+**MPC không thay vòng realtime; nó ngồi phía trên** (bảng phụ lục B, giữ nguyên):
+
+| Tầng | Chạy ở đâu | Chu kỳ | Tầm nhìn | Việc |
+|---|---|---|---|---|
+| Điều khiển | ESP32-S3 | 10 ms | 0 | PI vận tốc bánh (C4.2). Tất định, jitter p99 < 100 µs |
+| Local controller | N100 | 50–100 ms | 1,5–3 s | Chuỗi lệnh vận tốc, tránh va chạm dự đoán |
+| Global planner | N100 | khi cần | cả hành trình | Đường đi trên bản đồ tĩnh |
+
+Ba controller, nói theo bản chất: **RPP** hình học, bám điểm phía trước, giảm tốc theo luật, rất rẻ; **DWB** (hậu duệ Dynamic Window, Fox–Burgard–Thrun 1997) lấy mẫu cặp (v, ω), cuộn mỗi cặp như hằng số 1–2 s, chấm bằng critic: đã là dự đoán ngắn hạn; **MPPI** lấy mẫu hàng nghìn **chuỗi** lệnh có nhiễu, cuộn qua mô hình, trung bình có trọng số theo chi phí. Câu so sánh đúng không phải "phản ứng hay dự đoán" mà là **dự đoán giàu tới mức nào thì đáng CPU, trên kịch bản của bạn**.
+
+Mô phỏng đồ chơi: robot 1D, một PD phản ứng chỉ thấy người khi còn cách 1,5 m, so với một MPC tầm nhìn 2 s **biết trước** người đứng chắn ở đâu, trên hai kịch bản: dễ (không ai chắn) và khó (người chắn hành lang 4 s). Dự đoán rồi chạy.
+
+```python
+# [đã chạy] C11.4 — PD phản ứng vs MPC (tầm nhìn 2 s) trên robot 1D có ràng buộc
+import numpy as np, time
+from scipy.optimize import minimize
+DT, T, AMAX, VMAX, GOAL, H = 0.1, 16.0, 0.8, 0.5, 5.0, 20   # 10 Hz như local planner
+
+def xlim(t, scen):   # "khó": người đứng chắn ở x=2.5 m trong t∈[3,7] s → robot phải ở x<=2.0
+    return 2.0 if (scen == "khó" and 3.0 <= t <= 7.0) else np.inf
+
+def pd(x, v, t, scen, st):               # PD bám đích; chỉ THẤY người khi còn cách <=1.5 m
+    target = min(GOAL, xlim(t, scen)) if xlim(t, scen) - x < 1.5 else GOAL
+    return 1.2 * (target - x) - 2.0 * v
+
+def mpc(x, v, t, scen, st):              # tối ưu chuỗi gia tốc 2 s, BIẾT trước người đứng đâu
+    lim = np.array([xlim(t + (h + 1) * DT, scen) for h in range(H)])
+    lim = np.where(np.isfinite(lim), lim, 1e9)
+    rc = lambda g: np.cumsum(g[::-1])[::-1]           # tổng từ h tới cuối (để lan gradient ngược)
+    def cost(a):                                       # trả về (giá trị, gradient giải tích)
+        vs = v + np.cumsum(a) * DT; xs = x + np.cumsum(vs) * DT
+        da = np.diff(np.r_[st.get("a", 0.0), a]) / DT
+        ox, ov = np.maximum(0, xs - lim), np.maximum(0, vs - VMAX)
+        J = np.sum((GOAL - xs)**2) + 0.5 * a @ a + 0.05 * da @ da + 1e5 * (ox @ ox + ov @ ov)
+        gx = -2 * (GOAL - xs) + 2e5 * ox                         # dJ/dx_h
+        gv = DT * rc(gx) + 2e5 * ov                               # dJ/dv_i
+        gda = 0.1 * da / DT; gj = gda - np.r_[gda[1:], 0.0]       # dJ/da qua số hạng jerk
+        return J, DT * rc(gv) + a + gj
+    a0 = st.get("plan", np.zeros(H))
+    res = minimize(cost, a0, jac=True, method="L-BFGS-B", bounds=[(-AMAX, AMAX)] * H)
+    st["plan"] = np.r_[res.x[1:], res.x[-1]]   # warm start chu kỳ sau
+    return res.x[0]
+
+def episode(ctrl, scen):
+    x = v = 0.0; st = {}; acc = []; clear = np.inf; tg = None; cpu = []
+    for k in range(int(T / DT)):
+        t = k * DT; t0 = time.perf_counter()
+        a = float(np.clip(ctrl(x, v, t, scen, st), -AMAX, AMAX)); cpu.append(time.perf_counter() - t0)
+        st["a"] = a; v = float(np.clip(v + a * DT, -VMAX, VMAX)); x += v * DT; acc.append(a)
+        if np.isfinite(xlim(t, scen)): clear = min(clear, 2.5 - x)   # khoảng cách gần nhất tới người
+        if tg is None and abs(GOAL - x) < 0.10 and abs(v) < 0.10: tg = round(t, 1)
+    j = np.abs(np.diff(acc)) / DT
+    return tg, np.percentile(j, 95), j.max(), clear, 1e3 * np.percentile(cpu, 99)
+
+print("kịch bản bộ ĐK  t_tới_đích  jerk_p95  jerk_max  gần_người  cpu_p99(ms)")
+for scen in ("dễ", "khó"):
+    for name, c in (("PD", pd), ("MPC", mpc)):
+        tg, jp, jm, cl, cpu = episode(c, scen)
+        print(f"{scen:8s} {name:5s} {str(tg):>10s} {jp:9.2f} {jm:9.2f} {cl:10.2f} {cpu:11.2f}")
+```
+
+Bốn ý: (1) MPC mua hai thứ, **nhìn trước** và **biết ràng buộc**; không có gì để nhìn trước thì nó là controller đơn giản đắt tiền. (2) MPC chỉ tốt bằng mô hình nó cuộn (C11.1) và dự đoán nó nhận (C11.6). (3) Ràng buộc trong MPC thực tế thường là **phạt mềm**, có thể lấn; an toàn cứng nằm ở C10. (4) "Mượt" phải định nghĩa thành số **trước khi** đo, vì p95 và max có thể chỉ hai hướng ngược nhau.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Autoscaler phản ứng (theo CPU hiện tại) | PD/RPP | Scale chậm thì latency tăng một lúc; robot phản ứng chậm thì chạm người, không có error budget | Coi một lần lấn khoảng cách như một lần vượt SLO |
+| Predictive autoscaling | MPC/MPPI cuộn mô hình + dự báo người | Traffic không né autoscaler; người **né robot**, nên dự báo đổi chính thứ nó dự báo | Tin MPC vì "có dự báo" mà không đo chất lượng dự báo (C11.6) |
+| Deadline request 100 ms | MPPI phải xong trong một chu kỳ | Request quá hạn bị hủy, client retry. Chu kỳ quá hạn thì robot chạy tiếp lệnh cũ, không ai retry | Đo CPU % trung bình "còn dư" trong khi p99 chu kỳ đã vượt hạn khi perception chạy cùng |
+| A/B hai bản, hai nhóm user | 3 controller × cùng kịch bản, cùng seed | Ở đây ghép cặp được (CRN, K6 Bài 1); A/B web thường không | Phân tích như hai mẫu độc lập: vứt phần lớn power |
+
+**Chấm mô hình:**
+- *Phụ lục K7 gốc mục 3c (câu trong review):* "Robot giờ không xử lý realtime mà xử lý trước tương lai." → **SAI.** Vòng 10 ms trên ESP32 vẫn chạy và vẫn giữ robot ổn định; MPC là tầng thêm phía trên, chậm hơn 5–10 lần. Phản ví dụ: bỏ PI bánh, gửi lệnh MPPI 20 Hz thẳng xuống PWM; vùng chết và chênh lệch hai motor (C3.4) làm robot đi cong và giật dù kế hoạch hoàn hảo.
+- *"MPC mượt hơn."* → **ĐÚNG MỘT PHẦN.** Đúng khi cần né có dự báo: giảm tốc sớm thay vì phanh gấp. Gãy: MPPI lấy mẫu ngẫu nhiên nên đầu ra có nhiễu, cần làm mượt `[tự đo theo bản Nav2]`; và p95 với max cho kết luận khác nhau. Phản ví dụ: phần 7, kịch bản dễ.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟡 | MPC / receding horizon | Tối ưu chuỗi lệnh trong tầm nhìn, thực thi bước đầu, lặp lại | Một thuật toán cụ thể |
+| 🟡 | MPPI, DWB, RPP | Ba controller Nav2: lấy mẫu chuỗi / lấy mẫu cặp (v, ω) / hình học | "MPC thật" chỉ có MPPI |
+| 🟢 | Jerk | Đạo hàm gia tốc (m/s³) | Tính trực tiếp được từ odometry thô |
+| 🟢 | Ràng buộc cứng vs mềm | Không bao giờ vi phạm vs bị phạt khi vi phạm | MPC bảo đảm không va chạm |
+| 🟢 | Mặt Pareto | Tập cấu hình không bị cái nào thắng ở mọi trục (K4 Bài 9) | Có một "tốt nhất" |
+| 🟢 | Lỡ chu kỳ controller | Chu kỳ tính xong muộn hơn hạn; robot dùng lệnh cũ | CPU cao |
+| 🔴 | Bộ giải QP, ổn định MPC, lý thuyết MPPI | Nội tại thuật toán | Cần học trước khi đo |
+
+### 5. Dự đoán
+
+**A — đồ chơi (30 phút):** mỗi kịch bản, controller nào thắng ở từng cột (t tới đích, jerk p95, jerk max, gần người, CPU)? Có cột nào p95 và max chỉ hai hướng ngược nhau?
+
+**B — Nav2 trong CI C11.2:** thứ hạng 3 controller trên 5 trục ở ba nhóm kịch bản (người cắt ngang, người đứng chắn rồi tránh, hành lang hẹp hai người).
+
+| Tham số cần tra | Tra ở đâu |
+|---|---|
+| Controller có sẵn; tham số MPPI (số mẫu, số bước, `model_dt`) | Container Jazzy của bạn; docs.nav2.org mục controller plugins `[tự đo]` |
+| Tải CPU perception chạy cùng | C9.2 (p50/p95/p99 trên N100) |
+| Nhiễu odometry và gia tốc IMU | C6, C7; datasheet IMU |
+
+**Phương pháp cho trục jerk** (khóa trước khi xem dữ liệu): sai phân bậc ba của vị trí có nhiễu trắng σ_x cho độ lệch chuẩn jerk √20·σ_x/Δt³ (hệ số 1, −3, 3, −1); sai phân bậc một của gia tốc IMU cho √2·σ_a/Δt. Thay σ, Δt của bạn, so với mức cần phân biệt (~1 m/s³), rồi chọn tín hiệu, bộ lọc, tần số cắt.
+
+```markdown
+# prediction.md — K7 C11.4
+## A. Đồ chơi: | kịch bản | trục | thắng | vì sao | ; cột p95/max ngược nhau: ___
+## B. Metric KHÓA ở đây: jerk từ ___ lọc ___ Hz, tổng hợp ___ ; khoảng cách gần nhất từ ___ ;
+##    CPU: % trung bình VÀ p99 thời gian chu kỳ VÀ số lần lỡ chu kỳ, perception chạy cùng
+| trục | RPP | DWB | MPPI | thứ hạng đoán |
+```
+
+### 6. Làm
+
+Giữ sáu bước của phụ lục B.
+1. **Cấu hình 3 controller** (RPP, DWB, MPPI nếu bản cài có), mỗi cái một YAML có version, hash vào provenance (K6 Bài 7). **Cùng** giới hạn v, ω, gia tốc cho cả ba, dưới kẹp firmware; nếu không, bạn so giới hạn chứ không so thuật toán. Nạp τ, giới hạn gia tốc đo ở C11.1 vào mô hình của MPPI.
+2. **Kịch bản có chướng ngại động** theo schema C11.2: người cắt ngang ở nhiều góc và tốc độ, người đứng chắn rồi tránh, hành lang hẹp hai người; quỹ đạo người có seed (hoặc quỹ đạo thật từ C11.6).
+3. **N episode mỗi controller qua CI C11.2** (phụ lục ghi 1000; N theo power), **cùng** kịch bản và seed cho cả ba, phân tích **ghép cặp**: McNemar cho tỉ lệ thành công, bootstrap trên hiệu từng cặp kịch bản cho trục liên tục (→ F1.5).
+4. **Năm trục** (phụ lục ghi "bốn trục" nhưng bảng có năm dòng): tỉ lệ tới đích (Wilson); thời gian tới đích trên episode thành công (p50/p90); jerk p95 **và** max; khoảng cách gần nhất tới người (sim: ground truth; thật: marker/đo, ghi sai số); CPU trên N100: % **và** p99 thời gian chu kỳ **và** số lần lỡ chu kỳ, khi pipeline C9 chạy cùng, ghi tần số CPU.
+5. **Mặt Pareto** như **K4 Bài 9**, ít nhất hai mặt cắt (an toàn × thời gian, mượt × CPU). Chọn điểm vận hành, ghi `decisions.md`.
+6. **Xác nhận trên thật:** 20 lần mỗi controller, xen kẽ theo khối như C11.3. Với **3** controller, tương quan hạng gần như vô nghĩa (3! = 6 thứ tự, khớp do may đã 1/6); kiểm **theo cặp, theo trục**: chiều chênh lệch ngoài đời có cùng dấu với sim không, kèm CI. Ba controller này đi tiếp vào 6 cấu hình của C11.3.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Kỳ vọng của phụ lục B (giữ nguyên):** tỉ lệ thành công có thể **không khác nhau đáng kể** ở kịch bản dễ; jerk p95 **khác rõ**, "chỗ MPPI thắng" (xem cảnh báo); loại đơn giản có thể **nhanh hơn**; MPPI tốn CPU hơn nhiều, **> 70 % trên N100 là một ràng buộc thật**; thứ hạng sim vs thật nên khớp, không khớp thì kiểm miền hiệu lực.
+
+**Đồ chơi** (cột CPU là laptop lúc soạn, dao động giữa các lần chạy; N100 chậm hơn `[tự đo]`):
+
+| Kịch bản | Bộ ĐK | t tới đích (s) | jerk p95 | jerk max (m/s³) | gần người (m) | CPU p99 (ms) |
+|---|---|---|---|---|---|---|
+| dễ | PD | 11,1 | 0,60 | 0,60 | — | 0,01 |
+| dễ | MPC | 11,0 | **0,29** | 2,92 | — | ~25–35 |
+| khó | PD | 14,2 | **0,60** | 10,42 | 0,51 | 0,02 |
+| khó | MPC | 13,8 | 1,99 | **5,95** | 0,47 | ~45–50 |
+
+- **Dễ:** thời gian như nhau; MPC tốn CPU hơn ba bậc độ lớn; p95 nói MPC mượt hơn, max nói PD mượt hơn. Không có gì để nhìn trước thì MPC mua gần như không gì.
+- **Khó:** PD phanh gấp khi bất ngờ thấy người, jerk max gần gấp đôi; nhưng cú phanh chỉ vài chu kỳ nên **jerk p95 của PD thấp hơn**. "MPPI thắng jerk p95" của phụ lục không tự đúng; nó tùy cách tổng hợp. Với người đứng cạnh, một cú giật mạnh có lẽ quan trọng hơn p95: một lựa chọn, ghi `decisions.md`.
+- MPC tới sớm hơn vì giảm tốc sớm, và **lấn ràng buộc mềm 3 cm** (0,47 < 0,50 m): an toàn cứng không đặt ở MPC.
+- Bài 1D này có 20 biến; MPPI cuộn hàng nghìn quỹ đạo 2D. Trên N100 khi perception chạy cùng, đo p99 chu kỳ và số lần lỡ, đừng chỉ đo %.
+
+**Nav2 ở 0,5 m/s trong văn phòng nhỏ** `[ước lượng]`: người đứng yên, hành lang rộng → ba controller gần như bằng nhau, RPP có thể nhanh nhất. Người cắt ngang → khác biệt ở jerk max và khoảng cách gần nhất, phụ thuộc mạnh việc local controller có **nhận dự đoán người** không; không có thì MPPI cuộn một thế giới đứng yên (cầu sang C11.6). Nếu controller đơn giản không thua ở trục nào mà nhẹ hơn nhiều: **MPC không đáng cho bài toán này**, kèm số. Đó là kết quả đáng viết nhất.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Ba controller khác hẳn về thời gian ở kịch bản dễ | Giới hạn v/ω/gia tốc không đồng nhất | Diff ba YAML | Đồng nhất, chạy lại |
+| MPPI run rẩy mọi kịch bản | Nhiễu lấy mẫu chưa lọc; ít mẫu | Vẽ `/cmd_vel` | Làm mượt theo docs bản cài; tăng mẫu nếu CPU cho phép |
+| Jerk thật lớn gấp chục lần sim | Đạo hàm của tín hiệu nhiễu | Jerk khi robot đứng yên (phải ~0) | Đổi tín hiệu, lọc đã khóa trước |
+| CPU trung bình 50 % mà robot thỉnh thoảng khựng | Lỡ chu kỳ khi perception chạy đỉnh | Log thời gian từng chu kỳ | Giảm mẫu/horizon, ưu tiên CPU, hoặc controller nhẹ |
+| MPPI thắng sim, thua thật | Mô hình MPPI cuộn khác robot (trễ, gia tốc) | So `model_dt`, giới hạn với C11.1 | Nạp tham số C11.1 vào MPPI |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot MPPI. Tăng số mẫu từ A lên B an toàn trên CI (máy mát, không perception). Cái gì gãy trước ngoài đội?
+<details><summary>Hướng nghĩ</summary>
+
+Robot nóng hạ xung, robot chạy thêm dịch vụ: một phần đội bắt đầu lỡ chu kỳ. CI cần tầng "compute xấu nhất" (giới hạn tần số CPU, perception chạy cùng) và một SLO cho chu kỳ controller.
+
+</details>
+
+2. **[Failure mode]** MPPI cuộn mô hình không có trễ; robot thật trễ ba chu kỳ. Hành lang hẹp sẽ ra sao?
+<details><summary>Hướng nghĩ</summary>
+
+Kế hoạch lách sát giả định robot phản ứng ngay; robot đến muộn, controller sửa, lại muộn: dao động hoặc va chạm. Tham số C11.1 phải vào mô hình MPPI, không chỉ vào sim.
+
+</details>
+
+3. **[Nếu…thì]** Thêm dự đoán người (C11.6) vào MPPI mà jerk không giảm, khoảng cách không tăng. Dự đoán vô dụng, MPPI không dùng được, hay kịch bản không cần?
+<details><summary>Hướng nghĩ</summary>
+
+Ba giả thuyết, ba thí nghiệm: thay dự đoán bằng **tương lai thật** (oracle) để xem trần; đổi sang kịch bản cắt ngang nhanh; đo ADE/FDE ở 1–2 s. Oracle là công cụ chuẩn để tìm thành phần cổ chai.
+
+</details>
+
+4. **[Phản biện]** Năm trục + Pareto có thể bị dùng để luôn chọn được thứ mình thích không?
+<details><summary>Hướng nghĩ</summary>
+
+Có, nếu chọn trục, cách tổng hợp, trọng số **sau** khi xem kết quả: garden of forking paths (→ F1.5). Vì vậy phần 5 khóa metric.
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Lọc hóa dầu:** MPC đáng khi giá trị nằm ở chạy sát ràng buộc và mô hình đủ tốt; ngành này cũng phải đo MPC trả lại bao nhiêu so với chi phí bảo trì mô hình. Khác: chu kỳ phút so với 100 ms; mô hình nhận dạng bằng step test nhiều ngày `[chuẩn — Qin & Badgwell 2003]`.
+- **Engine cờ:** tìm sâu giới hạn, đi một nước, tìm lại: receding horizon. Khác: luật cờ là mô hình hoàn hảo, đối thủ đối kháng; robot có mô hình gần đúng và người không đối kháng nhưng phản ứng với robot.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú |
+|---|---|---|
+| Nguồn gốc MPC công nghiệp | [chuẩn] | Qin & Badgwell 2003 |
+| Nav2 có RPP, DWB, MPPI; MPPI có bước làm mượt | [tự đo] | Theo bản Jazzy cài |
+| Kết quả đồ chơi PD vs MPC | [đã chạy] | Chạy lại khi soạn chặng này; số thời gian/jerk khớp nguyên liệu cũ, CPU dao động |
+| √20·σ/Δt³ | [chuẩn] | Tổng bình phương hệ số sai phân |
+
+**Đã sửa so với phụ lục B và nguyên liệu cũ:** "Pareto như Khóa 6 Bài 9" → **K4 Bài 9**; "bốn trục" → năm; "xác nhận thật theo phương pháp Bài 20" với 3 điểm → kiểm theo cặp, theo trục; "jerk p95 là chỗ MPPI thắng" → giữ làm kỳ vọng, thêm phản ví dụ p95/max; "CPU > 70 %" → thêm p99 chu kỳ và số lần lỡ; thêm CRN và McNemar. Nguyên liệu cũ gọi bộ phản ứng là "PID" trong khi code là PD: đổi tên.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Qin & Badgwell (2003); G. Williams và cộng sự (2017), "Information Theoretic MPC for Model-Based Reinforcement Learning", ICRA.
+- **Giải thích:** docs.nav2.org, mục controller plugins; S. Macenski và cộng sự (2023), "Regulated Pure Pursuit for Robot Path Tracking", *Autonomous Robots*.
+- **Đào sâu:** Fox, Burgard, Thrun (1997), "The Dynamic Window Approach to Collision Avoidance".
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao MPC ngồi trên PI chứ không thay PI; (2) vẽ lại bảng ba tầng; (3) câu dưới.
+
+<details><summary>Câu 3: MPPI và RPP cùng 94 % thành công; MPPI jerk max thấp hơn 40 % (CI ghép cặp không chứa 0); CPU p99 chu kỳ 85 ms vs 6 ms; 0,3 % chu kỳ lỡ hạn khi perception chạy cùng. Chọn gì?</summary>
+
+Không có đáp án duy nhất, có lập luận đúng. Lỡ chu kỳ nghĩa là robot chạy bằng lệnh cũ: rủi ro an toàn có thể lớn hơn cú giật. Hai lựa chọn hợp lý: RPP kèm giảm tốc sớm quanh người (đo lại jerk), hoặc MPPI nhẹ hơn (ít mẫu) rồi đo lại cả hai trục. Ghi lựa chọn và ràng buộc vào `decisions.md`.
+
+</details>
+
+---
+
+## Bài C11.5 — Vòng đời dữ liệu đầy đủ và fine-tune (20h)
+
+> **Vị trí:** C11.3 → **C11.5** → C12 (và quay lại C11.2 với model mới) · **Cần trước:** → F3.5, F3.7, F3.8, F2.8, F1.5; K6 Bài 7 (provenance), Bài 12–13; C7.3 (sidecar MCAP, upload resumable, audit), C8.5, C9.1–C9.3 (đồng ý, xóa dữ liệu) · **Sau bài này bạn quyết định được:** fine-tune cái gì (và cái gì không, vì privacy), chia dữ liệu theo đơn vị nào, và một model mới được triển khai hay báo INCONCLUSIVE.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 2018, Zech và cộng sự huấn luyện mạng phát hiện viêm phổi trên X-quang ngực từ nhiều bệnh viện ở Mỹ. Trên tập kiểm tra cùng nguồn, kết quả tốt; trên dữ liệu bệnh viện khác, kết quả giảm rõ trong một số cấu hình. Họ chỉ ra mạng có thể nhận ra **bệnh viện** từ ảnh (dấu hiệu từ thiết bị, cách đặt nhãn), và tỉ lệ bệnh khác nhau giữa các bệnh viện, nên "nhận ra bệnh viện" trở thành một lối tắt để đoán bệnh `[chuẩn — Zech và cộng sự, "Variable generalization performance of a deep learning model to detect pneumonia in chest radiographs: A cross-sectional study", PLOS Medicine, 2018]`. Mỗi phiên chạy của robot là một "bệnh viện" nhỏ: sàn hôm đó bụi hay sạch, pin đầy hay vơi, hộp số nóng hay nguội. Chia dữ liệu theo lần chạy thay vì theo phiên, model sẽ học nhận ra phiên.
+
+Bản gốc đặt đúng kỳ vọng: huấn luyện thật trên N100 gần như không khả thi (K4 Bài 11 cho thấy riêng inference đã nặng); luồng thực tế và cũng là luồng công nghiệp là **thu trên biên → huấn luyện trên GPU thuê → nén → triển khai xuống biên**. Đó là kiến trúc đúng, ghi vào `decisions.md` kèm số đo.
+
+### 2. Mô hình tư duy
+
+```mermaid
+flowchart LR
+  P["1 Chuẩn bị<br/>metadata thí nghiệm, config qua OTA<br/>(config_hash)"] --> R["2 Chạy<br/>sidecar MCAP (C7.3)"]
+  R --> U["3 Upload<br/>đóng file, checksum, resumable"]
+  U --> B["4 Backend<br/>audit, index, usable, link Foxglove"]
+  B --> V["5 Xem lại<br/>Foxglove vs cảm nhận lúc chạy"]
+  V --> D["6 Dataset<br/>chọn session, chia THEO PHIÊN, version"]
+  D --> T["fine-tune (GPU thuê nếu cần)"]
+  T --> E["đánh giá trước/sau<br/>bootstrap theo phiên"]
+  E -->|PASS| CI["CI C11.2 → HIL → thật"]
+  CI -->|"dữ liệu mới"| P
+  E -->|INCONCLUSIVE| X["báo cáo trung thực, không triển khai"]
+```
+
+Bốn ý: (1) Mỗi mũi tên là một artifact có `content_hash` và cha (→ F3.8); "vòng khép kín" nghĩa là từ một model đang chạy trên robot truy ngược được tới từng MCAP đã dạy nó. (2) **Đơn vị độc lập là phiên** (hoặc người, hoặc ngày), không phải lần chạy; mọi feature tương quan với phiên (thời điểm, mức pin, tên file) mở cửa cho lối tắt. (3) CI nào áp cho model nào: model **trong vòng điều khiển** (dự đoán quãng dừng đi vào planner) đánh giá được bằng sim C11.2; model **perception** (nhận người) không, trừ khi sim render ảnh, vì C11.2 dùng sensor model; nó cần eval offline trên tập giữ kín theo người (C9.2). (4) Privacy là ràng buộc thiết kế: trọng số đã fine-tune "nhớ" dữ liệu và không gỡ được một người khỏi trọng số (C9.3, dòng 12 bảng xóa); yêu cầu xóa của một người đã có trong tập fine-tune nghĩa là bỏ model đó và huấn luyện lại.
+
+Mô phỏng: bộ dự đoán quãng dừng học từ log thả trôi (ứng viên thứ hai của bản gốc), so với "hằng số" từ sim C11.1, chia theo lần chạy vs theo phiên.
+
+```python
+# [đã chạy] C11.5 — "fine-tune" bộ dự đoán quãng dừng từ log thả trôi thật (đồ chơi).
+# Mỗi phiên (buổi chạy) có hiệu ứng riêng: bụi sàn, nhiệt hộp số, mức pin. Chia theo lần chạy hay theo phiên?
+import numpy as np
+rng = np.random.default_rng(5)
+S, R = 24, 12                                    # 24 phiên × 12 lần thả trôi mỗi phiên
+sess = np.repeat(np.arange(S), R)
+v0 = rng.uniform(0.15, 0.5, S * R)
+vbat = np.repeat(rng.uniform(12.0, 14.4, S), R)                  # V, mức pin của phiên (LiFePO4 4S)
+t_s = np.repeat(np.arange(S) * 86400.0, R) + rng.uniform(0, 3600, S * R)   # thời điểm chạy
+eff = np.repeat(rng.normal(0, 0.012, S), R)                      # hiệu ứng phiên (m), không đo được
+stop = 0.55 * v0**2 + 0.03 * v0 * (vbat - 13) + eff + rng.normal(0, 0.004, S * R)
+
+def base(v):  return v**2 / (2 * 0.9)          # "hằng số" cũ: giảm tốc 0.9 m/s² lấy từ sim C11.1
+def knn(Xtr, ytr, Xte, k=3):                    # mô hình "học được": kNN trên (v0, vbat, thời điểm)
+    sc = Xtr.std(0); d = (((Xte[:, None, :] - Xtr[None]) / sc) ** 2).sum(-1)
+    return ytr[np.argsort(d, 1)[:, :k]].mean(1)
+X = np.c_[v0, vbat, t_s]
+
+def evaluate(test_mask):
+    tr, te = ~test_mask, test_mask
+    e_b = np.abs(base(v0[te]) - stop[te]); e_k = np.abs(knn(X[tr], stop[tr], X[te]) - stop[te])
+    return e_b, e_k, sess[te]
+
+def boot_by_session(e_b, e_k, s, B=2000):     # CI của cải thiện MAE, lấy mẫu lại THEO PHIÊN
+    u = np.unique(s); out = []
+    for _ in range(B):
+        pick = rng.choice(u, u.size); idx = np.concatenate([np.flatnonzero(s == p) for p in pick])
+        out.append(e_b[idx].mean() - e_k[idx].mean())
+    return np.percentile(out, [2.5, 97.5])
+
+rand = rng.random(S * R) < 0.3                                   # chia ngẫu nhiên theo LẦN CHẠY
+grp = np.isin(sess, rng.choice(S, 7, replace=False))             # chia theo PHIÊN: 7 phiên giữ kín
+for name, m in (("chia theo lần chạy", rand), ("chia theo phiên", grp)):
+    e_b, e_k, s = evaluate(m); lo, hi = boot_by_session(e_b, e_k, s)
+    print(f"{name:18s} MAE hằng số {1e3*e_b.mean():5.1f} mm | kNN {1e3*e_k.mean():5.1f} mm | "
+          f"cải thiện {1e3*(e_b.mean()-e_k.mean()):5.1f} mm, CI95 [{1e3*lo:5.1f}, {1e3*hi:5.1f}]")
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Pipeline ETL có retry, idempotency | Upload resumable, audit, index (C7.3) | Lỗi ETL thường ồn ào; dữ liệu robot hỏng vật lý (timestamp lệch, encoder nhảy) đi qua mọi schema check (F3.7) | Dataset "sạch" về schema, sai về vật lý, dạy model sai |
+| Feature store, train/test split ngẫu nhiên | Chia theo phiên/người/ngày | Request web gần độc lập; lần chạy cùng phiên chia chung sàn, pin, nhiệt | Cải thiện "có ý nghĩa" trên test, biến mất trên robot |
+| Blue/green deploy model, rollback | Model mới → CI → HIL → thật, triển khai lại | Rollback web tức thì; rollback một model đã học dữ liệu người không xóa được dữ liệu trong trọng số | Hứa với người dùng "xóa khi yêu cầu" mà model vẫn mang dữ liệu họ |
+
+**Chấm mô hình:**
+- *Gemini K7 Bài 21: "Sidecar ảnh hưởng jitter: bằng 0 (jitter p99 vẫn < 100 µs)".* → **ĐÚNG MỘT PHẦN.** "Bằng 0" không đo được; đo được là "chênh lệch nhỏ hơn biên δ đã khai, ở độ phân giải của phép đo" (kiểm tương đương, TOST, K6 Bài 13). Và p99 < 100 µs là ngưỡng tuyệt đối, không phải phép so có/không sidecar. Phản ví dụ: sidecar đẩy p99 từ 40 lên 90 µs vẫn "< 100 µs" mà rõ ràng có ảnh hưởng.
+- *Gemini: "Cho robot chạy 5 lượt ngoài sàn để xác nhận vòng lặp đã đóng."* → **ĐÚNG MỘT PHẦN.** 5 lượt là smoke test cho đường ống (model chạy được, không crash), không phải bằng chứng hiệu quả; 5/5 thành công cho cận dưới Wilson khoảng 57 %.
+- *F2.8 khẳng định (c) về fine-tune nhận người* đã chấm ở đó (**ĐÚNG MỘT PHẦN**: chia theo người và phiên).
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Group split | Chia theo đơn vị phụ thuộc (phiên, người, ngày) | Chia ngẫu nhiên có stratify |
+| 🟢 | Lối tắt (shortcut learning) | Model học tín hiệu tương quan với nhãn trong dữ liệu, không phải cơ chế | Overfitting thông thường |
+| 🟢 | Lineage | Chuỗi artifact có hash và cha, từ MCAP tới model (→ F3.8) | Log thời gian |
+| 🟢 | Bootstrap theo cụm | Lấy mẫu lại cả phiên, không lấy mẫu lại từng lần | Bootstrap thường |
+| 🟡 | Machine unlearning | Gỡ ảnh hưởng của một mẫu khỏi model đã huấn luyện | Thứ đã giải quyết xong |
+
+### 5. Dự đoán
+
+1. **Thời gian vòng đời** (ngưỡng gốc < 10 phút từ kết thúc thí nghiệm tới link Foxglove): ước kích thước MCAP một phiên (tần số × kích thước message từ C7), băng thông Wi-Fi văn phòng đo thật (`iperf3`), thời gian audit và index. Bước nào chiếm nhiều nhất?
+2. **Chọn ứng viên fine-tune** trong ba của bản gốc (nhận người → FRR; dự đoán quãng dừng; phân loại "vùng hay kẹt") theo: cần dữ liệu người không, đánh giá được bằng sim không, cần GPU không.
+3. **Đồ chơi:** cải thiện MAE và CI khi chia theo lần chạy vs theo phiên; dấu của cải thiện ở cách chia thứ hai.
+
+```markdown
+# prediction.md — K7 C11.5
+## Vòng đời: MCAP ___ MB ; Wi-Fi ___ MB/s ; upload ___ s ; audit ___ s ; tổng ___ phút ; bước lớn nhất ___
+## Ứng viên: ___ vì ___ (dữ liệu người? ___ sim đánh giá được? ___ GPU? ___)
+## Đồ chơi: theo lần chạy ___ mm [__,__] ; theo phiên ___ mm [__,__]
+## δ cho model mới (khai TRƯỚC): ___
+```
+
+### 6. Làm
+
+**Bước 1 — sáu bước vòng đời, bấm giờ từng bước** (bản gốc): chuẩn bị (metadata, OTA config có `config_hash`) → chạy (sidecar MCAP C7.3) → upload (đóng file, checksum, resumable) → backend (audit, metadata, index, usable, link Foxglove) → xem lại → dataset (chọn session đạt, chuyển định dạng training, audit lần cuối, version). Tự động hóa tới link Foxglove; mỗi artifact ghi một dòng `lineage/*.json`.
+
+**Bước 2 — sidecar không ảnh hưởng vòng điều khiển.** Đo jitter vòng ESP32 (`test_jitter` C4) **và** thời gian chu kỳ `controller_manager`/`diff_drive_controller` trên N100, có và không có sidecar, xen kẽ 10 khối mỗi bên; kiểm tương đương với δ khai trước.
+
+**Bước 3 — fine-tune một thứ có thật.** Mặc định: **bộ dự đoán quãng dừng** từ log thả trôi/phanh của C11.1 và các session thật (không dữ liệu người, không cần GPU, đi vào planner nên CI C11.2 đánh giá được). Nhận người (giảm FRR theo bảng C9.2) chỉ khi có đồng ý lớp dùng-cho-huấn-luyện, chia theo người và phiên, và có kế hoạch huấn luyện lại khi có yêu cầu xóa. "Vùng hay kẹt" từ lịch sử recovery C8.5 nếu đủ dữ liệu.
+
+**Bước 4 — đo trước/sau** bằng kỷ luật K6 Bài 12–13: tập giữ kín **theo phiên**, CI bằng bootstrap theo phiên, δ khai trước. Cải thiện phải vượt khoảng tin cậy, nếu không: **INCONCLUSIVE**.
+
+**Bước 5 — triển khai lại và đóng vòng:** model mới → CI C11.2 (SIL + HIL) → chạy thật (C11.3 nếu nó đổi cấu hình) → dữ liệu mới vào bước 1. Lineage từ model trên robot về MCAP phải truy được bằng một lệnh.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Ngưỡng bản gốc (giữ nguyên):**
+
+| Kiểm tra | Ngưỡng | Cách đọc |
+|---|---|---|
+| Toàn vòng đời từ kết thúc thí nghiệm tới link Foxglove | < 10 phút, tự động | Bấm giờ từng bước; bước lớn nhất thường là upload ảnh camera `[ước lượng]` |
+| Sidecar ảnh hưởng jitter vòng điều khiển | **0, đo lại và chứng minh** | Đọc là: tương đương trong δ ở độ phân giải đo (TOST), trên cả ESP32 lẫn host |
+| Fine-tune: cải thiện | **Vượt khoảng tin cậy**, hoặc INCONCLUSIVE trung thực | CI theo phiên |
+| Vòng khép kín | Ít nhất **một vòng đầy đủ** | Có lineage truy ngược |
+
+**Đồ chơi:**
+
+| Cách chia | MAE hằng số | MAE kNN | Cải thiện [CI 95 % theo phiên] |
+|---|---|---|---|
+| Theo lần chạy | 12,5 mm | 8,3 mm | +4,2 [+1,2; +7,3] mm |
+| Theo phiên (7 phiên kín) | 8,4 mm | 15,0 mm | **−6,6** [−13,7; −0,4] mm |
+
+Chia theo lần chạy, kNN tìm hàng xóm **cùng phiên** qua feature thời điểm và hưởng hiệu ứng phiên: "cải thiện có ý nghĩa". Chia theo phiên, cùng model **tệ hơn** hằng số. Hai tập kiểm khác nhau nên MAE hằng số cũng khác; phép so đúng là cải thiện trong từng cách chia. Bỏ feature thời điểm chưa đủ: mức pin cũng là hằng số theo phiên.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Vòng đời > 10 phút | Upload ảnh đầy đủ; audit đọc lại cả file | Bấm giờ từng bước | Upload ưu tiên metadata + kênh nhẹ; audit theo chunk/index MCAP |
+| Upload treo khi Wi-Fi chập chờn | Upload không resumable | Ngắt Wi-Fi giữa chừng | Resumable, idempotent theo hash (F3.5) |
+| Cải thiện trên test, không thấy trên robot | Chia theo lần chạy; feature mang danh tính phiên | So hai cách chia | Group split; bỏ feature danh tính |
+| Model mới PASS CI nhưng không đổi gì | Model perception, CI dùng sensor model | Bảng "CI nào cho model nào" | Eval offline giữ kín theo người |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot, 1000 giờ dữ liệu/tháng. Cái gì gãy trước: băng thông upload, chi phí lưu, hay thời gian người xem lại ở bước 5?
+<details><summary>Hướng nghĩ</summary>
+
+Bước 5 không mở rộng theo số robot. Nghĩ tới xem lại có lấy mẫu (giữ mọi thất bại, lấy mẫu thành công, K6 Bài 9 nhớ trọng số), và rule tự động thay người ở phần lớn session.
+
+</details>
+
+2. **[Failure mode]** Một người rút đồng ý sau khi model nhận người đã fine-tune trên ảnh họ. Bạn làm gì, và thiết kế nào lẽ ra tránh được?
+<details><summary>Hướng nghĩ</summary>
+
+Không gỡ được khỏi trọng số: bỏ model, huấn luyện lại không có họ, ghi audit (C9.3). Thiết kế tránh được: không fine-tune trên mặt người; hoặc tập fine-tune có hạn dùng và lịch huấn luyện lại định kỳ.
+
+</details>
+
+3. **[Vì sao không]** Vì sao không huấn luyện thẳng trên N100 cho "edge AI" đúng nghĩa?
+<details><summary>Hướng nghĩ</summary>
+
+Lấy số K4 Bài 11 cho inference, nhân với số bước huấn luyện. Và N100 còn đang chạy Nav2, perception, sidecar: huấn luyện tranh CPU với vòng chu kỳ controller (C11.4).
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Y học: đánh giá đa trung tâm.** Sau các phát hiện như của Zech, đánh giá model y tế chuyển sang kiểm ngoài (external validation) ở bệnh viện không tham gia huấn luyện. Giống: đơn vị độc lập là nơi thu dữ liệu. Khác: họ có ủy ban đạo đức và quy định; bạn có `PRIVACY.md`.
+- **Kiểm toán tài chính: dấu vết kiểm toán.** Mỗi con số trong báo cáo truy được về chứng từ gốc. Lineage của model là audit trail của dữ liệu.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú |
+|---|---|---|
+| Zech và cộng sự 2018 | [chuẩn] | PLOS Medicine; chi tiết cấu hình đọc trong paper |
+| Đồ chơi chia theo phiên | [đã chạy] | Hiệu ứng phiên là giả định |
+| Wilson cận dưới cho 5/5 ≈ 57 % | [chuẩn] | Tính lại bằng hàm Wilson của K6 |
+
+**Đã sửa so với bản gốc/Gemini:** "sidecar ảnh hưởng jitter = 0" → kiểm tương đương có δ, trên cả ESP32 và host; Gemini "jitter p99 vẫn < 100 µs" là ngưỡng tuyệt đối, không phải phép so. Gemini "Sim CI 1000 episode" cho model perception → sim dùng sensor model không đánh giá model perception. Gemini "5 lượt thật xác nhận vòng" → smoke test. Gemini "mở rộng test lên 300–500 mẫu" → đơn vị đếm là phiên/người, không phải mẫu. Thêm ràng buộc privacy khi fine-tune trên người (C9.3, phụ lục 3b K7 gốc). Thứ tự ứng viên của bản gốc giữ nguyên trong danh sách, nhưng mặc định đổi sang dự đoán quãng dừng vì không cần dữ liệu người và đánh giá được bằng CI; ghi lý do ở bước 3.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Zech và cộng sự (2018), PLOS Medicine.
+- **Giải thích:** → F2.8 (split theo đơn vị), → F3.8 (lineage).
+- **Đào sâu:** S. Kaufman và cộng sự, "Leakage in Data Mining: Formulation, Detection, and Avoidance", ACM TKDD 2012.
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao "cải thiện có CI không chứa 0" ở dòng đầu bảng phần 7 vẫn sai; (2) vẽ lại vòng đời; (3) câu dưới.
+
+<details><summary>Câu 3: Bạn bỏ feature thời điểm, giữ (v0, vbat). Chia theo lần chạy vẫn cho cải thiện. Đã hết rò rỉ chưa?</summary>
+
+Chưa chắc: vbat là hằng số theo phiên trong dữ liệu này nên vẫn mang danh tính phiên. Kiểm bằng group split; nếu cải thiện chỉ còn ở cách chia theo lần chạy thì đó là rò rỉ.
+
+</details>
+
+---

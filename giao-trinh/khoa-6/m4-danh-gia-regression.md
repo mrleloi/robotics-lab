@@ -960,7 +960,7 @@ plt.savefig("b14_dr.png", dpi=120)             # trong bài: plt.show()
 **Chấm mô hình:**
 
 - *"Domain randomization thu hẹp sim-to-real gap."* (bản gốc và Gemini) — **ĐÚNG MỘT PHẦN.** Nó thu hẹp **khoảng tụt hiệu năng** khi chuyển, trong dải đã phủ; nó không làm sim đúng hơn chút nào. Phản ví dụ: vật có ma sát thấp hơn cận dưới của dải; không có lý do gì để policy DR chạy tốt hơn policy không DR ở đó.
-- *"Càng randomize nhiều, policy càng bền."* — **SAI** quá một ngưỡng. Phản ví dụ: dải kéo ma sát xuống mức không lực kẹp nào vừa giữ được vật vừa không bóp hỏng nó; optimizer chia "phiếu" cho thế giới không tồn tại (đồ chơi, λ ≥ 1.5).
+- *"Càng randomize nhiều, policy càng bền."* — **SAI** quá một ngưỡng. Phản ví dụ: dải kéo ma sát xuống mức không lực kẹp nào vừa giữ được vật vừa không bóp hỏng nó; optimizer chia "phiếu" cho thế giới không tồn tại.
 - *"Với đủ dữ liệu, tầng AI biểu diễn và dự đoán được mọi biến số của hệ vật lý."* (mô hình của bạn ở K3 lượt 12) — **ĐÚNG MỘT PHẦN.** Đúng với biến **quan sát được** từ dữ liệu policy nhận. Gãy ở biến **không quan sát được trước khi hành động**: ma sát vật chưa chạm, khối lượng hộp kín. Policy chỉ có thể phòng hờ (DR, bảo thủ) hoặc thăm dò rồi thích nghi (cần cảm biến/bộ nhớ, tốn thời gian). Phản ví dụ: không camera nào cho biết hệ số ma sát của cốc nhựa trước khi kẹp; ảnh chỉ thu hẹp dải.
 
 ### 4. Thuật ngữ

@@ -885,11 +885,11 @@ Lực riêng dọc dây là `g·cos θ + L·θ̇²`, cả hai số hạng đạt
 
 **Columbia, 2003** [chuẩn]. Khoảng 82 giây sau khi phóng ngày 16/1/2003, một mảng bọt cách nhiệt rơi khỏi bồn nhiên liệu ngoài, va vào mép trước cánh trái ở vận tốc tương đối khoảng 870 km/h. Trong lúc tàu còn trên quỹ đạo, kỹ sư dùng mô hình **Crater** để ước lượng hư hại. Crater được hiệu chỉnh bằng dữ liệu thử với những mẩu vật cỡ vài inch khối; mảng bọt lớn hơn hàng trăm lần về thể tích (ước tính của ban điều tra: tối đa khoảng 640 lần, ước lượng tốt nhất khoảng 400 lần). Mô hình vẫn trả ra một con số, và con số đó được đọc như bằng chứng rằng hư hại không nghiêm trọng. Ban điều tra (CAIB Report, Volume I, chương 6) ghi rằng kết quả đã được dùng ngoài miền dữ liệu của mô hình mà điều đó không được nói rõ khi trình bày. Tàu vỡ khi trở lại khí quyển ngày 1/2/2003. Sau sự cố này NASA soạn NASA-STD-7009 (Bài 15).
 
-Crater không có bug. Nó trả lời đúng cho những mẩu vật nó từng thấy. Thứ thiếu là một dòng đi kèm kết quả: *"điểm này nằm ngoài miền đã kiểm"*. Bài này viết ra dòng đó và làm cho harness tự in nó.
+Crater không có bug; thứ thiếu là một dòng đi kèm kết quả: *"điểm này nằm ngoài miền đã kiểm"*. Bài này làm cho harness tự in dòng đó.
 
 ### 2. Mô hình tư duy
 
-Bản gốc yêu cầu một **bảng hiệu lực**: tài liệu nói rõ sim đúng ở đâu và sai ở đâu. Bài này thêm một điều bản gốc chưa tách ra: gap được đo theo **kênh**, không theo hiện tượng. Một kênh là một cơ chế vật lý mà sim mô hình hóa, đi cùng đại lượng dùng để đo nó. Một hiện tượng đi qua vài kênh. Một task đi qua rất nhiều kênh. Gap của cả task (mức 4) cần robot thật nên khóa này chưa đo được. Thứ đo được ở đây là **tập kênh mà task phụ thuộc**, và mỗi kênh có miền đã kiểm của riêng nó.
+Bản gốc yêu cầu **bảng hiệu lực**: sim đúng ở đâu, sai ở đâu. Bài này tách thêm: gap đo theo **kênh**, không theo hiện tượng. Kênh là một cơ chế vật lý sim mô hình hóa, cùng đại lượng đo nó; một hiện tượng đi qua vài kênh, một task qua rất nhiều. Gap cả task (mức 4) cần robot thật; đo được ở đây là **tập kênh task phụ thuộc**, mỗi kênh có miền đã kiểm riêng.
 
 ```mermaid
 flowchart LR
@@ -911,8 +911,8 @@ Bốn ý bản chất:
 
 1. **Gap là một hàm, không phải một số**: `gap(kênh, điểm)`. Câu "con lắc lệch < 1%" chỉ đúng tại những điểm (L, biên độ) đã đo.
 2. **Miền đã kiểm là tập các điểm đã đo, không phải hộp min–max của từng trục.** Đo ở (μ thấp, vật nhẹ) và (μ cao, vật nặng) không cho bạn quyền kết luận gì về (μ thấp, vật nặng). Đó chính là góc tương tác của K6 Bài 6, giờ xuất hiện ở tầng validation.
-3. **Có ba trạng thái chứ không phải hai**: trong miền, ngoài miền, và *kênh chưa kiểm*. Trạng thái thứ ba nguy hiểm nhất. Vì không có tham số nào vượt ngưỡng, sẽ không có gì báo động.
-4. **Cột "chưa kiểm" phải ghi theo cơ chế, không chỉ theo dải.** Dải ("biên độ > 45°") thì checker tự kiểm được. Cơ chế ("có gió", "bề mặt ướt") thì người viết task phải khai trong `depends_on`.
+3. **Ba trạng thái, không phải hai**: trong miền, ngoài miền, *kênh chưa kiểm*. Thứ ba nguy hiểm nhất, vì không tham số nào vượt ngưỡng nên không gì báo động.
+4. **Cột "chưa kiểm" ghi theo cơ chế, không chỉ dải.** Dải ("biên độ > 45°") checker tự kiểm được; cơ chế ("có gió", "bề mặt ướt") người viết task phải khai trong `depends_on`.
 
 ### 3. Cầu nối từ backend
 
@@ -921,11 +921,11 @@ Bốn ý bản chất:
 | Runbook ghi "load test tới 5.000 rps" | Miền đã kiểm của một kênh | Khi vượt envelope tải, service thường **lộ ra** (latency tăng, 5xx). Khi vượt miền hiệu lực, sim vẫn trả số trông hợp lý, không có tín hiệu lỗi nào | Tin kết quả ở biên độ 60° vì "sim không báo gì" |
 | Data contract kiểm range ở cổng vào (F3.7) | Checker hiệu lực ở loader | Data contract **từ chối** bản ghi sai. Checker hiệu lực chỉ **gắn cờ**: bạn vẫn được chạy ngoài miền để khám phá, nhưng cờ đi theo kết quả tới báo cáo | Chặn cứng thì không khám phá được vùng mới; không gắn cờ thì hai loại kết quả trộn vào nhau |
 
-**Tên chuẩn của thứ bạn đã làm:** câu "chỉ đo trên host yên tĩnh, không áp cho host có tải" là một dòng *domain of applicability*. Oberkampf và Roy phân biệt **validation domain** (vùng đã có dữ liệu đối chứng) với **application domain** (vùng mô hình được dùng để quyết định). Bài này lấy giao của hai vùng đó và viết thành code.
+**Tên chuẩn của thứ bạn đã làm:** "chỉ đo trên host yên tĩnh, không áp cho host có tải" là một dòng *domain of applicability*. Oberkampf và Roy phân biệt **validation domain** (đã có dữ liệu đối chứng) với **application domain** (nơi mô hình được dùng để quyết định); bài này viết phần giao thành code.
 
 **Chấm mô hình:**
 
-- *"Lúc đo mà chưa cover đủ flag/khóa thì runtime không đảm bảo được mọi tình huống"* (mô hình của bạn ở K3 lượt 21). **ĐÚNG MỘT PHẦN.** Phần đúng: thứ chưa đo thì không có bảo đảm, và đó chính là cột "chưa kiểm". Chỗ gãy: không gian vật lý liên tục và có tương tác giữa các trục, số tổ hợp tăng theo hàm mũ (Bài 6), nên thêm flag không bao giờ đạt tới "đủ". Thứ làm được là **khai miền đã kiểm và gắn cờ khi ra khỏi nó**. Phản ví dụ: có flag cho μ và cho khối lượng, đã đo đủ hai đầu mỗi trục, vẫn lọt góc (μ thấp, vật nặng). Đó là `lift_goc` ở phần 6.
+- *"Lúc đo mà chưa cover đủ flag/khóa thì runtime không đảm bảo được mọi tình huống"* (mô hình của bạn ở K3 lượt 21). **ĐÚNG MỘT PHẦN.** Đúng: chưa đo thì không có bảo đảm, đó là cột "chưa kiểm". Gãy: không gian vật lý liên tục, có tương tác giữa các trục, số tổ hợp tăng theo hàm mũ (Bài 6), nên thêm flag không bao giờ "đủ"; làm được là **khai miền đã kiểm và gắn cờ khi ra khỏi nó**. Phản ví dụ: đo đủ hai đầu trục μ và trục khối lượng, vẫn lọt góc (μ thấp, vật nặng): `lift_goc` ở phần 6.
 - *"Gap nhỏ ở mọi hiện tượng đã đo thì sim tốt cho task."* **SAI.** Task có thể dựa vào kênh mà bảng không có. Phản ví dụ: con lắc, rơi tự do, mặt nghiêng đều lệch dưới 1%, nhưng task nhấc hộp phụ thuộc "creep khi giữ" (vật tuột dần trong tay kẹp), kênh mà ba hiện tượng kia không chạm tới.
 - *"Đo μ_s bằng mặt nghiêng rồi điền vào `friction` là xong kênh ma sát."* **ĐÚNG MỘT PHẦN.** Đo trực tiếp tốt hơn đoán (bản gốc), nhưng có ba chỗ gãy, bạn sẽ tự thấy bằng code ở phần 6: MuJoCo dùng **một** hệ số cho cả ma sát tĩnh lẫn động; hệ số của một tiếp xúc phụ thuộc **cả hai** geom chạm nhau; và tiếp xúc mềm có hành vi riêng ở dưới ngưỡng. Phản ví dụ: dựng ở phần 6 một hộp và một sàn có μ khác nhau, rồi so góc trượt trong sim với atan(μ của hộp).
 
@@ -948,8 +948,8 @@ Bốn ý bản chất:
 Viết vào `prediction.md`, commit, rồi mới đo hoặc chạy code.
 
 **A. Rơi tự do.** Tính t ở h = 0.5, 1.0, 1.5 m bằng `t = √(2h/g)`, với g lấy từ K5 Bài 4. Rồi dự đoán:
-(a) Cản khí làm t dài thêm bao nhiêu % ở 1 m, với bi thép Ø20 mm và bóng bàn Ø40 mm, 2.7 g? So vận tốc tới hạn `v_t = √(2mg/(ρ·C_d·A))` (ρ ≈ 1.2 kg/m³, C_d quả cầu ≈ 0.47 [chuẩn]) với vận tốc chạm đất `√(2gh)`.
-(b) Lúc nhả và lúc phát hiện chạm có trễ cố định (từ dư nam châm; trễ nhóm của DLPF trong IMU, tra datasheet). Đo một độ cao thì g lệch về phía nào? Fit `t = √(2h)/√g + t₀` trên nhiều độ cao thì độ chính xác và độ đúng của g đổi ra sao?
+(a) Cản khí làm t dài thêm bao nhiêu % ở 1 m, bi thép Ø20 mm và bóng bàn Ø40 mm 2.7 g? So `v_t = √(2mg/(ρ·C_d·A))` (ρ ≈ 1.2 kg/m³, C_d ≈ 0.47 [chuẩn]) với `√(2gh)`.
+(b) Nhả và phát hiện chạm có trễ cố định (dư từ nam châm; trễ nhóm DLPF của IMU, tra datasheet). Đo một độ cao thì g lệch về phía nào? Fit `t = √(2h)/√g + t₀` nhiều độ cao thì độ chính xác và độ đúng đổi ra sao?
 (c) Camera 30/120/240 fps cho lượng tử thời gian bằng bao nhiêu % của t(1 m)?
 (d) MuJoCo mặc định có tính cản khí không? Tra `option` › `density` trong XML reference.
 
@@ -975,15 +975,15 @@ Ngày: ____  Commit trước khi đo: [ ]   g = ____ (K5 Bài 4)
 
 **Bước 1. Chọn thêm 2 hiện tượng đo được bằng rig của bạn** (giữ từ bản gốc).
 
-*Rơi tự do.* Bản gốc gợi ý camera high-fps hoặc phát hiện va chạm bằng IMU. Cả hai chỉ cho bạn **một đầu** của khoảng thời gian; thời điểm nhả mới là phần khó.
-- **Nên dùng một đồng hồ cho cả hai đầu:** cổng quang IR ngay dưới điểm nhả (như Bài 16) và IMU hoặc piezo dưới tấm đích, cùng nối vào **một ESP32**, nên không có lỗi đồng bộ giữa hai thiết bị (K5). Camera slow-motion cũng được, nhưng lượng tử là một khung hình; đừng dùng phương pháp hàng rolling shutter của K5 Bài 11 (nó định thời một lần nháy LED, không định thời vật bay). Nam châm điện cần MOSFET và diode flyback: chưa làm mạch công suất thì bỏ.
-- **Đo ở ≥5 độ cao (0.4–1.4 m), mỗi độ cao ≥5 lần, rồi fit `t = √(2h)/√g + t₀`.** Mọi trễ cố định dồn vào t₀ thay vì vào g. Đây là mẹo "hai độ dài xung rồi lấy hiệu" của K5 Bài 11, viết dưới dạng hồi quy. Làm cho cả bi thép và bóng bàn.
-- Sai số dụng cụ: h đo bằng thước cuộn ±1–2 mm [tự đo], tính từ đáy bi tới mặt đích. Về thời gian, sai số chính là trễ ngắt GPIO và 1/ODR của IMU, không phải timer ESP32 [tự đo, lấy số bạn đã đo ở K5].
+*Rơi tự do.* Bản gốc gợi ý camera high-fps hoặc va chạm trên IMU; cả hai chỉ cho **một đầu** khoảng thời gian, thời điểm nhả mới là phần khó.
+- **Một đồng hồ cho cả hai đầu:** cổng quang IR ngay dưới điểm nhả (như Bài 16) và IMU hoặc piezo dưới tấm đích, cùng nối **một ESP32** (không lỗi đồng bộ hai thiết bị, K5). Camera slow-motion được, nhưng lượng tử là một khung hình; phương pháp hàng rolling shutter của K5 Bài 11 định thời một lần nháy LED, không định thời vật bay. Nam châm điện cần MOSFET và diode flyback: chưa làm mạch công suất thì bỏ.
+- **≥5 độ cao (0.4–1.4 m), mỗi độ cao ≥5 lần, fit `t = √(2h)/√g + t₀`**: mọi trễ cố định dồn vào t₀ thay vì g (mẹo "hai độ dài xung rồi lấy hiệu" của K5 Bài 11, dạng hồi quy). Làm cho cả bi thép và bóng bàn.
+- Sai số dụng cụ: h ±1–2 mm bằng thước cuộn, từ đáy bi tới mặt đích [tự đo]; thời gian: trễ ngắt GPIO và 1/ODR của IMU, không phải timer ESP32 [tự đo, số đo ở K5].
 
-*Mặt nghiêng.* `μ_s = tan θ_slip` khi tăng góc chậm [chuẩn]. Đây là cách đo trực tiếp một tham số bạn phải điền vào sim (bản gốc).
-- Ván phẳng có bản lề, nâng ≤1°/s. Dán IMU trên ván, góc tĩnh tính bằng `θ = atan2(a_x, a_z)` sau khi hiệu chuẩn bias (K5 Bài 4); đối chiếu một lần với thước đo góc. Đánh dấu lúc trượt bằng IMU thứ hai đặt trên khối, hoặc bằng video.
-- **Mỗi cặp bề mặt thử ≥10 lần**, cùng một vị trí, lau bề mặt giữa các đợt. Báo trung vị, khoảng tứ phân vị và u(μ).
-- **Thêm so với bản gốc: đo μ_k.** Hạ góc xuống dưới θ_slip, đẩy nhẹ khối, tìm góc thấp nhất mà khối vẫn trượt đều. Nếu μ_k < μ_s rõ rệt, bạn vừa đo được một kênh mà một hệ số `friction` duy nhất không biểu diễn nổi.
+*Mặt nghiêng.* `μ_s = tan θ_slip` khi tăng góc chậm [chuẩn]: đo trực tiếp một tham số phải điền vào sim (bản gốc).
+- Ván có bản lề, nâng ≤1°/s. IMU trên ván, `θ = atan2(a_x, a_z)` sau hiệu chuẩn bias (K5 Bài 4), đối chiếu một lần với thước đo góc. Lúc trượt: IMU thứ hai trên khối, hoặc video.
+- **Mỗi cặp bề mặt ≥10 lần**, cùng vị trí, lau bề mặt giữa các đợt. Báo trung vị, IQR và u(μ).
+- **Thêm: đo μ_k.** Dưới θ_slip, đẩy nhẹ khối, tìm góc thấp nhất mà khối vẫn trượt đều. μ_k < μ_s rõ rệt là một kênh mà một hệ số `friction` duy nhất không biểu diễn nổi.
 
 **Bước 2. Đủ ba đường cho mỗi hiện tượng** (bản gốc): giải tích, đo thật, sim trước và sau khi điền tham số đo được (`gravity` theo g địa phương; `density`/`viscosity` cho vật nhẹ; `friction` cho **cả hai** geom). Chạy hai mô phỏng sau (`b17_freefall.py`, `b17_incline.py`) trước khi đo thật, để biết cần nhìn vào đâu.
 
@@ -1049,7 +1049,7 @@ for mf in (1.0, 0.3):
 | Ma sát tĩnh/động (mặt nghiêng) | 3 loại bề mặt (bản gốc) × khối lượng đã thử | ... | tách lần fit và lần kiểm | Bề mặt ướt, bụi (bản gốc); tải lớn; trượt nhanh |
 | Creep khi giữ, va chạm–nảy, nhiều điểm tiếp xúc | — | — | — | **toàn bộ kênh** |
 
-**Bước 4. Cột cuối cùng là cột quan trọng nhất** (bản gốc). Nói rõ cái mình chưa kiểm là hành vi kỹ thuật trưởng thành, không phải thú nhận yếu kém. Ghi theo cơ chế, và dành một dòng cho các kênh chưa có hiện tượng nào đo tới.
+**Bước 4. Cột cuối cùng là cột quan trọng nhất** (bản gốc): ghi theo cơ chế, và một dòng cho các kênh chưa hiện tượng nào đo tới.
 
 **Bước 5. Nối ngược vào Module 4** (bản gốc): mỗi kịch bản đánh giá nằm trong hay ngoài miền đã kiểm? Gắn cờ.
 - Thêm `depends_on` vào schema kịch bản (Bài 5) và review trường này như review code.
@@ -1083,7 +1083,7 @@ for sc in [{"id": "lift_nhe",   "depends_on": ["ma_sat_tinh"], "params": {"mu": 
     print(f"{sc['id']:10s} -> {worst:8s}", "; ".join(f"{c}: {a} ({b})" for c, (a, b) in st.items()))
 ```
 
-`RADIUS` và thang chuẩn hóa là **quyết định** của bạn, không phải hằng số tự nhiên. Đặt thang theo mức tham số mà gap bắt đầu đổi đáng kể (lấy từ phân tích độ nhạy ở Bài 16 phần F). Đây là bước biến bảng hiệu lực từ tài liệu thành cơ chế: khi harness chạy một kịch bản ngoài miền đã kiểm, báo cáo phải nói ra điều đó (bản gốc).
+`RADIUS` và thang chuẩn hóa là **quyết định** của bạn: đặt thang theo mức tham số mà gap bắt đầu đổi đáng kể (độ nhạy ở Bài 16 phần F). Khi harness chạy kịch bản ngoài miền đã kiểm, báo cáo phải nói ra (bản gốc).
 
 ### 7. Số phải ra
 
@@ -1101,9 +1101,9 @@ for sc in [{"id": "lift_nhe",   "depends_on": ["ma_sat_tinh"], "params": {"mu": 
 
 **A. Rơi tự do** (numpy 2.5, scipy 1.18, mujoco 3.15.0):
 - t chân không 0.3197 / 0.4521 / 0.5537 s (bản gốc: 0.452 s ở 1 m). Cản khí: bi thép +0.02 / +0.05 / +0.07%, nhỏ hơn mọi sai số đo nên kênh này "tắt" được; bóng bàn +1.1 / +2.2 / +3.3%. Cùng hiện tượng, khác kênh trội.
-- Trễ nhả 15 ms (giả định): một độ cao cho g ≈ 9.16 ± 0.02, **chính xác mà sai** (lệch ~6%). Fit 6 độ cao: g ≈ 9.77 ± 0.06, t₀ ≈ 14.7 ± 1.3 ms; đúng hơn nhưng tản hơn vì √(2h) và hằng số gần cộng tuyến trên dải h hẹp.
-- Camera: 30 fps ≈ 7.4%, 120 fps ≈ 1.8%, 240 fps ≈ 0.9% của t(1 m). Thấy cản khí bóng bàn cần ≥240 fps và nhiều lần thả, hoặc cổng quang.
-- MuJoCo mặc định `density = 0`: không có cản khí. Tiếp xúc đầu tiên khi thả 1 m: 0.4540 s (dt 2 ms), 0.4525 s (dt 0.5 ms); "chạm" theo `ncon > 0` trễ khoảng một bước. Bật `density = 1.2` cho bóng bàn: ≈ 0.469–0.470 s, dài hơn mô hình C_d = 0.47 (≈ 0.462 s) khoảng 1.5%. Mô hình chất lưu của MuJoCo không phải C_d quả cầu: bật "có không khí" chưa phải đã validate kênh cản khí.
+- Trễ nhả 15 ms (giả định): một độ cao cho g ≈ 9.16 ± 0.02, **chính xác mà sai** (lệch ~6%). Fit 6 độ cao: g ≈ 9.77 ± 0.06, t₀ ≈ 14.7 ± 1.3 ms: đúng hơn nhưng tản hơn vì √(2h) và hằng số gần cộng tuyến trên dải h hẹp.
+- Camera: 30 / 120 / 240 fps ≈ 7.4 / 1.8 / 0.9% của t(1 m). Thấy cản khí bóng bàn cần ≥240 fps và nhiều lần thả, hoặc cổng quang.
+- MuJoCo mặc định `density = 0`: không cản khí. Tiếp xúc đầu tiên khi thả 1 m: 0.4540 s (dt 2 ms), 0.4525 s (dt 0.5 ms). `density = 1.2` cho bóng bàn: ≈ 0.469–0.470 s, dài hơn mô hình C_d = 0.47 (≈ 0.462 s) khoảng 1.5%: bật "có không khí" chưa phải đã validate kênh cản khí.
 
 **B. Mặt nghiêng** (μ = 0.5, atan μ = 26.57°):
 - Ngưỡng **sắc**: giữa 98% và 102% atan μ, hộp chuyển từ bò sang trượt có gia tốc (~0.5 m sau 3 s). `μ_s = tan θ_slip` khớp sim.
@@ -1111,7 +1111,7 @@ for sc in [{"id": "lift_nhe",   "depends_on": ["ma_sat_tinh"], "params": {"mu": 
 - Hộp μ 0.3 trên sàn μ 1.0, nghiêng 25°: chỉ bò ~8 mm; trên sàn μ 0.3: trượt ~6.6 m. μ tiếp xúc = **max** của hai geom cùng priority [spec, MuJoCo docs *Contact parameters*; tự đo].
 - Ngoài đời: μ_s tản 5–15% giữa các lần thử với bề mặt sạch [ước lượng], μ_k < μ_s với hầu hết cặp vật liệu khô [chuẩn]. Sim một μ chỉ khớp được góc khởi trượt **hoặc** tốc độ trượt.
 
-**C. Checker:** `lift_nhe` → IN; `lift_goc` → **OUT dù trong hộp min–max**; `lift_that` → **UNTESTED** (thiếu kênh `creep_khi_giu`). Trên bộ thật, số cờ thường nhiều hơn dự đoán và phần lớn là UNTESTED. Đó là kết quả đúng.
+**C. Checker:** `lift_nhe` → IN; `lift_goc` → **OUT dù trong hộp min–max**; `lift_that` → **UNTESTED** (thiếu kênh `creep_khi_giu`). Trên bộ thật, cờ thường nhiều hơn dự đoán, phần lớn UNTESTED.
 
 </details>
 
@@ -1126,34 +1126,35 @@ for sc in [{"id": "lift_nhe",   "depends_on": ["ma_sat_tinh"], "params": {"mu": 
 ### 9. Câu hỏi ngược
 
 1. **[Quy mô]** 40 task, mỗi task trung bình 6 kênh, mỗi kênh 3–4 tham số. Thứ gì gãy trước: số phép đo thật, việc giữ `depends_on` đúng khi task thay đổi, hay một báo cáo có 300 cờ?
-   <details><summary>Hướng nghĩ</summary>Đếm số điểm cần đo nếu mỗi trục cần 3 điểm. Xếp hạng kênh theo "số task phụ thuộc × độ nhạy của success theo kênh đó" để chọn phép đo tiếp theo. `depends_on` giống khai báo dependency trong build: khai thiếu thì build vẫn xanh. Có thí nghiệm nào phát hiện được khai thiếu không (nhiễu tham số của một kênh rồi xem success có đổi)?</details>
+   <details><summary>Hướng nghĩ</summary>Đếm số điểm nếu mỗi trục cần 3 điểm. Xếp kênh theo "số task phụ thuộc × độ nhạy của success theo kênh" để chọn phép đo tiếp. `depends_on` giống khai dependency trong build: khai thiếu thì build vẫn xanh; phát hiện bằng cách nhiễu tham số một kênh rồi xem success có đổi.</details>
 2. **[Failure mode]** Kể hai cách checker báo IN trong khi kịch bản thực ra ngoài miền.
-   <details><summary>Hướng nghĩ</summary>Thang chuẩn hóa quá rộng. Một tham số ảnh hưởng tới gap nhưng không có trong `scale` (nhiệt độ, độ ẩm bề mặt). Tham số đầu vào nằm trong miền nhưng **trạng thái trong episode** đi ra ngoài (vận tốc lúc va chạm), và trường hợp này cần kiểm theo trajectory.</details>
+   <details><summary>Hướng nghĩ</summary>Thang chuẩn hóa quá rộng. Tham số ảnh hưởng gap nhưng không có trong `scale` (nhiệt độ, độ ẩm bề mặt). Đầu vào trong miền nhưng **trạng thái trong episode** đi ra ngoài (vận tốc va chạm): cần kiểm theo trajectory.</details>
 3. **[Nếu…thì]** Nếu bật `cone="elliptic"`, `impratio=100` để hết creep, kết quả của các task cũ còn so được với baseline không?
    <details><summary>Hướng nghĩ</summary>Đổi cấu hình tiếp xúc là đổi mô hình: provenance phải ghi lại, và baseline phải chạy lại (Bài 7, Bài 13). Một thay đổi mô hình cũng là một PR, và đi qua CI như mọi PR khác (Bài 18).</details>
 4. **[Phản biện]** "Cột chưa kiểm dài thế này, người đọc sẽ nghĩ sim của tôi kém." Phản biện.
-   <details><summary>Hướng nghĩ</summary>Câu chuyện Columbia trả lời phần lớn. Người đọc có kinh nghiệm biết mọi sim đều có cột này; điều họ không biết là bạn có biết nó hay không. Một bảng không có cột này cho thấy bạn chưa đo, hoặc chưa nghĩ tới.</details>
+   <details><summary>Hướng nghĩ</summary>Columbia trả lời phần lớn. Người đọc có kinh nghiệm biết mọi sim đều có cột này; điều họ không biết là bạn có biết nó không.</details>
 
 ### 10. Liên kết ra ngoài
 
-- **Hàng không: mở rộng đường bao bay (flight envelope expansion).** Đội bay thử đi từng điểm thử, từ vùng an toàn ra dần tới biên, so dữ liệu bay với mô hình trước mỗi bước, và chỉ mở rộng khi mô hình còn khớp. Giống: miền là tập các điểm đã bay, được mở rộng có kế hoạch. Khác: họ không bao giờ "bay thử ngoài miền rồi gắn cờ". Với bạn, sim rẻ nên chạy ngoài miền được, miễn là kết quả mang cờ.
-- **Học máy: phát hiện dữ liệu ngoài phân bố (OOD detection).** Model gặp đầu vào khác dữ liệu huấn luyện vẫn trả lời tự tin. Giống: không có tín hiệu lỗi tự nhiên, nên phải dựng một bộ phát hiện riêng. Khác: OOD detection học miền từ dữ liệu, còn bảng của bạn khai miền từ các phép đo vật lý có chủ đích, nên giải thích được vì sao một điểm bị gắn cờ.
+- **Hàng không: mở rộng đường bao bay (flight envelope expansion).** Bay thử từng điểm từ vùng an toàn ra biên, so dữ liệu với mô hình trước mỗi bước, chỉ mở rộng khi mô hình còn khớp. Giống: miền là tập điểm đã bay, mở rộng có kế hoạch. Khác: họ không "bay ngoài miền rồi gắn cờ"; sim của bạn rẻ nên chạy ngoài miền được, miễn kết quả mang cờ.
+- **Học máy: OOD detection.** Model gặp đầu vào lạ vẫn trả lời tự tin. Giống: không có tín hiệu lỗi tự nhiên, phải dựng bộ phát hiện riêng. Khác: OOD detection học miền từ dữ liệu; bảng của bạn khai miền từ phép đo có chủ đích, nên giải thích được vì sao một điểm bị gắn cờ.
 
 ### 11. Độ tin cậy và sửa lỗi
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| Columbia: Crater được dùng ngoài miền dữ liệu hiệu chỉnh; mảng bọt lớn hơn mẫu thử ~400–640 lần về thể tích | [chuẩn] | CAIB Report Vol. I (2003). Reviewer tra web: con số "tối đa 640 lần" (1.920 vs 3 inch khối) và "ước lượng tốt nhất ~400 lần" được trích từ báo cáo; chưa mở được PDF để xác nhận số trang/chương, tự kiểm |
+| Columbia: Crater dùng ngoài miền dữ liệu hiệu chỉnh; mảng bọt lớn hơn mẫu thử ~400–640 lần về thể tích | [chuẩn] | CAIB Report Vol. I (2003). Reviewer tra web: "tối đa ~640 lần" (≈1.920 vs 3 inch khối) và "ước lượng tốt nhất ~400 lần" được trích từ báo cáo; chưa mở được PDF để xác nhận chương/trang, tự kiểm |
 | `μ_s = tan θ_slip`; C_d quả cầu ≈ 0.47 ở Re ~10³–10⁵ | [chuẩn] | Bóng bàn rơi 1 m có Re cỡ 10⁴ |
-| MuJoCo: μ tiếp xúc = max của hai geom; creep giảm khi dùng elliptic + impratio lớn | [spec] + [tự đo] | MuJoCo docs, *Contact parameters*, *Computation › Contact*; `b17_incline.py` |
-| Mọi bảng số trong 🔒 | [tự đo] | numpy 2.5, scipy 1.18, mujoco 3.15.0 |
+| MuJoCo: μ tiếp xúc = max của hai geom; creep giảm với elliptic + impratio lớn | [spec] + [đã chạy] | Docs *Contact parameters*, *Computation › Contact*; `b17_incline.py` |
+| Mọi bảng số trong 🔒 (kể cả số MuJoCo rơi tự do không có trong code hiển thị) | [đã chạy] | numpy 2.5, scipy 1.18, mujoco 3.15.0; reviewer chạy lại khớp |
 | μ_s tản 5–15% giữa các lần thử | [ước lượng] | Thay bằng số bạn đo |
 
 **Đã sửa so với bản gốc / Gemini:**
-- Bản gốc: con số "t = 0.452 s" nằm trong phần Làm → chuyển vào 🔒. Bản gốc chỉ nói "camera high-fps hoặc va chạm trên IMU", thiếu thời điểm **nhả** và lượng tử camera (30 fps ≈ 7% của t) → thêm cổng quang + IMU/piezo trên cùng ESP32, fit nhiều độ cao để khử trễ cố định.
-- Gemini dùng "đếm frame/hàng rolling shutter" để đo thời gian rơi, và "trừ trễ cảm biến đã đo ở K5 Bài 11". Phương pháp hàng định thời một lần nháy LED chứ không định thời vật bay, và trễ đó là của camera → bỏ cả hai, thay bằng fit t₀.
-- Gemini gọi miền đã đo ba đường là "Verified Domain"; so với thế giới thật là **validation** (Bài 15) → đổi tên. Gemini ghi "chu kỳ < 1% sau khi fit γ" (chu kỳ khớp nhờ L_eff, Bài 16) và các gap mẫu "< 2%", "±1.5°" không có nguồn → bỏ.
-- Bản gốc coi μ_s là "tham số bạn điền vào sim" → thêm ba giới hạn (một hệ số cho tĩnh và động, luật trộn max, creep) và phép đo μ_k. Thêm khái niệm kênh, `depends_on`, trạng thái UNTESTED, miền theo điểm đã đo thay cho hộp min–max.
+- Bản gốc: "t = 0.452 s" nằm trong phần Làm → chuyển vào 🔒; thiếu thời điểm **nhả** và lượng tử camera → cổng quang + IMU/piezo trên cùng ESP32, fit nhiều độ cao để khử trễ cố định.
+- Gemini: đo thời gian rơi bằng hàng rolling shutter và "trừ trễ cảm biến đã đo ở K5 Bài 11" → bỏ cả hai (phương pháp định thời nháy LED; trễ đó là của camera), thay bằng fit t₀.
+- Gemini: "Verified Domain" → đây là **validation** (Bài 15); gap mẫu "< 2%", "±1.5°" không nguồn → bỏ.
+- Bản gốc: μ_s là "tham số bạn điền vào sim" → thêm ba giới hạn (một hệ số cho tĩnh và động, luật trộn max, creep) và phép đo μ_k; thêm kênh, `depends_on`, UNTESTED, miền theo điểm đã đo.
+- Reviewer sửa: đáp án Tự kiểm tra câu 1 ngụ ý đo góc (0.3, 0.5) cứu được kịch bản (0.45, 0.3); thực tế điểm đó vẫn cách 2.5 thang → sửa.
 
 ### 12. Đọc thêm và tự kiểm tra
 

@@ -70,17 +70,17 @@ Thứ tự tối thiểu nếu tuần crunch: F4.1 mục 2 + 6 trước K2 Bài 
 
 ## F4.1 — Đồng hồ vật lý: thạch anh, ppm, nhiệt độ, lão hóa; mô hình offset/skew/drift (5h)
 
-> **Dùng cho:** K1 Bài 3, Bài 13 · K2 Bài 2 · K3 Bài 3 · K5 Bài 7, 8, 10 · K7 C7.2 · **Cần trước:** không (F1.1 nếu muốn phần độ bất định) · **Sau viên nang này bạn đánh giá được:** một con số "ppm" trong datasheet/tài liệu nói về cái gì (dung sai lúc xuất xưởng, hệ số nhiệt, lão hóa), một hệ số nhiệt có thuộc đúng loại thạch anh đang nói tới không, và một khẳng định "sync X phút một lần là đủ" có đứng được không.
+> **Dùng cho:** K1 Bài 3, Bài 13 · K2 Bài 2 · K3 Bài 3 · K5 Bài 7, 8, 10 · K7 C7.2 · **Cần trước:** không (F1.1 nếu muốn phần độ bất định) · **Sau viên nang này bạn đánh giá được:** một con số "ppm" là loại nào (dung sai, hệ số nhiệt, lão hóa), hệ số nhiệt có đúng loại thạch anh không, và "sync X phút một lần là đủ" có đứng được không.
 
 ### 1. Câu chuyện
 
-Dhahran, 25/2/1991. Khẩu đội Patriot đã chạy liên tục khoảng 100 giờ. Đồng hồ hệ thống đếm số tick 0,1 s bằng số nguyên; để đổi ra giây, phần mềm nhân với 0,1 lưu trong thanh ghi 24 bit. 0,1 không biểu diễn chính xác trong nhị phân, phần đuôi bị cắt, mỗi tick thiếu khoảng 9,5×10⁻⁸ s; sau 100 giờ, đồng hồ lệch khoảng 0,34 s [spec: R. Skeel, *Roundoff Error and the Patriot Missile*, SIAM News 25(4), 1992]. Với tốc độ của Scud, cổng theo dõi của radar dịch đi hơn nửa ki-lô-mét; hệ thống nhìn vào chỗ trống, kết luận báo động giả, và 28 lính Mỹ thiệt mạng [spec: GAO/IMTEC-92-26, 1992]. K5 Bài 7 đã kể câu chuyện này để dạy ngân sách sai số; ở đây hãy nhìn nó bằng đơn vị của viên nang: 9,5×10⁻⁸ s trên mỗi 0,1 s là sai tần số tương đối cỡ **1 ppm** [ước lượng: 9,5e−8 / 0,1]. Không có thạch anh nào hỏng. Một đồng hồ lệch 1 ppm, không ai đặt lại, và một hệ thống giả định thời gian của mình là đúng.
+Patriot ở Dhahran (1991) đã kể ở K5 Bài 7: mỗi tick 0,1 s thiếu ~9,5×10⁻⁸ s do 0,1 bị cắt trong thanh ghi 24 bit, sau ~100 giờ lệch ~0,34 s [spec: GAO/IMTEC-92-26; Skeel 1992]. Đổi sang đơn vị viên nang này: 9,5×10⁻⁸ / 0,1 ≈ **1 ppm**. Không thạch anh nào hỏng: một đồng hồ lệch 1 ppm, không ai đặt lại, trong một hệ giả định thời gian của mình đúng.
 
-Vì sao gần như mọi đồng hồ bạn gặp là thạch anh: năm 1927 Warren Marrison và J. W. Horton ở Bell Labs làm đồng hồ thạch anh đầu tiên — một lát tinh thể áp điện rung ở tần số do kích thước và góc cắt quyết định, ổn định hơn mọi con lắc [chuẩn]. 32 768 Hz của mọi RTC là 2¹⁵: chia đôi 15 lần bằng flip-flop ra đúng 1 Hz, và thạch anh dạng âm thoa (tuning fork) ở tần số này nhỏ, rẻ, ít điện [chuẩn]. Cái giá là độ nhạy nhiệt — và đó là chỗ bản Gemini của K5 đã nhầm (mục 6).
+Gần như mọi đồng hồ bạn gặp là thạch anh: lát tinh thể áp điện rung ở tần số do kích thước và góc cắt quyết định [chuẩn]. 32 768 Hz của mọi RTC là 2¹⁵, chia đôi 15 lần ra 1 Hz; thạch anh âm thoa (tuning fork) ở tần số này nhỏ, rẻ, ít điện, đổi lại nhạy nhiệt — chỗ bản Gemini của K5 đã nhầm (mục 6).
 
 ### 2. Mô hình tư duy
 
-**Mô hình ba số hạng.** So một đồng hồ với một chuẩn, sai lệch thời gian `x(t)` (giây) gần như luôn viết được thành:
+**Mô hình ba số hạng.** So với một chuẩn, sai lệch thời gian `x(t)` của một đồng hồ viết được thành:
 
 ```
 x(t) = x₀  +  y₀·t  +  ½·D·t²  +  ε(t)
@@ -101,15 +101,15 @@ offset x(t)
 
 Đổi đơn vị phải thuộc: skew `y` ppm nghĩa là mỗi giây lệch `y` µs; một giờ lệch `3,6·y` ms; một ngày lệch `86,4·y` ms [chuẩn]. Bạn đo được luôn là **hiệu** skew của hai đồng hồ, không phải skew của từng cái so với "giờ thật".
 
-**Skew đến từ đâu.** Một con số ppm trong datasheet thạch anh luôn là một trong năm thứ khác nhau, và tài liệu kém thường trộn chúng:
+**Skew đến từ đâu.** Một con số ppm trong datasheet là một trong năm thứ khác nhau; tài liệu kém trộn chúng:
 
 | Thành phần | Nghĩa | Cỡ điển hình | Đặc tính |
 |---|---|---|---|
-| Frequency tolerance (ở 25 °C) | Lệch lúc xuất xưởng | ±10…±50 ppm [spec: datasheet thạch anh thông dụng] | Cố định cho từng con → offset tuyến tính, đo một lần là bù được |
+| Frequency tolerance (ở 25 °C) | Lệch lúc xuất xưởng | ±10…±50 ppm [spec: datasheet thông dụng] | Cố định từng con → đo một lần là bù được |
 | Frequency stability theo nhiệt | Δf/f trên dải nhiệt làm việc | Xem bảng dưới | Thay đổi khi nhiệt đổi → **drift** |
-| Aging | Lệch theo thời gian sử dụng | ±1…±5 ppm/năm đầu [spec: datasheet thông dụng] | Chậm, gần như không thấy trong một phiên đo |
-| Load capacitance (pulling) | Tụ tải trên board khác tụ nhà sản xuất chỉ định | vài ppm mỗi pF [ước lượng] | Cố định theo thiết kế board — "cùng thạch anh, khác board, khác ppm" |
-| Nguồn, rung, sốc | Điện áp nuôi mạch dao động, gia tốc | nhỏ, trừ sốc mạnh | Robot rung thì có (thường bỏ qua ở mức ppm) |
+| Aging | Lệch theo thời gian sử dụng | ±1…±5 ppm/năm đầu [spec: datasheet thông dụng] | Không thấy trong một phiên đo |
+| Load capacitance (pulling) | Tụ tải trên board khác tụ nhà sản xuất chỉ định | vài ppm mỗi pF [ước lượng] | "Cùng thạch anh, khác board, khác ppm" |
+| Nguồn, rung, sốc | Điện áp nuôi, gia tốc | nhỏ, trừ sốc mạnh | Thường bỏ qua ở mức ppm |
 
 **Hai loại thạch anh, hai đường cong nhiệt — đây là chỗ hay sai nhất.**
 
@@ -118,74 +118,67 @@ offset x(t)
 | Có ở đâu | RTC, đồng hồ đeo tay, RTC slow clock tùy chọn của MCU | Clock chính của MCU (ESP32-S3: 40 MHz), NIC (PHC), USB, logic analyzer, CPU |
 | Dạng đường cong | **Parabol**: Δf/f = k·(T − T₀)², T₀ ≈ 25 °C | **Bậc ba** (chữ S nằm ngang): Δf/f ≈ a₁·(T − T₀) + a₃·(T − T₀)³, điểm uốn quanh 25–30 °C |
 | Hệ số | k ≈ −0,034 ± 0,006 ppm/°C² điển hình, có loại tới −0,04 [spec: datasheet Raltron RT2012, Geyer KX-327S] | a₃ ≈ 10⁻⁴ ppm/°C³ (gần như cố định theo vật lý tinh thể); a₁ phụ thuộc góc cắt, cỡ ±0,1…0,4 ppm/°C [ước lượng; xem Vig, tutorial mục 4] |
-| Datasheet thường ghi | k và T₀ | "±10 ppm (−20…+70 °C)" hoặc đường cong |
 
-Vì sao khác: tuning-fork rung uốn, độ cứng đàn hồi của lát thạch anh đổi theo nhiệt bậc hai; AT-cut rung trượt theo bề dày, và góc cắt ~35°15′ được chọn chính là để triệt tiêu số hạng bậc một và bậc hai quanh nhiệt độ phòng, chỉ còn bậc ba [chuẩn: Vig]. Muốn tốt hơn nữa: TCXO (đo nhiệt và bù, ±0,5…±2 ppm trên dải rộng), OCXO (giữ thạch anh trong lò ở nhiệt độ cố định, cỡ 10⁻⁸ trở xuống) [spec: datasheet TCXO/OCXO thông dụng]. Ngoài thạch anh còn **dao động RC** trong chip (ví dụ RTC slow clock mặc định của ESP32-S3) lệch tới phần trăm, không phải ppm [spec: ESP32-S3 Technical Reference Manual, chương Reset and Clock; tự kiểm theo bản bạn có].
+Vì sao khác: tuning-fork rung uốn, độ cứng của lát thạch anh đổi theo nhiệt bậc hai; AT-cut rung trượt theo bề dày, góc cắt ~35°15′ được chọn để hệ số bậc một gần 0 quanh nhiệt độ phòng, còn lại đường bậc ba [chuẩn: Vig]. Tốt hơn nữa: TCXO (bù nhiệt, ±0,5…±2 ppm), OCXO (lò ổn nhiệt, cỡ 10⁻⁸) [spec: datasheet thông dụng]. **Dao động RC** trong chip (RTC slow clock mặc định của ESP32-S3) lệch tới phần trăm, không phải ppm [spec: ESP32-S3 TRM, chương Reset and Clock].
 
-Mô phỏng: một robot đồng bộ đồng hồ lúc khởi động ở 25 °C, rồi ấm dần tới ~55 °C (motor, CPU). Đồng hồ của nó lệch bao nhiêu nếu là tuning-fork, nếu là AT-cut? Và nếu lúc sync ta đã ước lượng và bù luôn skew tĩnh?
+Mô phỏng: robot sync lúc khởi động ở 25 °C rồi ấm dần tới ~55 °C; tuning-fork vs AT-cut, có và không bù skew tĩnh.
 
 ```python
 # [đã chạy] F4.1 — tuning-fork 32,768 kHz (parabol) vs AT-cut MHz (bậc ba): robot nóng 25 → 55 °C
 import numpy as np
 import matplotlib.pyplot as plt
 
-def tuning_fork(T, k=-0.034, T0=25.0):        # ppm; k: datasheet điển hình −0,034 ± 0,006 ppm/°C²
+def tuning_fork(T, k=-0.034, T0=25.0):        # ppm; k điển hình −0,034 ± 0,006 ppm/°C²
     return k * (T - T0) ** 2
 
-def at_cut(T, a1=-0.2, a3=1.0e-4, T0=25.0):   # ppm; a1, a3 [ước lượng] — tra đường cong datasheet thật
+def at_cut(T, a1=-0.2, a3=1.0e-4, T0=25.0):   # ppm; a1, a3 [ước lượng] — tra datasheet thật
     return a1 * (T - T0) + a3 * (T - T0) ** 3
 
-OFFSET0 = 8.0                                  # ppm: sai tần số tĩnh ở 25 °C (dung sai lúc xuất xưởng)
-t = np.arange(0, 1800.0, 1.0)                  # 30 phút, bước 1 s; đồng bộ lúc t = 0
-T = 25 + 30 * (1 - np.exp(-t / 300))           # robot ấm dần tới ~55 °C, hằng số thời gian 5 phút
+OFFSET0 = 8.0                                  # ppm: sai tần số tĩnh ở 25 °C (dung sai xuất xưởng)
+t = np.arange(0, 1800.0, 1.0)                  # 30 phút, bước 1 s; sync lúc t = 0
+T = 25 + 30 * (1 - np.exp(-t / 300))           # ấm dần tới ~55 °C, hằng số thời gian 5 phút
 
 for name, f in (("tuning-fork", tuning_fork), ("AT-cut", at_cut)):
-    y = OFFSET0 + f(T)                         # skew so với đồng hồ chuẩn (ppm)
-    phase_ms = np.cumsum(y) * 1e-6 * 1e3       # offset tích lũy (ms) = tích phân skew theo thời gian
-    # Nếu ở t=0 ta ĐÃ ước lượng và bù skew tĩnh (8 ppm), phần còn lại chỉ do nhiệt:
-    resid_ms = np.cumsum(y - y[0]) * 1e-6 * 1e3
-    print(f"{name:12s} skew@55°C={y[-1]:+7.2f} ppm | offset sau 10 phút: {phase_ms[599]:7.2f} ms"
-          f" | sau khi bù skew lúc sync: {resid_ms[599]:+7.2f} ms (10'), {resid_ms[-1]:+7.2f} ms (30')")
+    y = OFFSET0 + f(T)                         # skew (ppm)
+    phase_ms = np.cumsum(y) * 1e-3             # offset (ms) = tích phân skew
+    resid_ms = np.cumsum(y - y[0]) * 1e-3      # nếu lúc sync đã bù skew tĩnh: chỉ còn phần nhiệt
+    print(f"{name:12s} skew@55°C={y[-1]:+7.2f} ppm | offset 10': {phase_ms[599]:7.2f} ms"
+          f" | sau bù: {resid_ms[599]:+7.2f} ms (10'), {resid_ms[-1]:+7.2f} ms (30')")
 
-Ts = np.linspace(-40, 85, 126)
-plt.plot(Ts, tuning_fork(Ts), label="tuning-fork 32,768 kHz (k=−0,034)")
-plt.plot(Ts, at_cut(Ts), label="AT-cut MHz (a1=−0,2; a3=1e−4)")
-plt.axvspan(15, 55, alpha=0.1, label="dải phòng → robot nóng")
-plt.xlabel("°C"); plt.ylabel("Δf/f (ppm)"); plt.legend(); plt.grid(alpha=.3)
-plt.show()
+Ts = np.linspace(-40, 85, 126)                  # vẽ hai đường cong nhiệt cạnh nhau
+plt.plot(Ts, tuning_fork(Ts), label="tuning-fork"); plt.plot(Ts, at_cut(Ts), label="AT-cut")
+plt.xlabel("°C"); plt.ylabel("Δf/f (ppm)"); plt.legend(); plt.show()
 ```
 
-Ba câu bản chất: (1) offset là tích phân của skew, nên sai số đồng hồ **lớn dần** kể từ lần sync; (2) bù skew tĩnh lúc sync xóa được số hạng tuyến tính, còn drift do nhiệt thì không, nên chu kỳ sync bị quyết định bởi drift chứ không bởi ppm trong datasheet; (3) "thạch anh" không phải một loại: hệ số nhiệt của loại này áp cho loại kia có thể sai một bậc độ lớn.
+Ba câu bản chất: (1) offset là tích phân của skew, nên sai số **lớn dần** kể từ lần sync; (2) bù skew tĩnh xóa số hạng tuyến tính, drift nhiệt thì không, nên chu kỳ sync do drift quyết định, không do ppm datasheet; (3) "thạch anh" không phải một loại: hệ số nhiệt loại này áp cho loại kia có thể sai một bậc.
 
 ### 3. Cầu nối từ backend
 
 | Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
 |---|---|---|---|
-| Clock skew giữa server, "chạy NTP là xong" | Mỗi thạch anh có skew riêng, đổi theo nhiệt | Trên server, NTP chạy liên tục và che skew; ESP32 trên robot thường không có ai sửa nó, skew tích lũy thẳng vào dữ liệu | Ghép IMU (đồng hồ ESP32) với camera (đồng hồ host) theo timestamp; sau 1 giờ lệch hàng chục ms, không có exception nào |
-| Rate limiter / token bucket chạy theo đồng hồ máy | Producer và consumer chạy theo hai thạch anh khác nhau (I2S, UART, USB audio) | Backend xả hàng đợi khi tải giảm; ở đây chênh tốc độ do ppm là **vĩnh viễn, một chiều**, không có lúc "tải giảm" | Tăng buffer để chữa: chỉ hoãn ngày tràn/cạn; cách đúng là một bên theo clock của bên kia hoặc chuyển đổi tốc độ mẫu (ASRC) |
-| Cấu hình đúng thì giá trị đúng (`sample_rate=48000`) | Tần số danh định ≠ tần số thật | Config là ý định; tần số thật = ý định × (1 + skew) | Tin rằng hai thiết bị "48 kHz" có cùng số mẫu sau 1 giờ (K1 Bài 3 câu 9) |
+| Clock skew giữa server, "chạy NTP là xong" | Mỗi thạch anh có skew riêng, đổi theo nhiệt | Server chạy NTP liên tục nên skew bị che; ESP32 trên robot thường không ai sửa, skew tích lũy thẳng vào dữ liệu | Ghép IMU (đồng hồ ESP32) với camera (đồng hồ host); sau 1 giờ lệch hàng chục ms, không exception nào |
+| Producer/consumer với hàng đợi | Hai đầu chạy theo hai thạch anh (I2S, UART, USB audio) | Backend xả hàng đợi khi tải giảm; chênh tốc độ do ppm là **vĩnh viễn, một chiều** | Tăng buffer chỉ hoãn ngày tràn/cạn; cách đúng: một bên theo clock bên kia, hoặc ASRC |
+| Config đúng thì giá trị đúng (`sample_rate=48000`) | Tần số danh định ≠ tần số thật | Tần số thật = ý định × (1 + skew) | Tin hai thiết bị "48 kHz" có cùng số mẫu sau 1 giờ (K1 Bài 3 câu 9) |
 
 **Chấm mô hình:**
 
-- *Mô hình của bạn ở K3 lượt 7:* "vì tốc độ truyền điện không thể bắt kịp... người ta nghĩ ra khái niệm tần số... mỗi thiết bị có khái niệm về clock, về thời gian của chúng... nếu không giới hạn thì thời gian ở mọi thiết bị sẽ lệch nhau... nên phải giới hạn lại, dù có thể chạy nhanh hơn 1000 lần". — **ĐÚNG MỘT PHẦN.** Đúng và quan trọng: *mỗi thiết bị có thời gian của riêng nó* — đó là tiền đề của cả khóa F4. Sai ở nguyên nhân: clock trong mạch số tồn tại để mọi flip-flop lấy mẫu cùng một nhịp sau khi tín hiệu đã ổn định (setup/hold), và tần số tối đa bị chặn bởi đường dẫn chậm nhất và công suất, không phải bị "cố tình giới hạn" (đã chấm ở K3). Và thời gian lệch nhau **không** vì chạy nhanh: hai đồng hồ chạy *chậm* vẫn lệch, vì mỗi miếng thạch anh rung ở tần số hơi khác danh định. Phản ví dụ: hai ESP32-S3 cùng thạch anh 40 MHz danh định, chạy chậm hơn trần của chip rất xa, vẫn lệch nhau vài đến vài chục ppm — K5 Bài 8 đo đúng điều này.
-- *"Datasheet ghi ±10 ppm nên đồng hồ của tôi lệch tối đa 10 ppm."* — **ĐÚNG MỘT PHẦN.** ±10 ppm thường là *tolerance ở 25 °C*; stability theo nhiệt và aging là các dòng khác, cộng thêm; tụ tải trên board kéo thêm. Và bạn so hai đồng hồ, nên hiệu có thể gấp đôi. Phản ví dụ: hai thạch anh ±10 ppm, một con +9, một con −9, ở 50 °C thêm vài ppm: hiệu > 18 ppm.
+- *Mô hình của bạn ở K3 lượt 7:* "mỗi thiết bị có khái niệm về clock, về thời gian của chúng... nếu không giới hạn thì thời gian ở mọi thiết bị sẽ lệch nhau... nên phải giới hạn lại, dù có thể chạy nhanh hơn 1000 lần". — **ĐÚNG MỘT PHẦN.** Đúng: *mỗi thiết bị có thời gian của riêng nó* — tiền đề của cả F4. Sai ở nguyên nhân: tần số tối đa bị chặn bởi critical path và công suất, không bị "cố tình giới hạn" (đã chấm ở K3); và thời gian lệch nhau không vì chạy nhanh mà vì mỗi miếng thạch anh rung hơi khác danh định. Phản ví dụ: hai ESP32-S3 cùng thạch anh 40 MHz danh định, chạy xa dưới trần của chip, vẫn lệch nhau vài đến vài chục ppm — K5 Bài 8 đo đúng điều này.
+- *"Datasheet ghi ±10 ppm nên đồng hồ của tôi lệch tối đa 10 ppm."* — **ĐÚNG MỘT PHẦN.** ±10 ppm thường là *tolerance ở 25 °C*; nhiệt, aging, tụ tải cộng thêm; và so hai đồng hồ thì hiệu có thể gấp đôi. Phản ví dụ: một con +9, một con −9, ở 50 °C thêm vài ppm: hiệu > 18 ppm.
 
-**Tên chuẩn của thứ bạn đã làm:** file `/var/lib/chrony/drift` (hoặc `ntp.drift`) trên server bạn quản lý chứa đúng một con số ppm: đó là ước lượng **skew** của thạch anh máy đó mà chrony lưu lại để lần khởi động sau không phải học lại từ đầu [spec: chrony.conf(5), `driftfile`]. Cái chrony gọi "drift file" là skew theo thuật ngữ khóa này; cái tên lệch nhau giữa các cộng đồng, nên luôn hỏi "đơn vị là gì": ppm là skew, ppm/°C hay ppm/ngày là drift. Thứ còn thiếu: bạn chưa từng phải hỏi con số đó đổi bao nhiêu khi máy nóng lên.
+**Tên chuẩn của thứ bạn đã làm:** file `/var/lib/chrony/drift` trên server của bạn chứa một con số ppm: ước lượng **skew** của thạch anh máy đó, lưu để lần boot sau khỏi học lại [spec: chrony.conf(5), `driftfile`]. Chrony gọi nó là "drift"; luôn đọc theo đơn vị: ppm là skew, ppm/°C hay ppm/ngày là drift. Thứ còn thiếu: con số đó đổi bao nhiêu khi máy nóng lên.
 
 ### 4. Thuật ngữ
 
 | Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
 |---|---|---|---|
-| 🟢 | Offset | Hai đồng hồ chỉ khác nhau bao nhiêu tại một thời điểm (lệch pha) | Đại lượng cố định |
+| 🟢 | Offset | Hai đồng hồ khác nhau bao nhiêu tại một thời điểm | Đại lượng cố định |
 | 🟢 | Skew (fractional frequency offset, ppm) | Tốc độ chạy khác nhau bao nhiêu; ppm = µs mỗi giây | "Lệch cố định" (đó là offset) |
-| 🟢 | Drift | Skew thay đổi theo nhiệt độ/thời gian | Đồng nghĩa với skew (nhiều tài liệu, kể cả roadmap, dùng lẫn) |
-| 🟢 | ppm, ppb | 10⁻⁶, 10⁻⁹ tương đối | Đơn vị thời gian tuyệt đối |
+| 🟢 | Drift | Skew thay đổi theo nhiệt độ/thời gian | Đồng nghĩa với skew (roadmap dùng lẫn) |
 | 🟢 | Tolerance vs stability vs aging | Lệch xuất xưởng / theo nhiệt / theo năm | Một con số ppm duy nhất |
 | 🟡 | Tuning-fork vs AT-cut | 32,768 kHz parabol vs MHz bậc ba | "Thạch anh có hệ số −0,04 ppm/°C²" (chỉ đúng loại tuning-fork) |
 | 🟡 | Turnover temperature T₀ | Đỉnh parabol của tuning-fork | Nhiệt độ hoạt động tốt nhất của mọi loại |
 | 🟡 | TCXO / OCXO | Thạch anh có bù nhiệt / trong lò ổn nhiệt | Chỉ có trong thiết bị quân sự |
-| 🟡 | Load capacitance, pulling | Tụ tải kéo tần số | Không liên quan tới phần mềm |
-| 🔴 | Activity dip, hysteresis nhiệt | Điểm nhảy tần số bất thường; lên/xuống nhiệt không trùng đường | Cần ngay (biết tên để khỏi ngạc nhiên ở K5 Bài 10) |
+| 🔴 | Activity dip, hysteresis nhiệt | Nhảy tần số bất thường; lên/xuống nhiệt không trùng đường | Cần ngay (chỉ biết tên, cho K5 Bài 10) |
 
 ### 5. Bài tập dự đoán
 
@@ -197,7 +190,7 @@ Ba câu bản chất: (1) offset là tích phân của skew, nên sai số đồ
 4. Muốn phần còn lại (sau bù) luôn < 1 ms, phải sync lại sau tối đa bao nhiêu giây, mỗi loại?
 5. Bản Gemini K5 Bài 10 dùng −0,04 ppm/°C² cho thạch anh của ESP32. Nếu tin con số đó, bạn sẽ chọn chu kỳ sync dài hơn hay ngắn hơn mức cần thiết, và sai bao nhiêu lần?
 
-**Tham số cần tra:** với phần cứng thật, tra datasheet thạch anh 40 MHz trên module ESP32-S3 của bạn (in trên vỏ thạch anh hoặc trong datasheet module) và mục yêu cầu thạch anh trong *ESP32-S3 Hardware Design Guidelines* (mục External Crystal Clock Source). Với bài này, dùng tham số trong code. **Phương pháp:** câu 1 thay T = 55 vào công thức; câu 2 tích phân skew theo thời gian (nhiệt độ tiến gần 55 theo hàm mũ, nên trung bình trong 10 phút thấp hơn 55); câu 4 tìm thời điểm đầu tiên |phần dư| vượt 1 ms.
+**Tham số cần tra:** với phần cứng thật, datasheet thạch anh 40 MHz trên module ESP32-S3 và *ESP32-S3 Hardware Design Guidelines* (mục External Crystal Clock Source); bài này dùng tham số trong code. **Phương pháp:** câu 1 thay T = 55; câu 2 tích phân skew theo thời gian (nhiệt tiến tới 55 theo hàm mũ, trung bình 10 phút thấp hơn 55); câu 4 tìm thời điểm đầu tiên |phần dư| vượt 1 ms.
 
 ```markdown
 # prediction.md — F4.1
@@ -220,11 +213,9 @@ Kết quả khi chạy (numpy 2.x, không có ngẫu nhiên):
 | Phần dư sau bù skew tĩnh, 10 phút / 30 phút | −7,0 / −41,3 ms | −1,6 / −5,6 ms |
 | Sync lại sau tối đa (phần dư < 1 ms) | ~250 s | ~420 s |
 
-Câu 2 là bẫy: không bù gì thì tuning-fork lại có |offset| *nhỏ hơn* sau 10 phút, vì phần nhiệt âm triệt tiêu một phần skew tĩnh dương. Một phép thử ngắn có thể cho bạn kết luận "loại này tốt hơn" vì một sự tình cờ về dấu. Câu 3 mới là câu đúng hỏi: sau khi bù cái bù được, phần nhiệt của tuning-fork lớn hơn AT-cut khoảng 4–7 lần trong kịch bản này (phần drift thuần nhiệt ở 55 °C: −30,6 vs −3,3 ppm, ~9 lần).
+Câu 2 là bẫy: không bù gì thì tuning-fork lại có |offset| *nhỏ hơn* sau 10 phút, vì phần nhiệt âm triệt tiêu một phần skew tĩnh dương — một phép thử ngắn cho kết luận "loại này tốt hơn" vì tình cờ về dấu. Câu 3 mới là câu đúng: sau khi bù cái bù được, phần nhiệt của tuning-fork lớn hơn AT-cut 4–7 lần (drift thuần nhiệt ở 55 °C: −30,6 vs −3,3 ppm).
 
-Câu 5: dùng −0,04 ppm/°C² (tuning-fork) cho thạch anh 40 MHz AT-cut, bạn dự đoán drift do nhiệt lớn gấp khoảng 10 lần thực tế (với a₁ giả định ở đây), nên chọn chu kỳ sync **ngắn hơn** cần thiết. Hậu quả không nguy hiểm (chỉ tốn sync), nhưng ngược lại thì nguy hiểm: ai đo một board AT-cut trong phòng rồi áp kết quả cho RTC 32 kHz sẽ chọn chu kỳ sync quá dài. Và ở K5 Bài 10, nếu bạn kỳ vọng "vọt thêm 10–30 ppm khi hơ nóng" thì có thể kết luận sai rằng thí nghiệm hỏng khi chỉ thấy vài ppm.
-
-Nhớ: a₁ của AT-cut ở đây là giả định. Với a₁ = −0,4 hoặc +0,1, số đổi; điều không đổi là AT-cut trong dải 15–55 °C lệch cỡ vài ppm còn tuning-fork lệch hàng chục ppm ở hai đầu dải.
+Câu 5: dùng −0,04 ppm/°C² (tuning-fork) cho thạch anh 40 MHz AT-cut, bạn dự đoán drift do nhiệt lớn gấp ~10 lần thực tế (với a₁ giả định ở đây), nên chọn chu kỳ sync **ngắn hơn** cần thiết — tốn sync, không nguy hiểm. Chiều ngược lại mới nguy hiểm: đo board AT-cut rồi áp cho RTC 32 kHz → chu kỳ sync quá dài. Ở K5 Bài 10, kỳ vọng "vọt thêm 10–30 ppm" sẽ khiến bạn tưởng thí nghiệm hỏng khi chỉ thấy vài ppm. a₁ ở đây là giả định; đổi a₁ thì số đổi, nhưng AT-cut trong 15–55 °C vẫn lệch cỡ vài ppm còn tuning-fork hàng chục ppm ở hai đầu dải.
 
 </details>
 
@@ -264,62 +255,63 @@ Checklist khi đọc một khẳng định về độ chính xác đồng hồ:
 1. **[Vì sao không]** Vì sao không gắn TCXO cho mọi ESP32 trên robot cho xong chuyện?
    <details><summary>Hướng nghĩ</summary>
 
-   Nghĩ theo ngân sách sai số (F4.7): nếu đóng dấu sai ±1 ms do USB và ISR, giảm drift từ 5 ppm xuống 0,5 ppm đổi được bao nhiêu? Và nếu đằng nào cũng sync mỗi phút thì drift giữa hai lần sync là bao nhiêu? Tiền nên tiêu vào số hạng lớn nhất.
+   Ngân sách sai số (F4.7): nếu đóng dấu đã sai ±1 ms do USB, giảm drift 5 → 0,5 ppm đổi được bao nhiêu khi đằng nào cũng sync mỗi phút? Tiền tiêu vào số hạng lớn nhất.
 
    </details>
 2. **[Quy mô]** 100 robot, mỗi con một ESP32. Phân bố skew giữa các con trông thế nào, và một hằng số bù "trung bình đội" có ích gì không?
    <details><summary>Hướng nghĩ</summary>
 
-   Tolerance là ngẫu nhiên giữa các con, cố định trong một con. Trung bình đội có thể gần 0 trong khi từng con lệch ±10 ppm. Bù phải theo từng thiết bị (giống hiệu chuẩn bias IMU từng con, F1.1), và phải lưu theo `device_id` + phiên bản firmware.
+   Tolerance ngẫu nhiên giữa các con, cố định trong một con: trung bình đội ~0 trong khi từng con ±10 ppm. Bù theo từng thiết bị, lưu theo `device_id` + firmware.
 
    </details>
 3. **[Failure mode]** Robot đứng sạc ở 25 °C, sync lúc khởi động, chạy 20 phút ngoài nắng, quay về. Dữ liệu ghép IMU–camera tốt ở đầu và cuối, tệ ở giữa. Một detector kiểm offset chỉ ở đầu và cuối episode sẽ thấy gì?
    <details><summary>Hướng nghĩ</summary>
 
-   Offset là tích phân của skew; nếu skew đi ra rồi quay về, offset không quay về 0 nhưng có thể nhỏ ở cuối. Hai điểm đo không đủ để thấy một đường cong. Nghĩ về đo offset liên tục bằng một sự kiện chung định kỳ.
+   Offset là tích phân của skew; skew đi ra rồi quay về thì offset không về 0 nhưng có thể nhỏ ở cuối. Hai điểm không thấy được đường cong; cần sự kiện chung định kỳ.
 
    </details>
 4. **[Phản biện]** "ppm nhỏ thế, robot chỉ chạy 30 phút một episode, bỏ qua được." Tính cho trường hợp nào thì đúng, trường hợp nào thì sai.
    <details><summary>Hướng nghĩ</summary>
 
-   So tích skew × thời lượng với dung sai thời gian của ứng dụng: log nhiệt độ 1 Hz vs ghép IMU 200 Hz vs VIO khi robot quay 3 rad/s (sai góc = ω × Δt). Cùng một ppm, kết luận đổi theo ứng dụng.
+   So skew × thời lượng với dung sai của ứng dụng: log nhiệt 1 Hz vs ghép IMU 200 Hz vs VIO quay 3 rad/s (sai góc = ω × Δt).
 
    </details>
 
 ### 8. Liên kết ra ngoài
 
-- **GPS.** Đồng hồ nguyên tử trên vệ tinh chạy nhanh hơn trên mặt đất khoảng 38 µs/ngày do hiệu ứng tương đối, và được chỉnh tần số trước khi phóng [chuẩn]. 38 µs/ngày ≈ 4,4×10⁻¹⁰, tức 0,00044 ppm, nhưng nhân với tốc độ ánh sáng thì thành ~11 km/ngày sai vị trí. Giống: sai tần số nhỏ × thời gian dài × hệ số khuếch đại lớn. Khác: ở GPS nguyên nhân biết trước và bù chính xác; trên robot, drift theo nhiệt phải đo.
-- **Âm thanh / video streaming.** Bên phát và bên nhận chạy hai thạch anh; player phải phát hiện skew bằng mức đầy của buffer và co giãn nhẹ hoặc resample (adaptive playout). Giống K1 Bài 3 câu 9. Khác: ở đó chỉ cần không tràn; trong robot cần biết *thời điểm* chính xác.
+- **GPS.** Đồng hồ vệ tinh chạy nhanh hơn mặt đất ~38 µs/ngày do hiệu ứng tương đối (≈ 4,4×10⁻¹⁰), được chỉnh tần số trước khi phóng; không chỉnh thì × tốc độ ánh sáng ≈ 11 km/ngày sai vị trí [chuẩn: Ashby, Living Reviews in Relativity 2003]. Giống: sai tần số nhỏ × thời gian × hệ số khuếch đại lớn. Khác: ở GPS nguyên nhân biết trước; trên robot drift nhiệt phải đo.
+- **Audio/video streaming.** Player phát hiện skew bên phát qua mức đầy buffer rồi resample (adaptive playout), như K1 Bài 3 câu 9. Khác: ở đó chỉ cần không tràn; robot cần *thời điểm* chính xác.
 
 ### 9. Áp vào khóa chính
 
 - **K1 Bài 3 câu 9, K1 Bài 13:** hai thạch anh "cùng tần số" luôn khác nhau; trên một link I2S thì bên nhận dùng BCLK của bên phát nên không trôi; trôi xuất hiện giữa hai miền clock độc lập.
 - **K2 Bài 2:** đọc độ dốc của `log_time − stamp` ra ppm; nếu cong theo giờ trong ngày, nghĩ tới nhiệt.
 - **K3 Bài 3:** sai số đo tần số bằng logic analyzer bị chặn bởi chính thạch anh 24 MHz của analyzer (vài chục ppm), nhỏ hơn tiêu chí 1% nhiều bậc — quyết định: không cần trọng tài tốt hơn cho tiêu chí đó.
-- **K5 Bài 7:** dòng "drift thạch anh" trong ngân sách phải ghi rõ loại thạch anh, dải nhiệt và khoảng thời gian kể từ sync. **K5 Bài 8:** độ dốc fit là *hiệu skew* của hai ESP32. **K5 Bài 10:** kỳ vọng dạng bậc ba/gần tuyến tính quanh phòng cho clock 40 MHz; nếu thấy parabol rõ, kiểm xem bạn đang đo đồng hồ nào (RTC slow clock hay esp_timer).
+- **K5 Bài 7:** dòng "drift thạch anh" ghi loại thạch anh, dải nhiệt, thời gian từ sync. **K5 Bài 8:** độ dốc fit là *hiệu skew* hai ESP32. **K5 Bài 10:** kỳ vọng bậc ba/gần tuyến tính quanh phòng cho clock 40 MHz; thấy parabol rõ thì kiểm đang đo đồng hồ nào (RTC slow clock hay esp_timer).
 - **K7 C7.2:** chọn chu kỳ sync ESP32 ↔ host theo drift đo được ở nhiệt độ làm việc thật của robot, không theo ppm datasheet.
 
 ### 10. Độ tin cậy
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| Patriot: ~0,34 s sau 100 giờ, 9,5×10⁻⁸ s/tick, 28 người chết | [spec] | Skeel 1992; GAO/IMTEC-92-26 |
-| Tuning-fork k ≈ −0,034 ± 0,006 ppm/°C², T₀ = 25 ± 5 °C | [spec] | Datasheet Raltron RT2012, Geyer KX-327S; có loại −0,036, −0,04 |
+| Patriot: ~0,34 s sau ~100 giờ, 9,5×10⁻⁸ s/tick (≈ 1 ppm) | [spec] | Skeel 1992; GAO/IMTEC-92-26; chi tiết ở K5 Bài 7 |
+| Tuning-fork k ≈ −0,034 ± 0,006 ppm/°C², T₀ = 25 ± 5 °C | [spec] | Datasheet tuning-fork 32,768 kHz (ví dụ Raltron RT2012); có loại −0,036, −0,04 |
 | AT-cut: đường bậc ba, a₃ ≈ 10⁻⁴ ppm/°C³, a₁ phụ thuộc góc cắt | [chuẩn] / [ước lượng] cho số | Vig, tutorial; tra đường cong datasheet thạch anh của bạn |
-| ESP32-S3 dùng thạch anh 40 MHz cho clock chính; RTC slow clock mặc định là RC nội | [spec] | ESP32-S3 TRM, chương clock; kiểm theo bản bạn có |
-| Yêu cầu dung sai thạch anh của ESP32-S3 | [tự đo] | Hardware Design Guidelines, mục External Crystal Clock Source |
-| Tolerance ±10…±50 ppm, aging ±1…±5 ppm/năm | [spec] | Datasheet thạch anh thông dụng; thay đổi theo hãng |
-| GPS ~38 µs/ngày | [chuẩn] | Ashby, *Relativity in the Global Positioning System*, Living Reviews in Relativity 2003 |
-| Kết quả mô phỏng mục 5 | [đã chạy] | Tham số a₁, a₃ là giả định |
+| ESP32-S3: thạch anh 40 MHz cho clock chính; RTC slow clock mặc định là RC nội | [spec] | ESP32-S3 TRM, chương clock |
+| Yêu cầu dung sai thạch anh của ESP32-S3 | [tự đo] | Hardware Design Guidelines |
+| Tolerance ±10…±50 ppm, aging ±1…±5 ppm/năm | [spec] | Datasheet thông dụng; đổi theo hãng |
+| Kết quả mô phỏng mục 5 | [đã chạy] | a₁, a₃ là giả định; reviewer chạy lại khớp |
 
-Đã sửa so với bản gốc/Gemini: (Gemini K5 Bài 10) hệ số −0,04 ppm/°C² áp cho thạch anh MHz → đó là hệ số tuning-fork 32 kHz; AT-cut bậc ba, lệch nhỏ hơn nhiều trong dải phòng (quy chuẩn mục 7). (Gemini K5 Bài 10) "vọt thêm 10–30 ppm khi hơ nóng" → kỳ vọng vài ppm cho AT-cut, phải tự đo. (Roadmap mục 3.1) "drift/skew" dùng lẫn → tách theo thuật ngữ đã thống nhất.
+Đã sửa so với bản gốc/Gemini: (Gemini K5 Bài 10) −0,04 ppm/°C² áp cho thạch anh MHz → hệ số tuning-fork 32 kHz; AT-cut bậc ba, lệch nhỏ hơn nhiều trong dải phòng (quy chuẩn mục 7); "vọt thêm 10–30 ppm khi hơ nóng" → vài ppm cho AT-cut, tự đo. (Roadmap 3.1) "drift/skew" dùng lẫn → tách theo thuật ngữ thống nhất.
+
+Reviewer sửa: rút câu chuyện Patriot thành trỏ về K5 Bài 7 (tránh kể lại); câu AT-cut "góc cắt triệt tiêu bậc một và bậc hai" → góc cắt làm hệ số bậc một gần 0, đường còn lại bậc ba.
 
 ### 11. Đọc thêm và tự kiểm tra
 
-- **Nguồn gốc:** John R. Vig, *Quartz Crystal Resonators and Oscillators for Frequency Control and Timing Applications — A Tutorial* (U.S. Army CECOM; bản PDF miễn phí, nhiều phiên bản) — đọc phần đường cong nhiệt theo góc cắt và phần aging.
-- **Giải thích:** một datasheet thạch anh tuning-fork 32,768 kHz bất kỳ (mục Frequency-temperature) và datasheet thạch anh 40 MHz trên module của bạn — đặt cạnh nhau.
-- **Đào sâu (tùy chọn):** R. Skeel, *Roundoff Error and the Patriot Missile* (SIAM News, 1992) và báo cáo GAO/IMTEC-92-26.
-- **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao "đã NTP" trên server không giúp gì cho IMU trên ESP32; (2) vẽ lại hình ba đường offset ở mục 2; (3) câu hỏi:
+- **Nguồn gốc:** John R. Vig, *Quartz Crystal Resonators and Oscillators for Frequency Control and Timing Applications — A Tutorial* (U.S. Army) — phần đường cong nhiệt theo góc cắt và aging.
+- **Giải thích:** một datasheet tuning-fork 32,768 kHz (mục Frequency-temperature) đặt cạnh datasheet thạch anh 40 MHz trên module của bạn.
+- **Đào sâu (tùy chọn):** R. Skeel, *Roundoff Error and the Patriot Missile* (SIAM News, 1992).
+- **Tự kiểm tra:** (1) giải thích vì sao "đã NTP" trên server không giúp gì cho IMU trên ESP32; (2) vẽ lại hình ba đường offset; (3) câu hỏi:
 
   Hai ESP32 lệch nhau 12 ppm. Ghép dữ liệu theo timestamp của từng con, không sync lại. Sau 40 phút, hai mẫu "cùng lúc" thật ra cách nhau bao lâu? IMU 200 Hz thì đó là bao nhiêu mẫu?
   <details><summary>Đáp án</summary>
