@@ -217,3 +217,97 @@ Copy vào `build-log/c00.md`, một mục mỗi buổi:
 Ghi cả **suýt sự cố** (mỏ suýt rơi, kìm chạm hai cực). Ngành hàng không và y tế thu thập near miss vì chúng nhiều hơn sự cố thật hàng chục lần và báo trước sự cố thật; đây cũng là dữ liệu.
 
 ---
+
+## Bài C0.1 — Bàn làm việc và đồ nghề: mua gì, vì sao (1,5h) (khung rút gọn)
+
+> **Vị trí:** K1 Bài 4 (mua đợt 1) → **C0.1** → C0.2 · **Cần trước:** K1 Phần B · **Sau bài này bạn quyết định được:** món nào trong BOM ở mục 2 phải mua trước khi đụng dây nguồn, món nào để sau, và bàn của bạn đặt vùng pin ở đâu.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 2016, Samsung thu hồi khoảng 2,5 triệu chiếc Galaxy Note 7 vì pin cháy, rồi các máy thay thế cũng cháy, và Samsung dừng hẳn sản phẩm trong cùng năm. Báo cáo điều tra công bố 23/1/2017 (Samsung cùng UL, Exponent, TÜV Rheinland) kết luận lỗi nằm ở pin của **hai nhà cung cấp khác nhau, với hai lỗi khác nhau**: pin A có góc vỏ quá chật làm điện cực âm bị cong; pin B có ba via mối hàn siêu âm trên tab dương đâm thủng lớp cách điện và màng ngăn, một số cell thiếu băng cách điện `[chuẩn — công bố của Samsung 1/2017 và tường thuật báo chí về buổi công bố]`.
+
+Bài học cho bàn làm việc của bạn: lỗi cháy pin của một tập đoàn có hàng trăm kỹ sư pin vẫn đến từ **một mối hàn có ba via và một góc vỏ chật vài phần mười milimét**. Bạn sẽ không chế tạo cell, nhưng bạn sẽ hàn, bấm, ép dây sát pin. Đồ nghề đúng là thứ biến "khéo tay" thành "lặp lại được": kìm bấm đúng ngàm cho ra đầu bấm giống nhau lần thứ 50 như lần thứ 1, còn kìm mỏ nhọn thì không.
+
+### 2. Mô hình tư duy
+
+```mermaid
+flowchart LR
+    subgraph P1["Mua TRƯỚC khi đụng dây nguồn"]
+        PSU["Nguồn bàn giới hạn dòng"]
+        FIRE["Bình chữa cháy + hộp kim loại + cát + kìm dài"]
+        STRIP["Kìm tuốt"]
+        TIP["Đầu mỏ to 3–5 mm"]
+    end
+    subgraph P2["Mua khi bắt đầu C0.3"]
+        CRIMP["Kìm bấm JST + ferrule"]
+        HS["Ống co + máy khò"]
+        WIRE["Dây silicon 22/18/14 AWG, XT60"]
+        SCALE["Cân hành lý"]
+    end
+    subgraph P3["Để sau (C1 trở đi)"]
+        BAG["Túi chống cháy pin"]
+        INA["INA226, cầu chì, công tắc"]
+    end
+    P1 --> P2 --> P3
+```
+
+Ba câu bản chất:
+1. **Mỗi món an toàn trả lời một sự cố cụ thể.** Bình chữa cháy cho lửa lan ra vật xung quanh; hộp kim loại + cát cho pin đang nóng; kìm dài cho khoảng cách giữa tay và pin. Món nào không gắn được với một dòng trong bảng "Khi sự cố" ở mục 1 thì chưa cần.
+2. **Đồ nghề tay biến kỹ năng thành quy trình.** Tiêu chí "đạt" của C0.3 (kéo được bao nhiêu N, sụt bao nhiêu mV) chỉ có nghĩa khi dụng cụ cho ra kết quả lặp lại.
+3. **Bố trí bàn là thiết kế đường thoát.** Vùng pin xa người, gần cửa, không nằm giữa ghế và lối ra.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Runbook sự cố dán sẵn trong wiki | Tờ "Khi sự cố" cạnh bàn | Runbook backend đọc khi đã ngồi xuống, có thời gian. Ở đây bạn có vài giây, tay có thể đang cầm mỏ hàn; quy trình phải **thuộc và đã diễn tập** (Lắp bước 6) | Tìm tờ giấy lúc khói đã đầy bàn |
+| Môi trường dev tách biệt production | Vùng nóng / vùng điện / vùng pin | Tách môi trường backend là logic, đổi bằng cấu hình. Tách vùng trên bàn là **khoảng cách vật lý**; một sợi dây vắt ngang là đã trộn hai vùng | Dây nguồn mỏ hàn vắt qua vùng pin; mỏ chạm vào vỏ pin |
+| Tooling chuẩn hóa (formatter, linter) cho cả team | Kìm bấm đúng ngàm | Formatter cho ra output giống hệt nhau. Kìm bấm vẫn phụ thuộc tay: đặt sai ngàm hay sai vị trí thì vẫn ra đầu hỏng | Tin "có kìm xịn thì đầu nào cũng đạt", bỏ bước kiểm |
+
+### 6. Làm
+
+1. Đọc mục 1 và mục 2 của chặng. Đánh dấu món bạn đã có từ K1.
+2. Chia BOM thành ba đợt như hình ở phần 2; ghi lý do vào `decisions.md` (ví dụ: "mua nguồn bàn đợt này vì C0.4 bắt buộc").
+3. Đi mua hoặc đặt online. Với nguồn bàn: đọc ảnh mặt trước, phải thấy nút OUTPUT riêng và đèn/ký hiệu CV, CC.
+4. Làm Lắp bước 1 và 2 ở mục 5.
+5. Chụp ảnh bàn, lưu `build-log/img/c00/ban-lam-viec.jpg`.
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Nguồn bàn không có nút OUTPUT riêng | Mẫu rẻ nhất, đầu ra luôn bật | Đọc manual | Đổi hàng nếu còn được; nếu không, luôn nối tải khi nguồn **tắt hẳn** rồi mới bật công tắc nguồn |
+| Bàn quá nhỏ cho ba vùng | Phòng chật | — | Vùng pin là một khay kim loại đặt trên sàn gạch cạnh cửa; không bỏ vùng |
+| Cửa hàng không có XT60 hàng hãng | Thị trường | — | Mua hàng thường, kiểm nhựa bằng mỏ 2 s; ghi vào `decisions.md` |
+| Bình chữa cháy hết hạn hoặc kim ở vùng đỏ | Hàng tồn | Đọc tem | Đổi |
+
+### 9. Câu hỏi ngược
+
+1. **[Vì sao không]** Vì sao không mua luôn túi chống cháy và INA226 ngay đợt này cho "đủ bộ"?
+<details><summary>Hướng nghĩ</summary>
+
+Mua theo câu hỏi, không theo danh sách (K1 Bài 4). C1 mới chọn hóa học và kích thước pin, mới biết túi cỡ nào. Mua sớm là cam kết sớm một quyết định chưa có dữ liệu, giống chọn database trước khi biết access pattern.
+
+</details>
+
+2. **[Quy mô]** Bạn dựng một xưởng cho 10 người cùng build robot. Bảng "Khi sự cố" và bố trí bàn thay đổi thế nào? Cái gì gãy trước?
+<details><summary>Hướng nghĩ</summary>
+
+Vùng sạc pin chung trở thành điểm rủi ro tập trung (nhiều pack, một phòng); cần tủ sạc riêng, phát hiện khói, quy tắc "không sạc qua đêm" có người kiểm. Dụng cụ chung (kìm bấm) cần kiểm định kỳ, nếu không mười người cùng làm đầu bấm hỏng với cùng một kìm mòn. Đây là chuyện của bất kỳ phòng lab robot nào.
+
+</details>
+
+3. **[Failure mode]** Bố trí của bạn qua checkpoint "đường ra cửa không đi qua vùng pin". Kể một tình huống bố trí đó vẫn hỏng.
+<details><summary>Hướng nghĩ</summary>
+
+Khói không đi theo đường bạn vẽ: nó lan theo luồng gió (quạt hút khói hàn có thể thổi khói pin về phía bạn). Robot hoàn chỉnh (từ C5) có pin trên xe, xe nằm ở đâu thì vùng pin ở đó. Bố trí là một giả định cần kiểm lại mỗi chặng.
+
+</details>
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** công bố của Samsung về kết quả điều tra Galaxy Note 7 (news.samsung.com, 1/2017).
+- **Giải thích:** Adafruit Learning System, các bài về dụng cụ cơ bản cho xưởng điện tử.
+- **Tự kiểm tra:** (1) mỗi món an toàn ở mục 2 ứng với dòng nào trong bảng "Khi sự cố"? (2) vẽ lại bàn của bạn với ba vùng và đường ra cửa từ trí nhớ.
+
+---

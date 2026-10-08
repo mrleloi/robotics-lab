@@ -541,18 +541,11 @@ Checklist để chấm một khẳng định về buffer/ngắt/DMA:
    DMA lặp lại vòng descriptor cũ: một đoạn âm lặp vô hạn. Task WDT chỉ bắt được nếu task nạp đã đăng ký và vỗ sau khi thực sự nạp (→ F5.7). Liên hệ K3 Bài 16.
 
    </details>
-5. **[Liên ngành]** Vì sao card âm thanh chuyên nghiệp quảng cáo "buffer 64 mẫu" như một tính năng, còn dịch vụ streaming chọn buffer hàng giây?
-   <details><summary>Hướng nghĩ</summary>
-
-   Một bên có người chơi nhạc nghe chính mình (trễ > ~10 ms là khó chơi), một bên chỉ cần không đứt. Cùng Little, khác hàm mất mát.
-
-   </details>
 
 ### 8. Liên kết ra ngoài
 
 - **Mạng (NAPI, DPDK):** Linux NAPI chuyển từ ngắt sang polling khi tải cao; DPDK bỏ hẳn ngắt, ghim một nhân poll card mạng 100%. *Giống:* chi phí mỗi sự kiện quyết định kiến trúc. *Khác:* DPDK đốt nguyên một nhân — trên ESP32 2 nhân, bạn không có nhân để đốt.
 - **Cơ sở dữ liệu (WAL group commit):** gom nhiều transaction vào một lần `fsync` — đổi trễ lấy thông lượng, giống khối DMA. *Khác:* không có deadline phần cứng; transaction chờ lâu hơn chứ không bị ghi đè.
-- **Thiên văn vô tuyến:** máy thu ghi tín hiệu số vào ring buffer lớn và chỉ lưu xuống đĩa khi bộ kích hoạt phát hiện sự kiện nhanh (chớp vô tuyến nhanh); dữ liệu cũ bị ghi đè có chủ ý. *Giống:* ring + chính sách ghi đè là quyết định khoa học. *Khác:* ở đó ghi đè là thiết kế, ở robot của bạn ghi đè không đánh dấu là lỗi dữ liệu.
 
 ### 9. Áp vào khóa chính
 

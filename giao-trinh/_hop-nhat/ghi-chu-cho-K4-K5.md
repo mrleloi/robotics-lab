@@ -5,3 +5,8 @@
 - K5 Bài 16 gốc: "schema bắt được sai đơn vị" sai; rule |a|=g chỉ đúng khi đứng yên; "σ=0 trong 1 s là kênh đơ" báo nhầm khi host đọc nhanh hơn ODR. (w-F3, đã chấm ở F3.7)
 - K5 Bài 17: quan hệ đúng là số lỗ audit thấy ≥ số drop đã khai, không phải "khớp hoàn toàn". (w-F3)
 - K4 Bài 2: "1% số lần chậm = robot giật 1% thời gian" lẫn đếm theo lần với theo thời gian. K4 Bài 6: "không tương quan latency–nhiệt" không là bằng chứng khi nhiệt gần như không đổi. (w-F1)
+- K5 Bài 9 (Gemini): fix `-p /var/run/...` làm ptp4l thoát lỗi (theo source linuxptp); instance thứ hai xóa socket cũ chứ không báo "Address already in use"; `-2` không phải cờ bật hardware timestamping. Không lấy độ rộng sandwich 1–2 µs làm tiêu chí PASS. (w-F4)
+- K5 Bài 10: kỳ vọng AT-cut bậc ba, không dùng −0.04 ppm/°C²; chọn cửa sổ theo cực tiểu Allan deviation. (w-F4)
+- K5 Bài 11: hàng sáng đầu tiên ứng với lúc readout, không phải lúc bắt đầu phơi sáng; công thức (t_pulse+t_exp)/t_row. (w-F4)
+- K5 Bài 12 (Gemini): nhầm resolution với uncertainty (52 µs / 41.7 ns). (w-F4)
+- `CLOCK_MONOTONIC` vẫn bị NTP slew (Gemini K3/K7). (w-F4)
