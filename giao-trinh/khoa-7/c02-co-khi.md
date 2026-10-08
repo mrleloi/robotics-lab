@@ -111,7 +111,7 @@ C2 chưa cấp điện, nhưng **đường đi** của cáp được quyết đ�
 
 ```
    TẦNG DƯỚI (nhìn từ trên)                                ký hiệu
-   ┌──────────────────────────────────────┐                ═══ cáp động lực (motor, nguồn) — đỏ/đen,
+   ┌──────────────────────────────────────┐                ═══ cáp động lực (motor, nguồn) — màu C0.5,
    │  ◎ caster                            │                    xoắn đôi, cỡ theo C1.3
    │                                      │                ··· cáp tín hiệu (encoder: 6 sợi) — đi
    │   ┌────────── PIN GIẢ ──────────┐    │                    phía đối diện, cắt cáp động lực vuông góc
@@ -126,9 +126,9 @@ C2 chưa cấp điện, nhưng **đường đi** của cáp được quyết đ�
 
 | Cáp | Từ → tới | Loại | Màu (C0.5) | Giảm lực ở đâu |
 |---|---|---|---|---|
-| Motor T/P (+,−) | Cọc motor → driver (C3) | Cỡ theo dòng hãm đo ở C3 + C1.3 | Đỏ/đen, hoặc theo dây sẵn của motor | Dây rút qua gá motor, cách cọc motor 2–3 cm |
-| Encoder T/P (VCC, GND, A, B) | Đầu cắm encoder → ESP32 (C3/C4) | Cáp sẵn của motor (thường 6 sợi chung đầu PH2.0 `[tự đo]`) | Theo cáp sẵn; ghi bảng màu vào `wiring/wires.csv` | Dây rút cách đầu cắm 3–5 cm, có vòng dư (service loop) |
-| Nguồn lên tầng trên | Bo nguồn (C1) → mini PC, ESP32 | Theo C1 | Đỏ/đen | Grommet + dây rút hai phía lỗ |
+| Motor T/P (M+, M−) | Cọc motor → driver (C3) | Cỡ theo dòng hãm đo ở C3 + C1.3 | Giữ màu dây sẵn của motor; dây nối dài **không** dùng đỏ (chỉ dành cho VBAT, C0.5) và không dùng đen (chỉ cho GND); nhãn `wire_id` hai đầu | Dây rút qua gá motor, cách cọc motor 2–3 cm |
+| Encoder T/P (VCC, GND, A, B) | Đầu cắm encoder → ESP32 (C3/C4) | Cáp sẵn của motor (thường 6 sợi chung một đầu cắm `[tự đo]`) | Cáp sẵn giữ màu nhà sản xuất; dây nối dài theo C0.5: A xanh lá, B xám, 3,3 V trắng nhãn "3V3", GND đen; ghi vào `wiring/wires.csv` | Dây rút cách đầu cắm 3–5 cm, có vòng dư (service loop) |
+| Nguồn lên tầng trên | Bo nguồn (C1) → mini PC, ESP32 | Theo C1 | Theo C0.5: cam 12 V (mini PC), tím 5 V (logic), đen GND | Grommet + dây rút hai phía lỗ |
 
 Chưa nối gì vào gì ở C2: dây được **đặt và buộc**, đầu dây để chờ, quấn băng dính đánh nhãn.
 
@@ -492,6 +492,224 @@ Khối lượng motor (vào lại phương trình), dòng hãm (vào driver, c�
   <details><summary>Đáp án</summary>
 
   F = 4 × (0,3 + 0,02 × 9,81) ≈ 4 × 0,496 ≈ 1,98 N; τ = 1,98 × 0,05 / 2 ≈ 0,050 N·m ≈ 0,50 kg·cm. Rất nhỏ: dốc mới là thứ quyết định motor.
+
+  </details>
+
+---
+
+## Bài C2.2 — Khung, bố trí khối lượng, trọng tâm, chống lật (5h)
+
+> **Vị trí:** C2.1 → **C2.2** → C2.3 · **Cần trước:** C2.1 · **Sau bài này bạn quyết định được:** bố trí bánh kéo/caster kiểu nào, đặt pin và mini PC ở đâu (cao bao nhiêu, cách trục bao xa) để robot không lật khi phanh gấp hay tăng tốc, và robot của bạn có cần giới hạn gia tốc phanh trong firmware không (→ K7 C4.4).
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Xe nâng hàng (forklift) đứng trên ba "điểm tựa hiệu dụng" (hai bánh trước và chốt xoay cầu sau), tạo thành **tam giác ổn định**. Chừng nào hình chiếu của trọng tâm tổng (xe + hàng) còn nằm trong tam giác, xe đứng; nâng hàng cao, phanh gấp, rẽ nhanh là ba cách đẩy hình chiếu đó ra ngoài. OSHA (cơ quan an toàn lao động Mỹ) ghi lật xe là nguyên nhân hàng đầu của tử vong liên quan xe nâng, và đào tạo người lái xoay quanh đúng khái niệm tam giác này `[chuẩn — tài liệu đào tạo forklift của OSHA]`.
+
+Robot của bạn là một xe nâng nhỏ chở mini PC, pin, và (ở C12) loa. Nó lật không giết ai, nhưng một lần lật là mini PC rơi, đầu nối gãy, pin va đập (C1.6: pin đã va đập thì cách ly). Và khác xe nâng, người "lái" robot là firmware: nó sẽ phanh gấp đúng lúc bạn không ngờ, ví dụ khi mất heartbeat (C4.4) hay khi nhấn E-stop.
+
+### 2. Mô hình tư duy
+
+```
+  NHÌN NGANG, robot đang PHANH khi đi tới (gia tốc a hướng ra sau)
+                          m·a (lực quán tính, đặt tại trọng tâm, hướng tới trước)
+                     ✚ ───►
+                     │ G       h = chiều cao trọng tâm
+                     │ m·g
+     ────────●───────┼────────◎──────  sàn
+          bánh kéo   │◄── d ──►caster trước = điểm lật
+  Lật quanh điểm tựa trước khi mô-men lật > mô-men giữ:   m·a·h > m·g·d
+                              ⇒  a_lật = g · d / h        (không phụ thuộc khối lượng)
+  Robot chỉ phanh được tới  a_thật = min( μ·g·(phần tải trên bánh kéo) ,  mô-men phanh motor / (r·m) )
+  An toàn khi a_thật < a_lật  ở CẢ hai hướng (phanh khi tới, phanh khi lùi = tăng tốc khi tới).
+```
+
+Bốn câu bản chất:
+
+1. **Lật là chuyện tỉ số d/h, không phải chuyện nặng nhẹ.** Robot nặng gấp đôi nhưng cùng hình học lật ở cùng gia tốc. Muốn chắc: hạ h (pin xuống thấp nhất), tăng d (điểm tựa xa trọng tâm).
+2. **Gia tốc phanh có trần do bám đường và do motor.** Bánh trượt trước khi lật là "an toàn" về lật (nhưng odometry hỏng, C6.3). Phanh ngắn mạch motor (C3.2) cho mô-men phanh cỡ mô-men hãm ở tốc độ cao `[chuẩn — C3.2 dẫn]`, có thể đủ để lật một robot cao.
+3. **Ba điểm tựa xác định; bốn điểm thì không.** Hai bánh kéo + một caster luôn chạm sàn. Hai bánh kéo + hai caster (trước, sau) trên sàn không phẳng sẽ có lúc một bánh **kéo** nhấc lên hoặc mất tải → trượt `[chuẩn — tĩnh học siêu tĩnh]`. Bố trí 4 điểm cần một caster có lò xo hoặc trục bánh kéo có treo.
+4. **Tải trên bánh kéo quyết định bám đường.** Trọng tâm càng gần trục bánh kéo, bánh kéo càng gánh nhiều tải, bám càng tốt; nhưng d về phía đó càng nhỏ → dễ lật về phía đó. Đây là đánh đổi thật, không có điểm "tối ưu mọi mặt".
+
+**Mô phỏng: ba bố trí, ba chiều cao trọng tâm.** Số ví dụ: 6 kg, bánh 85 mm, μ = 0,6, mô-men phanh lấy bằng mô-men hãm của 1:56 ở C2.1 (trường hợp xấu nhất).
+
+```python
+# [đã chạy] Phanh gấp có lật không? So gia tốc gây lật với gia tốc phanh motor/ma sát cho phép
+import numpy as np
+G, mu = 9.81, 0.6                # ma sát cao su–sàn gạch [ước lượng]
+m, r = 6.0, 0.0425               # kg, bán kính bánh m
+tau_brake = 2 * 7.2 * 0.0981     # N·m, 2 bánh, phanh ngắn mạch ~ mô-men hãm (C3.2), ví dụ 1:56
+# Bố trí: x đo dọc thân (+ = phía trước), gốc ở trục bánh kéo.
+# điểm tựa trước/sau = điểm chạm đất ngoài cùng; cog_x = vị trí trọng tâm
+layouts = {
+  "A: bánh kéo giữa, caster trước+sau": dict(front=+0.12, rear=-0.12, cog_x=0.00),
+  "B: bánh kéo sau, caster trước":      dict(front=+0.20, rear= 0.00, cog_x=0.05),
+  "C: bánh kéo trước, caster sau":      dict(front= 0.00, rear=-0.20, cog_x=-0.05),
+}
+def drive_load_frac(L):
+    """Phần trọng lượng trên bánh kéo (tĩnh, coi 3 điểm tựa trên một đường)."""
+    if L["front"] > 0 and L["rear"] < 0:        # A: 4 điểm, bất định -> giả sử caster gánh ít
+        return 0.8
+    span = L["front"] - L["rear"]
+    other = L["front"] if L["front"] != 0 else L["rear"]   # vị trí caster
+    return abs(other - L["cog_x"]) / span
+for h in (0.10, 0.20, 0.35):     # chiều cao trọng tâm: thấp / vừa / có cột loa+camera
+    print(f"--- trọng tâm cao {h*100:.0f} cm ---")
+    for name, L in layouts.items():
+        a_tip_fwd  = G * (L["front"] - L["cog_x"]) / h   # phanh khi đi tới: chúi về trước
+        a_tip_back = G * (L["cog_x"] - L["rear"]) / h    # tăng tốc tới / phanh khi lùi
+        frac = drive_load_frac(L)
+        a_grip = mu * G * frac                            # ma sát cho phép trên bánh kéo
+        a_motor = tau_brake / r / m                       # motor phanh được bao nhiêu
+        a_real = min(a_grip, a_motor)                     # cái nhỏ hơn quyết định
+        flag = "LẬT" if a_real >= min(a_tip_fwd, a_tip_back) else "ổn"
+        print(f"{name:38s} lật-chúi-trước {a_tip_fwd:5.1f} | lật-ngửa-sau {a_tip_back:5.1f} | "
+              f"phanh thật {a_real:4.1f} m/s² (bám {a_grip:4.1f}, motor {a_motor:4.1f}) -> {flag}")
+```
+
+Rẽ gấp cũng lật được, theo cùng công thức với nửa khoảng cách bánh `b/2` thay cho d: `a_ngang_lật = g·(b/2)/h`, với gia tốc ngang `v²/R` (R bán kính rẽ). Tự thêm vào code nếu robot bạn cao và hẹp.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Quorum 3 node: số lẻ để quyết định không bị "hòa" | Ba điểm tựa: luôn xác định được tải trên mỗi điểm | Quorum là về logic đồng thuận; ba điểm tựa là về **hình học**: bốn điểm không sai về logic mà là siêu tĩnh, tải phân bố tùy độ phẳng sàn từng milimét | Thêm caster thứ hai "cho vững" → bánh kéo mất tải trên sàn gồ ghề, robot đứng quay bánh tại chỗ |
+| Rate limiting để bảo vệ hệ thống khỏi burst | Giới hạn gia tốc (jerk/accel limit) trong firmware/Nav2 | Rate limit backend chỉ làm chậm; giới hạn gia tốc ở đây **mâu thuẫn trực tiếp với an toàn dừng**: dừng gấp để tránh va chạm cần gia tốc lớn, nhưng gia tốc lớn có thể làm lật | Kẹp gia tốc thật thấp cho "an toàn" → quãng dừng dài, đâm vào người; không kẹp → robot cao lật khi E-stop |
+| Phân bổ tải (load balancing) đều giữa các node | Phân bố khối lượng giữa bánh kéo và caster | Đều không phải mục tiêu: bánh kéo cần **nhiều** tải để bám, caster cần ít; nhưng dồn hết lên bánh kéo thì d về phía đó tiến về 0 | Đặt pin ngay trên trục bánh kéo (bám tốt nhất) → robot ngửa ra sau khi tăng tốc mạnh |
+
+**Chấm mô hình:**
+
+- *"Robot nặng thì khó lật."* **SAI.** `a_lật = g·d/h` không chứa khối lượng. Phản ví dụ: thêm 2 kg pin dự phòng **ở tầng trên** làm robot nặng hơn và **dễ** lật hơn (h tăng).
+- *"Trọng tâm càng thấp càng tốt, hết chuyện."* **ĐÚNG MỘT PHẦN.** Đúng về lật. Nhưng trọng tâm thấp cũng phải nằm đúng chỗ theo phương ngang (tải trên bánh kéo), và có giới hạn: pin sát sàn thì khoảng sáng gầm nhỏ, kẹt ngưỡng cửa. Phản ví dụ: robot lùn nhưng pin dồn về phía caster → bánh kéo gánh ít tải, trượt khi tăng tốc dù không bao giờ lật.
+- *"Caster chỉ là bánh phụ, chọn cái nào cũng được."* **SAI.** Caster là một điểm tựa của tam giác ổn định (đặt d), và là thứ kẹt đầu tiên ở ngưỡng cửa hay dây điện trên sàn. Caster xoay còn có hiệu ứng "lật hướng" khi robot đổi chiều: bánh caster xoay 180° quanh trục đứng, đẩy robot lệch một chút — một nguồn sai số odometry (→ K7 C6.3).
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Trọng tâm (CoG/CoM) | Điểm mà mọi trọng lượng coi như đặt vào | Tâm hình học của khung |
+| 🟢 | Đa giác tựa (support polygon) | Hình nối các điểm chạm sàn; hình chiếu trọng tâm phải nằm trong | Hình chữ nhật của khung |
+| 🟢 | Gia tốc lật `g·d/h` | Gia tốc ngang mà vượt qua thì robot lật quanh một cạnh tựa | Một ngưỡng "khi va chạm" — phanh bình thường cũng chạm tới |
+| 🟢 | Hệ số ma sát μ | Lực bám tối đa chia cho lực pháp tuyến | C_rr ở C2.1 |
+| 🟡 | Siêu tĩnh (statically indeterminate) | Nhiều điểm tựa hơn số cần, tải phụ thuộc biến dạng | "Vững hơn" |
+| 🟡 | Caster offset (trail) | Khoảng lệch giữa trục xoay đứng và trục bánh caster | Lỗi chế tạo — nó là thứ làm caster tự quay theo hướng chạy |
+| 🔴 | Ổn định động (ZMP), chống lật chủ động | Robot chân/xe cân bằng | — |
+
+### 5. Dự đoán
+
+**Đề:** với `mass_budget.csv` của bạn (Lắp bước 2) và bố trí bạn định chọn:
+
+1. Tính trọng tâm dự kiến (x, z) từ bảng khối lượng: `x_G = Σ mᵢxᵢ / Σ mᵢ`, tương tự z.
+2. Trong mô phỏng, đoán trước khi chạy: ở h = 20 cm, bố trí nào trong A, B, C "LẬT", và lật theo hướng nào?
+3. Với bố trí và h của bạn: a_lật hai hướng là bao nhiêu? Gia tốc phanh thật bị giới hạn bởi bám hay bởi motor?
+4. Góc lật tĩnh (nghiêng robot từ từ tới khi lật) theo mỗi hướng: `θ_lật = atan(d/h)`. Đây là số sẽ được kiểm ở Lắp bước 9.
+
+**Tham số cần tra/đo:** `mass_budget.csv`; khoảng cách trục bánh kéo – điểm chạm caster (đo trên mô hình bìa); μ chưa đo thì 0,6 `[ước lượng]` (đo được bằng cách kéo robot với bánh **khóa** bằng cân hành lý, giống C2.1 bước 6); mô-men hãm từ listing (C2.1) hoặc từ C3.1 sau này.
+
+```markdown
+# prediction.md — K7 C2.2
+commit: <hash>   bố trí: A / B / C / khác: ...
+- x_G = ... m (từ trục bánh kéo, + về trước)   z_G = h = ... m   (từ mass_budget.csv)
+- d_trước = ... m   d_sau = ... m
+- a_lật chúi trước = ... m/s²   a_lật ngửa sau = ... m/s²
+- a phanh thật = ... m/s² (bị giới hạn bởi: bám / motor)
+- θ_lật tĩnh chúi trước = ...°   ngửa sau = ...°
+- Mô phỏng ở h = 20 cm: lật ở bố trí ... theo hướng ...
+## Tôi sẽ ngạc nhiên nếu...
+```
+
+### 6. Làm
+
+1. Commit `prediction.md`. Chạy mô phỏng; rồi thay `layouts` bằng bố trí và trọng tâm của bạn.
+2. Trên mô hình bìa (Lắp bước 3), thử ít nhất hai vị trí pin giả: thấp sát trục bánh kéo, và lệch về phía caster. Với mỗi vị trí, tính lại x_G, h và a_lật.
+3. Chọn bố trí. Quy tắc gợi ý (đề xuất, không phải tiêu chí cứng): `a_lật` cả hai hướng ≥ 1,5 × gia tốc phanh thật lớn nhất `[ước lượng — hệ số an toàn]`; nếu không đạt, ghi giới hạn gia tốc phanh cần đặt ở firmware vào `decisions.md` để C4.4 dùng.
+4. Kiểm ba điểm tựa: nếu chọn 4 điểm, ghi cách bảo đảm bánh kéo luôn chạm (caster lò xo, khe chỉnh) và kiểm bằng tờ giấy ở Lắp bước 5c trên **ba** vị trí sàn khác nhau.
+5. Ghi bố trí cuối, x_G, h dự kiến vào `hw/robot_params.yaml` với `method: estimated_from_mass_budget` (C2.4 sẽ thay bằng số cân).
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+| h | A (kéo giữa, 2 caster) | B (kéo sau, caster trước) | C (kéo trước, caster sau) |
+|---|---|---|---|
+| 10 cm | ổn (a_lật 11,8 hai hướng) | ổn (a_lật ngửa sau 4,9 > phanh 4,4) | ổn (a_lật chúi trước 4,9 > 4,4) |
+| 20 cm | ổn (5,9 > 4,7) | **LẬT ngửa sau** (2,5) khi phanh lúc lùi hoặc tăng tốc mạnh lúc tới | **LẬT chúi trước** (2,5) khi phanh lúc tới |
+| 35 cm | LẬT (3,4) | LẬT | LẬT |
+
+- Ở mọi dòng, gia tốc phanh thật bị giới hạn bởi **bám** (4,4–4,7 m/s²), không phải motor (5,5). Nghĩa là robot sẽ trượt bánh trước khi motor phanh hết sức; với robot thấp đó là chế độ hỏng "an toàn", với robot cao thì không cứu được.
+- Hướng nguy hiểm là hướng có **d nhỏ**: phía bánh kéo khi trọng tâm đặt gần trục bánh kéo. B và C là đối xứng gương của nhau.
+- A trông tốt nhất trên giấy nhưng chính là bố trí 4 điểm (siêu tĩnh). Con số 0,8 tải trên bánh kéo trong code là **giả định**, không phải kết quả.
+- Mô-men phanh lấy bằng mô-men hãm là trường hợp xấu nhất: phanh ngắn mạch ở tốc độ v cho mô-men xấp xỉ tỉ lệ `v / v_không_tải` (C3.2). Ở 0,5 m/s với motor không tải ~0,8 m/s, khoảng 60% con số trên.
+- Robot confession có loa và camera trên cột: trọng tâm 30–35 cm là thực tế `[ước lượng]`. Khi đó giới hạn gia tốc phanh trong firmware (C4.4) không còn là tùy chọn.
+- Góc lật tĩnh `atan(d/h)` thường ra 30–60° cho robot thấp; nếu bạn dự đoán dưới 20° thì kiểm lại h.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Trọng tâm tính từ bảng lệch xa trọng tâm cân ở C2.4 | Món chưa cân (dây, vít, đai); z của món đoán sai | Cộng `mass_budget.csv` so với cân tổng | Cân bổ sung; ghi `source=measured` |
+| Robot khó lật trên giấy nhưng bánh kéo trượt khi khởi hành | Tải trên bánh kéo thấp (trọng tâm gần caster) | Cân ba điểm (C2.4) | Dời pin về phía trục bánh kéo |
+| Robot rung lắc "bập bênh" khi chạy qua mối nối gạch | Bố trí 4 điểm | Tờ giấy ở nhiều vị trí | Bỏ một caster hoặc thêm lò xo |
+| Caster kẹt ở ngưỡng cửa | Caster nhỏ; khoảng sáng gầm thấp | Đo chiều cao ngưỡng | Caster to hơn; chạy qua ngưỡng theo hướng bánh kéo đi trước |
+
+### 9. Câu hỏi ngược
+
+1. **[Nếu…thì]** Nếu E-stop (C10.1) cắt nguồn động lực và motor chuyển sang trôi tự do (coast), còn firmware phanh chủ động bằng ngắn mạch, thì chế độ nào nguy hiểm về lật hơn, chế độ nào nguy hiểm về va chạm hơn?
+<details><summary>Hướng nghĩ</summary>
+
+Coast: gia tốc nhỏ (chỉ ma sát), không lật, nhưng quãng dừng dài. Phanh ngắn mạch: dừng nhanh, gia tốc lớn. An toàn không phải một trục; ghi đánh đổi này vào `decisions.md` để C10 dùng.
+
+</details>
+
+2. **[Quy mô]** Một đội 50 robot cùng thiết kế nhưng mỗi robot gắn phụ kiện khác nhau (khay, cột màn hình). Bạn quản lý rủi ro lật thế nào mà không phải tính tay 50 lần?
+<details><summary>Hướng nghĩ</summary>
+
+`mass_budget.csv` theo cấu hình + script tính a_lật chạy trong CI mỗi khi cấu hình đổi; giới hạn gia tốc trong firmware đọc từ tham số theo cấu hình. Đó là "config validation" có vật lý bên trong.
+
+</details>
+
+3. **[Failure mode]** Liệt kê hai cách trọng tâm robot **di chuyển** trong lúc chạy mà bảng khối lượng tĩnh không thấy.
+<details><summary>Hướng nghĩ</summary>
+
+Pin trượt trong gá khi phanh; cột camera rung/uốn; người đặt đồ lên robot. Gá pin bằng đai + chặn cơ khí chính là để trọng tâm không di chuyển.
+
+</details>
+
+4. **[Liên ngành]** Xe tải chở chất lỏng có vách ngăn trong bồn. Vì sao, và robot của bạn có gì tương tự?
+<details><summary>Hướng nghĩ</summary>
+
+Chất lỏng dồn về phía trước khi phanh, dịch trọng tâm đúng lúc nguy hiểm nhất. Ở robot: món gá lỏng (pin, dây bó nặng) cũng "dồn" như vậy, chỉ ít hơn.
+
+</details>
+
+### 10. Liên kết ra ngoài
+
+- **Xe nâng và tam giác ổn định** (câu chuyện): giống hệt hình học. Khác: xe nâng có tải **thay đổi độ cao** liên tục, người lái được đào tạo; robot có firmware, nên quy tắc phải được viết thành giới hạn số.
+- **Xe SUV và bài thử "moose test" (né tránh đột ngột):** xe trọng tâm cao lật khi đổi hướng gấp, cùng công thức `g·(b/2)/h`. Ngành ô tô giải bằng điều khiển ổn định điện tử (giảm mô-men, phanh từng bánh): đúng hướng của C4.4 là kẹp gia tốc ở tầng thấp nhất.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| `a_lật = g·d/h` | [chuẩn] | Cân bằng mô-men tĩnh; bỏ qua chuyển tải động và đàn hồi bánh |
+| μ cao su–gạch ≈ 0,6 | [ước lượng] | Đo bằng kéo với bánh khóa |
+| Tải bánh kéo 0,8 ở bố trí 4 điểm | [ước lượng] | Giả định cho mô phỏng; thực tế phụ thuộc độ phẳng sàn |
+| Phanh ngắn mạch cho mô-men cỡ mô-men hãm ở tốc độ không tải | [chuẩn] | C3.2 mô phỏng; tỉ lệ với tốc độ |
+| Lật là nguyên nhân hàng đầu của tử vong liên quan xe nâng | [chuẩn] | Tài liệu OSHA về xe nâng |
+
+**Đã sửa so với bản gốc:** K7 gốc không có bài về bố trí khối lượng; bài mới.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** OSHA, tài liệu "Powered Industrial Trucks" (eTool forklift), phần ổn định.
+- **Giải thích:** Siegwart, Nourbakhsh & Scaramuzza, *Introduction to Autonomous Mobile Robots* — phần ổn định của robot có bánh.
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao khối lượng không nằm trong công thức lật; (2) vẽ lại hình phần 2; (3) câu dưới.
+
+  Robot h = 25 cm, caster trước cách trọng tâm 15 cm theo phương ngang. Phanh 3 m/s² khi đi tới có lật không?
+  <details><summary>Đáp án</summary>
+
+  a_lật = 9,81 × 0,15 / 0,25 ≈ 5,9 m/s² > 3 → không lật quanh caster trước. Còn phải kiểm hướng kia (tăng tốc, phanh lúc lùi) với d phía bánh kéo.
 
   </details>
 

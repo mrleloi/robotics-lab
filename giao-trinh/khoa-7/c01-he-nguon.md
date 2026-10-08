@@ -494,3 +494,590 @@ Chạy code phần 5 với số điển hình:
   Pack 2P → 7 Ah → 1C = 7 A; 7 A = 1C. (Nhầm phổ biến: lấy Ah của một cell.)
 
   </details>
+
+## Bài C1.2 — Power budget là một bảng số đo (3h)
+
+> **Vị trí:** C1.1 → **C1.2** → C1.3 (cỡ dây và cầu chì lấy từ bảng này) · **Cần trước:** K3 Bài 6 (dòng đầu tiên của power budget), K7 C0.4 (nguồn bàn), → F1.1 · **Sau bài này bạn quyết định được:** pack bao nhiêu Wh, BMS và cầu chì chính bao nhiêu A, và robot có chạy đủ một phiên làm việc không — bằng số đo, có cột nguồn gốc.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Ngày 12/11/2014, tàu đổ bộ Philae của ESA chạm sao chổi 67P sau mười năm bay. Móc neo không bắn, Philae nảy lên và dừng ở chân một vách đá trong bóng tối. Kế hoạch năng lượng giả định pin mặt trời nhận nắng 6–7 giờ mỗi "ngày" sao chổi; thực tế tấm sáng nhất chỉ nhận khoảng 1 giờ 20 phút `[chuẩn — họp báo ESA, SpacePolicyOnline thuật lại]`. Philae chạy khoa học bằng pin sơ cấp (không sạc được) được 64 giờ rồi ngủ đông vì hết năng lượng `[spec — bài báo của nhóm vận hành, E3S Web of Conferences 2017]`. Đêm cuối, nhóm điều khiển tính còn khoảng 100 Wh, chuỗi lệnh cuối cần khoảng 80 Wh; họ chọn những phép đo nào được chạy dựa trên đúng phép tính đó.
+
+Hai bài học cho robot của bạn. Một: power budget là thứ dùng để **ra quyết định lúc chạy**, không phải bảng trang trí trong tài liệu thiết kế. Hai: budget sai ở **giả định về môi trường** (ở đây là nắng), không phải ở phép cộng. Robot của bạn có giả định tương tự: "motor chỉ chạy 30% thời gian", "mini PC phần lớn idle". Đó là những dòng cần đo.
+
+### 2. Mô hình tư duy
+
+Power budget có **ba con số khác nhau cho mỗi tải**, phục vụ ba quyết định khác nhau:
+
+| Con số | Quyết định nó điều khiển | Đo bằng |
+|---|---|---|
+| **P trung bình** theo kịch bản | Pack bao nhiêu Wh (thời gian chạy) | Năng lượng tích phân trên một phiên (Wh) chia thời gian |
+| **I liên tục lớn nhất** (vài giây tới vài phút) | Cỡ dây, cầu chì, định mức DC-DC, dòng liên tục BMS | Dòng trung bình trên cửa sổ dài bằng hằng số thời gian nhiệt |
+| **I đỉnh + độ dài đỉnh** (ms) | Ngưỡng OC của BMS, sụt áp gây brownout, cầu chì loại nhanh/chậm | Logger nhanh (Bài C1.5); đồng hồ và màn nguồn bàn **không** thấy |
+
+```
+ dòng phía pack (A)
+  15 ┤        ▲ đỉnh trùng: 2 motor khởi động + mini PC boost CPU     ← BMS OC, brownout
+     │        │▲
+  10 ┤        ││
+     │        ││        ▲ (một motor)
+   5 ┤        ││        │                                            ← cầu chì, dây: nhìn vùng này
+     │ ───────┘└──┐   ──┘└────────┐      ┌────────
+   2 ┤            └───────────────┘──────┘            ← P TB → Wh → runtime
+   0 ┼────────────────────────────────────────────► t
+       idle    tăng tốc      chạy đều   dừng   quay đầu
+```
+
+**Tải công suất không đổi** là chỗ trực giác hay sai: mini PC qua DC-DC muốn ~P W bất kể áp pin. Pin càng cạn, áp càng thấp, **dòng càng lớn** (I = P/(η·V)). Đỉnh dòng tệ nhất xảy ra lúc pin gần cạn, đúng lúc R trong lớn nhất và áp đã thấp: ba điều xấu cùng một lúc.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Capacity planning: tổng request CPU/RAM của pod ≤ node | Tổng P TB ≤ năng lượng pack / thời gian; tổng I liên tục ≤ BMS, cầu chì | Kubernetes **throttle** pod vượt limit (chậm đi, còn sống). Nguồn không throttle: vượt ngưỡng là **cắt** toàn bộ, kể cả tải vô tội (mini PC) | Budget theo kiểu "overcommit vì không phải lúc nào cũng full" → mỗi lần đỉnh trùng là mini PC sập |
+| p50/p99 latency | P TB / I đỉnh | Latency p99 làm chậm một request. Dòng đỉnh làm **mọi** tải trên cùng nguồn sụt áp cùng lúc (tương quan hoàn toàn) | Tối ưu theo trung bình, bỏ qua đỉnh 50 ms quyết định brownout |
+| Burst credit (EC2 T-series) | Pin cho dòng đỉnh lớn hơn liên tục trong thời gian ngắn | Burst credit có số dư đọc được. "Credit" của dây và cầu chì là **nhiệt**, không có API, chỉ có đường cong thời gian–dòng (Bài C1.3) | Coi dòng đỉnh ngắn là "free" cho cả cầu chì loại nhanh |
+| Load test trước khi go-live | Đo từng khối trên nguồn bàn trước khi lên pin | Load test có traffic replay; ở đây bạn phải **tự tạo kịch bản tải** (stress CPU, bật tắt tải giả) và kịch bản đó là một giả định cần ghi lại | Đo mini PC ở idle, robot thật chạy perception → budget lệch 3–4 lần |
+
+**Chấm mô hình:**
+- *"Power budget = cộng công suất trên nhãn các thiết bị."* — **SAI.** Nhãn adapter 36 W là định mức nguồn, không phải mức ăn; nhãn motor không ghi dòng khởi động/kẹt. Phản ví dụ: adapter mini PC 12 V 3 A, mini PC idle chỉ cỡ 1/5 con số đó `[ước lượng — đo ở phần 6]`; motor "12 V 0,3 A" (dòng không tải) kẹt ăn gấp nhiều lần (C3).
+- *"Lấy tổng các đỉnh là an toàn nhất."* — **ĐÚNG MỘT PHẦN.** Đúng cho ngưỡng cắt (BMS OC) vì đỉnh **tương quan**: robot tăng tốc thì cả hai motor cùng khởi động, và đó cũng là lúc mini PC chạy planner. Sai nếu dùng tổng đỉnh để chọn dây và Wh: dây chọn theo dòng liên tục, Wh theo trung bình. Phản ví dụ: tổng đỉnh ~15 A nhưng chỉ kéo dài 60 ms; chọn dây 12 AWG theo con số đó là phí khối lượng, trong khi BMS cắt sau 100 ms thì vẫn an toàn.
+- Mô hình của bạn ở K3 lượt 11 (sụt áp vì "chiếm dụng nguồn chung") đã được chấm ở → K7 C0.4. Điểm bổ sung ở quy mô pack: "hết quota" có thật ở **hai** chỗ: ngưỡng OC của BMS và giới hạn dòng của từng DC-DC. Chạm giới hạn DC-DC chỉ sập nhánh đó; chạm BMS sập tất cả.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Power budget | Bảng tải × trạng thái → P TB, I liên tục, I đỉnh, có nguồn gốc số | Tổng công suất nhãn |
+| 🟢 | Duty cycle (của tải) | Tỉ lệ thời gian tải ở trạng thái đó trong kịch bản | Duty cycle PWM (cùng chữ, khác nghĩa) |
+| 🟢 | Inrush current | Dòng nạp tụ đầu vào khi vừa cấp điện | Dòng khởi động motor (khác cơ chế, cùng hệ quả) |
+| 🟢 | Stall current (dòng hãm/kẹt) | Dòng khi motor bị giữ đứng yên ở áp đầy | Dòng định mức |
+| 🟢 | Tải công suất không đổi | Tải sau DC-DC: áp vào giảm thì dòng vào tăng | Tải điện trở |
+| 🟡 | Derating | Dùng linh kiện dưới định mức (ví dụ ≤80%) để chừa biên nhiệt, tuổi | Hệ số an toàn tùy hứng |
+
+### 5. Dự đoán
+
+Với từng tải, dự đoán P idle, P TB trong kịch bản "robot đi tuần 1 giờ" của bạn (tự viết kịch bản: bao nhiêu % thời gian chạy, đứng, xử lý ảnh), và I đỉnh. Tra: nhãn adapter mini PC; review công suất N100 (ghi nguồn, đánh dấu `[ước lượng]`); datasheet ESP32-S3 (dòng khi WiFi phát, mục "RF current consumption" `[spec]`); trang bán motor (dòng không tải, dòng kẹt nếu có). Chưa có motor: dùng tải giả bóng đèn 12 V 21 W làm "motor" ở C1, thay số thật ở C3.
+
+Công thức: P_pack = Σ (V_rail·I_rail/η_rail); runtime = Wh_pack × tỉ lệ dùng được / P_TB; I đỉnh phía pack của tải qua DC-DC = V_rail·I_đỉnh/(η·V_pack_min).
+
+Mẫu `prediction.md`:
+```markdown
+# C1.2 — dự đoán
+Kịch bản 1 h: chạy __%, đứng __%, CPU nặng __%
+| tải | P idle (W) | P TB (W) | I đỉnh (A) | nguồn số |
+|---|---|---|---|---|
+| mini PC | | | | |
+| ESP32 + cảm biến | | | | |
+| tải giả / motor ×2 | | | | |
+P TB tổng: __ W · runtime với pack __ Wh dùng 80%: __ h
+Tải nào chiếm lớn nhất trong P TB: __ ; trong I đỉnh: __
+```
+
+### 6. Làm
+
+Dụng cụ: nguồn bàn (màn hình V/I: tra độ chính xác trong manual, thường cỡ ±(0,5–1% + vài digit) `[spec — manual nguồn của bạn]`, cập nhật chậm vài lần/giây), UT33D+, tải giả.
+
+1. **Mini PC trên nguồn bàn.** V_set 12,0 V, I_set 4 A (trên dòng adapter 3 A một chút). Jack 5,5×2,5 đã kiểm cực (Lắp bước 2). Ghi dòng ở: (a) tắt máy nhưng còn cắm (dòng chờ); (b) boot: đọc số lớn nhất bạn kịp thấy và ghi `inconclusive` cho đỉnh vì màn nguồn quá chậm; (c) idle desktop/SSH 2 phút; (d) `stress-ng --cpu 4 --timeout 120s` (cài trong Docker hoặc host); (e) nếu đã có K4: chạy model perception thật. Mỗi trạng thái đọc 5 lần cách 10 s, ghi trung vị.
+2. **ESP32-S3 trên nguồn bàn 5,0 V** (qua chân 5V/GND, không qua USB của PC để đo được): idle, WiFi kết nối và gửi liên tục.
+3. **Tải giả:** bóng đèn 21 W ở 13,2 V: đo điện trở nguội bằng UT33D+ trước, rồi dòng khi sáng ổn định. Tỉ số R nóng / R nguội là gợi ý cho đỉnh khởi động sẽ đo ở C1.5.
+4. **Điền `power/budget.csv`** với `source` đúng (`measured:` / `datasheet:` / `estimate:`). Cột `i_peak` của mini PC và tải giả để `estimate:` cho tới Bài C1.5.
+5. **Chạy script:**
+
+```python
+# [đã chạy] Power budget: từ bảng số đo -> năng lượng, thời gian chạy, dòng đỉnh xấu nhất, kiểm giới hạn
+import csv
+ETA = {"12V": 0.90, "5V": 0.85, "5V_pc": 1.0, "pack": 1.0}   # hiệu suất DC-DC nhánh [ước lượng]
+PACK_WH, USABLE, V_MIN, V_NOM = 77, 0.80, 11.0, 13.2   # Wh nhãn; phần dùng được; V pack lúc cạn dưới tải; V danh định
+# giới hạn [spec: đọc nhãn/datasheet BMS và cầu chì CỦA BẠN]
+BMS_CONT, BMS_OC_TRIP, BMS_OC_DELAY_MS = 15.0, 25.0, 100   # A, A, ms
+FUSE_MAIN = 15.0                                            # A
+
+rows = list(csv.DictReader(open("power_budget.csv", encoding="utf-8")))
+p_avg = p_idle = i_pk_sum = 0.0; longest_peak = 0
+for r in rows:
+    if r["rail"] == "5V_pc":           # ăn qua USB mini PC: đã nằm trong số đo mini_pc
+        continue
+    v, eta = float(r["v_rail"]), ETA[r["rail"]]
+    p_avg += v * float(r["i_avg"]) / eta
+    p_idle += v * float(r["i_idle"]) / eta
+    # dòng đỉnh phía pack: tải qua DC-DC là tải công suất -> lớn nhất khi pin cạn
+    i_pk = float(r["i_peak"]) if r["rail"] == "pack" else v * float(r["i_peak"]) / eta / V_MIN
+    i_pk_sum += i_pk; longest_peak = max(longest_peak, int(r["peak_ms"]) if r["rail"] == "pack" else 0)
+    print(f"{r['load']:12s} P_TB {v * float(r['i_avg']) / eta:5.1f} W   I đỉnh phía pack {i_pk:5.2f} A")
+i_avg = p_avg / V_NOM
+print(f"\nP TB {p_avg:.1f} W (I TB ~{i_avg:.1f} A) · P chờ {p_idle:.1f} W")
+print(f"Thời gian chạy: {PACK_WH * USABLE / p_avg:.1f} h · chờ: {PACK_WH * USABLE / p_idle:.1f} h")
+print(f"Dòng đỉnh nếu MỌI đỉnh trùng nhau: {i_pk_sum:.1f} A, đỉnh motor dài nhất {longest_peak} ms")
+checks = {"I TB < 80% BMS liên tục": i_avg < 0.8 * BMS_CONT,
+          "I TB < 75% cầu chì chính": i_avg < 0.75 * FUSE_MAIN,
+          "Đỉnh trùng < ngưỡng OC của BMS, hoặc ngắn hơn trễ cắt": i_pk_sum < BMS_OC_TRIP or longest_peak < BMS_OC_DELAY_MS}
+for k, ok in checks.items():
+    print(f"  {'PASS' if ok else 'FAIL'}  {k}")
+print("  (cầu chì với đỉnh ngắn: tra đường cong thời gian–dòng, không so đỉnh với định mức)")
+```
+
+`power_budget.csv` mẫu (toàn số `[ước lượng]`, thay bằng số của bạn):
+```
+load,rail,v_rail,i_idle,i_avg,i_peak,peak_ms,source
+mini_pc,12V,12.0,0.55,1.10,3.00,3000,"estimate: review N100"
+esp32_logic,5V,5.0,0.08,0.15,0.45,5,"estimate"
+camera_usb,5V_pc,5.0,0.00,0.25,0.40,200,"estimate; ăn qua USB mini PC"
+motor_L,pack,13.2,0.00,0.60,5.00,60,"estimate: thay bằng số C3"
+motor_R,pack,13.2,0.00,0.60,5.00,60,"estimate"
+amp_audio,pack,13.2,0.02,0.20,1.50,50,"estimate: C12.1"
+```
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Với CSV mẫu (không phải số của bạn), script in: P TB ~34 W, P chờ ~8 W, runtime ~1,8 h (chờ ~7,6 h), tổng đỉnh ~15,4 A, ba kiểm PASS. Ý nghĩa: với pack 77 Wh, robot **không** chạy cả buổi làm việc; nếu C10.3 cần soak dài thì phải có trạm sạc hoặc pack lớn hơn. Đây là quyết định của C1, không phải phát hiện ở C10.
+
+Số đo của bạn, khoảng hợp lý `[ước lượng]`:
+- Mini PC N100: idle cỡ 5–9 W; stress CPU cỡ 15–30 W; có báo cáo người dùng ~34 W khi stress nặng (một nguồn, kiểm lại). Dòng chờ khi tắt máy khác 0 (vài trăm mW tới ~1–2 W tùy BIOS, cổng USB/LAN còn cấp nguồn) — đó là lý do robot cắm pin để qua đêm vẫn hết pin.
+- ESP32-S3: idle vài chục mA; WiFi phát vài trăm mA đỉnh `[spec — datasheet ESP32-S3, mục RF]`. Trung bình trên màn nguồn bàn thấp hơn đỉnh nhiều.
+- Bóng 12 V 21 W: R nguội nhỏ hơn R nóng nhiều lần (dây tóc tungsten tăng điện trở mạnh theo nhiệt) → dòng lúc bật lớn hơn dòng sáng ổn định nhiều lần, kéo dài vài chục ms. Màn nguồn bàn không thấy; Bài C1.5 thấy.
+- Tải chiếm lớn nhất trong P TB thường là **mini PC**, trong I đỉnh là **motor**. Hai tối ưu khác nhau: Wh giảm bằng quản lý tải compute; brownout giảm bằng ramp motor (C4.4).
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Mini PC không boot trên nguồn bàn, nguồn báo CC | I_set dưới dòng khởi động (tụ đầu vào + boot) | Tăng I_set từng 0,5 A | Ghi I_set tối thiểu boot được: đó là một số đo |
+| Mini PC idle cao bất thường (>12 W) | Quạt/iGPU, màn hình HDMI cắm, BIOS hiệu năng cao | Rút HDMI, kiểm BIOS | Ghi cấu hình đo cùng số đo |
+| Số dòng nhảy liên tục, không đọc được | Tải biến động nhanh hơn màn hình | Đọc 10 lần, lấy trung vị + min/max | Chấp nhận `inconclusive` cho đỉnh, đo lại ở C1.5 |
+| Runtime tính ra quá ngắn | Pack nhỏ hoặc kịch bản quá nặng | Tải nào chiếm % lớn nhất | Đổi kịch bản/pack; ghi `decisions.md` |
+
+### 9. Câu hỏi ngược
+
+1. **[Nếu…thì]** Nếu bạn thêm GPU ngoài (ví dụ Jetson ở tương lai) ăn 15 W trung bình, 25 W đỉnh, dòng nào trong budget đổi, quyết định phần cứng nào ở C1 phải làm lại?
+   <details><summary>Hướng nghĩ</summary>
+
+   Wh/runtime, I liên tục (dây chính, F0, BMS), I đỉnh trùng (BMS OC), thêm một nhánh DC-DC và cầu chì. Một tải mới chạm cả ba con số; đó là lý do budget phải là file chạy được trong CI, không phải ô Excel.
+
+   </details>
+2. **[Quy mô]** 100 robot cùng một budget. Sau 6 tháng runtime trung bình giảm 25%. Bạn phân biệt "pin già" với "phần mềm mới ăn điện hơn" bằng dữ liệu gì?
+   <details><summary>Hướng nghĩ</summary>
+
+   Năng lượng lấy ra mỗi chu kỳ (Wh, từ tích phân V·I) vs dung lượng danh định → pin; P TB theo phiên bản phần mềm → tải. Hai biến cần log riêng, có phiên bản phần mềm gắn vào mỗi phiên.
+
+   </details>
+3. **[Failure mode]** Budget đúng cho pin mới, ở 25 °C. Kể ba điều kiện làm cùng budget đó gây sập hệ.
+   <details><summary>Hướng nghĩ</summary>
+
+   Pin lạnh hoặc già (R tăng → sụt sâu hơn ở cùng đỉnh), pin gần cạn (tải công suất kéo dòng lớn hơn), motor kẹt vào thảm (đỉnh dài thành liên tục). Câu chuyện iPhone ở Bài C1.5 là đúng điều này.
+
+   </details>
+4. **[Phản biện]** "Đo làm gì, lấy số datasheet nhân 1,5 là đủ." Khi nào câu này đúng?
+   <details><summary>Hướng nghĩ</summary>
+
+   Đúng cho linh kiện có datasheet đầy đủ và tải ổn định. Sai cho mini PC (hành vi phụ thuộc phần mềm), motor kẹt (datasheet hàng phổ thông hay thiếu) và mọi đỉnh ngắn. Hệ số 1,5 không có cơ sở khi không biết phân bố.
+
+   </details>
+
+### 10. Liên kết ra ngoài
+
+- **Không gian (Philae):** giống: budget quyết định chạy lệnh nào khi năng lượng cạn. Khác: Philae không sạc được và không có người tới thay pin; robot của bạn có, nên câu hỏi chuyển từ "còn đủ không" sang "về sạc lúc nào" (C10).
+- **Điện lưới:** nhà máy điện lập kế hoạch theo **đỉnh** phụ tải (công suất lắp đặt) và theo **năng lượng** (nhiên liệu): đúng hai trục P đỉnh / Wh. Khác: lưới có nhiều nguồn chia tải; robot chỉ có một pack.
+- **Data center:** công suất điện đặt hàng theo đỉnh của rack, không theo trung bình; vượt là nhảy aptomat cả rack. Giống hệt "chạm BMS sập tất cả".
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Philae: 64 h khoa học trên pin, ~1 h 20 phút nắng/ngày thay vì 6–7 h, ~100 Wh còn / ~80 Wh cần | [spec]/[chuẩn] | Bài E3S 2017 của nhóm vận hành; họp báo ESA 14/11/2014 |
+| Adapter EQ12: 12 V 3 A, jack 5,5×2,5 | [spec] | Đọc nhãn adapter của bạn |
+| N100 idle <7 W, stress ~34 W | [ước lượng] | Một người dùng đo; đo lại |
+| Hiệu suất DC-DC 85–90% | [ước lượng] | Đo ở Bài C1.4 |
+
+**Đã sửa so với bản gốc:** K7 gốc ghi "mini PC 6–25 W", `_KE-HOACH-K7.md` mục 5 cũng vậy. Có báo cáo N100 ăn ~34 W khi stress; adapter định mức 36 W. Đề xuất: chọn DC-DC theo **36 W + biên**, không theo 25 W, cho tới khi số đo của bạn chứng minh khác.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** datasheet ESP32-S3 (Espressif), mục dòng tiêu thụ RF; nhãn adapter mini PC.
+- **Giải thích:** K3 Bài 6 (brownout, dòng đầu tiên của budget); → F5.7.
+- **Đào sâu (tùy chọn):** bài báo vận hành Philae (E3S Web of Conferences, 2017) — đọc phần quản lý năng lượng.
+- **Tự kiểm tra:** (1) giải thích ba con số của một tải và quyết định mỗi số điều khiển; (2) vẽ lại hình dòng theo thời gian ở phần 2; (3) Mini PC 25 W qua DC-DC hiệu suất 90%: dòng phía pack ở 14,4 V và ở 10 V là bao nhiêu?
+  <details><summary>Đáp án</summary>
+
+  25/0,9/14,4 ≈ 1,93 A; 25/0,9/10 ≈ 2,78 A (khớp `c14_headroom.py` ở Bài C1.4). Dòng tăng ~44% khi pin cạn.
+
+  </details>
+
+## Bài C1.3 — Dây, đầu nối, cầu chì: tiết diện, sụt áp, nhiệt (4h)
+
+> **Vị trí:** C1.2 → **C1.3** → C1.4 · **Cần trước:** K7 C0.2 (I²R), C0.3 (mối nối, đồ gá Kelvin), C1.2 (dòng liên tục mỗi nhánh) · **Sau bài này bạn quyết định được:** mỗi nhánh dùng dây cỡ nào và cầu chì bao nhiêu ampe, đặt ở đâu; và đọc được một cầu chì đứt như một số đo.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Ngày 2/9/1998, chuyến Swissair 111 (MD-11) rơi xuống biển gần Nova Scotia, 229 người chết. Báo cáo của TSB Canada (2003) kết luận đám cháy nhiều khả năng bắt đầu từ **hồ quang điện** phía trên trần buồng lái; một đoạn cáp của hệ thống giải trí trên máy bay (IFEN, lắp thêm sau) có vết hồ quang nằm đúng vùng đó. Hồ quang **không làm nhảy aptomat**: aptomat trên máy bay thuộc loại thông dụng, không được thiết kế để bắt mọi kiểu hồ quang. Lửa bắt vào lớp phủ dễ cháy của chăn cách nhiệt rồi lan `[spec — TSB Canada, báo cáo A98H0003]`.
+
+Hai điều cho bàn làm việc của bạn. Thiết bị bảo vệ chỉ bắt được kiểu lỗi nó được thiết kế để thấy: cầu chì nhiệt bắt **quá dòng kéo dài**, không bắt một mối nối lỏng đang tóe lửa ở 3 A. Và một **tải thêm vào sau** (IFEN; với bạn: loa ở C12, đèn, GPU) là chỗ lỗi hay vào, vì nó được đi dây khi thiết kế gốc đã xong.
+
+### 2. Mô hình tư duy
+
+```
+  [PACK] ──F0── dây chính ──┬──FA── dây nhánh A (16 AWG) ── tải A
+                            ├──FB── dây nhánh B (18 AWG) ── tải B
+                            └──FC── dây nhánh C (22 AWG) ── tải C
+
+  Quy tắc chọn, theo thứ tự:
+   (1) I_liên tục của tải (C1.2)  ≤  0,75 × I_cầu chì       ← cầu chì không đứt oan
+   (2) I_cầu chì  ≤  sức chịu nhiệt của DÂY nhánh            ← dây không cháy trước cầu chì
+   (3) sụt áp nhánh ở I đỉnh ≤ vài % áp nhánh               ← tải không brownout
+   (4) cầu chì đặt ở ĐẦU NGUỒN của dây nó bảo vệ, càng sát chỗ rẽ nhánh càng tốt
+```
+
+Bản chất: **cầu chì bảo vệ dây, không bảo vệ thiết bị.** Mini PC chết vì quá áp, không vì quá dòng; ESP32 chết trước khi cầu chì 2 A kịp đứt. Cầu chì là một dây chì được thiết kế để là **điểm yếu nhất có chủ đích** của đoạn dây: nóng chảy ở dòng thấp hơn dòng làm vỏ dây cháy. Nó là thiết bị nhiệt: đứt theo I²·t, nên đỉnh ngắn vượt định mức nhiều lần vẫn không làm đứt.
+
+Đường cong thời gian–dòng của cầu chì lưỡi ATO (họ 0257, 3–40 A) `[spec — datasheet Littelfuse 0257]`:
+
+| Dòng / định mức | Thời gian đứt (min – max) |
+|---|---|
+| 100% | không đứt (≥100 h) |
+| 135% | 0,75 s – 600 s |
+| 200% | 0,15 s – 5 s |
+| 350% | 0,08 s – 0,5 s |
+
+Đọc: một cầu chì 10 A chở 13,5 A có thể sống **10 phút**. Dây của nó phải chịu được mức đó suốt thời gian ấy.
+
+**Bảng dây đồng** (tính bằng code dưới; R ở 20 °C `[chuẩn]`; dòng gợi ý là `[ước lượng]` thận trọng cho dây silicon đi trong bó, trong hộp kín, không phải con số "chassis wiring" lạc quan hay thấy trên mạng):
+
+| AWG | mm² | mΩ/m | Dòng liên tục gợi ý (bó, trong hộp) | Dùng cho |
+|---|---|---|---|---|
+| 26 | 0,13 | 134 | ≤1 A | sense, I2C |
+| 22 | 0,33 | 53 | ≤3 A | 5 V logic, cuộn relay |
+| 18 | 0,82 | 21 | ≤7 A | 12 V mini PC |
+| 16 | 1,31 | 13 | ≤10 A | nhánh motor |
+| 14 | 2,08 | 8,3 | ≤15 A | dây chính |
+| 12 | 3,31 | 5,2 | ≤20 A | dây chính nếu budget lớn |
+
+```python
+# [đã chạy] Tiết diện dây -> điện trở -> sụt áp và nhiệt tỏa trên dây, cho từng nhánh của robot
+import math
+RHO_CU = 1.72e-8          # ohm·m, đồng ở 20 °C [chuẩn]; ở 60 °C cao hơn ~16% (hệ số 0,0039/K)
+def awg_mm2(n):           # đường kính AWG: d = 0,127 mm · 92^((36-n)/39) [chuẩn]
+    d = 0.127 * 92 ** ((36 - n) / 39)
+    return math.pi * d * d / 4
+def r_per_m(n, temp_c=20):
+    return RHO_CU / (awg_mm2(n) * 1e-6) * (1 + 0.0039 * (temp_c - 20))
+
+print("AWG  mm²    mΩ/m(20°C)")
+for n in (26, 24, 22, 20, 18, 16, 14, 12, 10):
+    print(f"{n:3d} {awg_mm2(n):5.2f} {r_per_m(n)*1e3:8.2f}")
+
+# điện trở tiếp xúc/linh kiện nối tiếp [ước lượng; đo bằng đồ gá Kelvin của C0]
+XT60, VIT, CAUCHI, DUPONT = 0.001, 0.002, 0.006, 0.020
+# nhánh: (tên, AWG, dài MỘT chiều m, I TB A, I đỉnh A, áp nhánh V, R tiếp xúc cộng thêm ohm)
+branches = [("pack->bus chính", 14, 0.30, 5.0, 15.0, 13.2, 2*XT60 + CAUCHI + 2*VIT),
+            ("bus->driver motor", 16, 0.30, 3.0, 12.0, 13.2, CAUCHI + 4*VIT),
+            ("DC-DC->mini PC 12 V", 18, 0.40, 2.1, 3.0, 12.0, 2*VIT),
+            ("buck 5 V->ESP32 JST", 22, 0.30, 0.5, 1.0, 5.0, 2*VIT),
+            ("SAI: 5 V qua Dupont 26AWG", 26, 0.40, 0.5, 1.0, 5.0, 4*DUPONT)]
+print("\nnhánh                    AWG  sụt áp TB  sụt áp đỉnh  %V đỉnh  W tỏa trên dây (TB)")
+for name, n, L, i_avg, i_pk, v, r_extra in branches:
+    R = r_per_m(n, 40) * 2 * L + r_extra   # dây đi + về (ấm 40 °C) + tiếp xúc
+    print(f"{name:24s} {n:3d} {i_avg*R*1e3:7.0f} mV {i_pk*R*1e3:9.0f} mV {100*i_pk*R/v:7.1f}% {i_avg**2*R:8.3f}")
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Timeout ở mỗi hop, ngắn dần về phía client | Cầu chì nhỏ dần từ pin ra nhánh (15 → 10 → 5 → 2 A) | Timeout so thời gian; cầu chì so **I²t**, và hai cầu chì nối tiếp có thể đứt cùng lúc khi chập nặng (không có "phối hợp" nếu không chọn kỹ) | Chập nhánh C làm đứt F0, sập cả robot thay vì một nhánh |
+| Health check phát hiện service chết | Cầu chì phát hiện quá dòng | Mối nối lỏng tóe lửa ở dòng bình thường: không quá dòng, cầu chì "khỏe", vẫn cháy (Swissair) | Tin cầu chì thay kiểm mối nối (C0.3) và kiểm nhiệt (Gate) |
+| Network latency do khoảng cách | Sụt áp do R dây × I | Latency cộng thêm; sụt áp còn **đổi hành vi tải**: DC-DC kéo thêm dòng để bù, làm sụt thêm | Tính sụt áp ở dòng TB, quên dòng đỉnh |
+
+**Chấm mô hình:**
+- *"Cầu chì to hơn thì an toàn hơn, khỏi đứt vặt."* — **SAI.** Cầu chì to hơn sức chịu dây biến dây thành cầu chì. Phản ví dụ: F 15 A trên dây 22 AWG; chập ở 12 A: cầu chì sống mãi, dây nóng chảy vỏ.
+- *"Dây chọn theo bảng dòng tối đa là đủ."* — **ĐÚNG MỘT PHẦN.** Bảng nói về nhiệt; sụt áp và **điện trở tiếp xúc** thường quyết định trước. Phản ví dụ: code trên: nhánh 5 V qua Dupont 26 AWG sụt ~4% ở 1 A dù dòng nằm trong "giới hạn" của dây.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | AWG / mm² | Cỡ dây; AWG nhỏ = dây to | AWG lớn = dây to |
+| 🟢 | Ampacity | Dòng liên tục dây chịu được với mức tăng nhiệt cho phép, phụ thuộc cách đi dây | Một con số cố định |
+| 🟢 | I²t, đường cong thời gian–dòng | Cầu chì đứt theo năng lượng nhiệt | "Cầu chì 10 A đứt ở 10,1 A" |
+| 🟢 | Interrupting rating | Dòng lớn nhất cầu chì cắt được an toàn ở áp định mức | Định mức dòng |
+| 🟡 | Phối hợp bảo vệ (selectivity) | Chỉ cầu chì gần lỗi nhất đứt | Tự có khi cầu chì nhỏ dần |
+| 🟡 | Strain relief | Đỡ dây để lực kéo/rung không dồn vào mối nối | Trang trí |
+
+### 5. Dự đoán
+
+1. Với bảng dây ở mục 4 phần đầu chặng, tính sụt áp mỗi nhánh ở I TB và I đỉnh từ budget C1.2 (sửa `branches` trong code).
+2. **Thí nghiệm đứt cầu chì có kiểm soát:** nguồn bàn V_set 5 V, I_set 5 A, nối qua cầu chì ATO **2 A** rồi nối tắt phía sau bằng dây 18 AWG. Dòng 250% định mức. Dự đoán thời gian đứt (khoảng) từ bảng thời gian–dòng (nội suy giữa 200% và 350%).
+3. Sau 10 phút ở 5 A qua dây chính 14 AWG và qua mối XT60: nhiệt tăng bao nhiêu K?
+
+Mẫu `prediction.md`:
+```markdown
+# C1.3 — dự đoán
+| nhánh | AWG | I đỉnh | sụt áp đỉnh (mV, %) |
+| ... |
+Thời gian đứt cầu chì 2 A ở 5 A: __ s (khoảng __ – __ s)
+ΔT dây 14 AWG / XT60 sau 10 phút 5 A: __ K / __ K
+```
+
+### 6. Làm
+
+1. **Thí nghiệm cầu chì** (trước khi đụng pin): cầu chì nằm trên tấm gốm/gạch, không gần giấy; kính bảo hộ. OUTPUT OFF → nối → OUTPUT ON, bấm giờ bằng điện thoại quay video màn hình nguồn bàn (đọc frame). Lặp với 3 cầu chì. Ghi `quantity=fuse_open_time`, đơn vị `s`. Nguồn bàn giới hạn dòng nên đây là phép thử an toàn; **không bao giờ làm với pin**.
+2. **Làm bó dây** (Lắp bước 3) theo bảng dây mục 4; dây chính 14 AWG đỏ/đen, nhánh theo bảng. Cầu chì inline của F0 nằm trên pigtail pin, cách cực pin ≤10 cm.
+3. **Đo sụt áp mỗi mối nối và mỗi đầu XT60** bằng đồ gá Kelvin của C0.3, ở 3 A từ nguồn bàn. Ghi `quantity=joint_drop`.
+4. **Thử nhiệt:** nguồn bàn CC 5 A qua dây chính + XT60 + F0 (đầu kia nối tắt), V_set vừa đủ; đo nhiệt kế IR ở 0, 5, 10 phút tại: giữa dây, XT60, đế cầu chì. Nhiệt kế IR đọc sai trên bề mặt bóng (phát xạ thấp): đo lên vỏ nhựa/băng keo đen dán lên kim loại `[chuẩn]`.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+- Code với số mẫu: dây chính 14 AWG ~2% ở đỉnh 15 A (phần lớn do tiếp xúc + cầu chì, không do dây); nhánh 12 V 18 AWG <1%; Dupont 26 AWG ~4% ở 1 A. Điện trở **tiếp xúc** thường lớn hơn điện trở dây ở các nhánh ngắn: chất lượng mối nối quan trọng hơn tăng cỡ dây.
+- Cầu chì 2 A ở 5 A (250%): theo bảng, giữa ~0,08–0,15 s (min) và ~0,5–5 s (max); thực tế thường vài trăm ms tới 1–2 s. Nguồn bàn có thể chuyển CC chậm và tụ đầu ra xả trước (→ K7 C0.4) làm đỉnh đầu lớn hơn 5 A, cầu chì đứt sớm hơn dự đoán.
+- 5 A qua 14 AWG: dây tăng vài K, gần như không cảm nhận; XT60 tốt tăng vài K; nếu một điểm tăng >15–20 K so với dây kế bên: mối nối đó có điện trở cao, làm lại.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Cầu chì không đứt sau 30 s | Nguồn bàn đã hạ xuống dưới 5 A (V_set quá thấp để giữ 5 A qua R mạch) | Đọc chế độ CV/CC trên màn | Tăng V_set vừa đủ để vào CC |
+| Đế cầu chì nóng hơn cầu chì | Tiếp xúc lưỡi–đế kém, đế rẻ | Đo sụt áp qua đế | Đế khác; không bẻ cong lưỡi |
+| Sụt áp một mối gấp đôi mối khác cùng loại | Mối hàn nguội, sợi đứt | So với đối chứng dây nguyên | Làm lại mối |
+
+### 9. Câu hỏi ngược
+
+1. **[Vì sao không]** Vì sao không dùng một cầu chì chính duy nhất và bỏ cầu chì nhánh, khi BMS đã có quá dòng?
+   <details><summary>Hướng nghĩ</summary>
+
+   Cầu chì 15 A không bảo vệ dây 22 AWG. Mỗi dây cần một thiết bị có định mức ≤ sức chịu của chính dây đó, ở đầu nguồn của nó. Cùng logic: rate limit toàn cục không thay rate limit theo tenant.
+
+   </details>
+2. **[Failure mode]** Cầu chì nhánh motor đứt giữa hành trình. Robot ở trạng thái nào? An toàn hơn hay nguy hiểm hơn so với F0 đứt?
+   <details><summary>Hướng nghĩ</summary>
+
+   Motor mất điện (dừng), mini PC và ESP32 sống, ghi được sự kiện: lỗi "fail-safe" và quan sát được. F0 đứt: mất hết, không log. Thiết kế nhánh tách là để lỗi rơi vào kiểu thứ nhất.
+
+   </details>
+3. **[Quy mô]** 100 robot, mỗi con ~30 mối nối nguồn. Rung làm mỗi mối có xác suất lỏng nhỏ mỗi tháng. Bạn phát hiện mối lỏng từ xa bằng dữ liệu gì đã có ở C1?
+   <details><summary>Hướng nghĩ</summary>
+
+   R hiệu dụng của đường nguồn = ΔV/ΔI giữa INA226 ở pack và áp đo ở tải, theo thời gian. Mối lỏng làm R tăng dần, thường trước khi gây sự cố. Cần ít nhất hai điểm đo áp.
+
+   </details>
+4. **[Liên ngành]** Nhà dân dùng aptomat; robot dùng cầu chì. Vì sao không dùng aptomat DC nhỏ cho robot?
+   <details><summary>Hướng nghĩ</summary>
+
+   Được, nếu ghi định mức DC đúng áp và cắt được dòng chập của pack; đổi lại khối lượng, giá, và aptomat AC rẻ thường không cắt DC an toàn (hồ quang DC không tự tắt qua điểm 0).
+
+   </details>
+
+### 10. Liên kết ra ngoài
+
+- **Hàng không (Swissair 111 → AFCI):** sau các vụ hồ quang dây, ngành phát triển aptomat phát hiện hồ quang (arc-fault). Nhà ở Mỹ cũng bắt buộc AFCI ở nhiều phòng theo NEC `[chuẩn]`. Giống: thêm cảm biến cho kiểu lỗi mà bảo vệ nhiệt không thấy. Khác: robot của bạn dựa vào kiểm mối nối định kỳ thay vì thiết bị.
+- **Ô tô:** hộp cầu chì nhiều nhánh, dây cỡ theo nhánh: đúng kiến trúc bo của bạn, và cầu chì lưỡi chính là chuẩn ô tô (ISO 8820).
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Swissair 111: hồ quang, cáp IFEN, aptomat không bắt mọi hồ quang | [spec] | TSB Canada, A98H0003, 2003; báo cáo không kết luận chắc dây nào là sự kiện đầu |
+| Bảng thời gian–dòng ATO, 32 V DC, cắt 1000 A | [spec] | Datasheet Littelfuse 0257; kiểm revision |
+| R dây theo AWG | [chuẩn] | Công thức trong code |
+| Dòng liên tục gợi ý theo AWG | [ước lượng] | Thận trọng; đo nhiệt ở phần 6 |
+| R tiếp xúc XT60/vít/Dupont/cầu chì | [ước lượng] | Đo bằng đồ gá C0.3 |
+
+**Đã sửa so với bản gốc:** K7 gốc không có cầu chì nào ngoài "E-stop"; thêm cầu chì chính sát pin và cầu chì nhánh theo dây.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Littelfuse, datasheet ATO Blade Fuse (0257); TSB Canada, *Aviation Investigation Report A98H0003* (tóm tắt).
+- **Giải thích:** K7 C0.2, C0.3.
+- **Đào sâu (tùy chọn):** ABYC E-11 (đi dây DC trên tàu thuyền) là chuẩn thực hành tốt cho hệ 12 V có pin, nhiều bảng cỡ dây công khai dựa trên nó — đọc bảng sụt áp 3%/10%.
+- **Tự kiểm tra:** (1) giải thích "cầu chì bảo vệ dây" trong 5 câu; (2) vẽ lại sơ đồ cầu chì nhánh; (3) Nhánh 5 V dây 22 AWG, tải 0,5 A TB, 1 A đỉnh: cầu chì 2 A hay 5 A?
+  <details><summary>Đáp án</summary>
+
+  2 A: 0,5 A ≤ 0,75×2; 2 A ≤ ~3 A của 22 AWG. 5 A vượt sức chịu dây.
+
+  </details>
+
+
+## Bài C1.4 — DC-DC: buck/boost/buck-boost, ripple, pin cạn (4h)
+
+> **Vị trí:** C1.3 → **C1.4** → C1.5 · **Cần trước:** C1.1 (áp pack trôi), C1.2 (tải công suất không đổi), K3 Bài 6 (brownout) · **Sau bài này bạn quyết định được:** mini PC cần buck hay buck-boost với pack của bạn, định mức dòng DC-DC bao nhiêu, và ngưỡng ngắt mềm đặt ở đâu.
+
+### 1. Câu chuyện — vì sao người ta phải phát minh ra thứ này
+
+Trước bộ nguồn xung, cách hạ áp phổ biến là ổn áp tuyến tính (linear regulator, ví dụ 7805): một transistor đóng vai điện trở tự chỉnh, **đốt** phần áp thừa thành nhiệt. Hạ 14,6 V xuống 5 V ở 1 A bằng cách đó: (14,6 − 5) × 1 = 9,6 W nhiệt, hiệu suất 34% `[chuẩn — tính trực tiếp]`; cần tản nhiệt to bằng bao diêm, và gần 2/3 pin thành nhiệt. Bộ nguồn xung (switching) thay điện trở bằng một công tắc đóng ngắt hàng trăm kHz và một cuộn cảm giữ năng lượng giữa các nhịp: hiệu suất 85–95% `[ước lượng — tùy module]`. Đó là lý do mọi laptop, điện thoại, robot dùng nó. Cái giá: nhiễu xung (ripple), đáp ứng chậm khi tải nhảy, và những kiểu hỏng riêng mà bài này đo.
+
+### 2. Mô hình tư duy
+
+```
+ BUCK (hạ áp)            Vout = D·Vin       chỉ khi Vin > Vout + dropout
+ Vin ─[SW]─┬─[L]─┬─ Vout
+          [D]   [C]      D = tỉ lệ thời gian SW đóng (0..1)
+ GND ──────┴─────┴─
+
+ BOOST (tăng áp)         Vout = Vin/(1−D)   chỉ khi Vin < Vout
+ BUCK-BOOST (4 công tắc) tự chuyển chế độ: Vin trên, dưới, hay xấp xỉ Vout đều ra Vout
+```
+
+Ba điều bản chất:
+1. **DC-DC giữ công suất, không giữ dòng:** P_vào ≈ P_ra/η. Áp vào giảm → dòng vào tăng. Mini PC 25 W: ~1,65 A ở 16,8 V nhưng ~2,8 A ở 10 V (code dưới). Định mức dòng vào/công tắc của module phải tính ở **Vin thấp nhất**.
+2. **Buck cần headroom:** Vin phải lớn hơn Vout + dropout (vài trăm mV tới ~1 V tùy module `[ước lượng — tra datasheet IC trên module]`). Áp pack **dưới tải đỉnh** chứ không phải OCV mới là thứ so.
+3. **UVLO (undervoltage lockout):** dưới một Vin nhất định, DC-DC tắt hẳn. Tắt → tải hết dòng → áp pack hồi lên → DC-DC bật lại → tải kéo dòng → sụt → tắt: **dao động bật/tắt**, mini PC reboot liên tục. Phải có ngắt mềm bằng phần mềm ở trên mức đó (C5.4, C10).
+
+**Tính cụ thể cho mini PC 12 V** (code: OCV từng cell theo SOC `[ước lượng]`, R_pack 60 mΩ, tải TB 3 A, đỉnh 12 A):
+
+```python
+# [đã chạy] Buck hay buck-boost cho mini PC 12 V: bao nhiêu năng lượng pack dùng được?
+import numpy as np
+# Đường OCV theo SOC [ước lượng, dạng điển hình; đo lại pack của bạn ở C1.5]
+soc = np.array([0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]) / 100
+ocv = {"NMC": np.array([3.00, 3.30, 3.45, 3.55, 3.62, 3.68, 3.73, 3.80, 3.88, 3.97, 4.07, 4.20]),
+       "LFP": np.array([2.50, 3.00, 3.15, 3.22, 3.26, 3.28, 3.29, 3.30, 3.31, 3.33, 3.36, 3.65])}
+R_PACK = 0.06          # ohm, pack 2P + dây [ước lượng]
+I_AVG, I_PEAK = 3.0, 12.0   # A: tải trung bình cả robot; đỉnh khi 2 motor khởi động/kẹt [ước lượng, đo ở C1.5]
+V_OUT, DROPOUT = 12.0, 1.0  # buck cần Vin >= Vout + dropout [ước lượng, tra datasheet module]
+
+s = np.linspace(0, 1, 1001)
+print("pack    | V dưới tải TB  | buck: % năng lượng dùng được (TB / lúc đỉnh) | buck-boost (lúc đỉnh)")
+for chem, cell in ocv.items():
+    for S in (3, 4):
+        v_ocv = S * np.interp(s, soc, cell)
+        v_avg, v_pk = v_ocv - I_AVG * R_PACK, v_ocv - I_PEAK * R_PACK
+        cutoff = S * cell[1]               # ngắt mềm ở ~5% SOC, trên ngưỡng UV của BMS
+        frac = lambda ok: (v_ocv * ok).sum() / v_ocv.sum() * 100   # năng lượng ~ tổng OCV theo SOC
+        buck_avg = frac(v_avg >= V_OUT + DROPOUT)
+        buck_pk = frac(v_pk >= V_OUT + DROPOUT)
+        bb_pk = frac(v_pk >= cutoff - I_PEAK * R_PACK)
+        print(f"{S}S {chem} | {v_avg.min():5.2f}..{v_avg.max():5.2f} V | "
+              f"{buck_avg:5.1f}% / {buck_pk:5.1f}%{'':22s}| {bb_pk:5.1f}%")
+eta = 0.90
+for vin in (16.8, 14.4, 13.0, 12.0, 10.0):   # tải công suất không đổi: pin càng cạn, dòng vào càng lớn
+    print(f"Vin={vin:4.1f} V -> I_in = {25 / eta / vin:4.2f} A cho mini PC 25 W")
+```
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Adapter/proxy chuyển giao thức | DC-DC chuyển "định dạng" áp | Proxy có thể từ chối request lỗi; DC-DC hết headroom thì **lặng lẽ cho ra áp thấp hơn**, tải nhận dữ liệu "sai" (áp thấp) mà không có lỗi trả về | Tin "có DC-DC thì 12 V luôn là 12 V" |
+| Retry storm khi service hồi phục | Dao động UVLO | Retry storm có backoff để dập. UVLO chỉ có hysteresis vài trăm mV `[ước lượng]`; R pack lớn hơn mức đó là dao động | Mini PC reboot vòng lặp lúc pin gần cạn, hỏng file |
+| Autoscaling theo tải | Tải công suất không đổi | Autoscaling thêm tài nguyên; ở đây "tài nguyên" (Wh, áp) **đang giảm** đúng lúc nhu cầu dòng tăng (vòng phản hồi dương) | Chọn DC-DC theo dòng ở áp danh định |
+
+**Chấm mô hình:**
+- *"Cần 12 V từ pin 12 V thì khỏi DC-DC."* — **SAI.** 4S LFP đầy 14,6 V, cạn ~10 V; mini PC nhận dải đó trực tiếp là ngoài thông số `[spec — nhãn adapter 12 V; dung sai đầu vào N100 không công bố, tự đo không được: không thử]`. `_KE-HOACH-K7.md` mục 5: không được để mini PC ăn trực tiếp pin không ổn áp.
+- *"Cứ buck là được, pin 4S luôn trên 12 V."* — **ĐÚNG MỘT PHẦN.** Đúng cho 4S NMC nếu ngắt mềm đủ cao (code: buck dùng được phần lớn năng lượng). Sai cho 4S LFP (áp đoạn phẳng ~13,2 V, dưới tải đỉnh không còn đủ headroom) và 3S (luôn dưới). Phản ví dụ: con số buck/LFP ở 🔒.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Buck / boost / buck-boost | Hạ / tăng / cả hai | "Buck-boost là hai module nối tiếp" |
+| 🟢 | Dropout, headroom | Chênh áp tối thiểu vào–ra để còn ổn áp | Chỉ có ở LDO |
+| 🟢 | UVLO | Ngưỡng Vin dưới đó DC-DC tắt | Bảo vệ pin (không, nó bảo vệ chính module) |
+| 🟢 | Ripple | Gợn áp ra ở tần số đóng ngắt | Nhiễu ngẫu nhiên |
+| 🟡 | Synchronous rectification | Thay diode bằng MOSFET để giảm tổn hao | Không đáng kể |
+| 🟡 | Load transient response | Áp ra lệch bao nhiêu khi tải nhảy bậc | Ripple |
+
+### 5. Dự đoán
+
+1. Chạy code với pack bạn chọn (sửa `R_PACK`, `I_AVG`, `I_PEAK` theo C1.1–C1.2). Buck hay buck-boost? Dự đoán trước khi chạy.
+2. Module buck-boost của bạn: tra IC trên module (đọc chữ trên chip; nhiều module phổ biến dùng IC có datasheet công khai) → dải Vin, UVLO, dòng công tắc. Hiệu suất ở Vin 10 / 13,2 / 14,6 V, tải ~2 A?
+3. Áp ra 12 V lệch bao nhiêu khi tải nhảy 0 → 2 A?
+
+### 6. Làm
+
+Tải thử cho đầu ra 12 V: bóng 21 W (~1,75 A ở 12 V) hoặc điện trở nhôm 10 Ω 50 W (1,2 A) trên tấm nhôm. **Chưa dùng mini PC** cho tới bước 4.
+
+1. **Không tải:** nguồn bàn → đầu vào module, I_set 0,5 A. Chỉnh biến trở (nếu có) cho Vout 12,0 V, đo bằng UT33D+ tại đầu ra. Quét Vin 10,0 → 14,6 V (hoặc 12 → 16,8 V cho NMC) từng 0,5 V: Vout có giữ không? Dán băng keo biến trở.
+2. **Có tải, đo hiệu suất:** ở 3 điểm Vin, đọc V_in, I_in trên nguồn bàn, V_out bằng UT33D+, I_out tính từ R tải đo ở nhiệt độ làm việc (hoặc đo bằng thang 10 A của UT33D+, nhớ giới hạn thời gian đo dòng lớn trong manual `[spec — tra manual UT33D+]`). η = V_out·I_out / (V_in·I_in). Ghi sai số: η có bất định cỡ vài % do 4 phép đo cộng dồn (→ F1.1).
+3. **Tìm UVLO:** tải gắn, giảm Vin từ từ tới khi Vout sụp; tăng lại tới khi Vout về. Ghi cả hai ngưỡng (hysteresis).
+4. **Mini PC:** chỉ khi bước 1–3 PASS. Mini PC chạy `stress-ng`, Vin = mức thấp nhất của pack; theo dõi Vout. Ghi `quantity=dcdc_vout_min`.
+5. Làm tương tự cho buck 5 V với ESP32 (ESP32 chỉ nối sau khi đo không tải 5,0–5,2 V).
+6. Ripple: UT33D+ thang AC mV chỉ cho một con số RMS thô và có thể sai ở tần số cao `[spec — tra băng thông thang AC trong manual]`; ghi `inconclusive`. Đo đúng cần máy hiện sóng; logic analyzer không đo áp analog.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Code với số mẫu:
+
+| pack | áp dưới tải TB | buck dùng được (TB / lúc đỉnh) | buck-boost |
+|---|---|---|---|
+| 3S NMC | 8,8–12,4 V | 0% / 0% | ~96% |
+| 4S NMC | 11,8–16,6 V | ~96% / ~92% | ~96% |
+| 3S LFP (tham khảo) | 7,3–10,8 V | 0% / 0% | ~96% |
+| 4S LFP | 9,8–14,4 V | ~46% / ~8% | ~96% |
+
+("dùng được" = phần năng lượng trên ngưỡng cần; buck-boost dừng ở ngắt mềm ~5% SOC.) Kết luận: **4S LFP bắt buộc buck-boost**: buck chỉ giữ được 12 V khi pin còn trên đoạn phẳng, và mỗi đỉnh dòng motor kéo áp xuống dưới headroom → mini PC brownout lúc tăng tốc. 4S NMC: buck dùng được nếu ngắt mềm ở ~13,5–14 V dưới tải; buck-boost vẫn cho biên rộng hơn khi pin già (R tăng). 3S: không có lựa chọn buck.
+
+Đo thật: η module tốt ~85–93% ở 1–2 A; thấp hơn ở Vin thấp (dòng vào lớn hơn) và ở tải rất nhẹ. Vout lệch khi tải nhảy: vài chục tới vài trăm mV rồi về trong ms `[ước lượng]`; quá ±5% hoặc không về → module yếu. UVLO phụ thuộc IC; nếu UVLO của module **cao hơn** ngưỡng UV của BMS, DC-DC tắt trước BMS: tốt cho pin, nhưng vẫn là cắt cứng với mini PC.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Vout không tải đúng, có tải tụt mạnh | Module định mức ảo; dây vào mảnh | Đo Vin tại chân module khi có tải | Module lớn hơn; dây vào ngắn/to |
+| Module nóng >70 °C ở 2 A | Hiệu suất thấp, cuộn cảm bão hòa | IR thermometer; η đo được | Tản nhiệt, module khác, giảm dòng |
+| Vout = Vin khi Vin < 12 V | Module chỉ là buck (bán nhầm) | Quét Vin ở bước 1 | Đổi module buck-boost thật |
+| Mini PC reboot khi Vin thấp | UVLO dao động | Log Vin/Vout bằng INA226 (C1.5) | Ngắt mềm trên UVLO |
+
+### 9. Câu hỏi ngược
+
+1. **[Nếu…thì]** Nếu đổi pack sang 4S NMC, hai ngưỡng nào trên robot phải đổi theo? Chỗ nào trong code/firmware đang hard-code chúng?
+   <details><summary>Hướng nghĩ</summary>
+
+   Ngắt mềm theo áp (khác hẳn giữa hai hóa học), ngưỡng cảnh báo pin yếu, sạc. Chúng nên là cấu hình theo `battery.chemistry` trong một file, không rải rác.
+
+   </details>
+2. **[Failure mode]** Buck-boost hỏng kiểu "công tắc chập": Vout = Vin. Mini PC nhận 14,6 V. Lớp nào bắt được?
+   <details><summary>Hướng nghĩ</summary>
+
+   Không cầu chì nào (dòng bình thường). Cần giám sát áp ra (INA226 thứ hai, hoặc ADC ESP32 qua cầu chia) và một hành động (cắt nhánh). Đây là FMEA ở C10.2.
+
+   </details>
+3. **[Quy mô]** 100 robot, DC-DC từ hai lô hàng khác nhau. Dữ liệu nào cho biết lô nào yếu trước khi có hỏng hóc?
+   <details><summary>Hướng nghĩ</summary>
+
+   η và nhiệt theo tải, Vout min trong mỗi đỉnh, gắn mã lô vào metadata robot. Phân phối theo lô, không trung bình chung.
+
+   </details>
+4. **[Liên ngành]** Ổ cắm USB-C PD đàm phán áp trước khi cấp. Vì sao robot DIY ít làm thế?
+   <details><summary>Hướng nghĩ</summary>
+
+   PD giải quyết "nhiều thiết bị, một sạc"; robot là hệ đóng, áp cố định, thêm đàm phán là thêm một điểm hỏng. Một số mini PC đời mới nhận nguồn qua USB-C PD: khi đó phía robot cần nguồn PD source, đổi hẳn bài toán.
+
+   </details>
+
+### 10. Liên kết ra ngoài
+
+- **Điện thoại:** pin 1 cell 3,0–4,4 V nuôi các rail 0,8–3,3 V: buck là chính, boost cho đèn flash; IC quản lý nguồn (PMIC) chứa hàng chục DC-DC. Giống: rail theo tải. Khác: thiết kế chung một bo, không có dây dài giữa các khối.
+- **Xe điện:** pack 400–800 V hạ xuống 12 V cho phụ tải qua DC-DC cách ly; hệ 12 V vẫn có ắc quy riêng để điện tử không chết khi pack chính cắt. Cùng ý "động lực và điều khiển tách nhau" như E-stop của bạn.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Đường OCV theo SOC trong code | [ước lượng] | Dạng điển hình; đo đường xả thật ở Gate (log INA226) |
+| Dropout ~1 V, η 85–93% | [ước lượng] | Tra datasheet IC trên module, đo bước 2 |
+| Vout = D·Vin (buck), Vin/(1−D) (boost) | [chuẩn] | Lý tưởng, chế độ dẫn liên tục |
+| Dung sai đầu vào mini PC | [tự đo — không thử quá áp] | Không công bố; giữ 12 V ±5% |
+
+**Đã sửa so với bản gốc:** K7 gốc "DC-DC ổn áp 12 V ≥3 A" không nói loại; với pin 3S/4S và 4S LFP, buck đơn thuần không giữ 12 V trên cả dải. Nâng định mức lên ≥5 A theo C1.2 (36 W + biên, và dòng vào lớn hơn ở Vin thấp).
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** datasheet IC chuyển đổi trên module của bạn (mục UVLO, efficiency curves).
+- **Giải thích:** TI, *Basic Calculation of a Buck Converter's Power Stage* (application note SLVA477) và bản tương ứng cho boost (SLVA372) `[spec — tên tài liệu TI; kiểm số hiệu]`.
+- **Tự kiểm tra:** (1) giải thích vì sao dòng vào tăng khi pin cạn; (2) vẽ lại ba sơ đồ buck/boost/buck-boost; (3) Buck lý tưởng 13,2 → 5 V: D bằng bao nhiêu?
+  <details><summary>Đáp án</summary>
+
+  D = 5/13,2 ≈ 0,38.
+
+  </details>
+

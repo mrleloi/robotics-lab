@@ -1716,3 +1716,505 @@ Checklist khi đọc một phân tích độ nhạy hoặc bất định:
   </details>
 
 ---
+
+## F6.7 — Ước lượng trạng thái: từ trung bình đến Kalman (trực giác), covariance (5h)
+
+> **Dùng cho:** K3 Bài 6 (đọc lướt) · K7 C6.1, C6.3, C8.3 · **Cần trước:** F1.1 (trung bình có trọng số, độ bất định), F6.4 · **Sau viên nang này bạn đánh giá được:** một covariance điền vào message có ý nghĩa gì và có trung thực không; một bộ lọc "tự tin quá" hay "sợ quá" trông thế nào trong dữ liệu; một khẳng định về kết quả hợp nhất cảm biến có đứng được không.
+
+### 1. Câu chuyện
+
+Năm 1960, Rudolf Kálmán công bố *A New Approach to Linear Filtering and Prediction Problems* [chuẩn: Transactions of the ASME, Journal of Basic Engineering, 1960]. Cùng năm, ông đến NASA Ames, nơi Stanley Schmidt đang tìm cách điều hướng tàu vũ trụ quanh Mặt Trăng chỉ bằng vài phép đo quang học thưa thớt và một mô hình quỹ đạo. Đội của Schmidt thấy ngay giá trị của cách làm "dự đoán bằng mô hình, sửa bằng phép đo, mang theo độ bất định ở cả hai bước", mở rộng nó cho hệ phi tuyến (về sau gọi là extended Kalman filter), và nó vào máy tính dẫn đường Apollo [chuẩn: L. McGee & S. Schmidt, *Discovery of the Kalman Filter as a Practical Tool for Aerospace and Industry*, NASA TM-86847, 1985]. Một chi tiết ít được kể: trên máy tính số bit hạn chế thời đó, ma trận covariance tính theo công thức gốc có thể mất tính xác định dương do làm tròn, tức bộ lọc tự tin vào những điều không thể; người ta phải phát minh dạng căn bậc hai (square-root filter, Potter 1963) để giữ covariance hợp lệ [chuẩn].
+
+Bài học mà kỹ sư hợp nhất cảm biến mang theo từ đó: **covariance là sản phẩm, không phải phụ kiện.** Một ước lượng vị trí không có độ bất định đi kèm thì không hợp nhất được với cái gì khác, và một covariance nói dối (quá nhỏ hoặc quá lớn) làm hỏng bộ lọc lặng lẽ hơn mọi bug. K7 gốc yêu cầu bạn "dùng thư viện, không tự viết EKF" (Bài 8, nay là C8.3); đúng. Viên nang này cho bạn đủ trực giác để biết thư viện đó làm gì với những con số bạn đưa vào.
+
+### 2. Mô hình tư duy
+
+**Bốn bước từ thứ bạn đã biết tới Kalman 1D:**
+
+| Bước | Công thức | Ý nghĩa |
+|---|---|---|
+| Trung bình n mẫu | x̂ₙ = x̂ₙ₋₁ + (1/n)·(zₙ − x̂ₙ₋₁) | Trung bình viết **đệ quy**: ước lượng cũ + gain × (đo − dự đoán). Gain 1/n giảm dần: càng chắc thì càng ít nghe phép đo mới |
+| EMA | x̂ = x̂ + α·(z − x̂) | Gain **cố định**: luôn nghe phép đo mới một tỉ lệ α. Hợp khi đại lượng **đổi** theo thời gian |
+| Trung bình có trọng số hai phép đo (F1.1) | x̂ = (z₁/σ₁² + z₂/σ₂²)/(1/σ₁² + 1/σ₂²) | Trọng số tỉ lệ nghịch phương sai; phương sai kết quả nhỏ hơn cả hai |
+| **Kalman 1D** | **Dự đoán:** x⁻ = x + u·dt, P⁻ = P + Q · **Cập nhật:** K = P⁻/(P⁻ + R), x = x⁻ + K·(z − x⁻), P = (1 − K)·P⁻ | Dòng 3 lặp lại theo thời gian: "phép đo thứ nhất" là dự đoán từ mô hình (phương sai P⁻), phép đo thứ hai là z (phương sai R). Gain **tự chỉnh** theo tỉ lệ bất định |
+
+Ba con số bạn phải hiểu như hiểu timeout và retry:
+
+- **P** — bộ lọc **tự khai** nó không chắc bao nhiêu (phương sai của sai số ước lượng). Nó không phải sai số; nó là lời hứa về độ lớn của sai số.
+- **Q** — mỗi bước dự đoán làm mất bao nhiêu chắc chắn (mô hình chuyển động sai bao nhiêu mỗi giây). Q gánh **mọi** thứ mô hình dự đoán không biết: nhiễu encoder, **và** sai tỉ lệ bánh, trượt, va chạm.
+- **R** — phép đo nhiễu bao nhiêu.
+
+```
+P (bất định tự khai)
+  │      ╱│      ╱│      ╱│                          ╱   mất marker: P chỉ tăng (dự đoán thuần)
+  │    ╱  │    ╱  │    ╱  │                       ╱
+  │  ╱    │  ╱    │  ╱    │                    ╱
+  │╱      │╱      │╱      │╱ ─ ─ ─ ─ ─ ─ ─ ╱─
+  │       ↑ marker: P sụt (cập nhật)     ╱              marker quay lại: P sụt mạnh, x̂ nhảy
+  └──────────────────────────────────────────────────────────► t
+   dự đoán: P += Q·dt mỗi bước odometry       cập nhật: P ← (1 − K)·P
+```
+
+Hình răng cưa đó là toàn bộ trực giác. Ba hệ quả:
+
+1. **Kalman tối ưu chỉ khi Q, R đúng.** Với mô hình tuyến tính, nhiễu trắng Gauss và Q, R đúng, nó là ước lượng có phương sai nhỏ nhất [chuẩn]. Q, R sai thì nó vẫn chạy, vẫn ra số, chỉ là số tệ hơn và P nói dối.
+2. **Có thể kiểm P có nói thật không**, bằng dữ liệu có ground truth (sai số thật nằm trong ±2√P khoảng 95% thời gian?) hoặc không cần ground truth: **innovation** `z − x⁻` phải có phương sai cỡ `P⁻ + R`; nếu innovation lớn hơn nhiều một cách có hệ thống, bộ lọc đang tự tin quá [chuẩn: kiểm định NIS/NEES]. Đây là "kiểm tra chính bài test" (F2.5) áp cho bộ lọc.
+3. **Sai số có hệ thống không được mô hình hóa phải đi đâu đó.** Odometry sai tỉ lệ 2% không phải nhiễu trắng; nếu Q chỉ tính nhiễu trắng của encoder, bộ lọc tin odometry quá mức và bị kéo lệch. Hai lối ra: tăng Q (trung thực nhưng thô), hoặc **thêm trạng thái** (ước lượng luôn hệ số tỉ lệ, F6.4 online). Mở rộng ra nhiều chiều và phi tuyến (EKF, UKF trong `robot_localization`) giữ nguyên ba ý này; chỉ có P thành ma trận và phép trừ/cộng thành phép chiếu.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Ước lượng RTT trong TCP: SRTT ← (1−α)·SRTT + α·RTT, RTTVAR theo độ lệch, timeout = SRTT + 4·RTTVAR (Jacobson 1988, RFC 6298) | Bộ ước lượng gain cố định có theo dõi độ bất định | Đây là họ hàng gần nhất của Kalman mà bạn đã dùng mỗi ngày: một ước lượng + một độ bất định đi kèm + quyết định dùng cả hai. Khác: α, β cố định (1/8, 1/4), không có mô hình dự đoán, độ bất định ước lượng từ dữ liệu chứ không lan truyền | Dùng EMA với α cố định cho vị trí robot: khi mất marker, không có bước dự đoán, ước lượng đứng yên trong khi robot đi |
+| Health score tổng hợp từ nhiều probe, probe nào ồn thì trọng số thấp | Trung bình nghịch đảo phương sai | Probe thường cùng đo **một** đại lượng tĩnh; robot đo đại lượng **đang đổi**, nên cần mô hình chuyển động giữa các lần đo | Trộn marker cũ 1 s với odometry hiện tại như thể cùng thời điểm (F4.6) |
+| Dashboard hiển thị giá trị mà không hiển thị khoảng tin cậy | Pose không kèm covariance | Trong backend, người đọc dashboard tự bù bằng kinh nghiệm; trong hợp nhất, máy đọc covariance theo nghĩa đen | Điền covariance "cho có" (0,01 mọi chỗ): bộ lọc tin tuyệt đối thứ không đáng tin |
+
+**Tên chuẩn của thứ bạn đã làm:** EMA trên metric là bộ lọc thông thấp bậc một, cũng là Kalman ở trạng thái dừng cho một mô hình "random walk + nhiễu đo" với một tỉ lệ Q/R cụ thể [chuẩn]. Khi chọn α, bạn đã ngầm chọn Q/R. Thứ còn thiếu: chọn nó **từ số đo** (R từ phương sai cảm biến đứng yên; Q từ sai số odometry đo được ở C6) và **kiểm** nó bằng innovation.
+
+**Chấm mô hình:**
+
+- *"Kalman là trung bình có trọng số."* **ĐÚNG MỘT PHẦN.** Bước cập nhật đúng là thế. Thiếu bước dự đoán: không có mô hình chuyển động thì không có gì để làm khi mất phép đo, và không biết P tăng bao nhiêu giữa hai lần đo. Phản ví dụ: mục 5, "marker giữ mẫu cuối" (chỉ có phép đo) trôi hàng mét khi mất marker.
+- *"Dùng model AI dự đoán thay cho tầng đo vật lý"* (mô hình của bạn ở K3 lượt 12, ở góc ước lượng trạng thái). **ĐÚNG MỘT PHẦN.** Dự đoán bằng mô hình là một nửa của mọi bộ ước lượng tốt, đúng như bạn nói. Nửa còn lại là phép đo sửa nó, vì mô hình nào cũng tích lũy sai số theo thời gian (P chỉ tăng khi chỉ dự đoán). Phản ví dụ: mục 5, odometry thuần là "dự đoán không đo", sai cỡ nửa mét sau hai phút dù mô hình chỉ sai 2%.
+- *"R và Q lấy từ datasheet là đủ."* **ĐÚNG MỘT PHẦN.** R từ datasheet/đo đứng yên là điểm xuất phát tốt cho nhiễu trắng. Q từ nhiễu trắng của encoder bỏ sót sai số hệ thống, và bộ lọc thành tự tin quá. Phản ví dụ: mục 5, dòng "Q chỉ từ nhiễu trắng".
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Trạng thái (state) | Tập số đủ để dự đoán tương lai (vị trí, vận tốc, có khi cả bias) | Chỉ vị trí |
+| 🟢 | Dự đoán / cập nhật (predict / update) | Đi tới bằng mô hình, sửa bằng phép đo | Hai bộ lọc riêng |
+| 🟢 | Covariance P | Bất định tự khai của ước lượng | Sai số thật |
+| 🟢 | Q (process noise), R (measurement noise) | Mô hình sai bao nhiêu mỗi giây / cảm biến nhiễu bao nhiêu | Núm vặn tùy ý cho đồ thị mượt |
+| 🟢 | Kalman gain K | Tỉ lệ nghe phép đo mới, tính từ P và R | Hằng số như α của EMA |
+| 🟢 | Innovation (residual) z − x⁻ | Phép đo lệch dự đoán bao nhiêu; dùng để kiểm bộ lọc | Sai số |
+| 🟢 | Tính nhất quán (consistency) | Sai số thật cỡ đúng như P khai | Độ chính xác cao |
+| 🟡 | EKF / UKF | Kalman cho hệ phi tuyến bằng tuyến tính hóa / bằng điểm sigma | Thứ phải tự viết |
+| 🟡 | Mở rộng trạng thái (state augmentation) | Thêm bias, hệ số tỉ lệ vào trạng thái để ước lượng luôn | Làm bộ lọc chậm vô ích |
+| 🟡 | NIS/NEES | Kiểm định thống kê tính nhất quán | Cần cho C8.3 (chỉ cần ý) |
+| 🔴 | Particle filter, factor graph, smoothing | Ước lượng phi Gauss, đa giả thuyết, tối ưu cả quỹ đạo | Cần ở lộ trình này |
+
+### 5. Bài tập dự đoán
+
+**Đề.** Robot đi thẳng 2 phút, vận tốc 0,2–0,4 m/s. Odometry 50 Hz sai tỉ lệ +2% (đường kính bánh) và nhiễu 0,02 m/s mỗi mẫu. Marker cho vị trí tuyệt đối 1 Hz, σ = 5 cm, **mất** từ giây 60 đến 90. Năm cách ước lượng: odometry thuần; marker "giữ mẫu cuối"; Kalman với q = 10⁻³ m²/s (đủ lớn để gánh sai tỉ lệ); Kalman với q **chỉ từ nhiễu trắng** của encoder (q = σ_v²·dt = 8·10⁻⁶ m²/s); Kalman "sợ odometry" q = 1 m²/s. Dự đoán:
+
+1. RMSE và sai số cuối đợt mất marker của odometry thuần (gợi ý: 2% của quãng đường).
+2. Marker giữ mẫu cuối: sai số cuối đợt mất marker (gợi ý: robot đi được bao xa trong 30 s?).
+3. Kalman q = 10⁻³: RMSE cỡ bao nhiêu so với σ marker? Sai số cuối đợt mất marker so với odometry thuần?
+4. Kalman q nhiễu trắng: RMSE tốt hơn hay tệ hơn q = 10⁻³? Bao nhiêu % thời gian sai số thật nằm trong ±2√P tự khai?
+5. Kalman q = 1: RMSE? ±2√P trung bình rộng bao nhiêu? Cái giá của "sợ" là gì?
+
+```python
+# [đã chạy] F6.7 — Kalman 1D: robot đi thẳng, odometry (trôi) + marker (1 Hz, nhiễu, có lúc mất)
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+rng = np.random.default_rng(7)
+dt, T = 0.02, 120.0                                   # odometry 50 Hz, 2 phút
+n = int(T / dt); t = np.arange(n) * dt
+v_true = 0.3 + 0.1 * np.sin(0.2 * t)                  # m/s
+x_true = np.cumsum(v_true) * dt
+v_odo = v_true * 1.02 + rng.normal(0, 0.02, n)        # odometry: sai tỉ lệ 2% (bánh) + nhiễu
+SIG_M = 0.05                                          # marker σ = 5 cm
+has_marker = (np.arange(n) % 50 == 0) & ~((t > 60) & (t < 90))   # 1 Hz, mất từ giây 60 đến 90
+z = x_true + rng.normal(0, SIG_M, n)
+
+def kalman(q, r):
+    """q: phương sai nhiễu quá trình mỗi giây (m²/s) — mức tin odometry; r: phương sai marker (m²)."""
+    x, P = 0.0, 1.0; xs, Ps = np.empty(n), np.empty(n)
+    for k in range(n):
+        x, P = x + v_odo[k] * dt, P + q * dt          # PREDICT: cộng odometry, bất định NỞ ra
+        if has_marker[k]:                             # UPDATE: trộn theo tỉ lệ bất định
+            K = P / (P + r)
+            x, P = x + K * (z[k] - x), (1 - K) * P
+        xs[k], Ps[k] = x, P
+    return xs, Ps
+
+x_odo = np.cumsum(v_odo) * dt
+x_hold = np.maximum.accumulate(np.where(has_marker, np.arange(n), 0)); x_hold = z[x_hold]   # marker "giữ giá trị cũ"
+cases = {"odometry thuần": (x_odo, None), "marker giữ mẫu cuối": (x_hold, None),
+         "Kalman q=1e-3, r=σ²": kalman(1e-3, SIG_M**2),
+         "Kalman q chỉ từ nhiễu trắng": kalman(0.02**2 * dt, SIG_M**2),
+         "Kalman sợ odometry: q=1": kalman(1.0, SIG_M**2)}
+for name, (xe, P) in cases.items():
+    e = xe - x_true; out = (t > 60) & (t < 90)
+    msg = f"{name:28s} RMSE {np.sqrt(np.mean(e**2))*100:6.1f} cm | sai cuối lúc mất marker {abs(e[out][-1])*100:5.1f} cm"
+    if P is not None:                                  # bao nhiêu % thời gian sai số thật nằm trong ±2σ tự khai?
+        msg += f" | |e| ≤ 2σ: {np.mean(np.abs(e) <= 2*np.sqrt(P))*100:5.1f}% | 2σ TB {200*np.sqrt(P).mean():5.1f} cm"
+    print(msg)
+xk, Pk = cases["Kalman q=1e-3, r=σ²"]
+plt.plot(t, (xk - x_true) * 100, label="sai số Kalman (cm)")
+plt.fill_between(t, -200*np.sqrt(Pk), 200*np.sqrt(Pk), alpha=.3, label="±2σ tự khai")
+plt.axvspan(60, 90, color="grey", alpha=.15); plt.xlabel("t (s)"); plt.legend(); plt.grid(alpha=.3)
+plt.savefig("f67.png", dpi=110)                       # trong bài: plt.show()
+```
+
+```markdown
+# prediction.md — F6.7
+1. odometry: RMSE ___ cm ; cuối đợt mất ___ cm
+2. marker giữ: cuối đợt mất ___ cm
+3. Kalman q=1e-3: RMSE ___ cm ; cuối đợt mất ___ cm
+4. q nhiễu trắng: RMSE ___ (tốt/tệ hơn) ; trong ±2σ ___ %
+5. q=1: RMSE ___ ; 2σ TB ___ cm ; cái giá: ___
+Độ tự tin (1–5): ___
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Kết quả khi chạy (numpy 2.5.3, seed 7):
+
+| Cách | RMSE (cm) | Sai số cuối đợt mất marker (cm) | Sai số thật trong ±2√P | 2√P trung bình (cm) |
+|---|---|---|---|---|
+| Odometry thuần | 39,7 | 50,9 | — | — |
+| Marker giữ mẫu cuối | 283 | 906 | — | — |
+| Kalman q = 10⁻³ | **7,7** | 21,1 | **99%** | 12,2 |
+| Kalman q nhiễu trắng (8·10⁻⁶) | 13,4 | 27,2 | **8%** | 2,9 |
+| Kalman q = 1 | 8,4 | 21,7 | 100% | **281** |
+
+1. Quãng đường ~36 m × 2% ≈ 70 cm ở cuối; RMSE ~40 cm, cuối đợt mất ~51 cm. Sai số **tăng đều**, không bao giờ tự sửa.
+2. ~9 m: robot đi 30 s × ~0,3 m/s mà ước lượng đứng yên. Đo không có mô hình chuyển động là vô dụng khi mất đo.
+3. RMSE ~8 cm, chỉ hơn σ marker một chút, vì giữa hai marker odometry nội suy tốt. Trong đợt mất, Kalman = odometry thuần bắt đầu từ một điểm đúng: 30 s × 0,3 m/s × 2% ≈ 18–21 cm. Tốt hơn odometry thuần vì **điểm xuất phát** đã được sửa, không phải vì Kalman làm odometry tốt hơn. P khai trung thực (99% trong ±2σ, hơi thận trọng).
+4. **Tệ hơn** (13 cm), và **nói dối**: chỉ 8% thời gian sai số thật nằm trong ±2√P (lẽ ra ~95%). Q chỉ có nhiễu trắng, nên bộ lọc tin odometry gần như tuyệt đối, phớt lờ marker, bị sai tỉ lệ 2% kéo lệch. Đây là kiểu hỏng nguy hiểm nhất: một hệ khác (Nav2, bộ phát hiện va chạm) đọc P = 1,5 cm và tin.
+5. RMSE gần như tốt bằng q = 10⁻³ (bộ lọc theo sát marker), nhưng P **vô dụng**: ±2√P ≈ 2,8 m, không quyết định nào dùng được. Và ước lượng giật theo nhiễu marker (không thấy trong RMSE vị trí, thấy rõ ở vận tốc suy ra). Cái giá của "sợ" là mất thông tin bất định, không phải mất độ chính xác vị trí.
+
+Bài học cho C8.3: **cùng một thư viện EKF**, ba bộ Q khác nhau cho ba hành vi khác nhau, và chỉ một bộ có P trung thực. Q phải lấy từ sai số odometry **đo được** ở C6 (kể cả phần hệ thống còn lại sau UMBmark), rồi kiểm bằng tỉ lệ "trong ±2σ" trên một lần chạy có ground truth.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi đọc một kết quả ước lượng trạng thái / hợp nhất cảm biến:
+
+1. Covariance điền vào message đến từ đâu: đo, datasheet, hay "cho có"? Đơn vị của từng phần tử là gì?
+2. Covariance đó mô tả **sai số của một mẫu** (nhiễu tức thời) hay **sai số tích lũy** (sau một quãng)? Cái nào message yêu cầu?
+3. Q có gánh sai số hệ thống còn lại không, hay chỉ nhiễu trắng?
+4. Có kiểm tính nhất quán (tỉ lệ sai số trong ±2σ, hoặc innovation) không? Hay chỉ báo RMSE?
+5. Các phép đo được ghép có cùng thời điểm không (F4.6)? Marker trễ 100 ms được áp như đo "bây giờ"?
+6. Kết quả "fusion giữ sai số < X" có kèm điều kiện (mật độ marker, tốc độ, thời gian mất marker) không?
+
+**ĐÚNG** nếu covariance có nguồn đo và được kiểm nhất quán; **SAI** nếu covariance sai đơn vị/ý nghĩa, hoặc kết quả báo không kèm điều kiện; **CHƯA RÕ** nếu chỉ có RMSE.
+
+**Khẳng định mẫu — tự chấm trước khi mở:**
+
+(a) K7 gốc Bài 5: *"`nav_msgs/Odometry` (có covariance — điền từ số đo UMBmark)"*; bản Gemini K7 Bài 5 cụ thể hơn: *"Điền ma trận hiệp phương sai (covariance) từ phương sai thực tế đo được qua 10 lần chạy UMBmark (Bài 4), tuyệt đối không để toàn số 0."*
+
+(b) Bản Gemini K7 Bài 7, câu tự kiểm tra: *"Tại sao khi đưa dữ liệu marker vào bộ lọc vị trí (EKF), ta phải gán giá trị hiệp phương sai của góc quay (σ²_yaw) lớn hơn nhiều so với hiệp phương sai của tọa độ khoảng cách (σ²_x, σ²_y)?"*
+
+(c) Bản Gemini K7 Bài 8, bảng "Số phải ra": *"Sai số vị trí sau hợp nhất (EKF Fusion): được giữ vững ổn định trong phạm vi vài chục centimet (< 25 cm) xuyên suốt toàn bộ hành trình"*; và *"Khi tag xuất hiện trở lại: biến đổi map → odom nhảy bậc để kéo tọa độ robot về đúng vị trí thực tế mà không làm đứt gãy tính liên tục của odom → base_link."*
+
+<details><summary>🔒 Đáp án</summary>
+
+(a) **ĐÚNG MỘT PHẦN.** Hướng đúng (covariance phải từ số đo, không để 0, không bịa). Sai ở ý nghĩa: UMBmark đo sai lệch **cuối** một hình vuông 4 m, chủ yếu để tách sai số **hệ thống**; phương sai của 10 điểm cuối là sai số **tích lũy** sau ~16 m. Covariance trong `nav_msgs/Odometry` mô tả bất định của pose (tăng dần theo quãng đường) và của twist (nhiễu **tức thời** của vận tốc). Điền phương sai cuối-hình-vuông vào twist covariance là sai đơn vị nghĩa (quá lớn hàng bậc); điền vào pose covariance cố định là sai dạng (pose covariance phải lớn dần). Cách đúng hơn: twist covariance từ nhiễu vận tốc đo khi chạy đều; tốc độ tăng bất định theo quãng đường (sau hiệu chuẩn) từ phân tán của UMBmark chia theo quãng, đưa vào Q của bộ lọc. `robot_localization` thường dùng twist từ odometry; kiểm cấu hình của bạn [tự đo].
+
+(b) **SAI về cách đặt vấn đề** (dù kết luận thực tế có thể đúng). σ²_yaw có đơn vị rad², σ²_x có đơn vị m²; "lớn hơn nhiều" giữa hai đơn vị khác nhau là vô nghĩa (đổi m sang mm thì thứ tự đảo). Câu hỏi đúng: σ_yaw đo được (rad) có lớn so với **ảnh hưởng của nó lên vị trí** không? Với robot, sai yaw δθ làm sai vị trí ngang cỡ d·δθ sau quãng d; so cái đó với σ_x. Lý do thật khiến yaw từ marker phẳng kém: ước lượng góc từ một tag nhỏ nhìn gần chính diện rất nhạy nhiễu góc cạnh (bài toán PnP gần suy biến); đó là một khẳng định về **số đo**, phải đo ở C8.2, không suy ra từ việc so hai phương sai khác đơn vị.
+
+(c) Câu đầu **CHƯA RÕ → không chấp nhận như ngưỡng**: "< 25 cm" không có nguồn, phụ thuộc mật độ marker, tốc độ, độ dài đợt mất marker (mục 5: chỉ một đợt mất 30 s đã tới ~21 cm với sai tỉ lệ 2%). Phải là số bạn dự đoán rồi đo. Câu sau **ĐÚNG**: đó chính là thiết kế của REP-105: `odom → base_link` liên tục (không nhảy, có thể trôi), `map → odom` hấp thụ các bước sửa của định vị tuyệt đối, nên bộ điều khiển cục bộ dựa trên odom không bị giật khi marker sửa vị trí (F6.8).
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Vì sao không]** Vì sao không đặt R của marker thật nhỏ để bộ lọc "tin marker", vì marker chính xác hơn odometry?
+   <details><summary>Hướng nghĩ</summary>
+
+   R nhỏ hơn thật → mỗi marker kéo ước lượng gần như về đúng z, kể cả nhiễu của nó; vận tốc suy ra giật; một marker sai (nhận nhầm ID, phản chiếu) kéo robot đi xa. Bộ lọc tin quá một nguồn là mất khả năng phát hiện nguồn đó hỏng. Liên hệ: một health check không bao giờ được phép sai.
+
+   </details>
+2. **[Quy mô]** 100 robot, mỗi con một bộ Q, R. Bạn phát hiện một robot "tự tin quá" thế nào, từ log, không cần ground truth?
+   <details><summary>Hướng nghĩ</summary>
+
+   Innovation: với mỗi lần cập nhật marker, tính (z − x⁻)²/(P⁻ + R); trung bình phải cỡ 1. Robot có giá trị trung bình ≫ 1 đang tự tin quá. Đây là một metric fleet rẻ, chỉ cần log thêm P⁻ và innovation. Câu hỏi infra: các trường đó có trong MCAP không?
+
+   </details>
+3. **[Failure mode]** Marker đến trễ 150 ms (xử lý ảnh) nhưng được áp như phép đo "bây giờ". Robot chạy 0,4 m/s. Bộ lọc hỏng thế nào, và vì sao P không báo?
+   <details><summary>Hướng nghĩ</summary>
+
+   Mỗi cập nhật kéo ước lượng về vị trí 6 cm phía sau: sai có hệ thống, không phải nhiễu, nên P (vốn giả định nhiễu trắng) không phản ánh. Cách đúng: đóng dấu thời gian phép đo ở lúc chụp (F4.6) và cho bộ lọc áp nó vào đúng thời điểm (nhiều thư viện có cơ chế lưu lịch sử để làm việc này [tự đo theo thư viện]).
+
+   </details>
+4. **[Liên ngành]** Đồng hóa dữ liệu trong dự báo thời tiết (data assimilation) và Kalman: giống và khác ở đâu?
+   <details><summary>Hướng nghĩ</summary>
+
+   Cùng cấu trúc dự đoán–cập nhật với covariance. Khác: trạng thái hàng trăm triệu chiều, không lưu được P đầy đủ; dùng ensemble (EnKF) hoặc tối ưu theo cửa sổ thời gian (4D-Var). Họ gặp đúng bài toán "Q gánh sai số mô hình" ở quy mô lớn nhất.
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Điều hướng Apollo và GPS/INS.** Từ Apollo đến máy bay dân dụng hiện nay, hợp nhất quán tính (trôi, liên tục) với vô tuyến/GPS (tuyệt đối, thưa, có lúc mất) theo đúng cấu trúc odometry + marker của bạn [chuẩn]. Giống: hai nguồn bổ sung, covariance quyết định trộn. Khác: IMU hàng không trôi chậm hơn odometry bánh xe nhiều bậc, và hệ thống được chứng nhận với kiểm tra tính toàn vẹn (integrity monitoring) — phát hiện khi một nguồn nói dối.
+- **TCP RTO** (mục 3): ước lượng + độ bất định + quyết định dùng cả hai, gain cố định. Giống: thừa nhận độ bất định là một phần của ước lượng. Khác: không có mô hình dự đoán; khi mất mẫu (mất gói), RTO lùi theo luật cứng (exponential backoff) thay vì lan truyền bất định.
+
+### 9. Áp vào khóa chính
+
+- **K3 Bài 6:** mục chấm mô hình lượt 12 nhắc Kalman như ví dụ "dự đoán rồi hiệu chỉnh"; chấm mô hình thứ hai ở mục 3 là phần nối tiếp.
+- **K7 C6.1, C6.3:** odometry là bước **dự đoán**; sai số hệ thống còn lại sau UMBmark và hành vi trượt (F6.1) quyết định Q. Ghi phương sai theo quãng đường, không phải một con số.
+- **K7 C8.2:** đo σ của pose từ marker theo khoảng cách và góc nhìn: đó là R, và nó **đổi theo điều kiện** (R động).
+- **K7 C8.3:** cấu hình `robot_localization` với Q, R từ C6 và C8.2; kiểm nhất quán bằng tỉ lệ trong ±2σ trên lần chạy có điểm ground truth; log innovation cho câu hỏi ngược 2. Che marker 2 phút (bản gốc) là thí nghiệm "mất cập nhật" của mục 5.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Kalman 1960; Schmidt ở NASA Ames đưa vào điều hướng Apollo, phát triển dạng mở rộng | [chuẩn] | McGee & Schmidt, NASA TM-86847 (1985) |
+| Square-root filter (Potter 1963) vì covariance mất xác định dương do làm tròn | [chuẩn] | Grewal & Andrews, *Kalman Filtering: Theory and Practice* (chương lịch sử, số học) |
+| TCP: SRTT/RTTVAR với α = 1/8, β = 1/4, RTO = SRTT + 4·RTTVAR | [spec] | RFC 6298 (2011), dựa trên Jacobson 1988 |
+| EMA = Kalman trạng thái dừng cho random walk + nhiễu đo | [chuẩn] | Kết quả kinh điển (bộ lọc α) |
+| `sensor_msgs/Imu`: covariance toàn 0 nghĩa là "không biết", phần tử 0 bằng −1 nghĩa là "không có ước lượng" | [spec] | Chú thích trong `sensor_msgs/msg/Imu.msg`; cách `robot_localization` xử lý covariance 0 thì [tự đo] theo phiên bản |
+| Bảng mục 5 | [đã chạy] | numpy 2.5.3, seed 7; mô hình 1D đồ chơi |
+
+Đã sửa so với bản gốc/Gemini: (K7 gốc Bài 5, Gemini K7 Bài 5) "covariance odometry điền từ UMBmark / phương sai 10 lần chạy" → UMBmark đo sai số tích lũy, chủ yếu hệ thống; twist covariance là nhiễu tức thời, sai số theo quãng đường thuộc về Q. (Gemini K7 Bài 7) so σ²_yaw với σ²_x khác đơn vị → so ảnh hưởng lên vị trí; độ kém của yaw từ marker là chuyện phải đo. (Gemini K7 Bài 8) "fusion < 25 cm suốt hành trình" không có nguồn → con số tự dự đoán rồi đo, kèm điều kiện.
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** R. E. Kálmán, *A New Approach to Linear Filtering and Prediction Problems* (1960) — đọc phần giới thiệu để thấy bài toán được đặt thế nào; L. McGee & S. Schmidt, NASA TM-86847 (1985) cho lịch sử.
+- **Giải thích:** R. Labbe, *Kalman and Bayesian Filters in Python* (sách miễn phí dạng notebook trên GitHub, tác giả Roger Labbe), chương 1–8 (g-h filter → Kalman 1D → nhiều chiều).
+- **Đào sâu (tùy chọn):** S. Thrun, W. Burgard, D. Fox, *Probabilistic Robotics* (MIT Press, 2005), chương 3 (Gaussian filters).
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer Kalman 1D bằng TCP RTO, nói rõ chỗ giống và chỗ thiếu; (2) vẽ lại hình răng cưa của P; (3) câu hỏi:
+
+  Hai nguồn đo cùng một vị trí tĩnh: σ₁ = 3 cm, σ₂ = 4 cm, độc lập. Ước lượng kết hợp có σ bao nhiêu, trọng số mỗi nguồn bao nhiêu? Nếu bạn khai nhầm σ₂ = 1 cm thì sao?
+  <details><summary>Đáp án</summary>
+
+  1/σ² = 1/9 + 1/16 → σ = 2,4 cm; trọng số 16/25 = 0,64 cho nguồn 1, 0,36 cho nguồn 2. Khai σ₂ = 1 cm: trọng số nguồn 2 thành 0,9, σ tự khai ≈ 0,95 cm trong khi sai số thật ≈ 3,6 cm (√(0,1²·9 + 0,9²·16)): ước lượng tệ hơn chỉ dùng nguồn 1, và tự tin gấp bốn lần mức đáng có.
+
+  </details>
+
+---
+
+## F6.8 — Hình học tối thiểu: frame, transform 4×4, quaternion (🟡) (3h)
+
+> **Dùng cho:** K2 Bài 3 · K5 Bài 13 · K6 Bài 2 · K7 C8.2, C8.3 · **Cần trước:** không · **Sau viên nang này bạn đánh giá được:** một con số vị trí/hướng có kèm đủ frame và quy ước không; một chuỗi transform có đúng thứ tự không; một quaternion trong dataset có bị đọc sai thứ tự thành phần không. Mức 🟡: biết đủ để **không làm sai dữ liệu và đọc được lỗi**, không cần tự dẫn công thức.
+
+### 1. Câu chuyện
+
+Ngày 16/10/1843, William Rowan Hamilton đi dạo dọc kênh Royal ở Dublin và nghĩ ra lời giải cho bài toán ông vật lộn nhiều năm: muốn biểu diễn phép quay trong không gian ba chiều bằng một "số", cần **bốn** thành phần chứ không phải ba. Ông khắc công thức `i² = j² = k² = ijk = −1` lên cầu Brougham [chuẩn]. Quaternion bị quên gần một thế kỷ, rồi quay lại với đồ họa máy tính, hàng không vũ trụ và robotics, vì một lý do rất thực dụng: ba con số (góc Euler) **luôn** có chỗ kỳ dị.
+
+Chỗ kỳ dị đó có tên là gimbal lock. Khối quán tính của Apollo đặt con quay trên ba vòng gimbal; khi hai trục gimbal thẳng hàng, hệ mất một bậc tự do và không biểu diễn được một số chuyển động. Phi hành đoàn phải tránh vùng hướng đó, và Michael Collins trên Apollo 11 từng đùa xin "một gimbal thứ tư làm quà Giáng sinh" [chuẩn: được trích rộng rãi từ bản ghi liên lạc Apollo 11]. Bài học cho data infra: **cách biểu diễn hướng là một quyết định có điểm hỏng**, và dataset lưu hướng theo quy ước nào thì mọi người đọc phải biết đúng quy ước đó.
+
+### 2. Mô hình tư duy
+
+**Frame và transform.** Một frame là một hệ trục gắn vào một vật (`map`, `odom`, `base_link`, `camera_optical_frame`). Một điểm chỉ có tọa độ **trong** một frame. Transform `T_A_B` (đọc: "B nhìn từ A", hay "pose của B trong A") là ma trận 4×4 đổi tọa độ một điểm từ B sang A:
+
+```
+         ┌ R(3×3)  t(3×1) ┐            p_A = T_A_B · p_B          (p viết dạng [x, y, z, 1])
+T_A_B =  │                │            T_A_C = T_A_B · T_B_C      (chỉ số trong "khớp nhau": B…B)
+         └ 0 0 0     1    ┘            T_B_A = (T_A_B)⁻¹ = [Rᵀ, −Rᵀt; 0, 1]
+```
+
+Quy ước đặt tên `T_cha_con` với chỉ số "khớp nhau" khi nhân là cách rẻ nhất để không sai thứ tự [chuẩn: cách viết của Tedrake trong *Robotic Manipulation*, và nhiều thư viện]. Nhân ma trận **không giao hoán**: đổi thứ tự là đổi kết quả.
+
+**Cây TF của robot** (REP-105, `CONVENTIONS.md` mục 2):
+
+```mermaid
+flowchart LR
+  map -->|"định vị tuyệt đối sửa<br/>(được NHẢY)"| odom
+  odom -->|"odometry tích phân<br/>(LIÊN TỤC, được trôi)"| base_link
+  base_link -->|"đo cơ khí, tĩnh<br/>(extrinsic)"| camera_link
+  camera_link -->|"đổi quy ước trục<br/>z ra trước, x phải, y xuống"| camera_optical_frame
+  base_link --> imu_link
+```
+
+**Bốn cách biểu diễn phép quay** [chuẩn]:
+
+| Cách | Số lượng | Điểm mạnh | Điểm hỏng |
+|---|---|---|---|
+| Ma trận quay R | 9 (ràng buộc trực chuẩn) | Không kỳ dị, nhân trực tiếp | Làm tròn tích lũy làm R hết trực chuẩn; tốn chỗ |
+| Góc Euler (roll, pitch, yaw) | 3 | Người đọc hiểu | Kỳ dị (gimbal lock); **12 quy ước thứ tự trục**, nội tại hay ngoại tại |
+| Trục–góc / rotation vector | 3 | Trực quan cho phép quay nhỏ, dùng trong tối ưu | Kỳ dị ở 0 (trục không xác định) và nhập nhằng ở π |
+| Quaternion đơn vị | 4 (chuẩn = 1) | Không kỳ dị, nội suy đẹp (slerp), gọn | **q và −q cùng một phép quay**; thứ tự thành phần (x, y, z, w) hay (w, x, y, z) tùy thư viện |
+
+Thứ tự thành phần là bẫy data infra kinh điển: ROS `geometry_msgs/Quaternion` là (x, y, z, w); scipy `Rotation.as_quat()` mặc định (x, y, z, w); nhiều thư viện khác (MuJoCo `qpos` của freejoint, Eigen khi khởi tạo bằng 4 số, nhiều dataset) dùng (w, x, y, z) [spec: tài liệu từng thư viện; tự kiểm theo phiên bản]. Đọc nhầm không báo lỗi gì, vì mọi bộ 4 số chuẩn hóa đều là một phép quay hợp lệ.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Timestamp cần múi giờ; "10:00" không có zone là vô nghĩa | Tọa độ cần frame; "(2, 1)" không có `frame_id` là vô nghĩa | Đổi múi giờ là cộng một hằng số (giao hoán được); đổi frame là quay rồi tịnh tiến (không giao hoán), và **đổi theo thời gian** (robot di chuyển) | Ghép hai điểm từ hai frame như cùng frame; lệch vài mét mà không có lỗi nào |
+| Đường dẫn tương đối, resolve qua chuỗi thư mục | Chuỗi transform qua cây TF | Resolve đường dẫn là nối chuỗi; transform là nhân ma trận có thứ tự, và mỗi cạnh có timestamp riêng | Dùng transform `map → odom` ở thời điểm khác với phép đo (F4.6) |
+| Endianness / thứ tự byte khi đọc binary | Thứ tự thành phần quaternion | Đọc sai endianness thường ra số vô lý, dễ phát hiện; đọc sai thứ tự quaternion ra một phép quay **hợp lệ khác** | Dataset "trông bình thường" mà mọi hướng đều sai |
+
+**Chấm mô hình:**
+
+- *"Quaternion là bốn góc."* **SAI.** Nó là (sin(θ/2)·trục, cos(θ/2)) cho phép quay góc θ quanh một trục đơn vị. Phản ví dụ: quay 90° quanh z là (0, 0, 0,707, 0,707), không có thành phần nào bằng 90.
+- *"Robot chạy trên sàn phẳng, chỉ cần yaw, góc Euler là đủ."* **ĐÚNG MỘT PHẦN.** Với pose 2D của base thì đúng (một góc, không có gimbal lock). Gãy khi xử lý IMU (gắn nghiêng, đo cả roll/pitch), camera (optical frame xoay so với body), hoặc ghép dữ liệu 3D từ dataset ngoài.
+- *"Nội suy hướng giữa hai mẫu bằng trung bình từng thành phần là được."* **ĐÚNG MỘT PHẦN.** Xem khẳng định (c) ở mục 6.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Frame, `frame_id` | Hệ trục mà một số đo được biểu diễn trong đó | Tên topic |
+| 🟢 | Transform T_A_B | Pose của B trong A; đổi tọa độ từ B sang A | Hướng ngược lại (quy ước của thư viện có thể khác: luôn kiểm) |
+| 🟢 | `map`, `odom`, `base_link` (REP-105) | Frame toàn cục (nhảy được) / cục bộ liên tục (trôi) / thân robot | Ba tên của cùng một thứ |
+| 🟢 | REP-103 | x tiến, y trái, z lên; đơn vị SI; optical frame z ra trước | Chỉ là gợi ý |
+| 🟡 | Quaternion đơn vị, q ≡ −q | Bốn số biểu diễn phép quay, chuẩn 1, hai dấu cùng nghĩa | Bốn góc |
+| 🟡 | Góc Euler, gimbal lock | Ba góc theo một thứ tự trục; mất bậc tự do khi pitch = ±90° | Lỗi phần mềm |
+| 🟡 | Slerp | Nội suy theo cung trên mặt cầu quaternion, tốc độ góc đều | Nội suy tuyến tính rồi chuẩn hóa (gần đúng khi góc nhỏ) |
+| 🟡 | Extrinsic (calibration) | Transform tĩnh giữa cảm biến và thân robot | Thông số nội của camera (intrinsic) |
+| 🔴 | Đại số Lie SO(3)/SE(3), error-state | Toán cho tối ưu và lọc trên phép quay | Cần ở mức 🟡 |
+
+### 5. Bài tập dự đoán
+
+**Đề.** Robot ở (2, 1) trong `map`, quay yaw 90°. Camera gắn trước tâm 0,2 m, cao 0,3 m, cùng hướng thân (bỏ qua optical frame). Một vật cách camera 1 m theo trục x của camera. Dự đoán (tính tay trước):
+
+1. Tọa độ vật trong `map` khi nhân đúng `T_map_base · T_base_cam · p`.
+2. Tọa độ khi nhân nhầm thứ tự `T_base_cam · T_map_base · p`.
+3. Quaternion yaw 90° ở dạng (x, y, z, w). Nếu bên gửi ghi (w, x, y, z) mà bên nhận đọc là (x, y, z, w), bên nhận thấy phép quay gì (góc, trục)?
+4. q và −q có cho cùng ma trận quay không?
+5. Hai bộ góc ZYX (yaw, pitch, roll) = (30°, 90°, 0°) và (0°, 90°, −30°): cùng phép quay không?
+6. Từ yaw 10° tới yaw 170°, nội suy ở t = 0,25: slerp cho yaw bao nhiêu? Trung bình có trọng số từng thành phần rồi chuẩn hóa ("lerp thô") cho bao nhiêu?
+
+```python
+# [đã chạy] F6.8 — frame, transform 4×4, quaternion: ba cái bẫy chạy được
+import numpy as np
+from scipy.spatial.transform import Rotation as R
+
+def T(rot, xyz):                                   # transform đồng nhất 4×4 từ Rotation + tịnh tiến
+    M = np.eye(4); M[:3, :3] = rot.as_matrix(); M[:3, 3] = xyz; return M
+inv = lambda M: np.block([[M[:3, :3].T, -M[:3, :3].T @ M[:3, 3:]], [np.zeros((1, 3)), np.ones((1, 1))]])
+
+# Cây TF: map → base_link (robot ở (2, 1), quay 90°) → camera (gắn trước 0.2 m, cao 0.3 m)
+T_map_base = T(R.from_euler("z", 90, degrees=True), [2.0, 1.0, 0.0])
+T_base_cam = T(R.identity(), [0.2, 0.0, 0.3])
+p_cam = np.array([1.0, 0.0, 0.0, 1.0])            # một vật cách camera 1 m theo trục x của camera
+print("vật trong map (đúng thứ tự):  ", (T_map_base @ T_base_cam @ p_cam)[:3].round(3))
+print("vật trong map (đảo thứ tự):   ", (T_base_cam @ T_map_base @ p_cam)[:3].round(3))
+print("T_base_map = inv(T_map_base)?  ", np.allclose(inv(T_map_base) @ T_map_base, np.eye(4)))
+
+# Bẫy 2: thứ tự thành phần quaternion. ROS/geometry_msgs: (x, y, z, w). Nhiều thư viện khác: (w, x, y, z).
+q_xyzw = R.from_euler("z", 90, degrees=True).as_quat()            # scipy mặc định: (x, y, z, w)
+print("quaternion yaw 90° (x,y,z,w): ", q_xyzw.round(4))
+wrong = R.from_quat(np.roll(q_xyzw, 1))                           # ai đó gửi (w,x,y,z), bên nhận đọc (x,y,z,w)
+print("đọc nhầm thứ tự -> góc quay   ", np.degrees(wrong.magnitude()).round(1), "độ quanh trục",
+      (wrong.as_rotvec() / wrong.magnitude()).round(3))
+print("q và -q cùng một phép quay?   ", np.allclose(R.from_quat(q_xyzw).as_matrix(), R.from_quat(-q_xyzw).as_matrix()))
+
+# Bẫy 3: góc Euler ở pitch = 90° (gimbal lock): đổi roll hay đổi yaw cho CÙNG một kết quả
+a = R.from_euler("ZYX", [30, 90, 0], degrees=True)                # yaw 30, pitch 90, roll 0
+b = R.from_euler("ZYX", [0, 90, -30], degrees=True)               # yaw 0,  pitch 90, roll −30
+print("gimbal lock: hai bộ góc khác nhau, cùng phép quay?", np.allclose(a.as_matrix(), b.as_matrix()))
+
+# Nội suy giữa hai hướng: cộng thô từng thành phần (rồi chuẩn hóa) vs slerp
+q1, q2 = R.from_euler("z", 10, degrees=True), R.from_euler("z", 170, degrees=True)
+from scipy.spatial.transform import Slerp
+print("slerp t=0.25  ->", np.degrees(Slerp([0, 1], R.concatenate([q1, q2]))(0.25).as_euler("ZYX")[0]).round(2),
+      "độ; lerp thô t=0.25 ->", np.degrees(R.from_quat(0.75*q1.as_quat()+0.25*q2.as_quat()).as_euler("ZYX")[0]).round(2))
+```
+
+```markdown
+# prediction.md — F6.8
+1. đúng thứ tự: (___, ___, ___)
+2. nhầm thứ tự: (___, ___, ___)
+3. q(x,y,z,w) = ___ ; đọc nhầm thứ tự → quay ___° quanh trục ___
+4. q, −q cùng phép quay? ___
+5. hai bộ Euler cùng phép quay? ___
+6. slerp t=0,25: ___° ; lerp thô: ___°
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Kết quả khi chạy (scipy 1.18.1):
+
+| Câu | Kết quả |
+|---|---|
+| 1 | (2,0; 2,2; 0,3): robot nhìn theo +y của map, camera ở (2; 1,2), vật xa thêm 1 m theo +y |
+| 2 | (2,2; 2,0; 0,3): sai 0,2 m mỗi trục, **trông hợp lý** — không có gì báo lỗi |
+| 3 | q = (0; 0; 0,7071; 0,7071). Ghi (w, x, y, z) = (0,7071; 0; 0; 0,7071), đọc như (x, y, z, w) → **quay 90° quanh trục x** (roll), không phải yaw |
+| 4 | Có: q và −q cùng một ma trận |
+| 5 | Có: ở pitch 90°, yaw và roll quay quanh cùng một trục, chỉ hiệu của chúng có nghĩa (gimbal lock) |
+| 6 | Slerp 50,0°; lerp thô 44,5° (lệch 5,5° ở góc 160°) |
+
+Câu 2 và 3 là hai lỗi dữ liệu nguy hiểm nhất của viên nang: kết quả sai là một giá trị **hợp lệ**, nên schema validation không bắt được (F6.2 mục 6, F3.7). Cách bắt: kiểm tra vật lý (robot đi tới thì vật trong map đứng yên; trọng lực trong khung IMU đứng yên phải chỉ xuống dưới sau khi quay về `base_link`).
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi đọc một dữ liệu/khẳng định có vị trí hoặc hướng:
+
+1. Mỗi số có `frame_id` không? Frame đó theo REP-103/105 hay quy ước riêng (ghi ở đâu)?
+2. Transform viết theo quy ước nào (T_A_B là B trong A hay ngược lại)? Thứ tự nhân có khớp chỉ số không?
+3. Quaternion theo thứ tự nào? Có chuẩn hóa không? Có xử lý q ≡ −q khi nội suy/so sánh không?
+4. Góc Euler: thứ tự trục nào, nội tại hay ngoại tại, độ hay rad?
+5. Transform lấy ở **thời điểm** của phép đo không (F4.6)?
+
+**ĐÚNG** nếu 1–5 rõ; **SAI** nếu trộn frame hoặc sai thứ tự; **CHƯA RÕ** nếu thiếu `frame_id` hoặc quy ước quaternion (thường gặp nhất trong dataset ngoài).
+
+**Khẳng định mẫu — tự chấm trước khi mở:**
+
+(a) Bản Gemini K7 Bài 8, bảng "Nếu ra khác": *"Bộ lọc EKF bị phân kỳ, tọa độ bay ra vô cực (NaN) — Dấu của góc xoay giữa khung camera và khung thân robot bị ngược (sai cấu hình TF extrinsic)."*
+
+(b) Bản Gemini K7 Bài 8, cùng bảng: *"Robot bị giật bắn vị trí trên màn hình RViz/Foxglove — Node EKF cấu hình sai: đang để marker phát trực tiếp biến đổi odom → base_link thay vì map → odom."*
+
+(c) K5 Bài 13 (bản giáo trình), bảng thuật ngữ, dòng Slerp, cột "hay bị hiểu nhầm thành": *"Nội suy tuyến tính từng thành phần rồi chuẩn hóa (chấp nhận được khi góc nhỏ)."*
+
+<details><summary>🔒 Đáp án</summary>
+
+(a) **ĐÚNG MỘT PHẦN.** Extrinsic ngược dấu là lỗi thật và hay gặp, nhưng triệu chứng điển hình của nó **không** phải NaN: marker đưa vào những vị trí sai một cách nhất quán (gương qua trục), bộ lọc bị kéo về vị trí sai, innovation lớn kéo dài (F6.7 mục 6). NaN thường do số không hợp lệ: quaternion toàn 0 hoặc chưa chuẩn hóa, covariance không xác định dương, dt = 0 hoặc timestamp đi lùi. Chẩn đoán đúng cho NaN: tìm message đầu tiên chứa NaN/inf và kiểm các trường đó.
+
+(b) **ĐÚNG.** REP-105 dành `map → odom` cho các bước sửa nhảy; `odom → base_link` phải liên tục để điều khiển cục bộ không giật. Một ghi chú: nhìn trong frame `map`, robot **nhảy** khi marker sửa là hành vi đúng; chỉ nhảy trong frame `odom` mới là lỗi. Khi chẩn đoán, ghi rõ đang xem ở fixed frame nào trong RViz/Foxglove.
+
+(c) **ĐÚNG MỘT PHẦN.** Đúng khi góc nhỏ **và** hai quaternion cùng bán cầu (tích vô hướng q₁·q₂ > 0). Nếu khác bán cầu (cùng phép quay gần nhau nhưng một bên lưu dạng −q, điều xảy ra thường xuyên trong dữ liệu thật), trung bình từng thành phần đi đường vòng gần 360° hoặc ra gần 0 rồi chuẩn hóa thành một phép quay vô nghĩa. Cách đúng: lật dấu một bên nếu tích vô hướng âm, rồi mới nội suy (slerp hay lerp).
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Quy mô]** Bạn nhận 1000 giờ dataset từ ba nguồn, mỗi nguồn một quy ước quaternion và frame. Kiểm tự động thế nào mà không cần người xem từng file?
+   <details><summary>Hướng nghĩ</summary>
+
+   Kiểm vật lý (F3.7): khi robot đứng yên, gia tốc kế quay về `base_link` phải chỉ (0, 0, +g) theo REP-103; khi robot đi thẳng tới, vận tốc trong `base_link` phải chủ yếu theo +x. Một quy ước sai làm các bất biến này hỏng ngay. Ghi quy ước vào metadata channel (CONVENTIONS) để lần sau khỏi đoán.
+
+   </details>
+2. **[Failure mode]** Camera optical frame (z ra trước) bị khai như `camera_link` (x ra trước). Vật thấy được sẽ hiện ở đâu trong map?
+   <details><summary>Hướng nghĩ</summary>
+
+   Vật trước camera 1 m (z_optical = 1) sẽ bị đặt **lên trên** camera 1 m (z_link = 1). Lỗi kiểu này làm marker "bay" lên trần, và nếu chỉ dùng x, y thì vật dồn về chân robot. Kiểm bằng cách đặt vật trước camera và nhìn trong Foxglove.
+
+   </details>
+3. **[Vì sao không]** Vì sao ROS không lưu góc Euler trong message pose cho dễ đọc?
+   <details><summary>Hướng nghĩ</summary>
+
+   Kỳ dị và 12 quy ước thứ tự. Một định dạng trao đổi cần biểu diễn không nhập nhằng; quaternion còn nhập nhằng q/−q, nhưng đó là nhập nhằng vô hại cho phép quay (cùng ma trận), chỉ cần cẩn thận khi nội suy.
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Đồ họa máy tính và game.** Animation xương nhân vật lưu quaternion và nội suy bằng slerp từ thập niên 1980 (Shoemake, SIGGRAPH 1985) [chuẩn]. Giống: cùng bẫy q/−q khi blend. Khác: sai một độ trong game là "trông hơi lạ"; trong dataset robot là nhãn sai cho policy học.
+- **Trắc địa và GIS.** Tọa độ GPS (WGS84) phải đổi sang hệ chiếu (UTM) hay hệ địa phương trước khi đo khoảng cách; ghép dữ liệu khác datum lệch hàng trăm mét [chuẩn]. Giống: số không kèm hệ quy chiếu là vô nghĩa. Khác: datum đổi chậm theo thập kỷ; TF robot đổi mỗi mili giây.
+
+### 9. Áp vào khóa chính
+
+- **K2 Bài 3:** mọi số hình học đi kèm frame, đơn vị, quy ước; mục 6 là checklist audit dataset.
+- **K5 Bài 13:** nội suy hướng khi ghép luồng khác tần số: slerp, và xử lý q/−q trước (khẳng định (c)).
+- **K6 Bài 2:** ghi thứ tự quaternion của observation (MuJoCo thường (w, x, y, z), ROS (x, y, z, w)) và chuyển đổi một chỗ duy nhất khi ghi MCAP.
+- **K7 C8.2:** extrinsic `base_link → camera_link` là tham số đo (thước, hoặc hiệu chuẩn) với độ bất định của nó; đi vào R của marker (F6.7). **K7 C8.3:** cây TF ở mục 2; bảng chẩn đoán (a), (b).
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Hamilton, 16/10/1843, cầu Brougham | [chuẩn] | |
+| Gimbal lock của IMU Apollo; câu đùa "fourth gimbal" của Collins | [chuẩn] | Bản ghi Apollo 11; được trích nhiều nơi, kiểm nguyên văn nếu cần dẫn |
+| ROS `geometry_msgs/Quaternion` thứ tự (x, y, z, w); scipy `as_quat()` mặc định (x, y, z, w) | [spec] | Định nghĩa message ROS 2; tài liệu scipy (từ 1.14 có tham số `scalar_first`) — kiểm theo phiên bản |
+| MuJoCo `qpos` của freejoint dùng (w, x, y, z) | [spec] | Tài liệu MuJoCo, mục freejoint / quaternion; [tự đo] theo phiên bản |
+| REP-103 optical frame: z ra trước, x phải, y xuống | [spec] | REP-103; `CONVENTIONS.md` mục 2 |
+| Bảng mục 5 | [đã chạy] | scipy 1.18.1 |
+
+Đã sửa so với bản gốc/Gemini: (Gemini K7 Bài 8) "EKF ra NaN do extrinsic ngược dấu" → extrinsic ngược cho sai nhất quán và innovation lớn; NaN do số không hợp lệ.
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** REP-103 và REP-105 (ros.org/reps), mỗi cái vài trang.
+- **Giải thích:** R. Tedrake, *Robotic Manipulation* (ghi chú bài giảng MIT, miễn phí trực tuyến), chương về pick-and-place, phần ký hiệu không gian (spatial algebra, quy ước `X^A_B`).
+- **Đào sâu (tùy chọn):** J. Solà, *Quaternion kinematics for the error-state Kalman filter* (arXiv 1711.02508, 2017), chương 1–2.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao đọc nhầm thứ tự quaternion nguy hiểm hơn đọc nhầm endianness; (2) vẽ lại cây TF; (3) câu hỏi:
+
+  Bạn có `T_map_base` và `T_base_cam`. Viết biểu thức cho pose của `map` nhìn từ camera.
+  <details><summary>Đáp án</summary>
+
+  `T_cam_map = (T_map_base · T_base_cam)⁻¹ = T_base_cam⁻¹ · T_map_base⁻¹`. Chỉ số khớp: cam…base · base…map.
+
+  </details>
+
+---

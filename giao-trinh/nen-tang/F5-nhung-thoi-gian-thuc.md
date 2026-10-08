@@ -200,7 +200,7 @@ phía nào: … vì …
 
 <details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
 
-Hai lần chạy trên máy soạn (container, 4 vCPU Xeon 2,8 GHz, kernel `PREEMPT_DYNAMIC`, timerslack 50 000 ns):
+Bốn lần chạy trên máy soạn (container, 4 vCPU Xeon 2,8 GHz, kernel `PREEMPT_DYNAMIC`, timerslack 50 000 ns):
 
 | Lần | Trường hợp | p50 (µs) | p99 (µs) | max (µs) | > 1,5 ms |
 |---|---|---|---|---|---|
@@ -208,11 +208,15 @@ Hai lần chạy trên máy soạn (container, 4 vCPU Xeon 2,8 GHz, kernel `PREE
 | 1 | có tải | 1000 | 1452 | 51 551 | 0,98% |
 | 2 | yên | 999 | 1144 | 6423 | 0,38% |
 | 2 | có tải | 1000 | 1613 | 21 892 | 1,24% |
+| 3 | yên | 999 | 1160 | 14 935 | 0,42% |
+| 3 | có tải | 1000 | 1457 | 12 992 | 0,94% |
+| 4 | yên | 999 | 1153 | 4186 | 0,42% |
+| 4 | có tải | 1000 | 1677 | 28 126 | 1,52% |
 
 Đọc bảng:
 - **p50 hoàn hảo trong mọi trường hợp.** Nếu bạn chỉ nhìn trung vị, vòng này "chạy đúng 1 kHz". Đó chính là thứ một dashboard backend sẽ báo.
-- **max dài gấp 20–50 lần chu kỳ khi có tải**: 20–50 chu kỳ liên tiếp motor chạy theo lệnh cũ. Ở 0,5 m/s, 50 ms là 2,5 cm robot đi mù — chưa kể vòng PID tích lũy sai số rồi giật khi tỉnh lại.
-- **Max lệch gấp đôi giữa hai lần chạy cùng cấu hình**: đuôi của 5000 mẫu là một ước lượng rất nhiễu (→ F1.2). Đừng so hai cấu hình bằng max của một lần chạy.
+- **max dài gấp 13–52 lần chu kỳ khi có tải** (và lần 3 cho thấy máy "yên" trong VM cũng có cú 15 ms): hàng chục chu kỳ liên tiếp motor chạy theo lệnh cũ. Ở 0,5 m/s, 50 ms là 2,5 cm robot đi mù — chưa kể vòng PID tích lũy sai số rồi giật khi tỉnh lại.
+- **Max lệch tới 4 lần giữa các lần chạy cùng cấu hình**: đuôi của 5000 mẫu là một ước lượng rất nhiễu (→ F1.2). Đừng so hai cấu hình bằng max của một lần chạy.
 - Máy của bạn có thể cho số tốt hơn (máy thật, không ảo hóa) hoặc tệ hơn (laptop tiết kiệm pin). Hình dạng (p50 đẹp, đuôi xấu, đuôi phình khi tải) mới là kết quả.
 
 Câu 4: một vòng mà sai thời điểm làm sai vật lý thuộc về MCU. Lý do bằng số: đuôi ở đây là hàng chục ms; đuôi của timer phần cứng + ISR trên MCU là µs (bạn sẽ đo ở K7 C4.2).
@@ -248,7 +252,7 @@ Checklist để chấm một khẳng định kiểu "chạy X trên nền tảng
 
 (c) **ĐÚNG MỘT PHẦN.** Đúng cho kiến trúc robot cỡ của bạn và phần lớn robot di động. Gãy ở chữ "luôn": có robot dùng Linux PREEMPT_RT chạy vòng điều khiển 1 kHz trực tiếp (nhiều cánh tay công nghiệp dùng EtherCAT với master trên Linux RT `[chuẩn]`), và có robot chỉ có MCU. Câu đúng: "chức năng nào có hậu quả vật lý khi trễ thì nằm trên nền tảng có cận trên thời gian đã đo".
 
-(d) **SAI** (suy luận). p50 không nói gì về đuôi; bài tập trên cho p50 = 1000 µs và max 20–50 ms trên cùng máy. Muốn kết luận cần đuôi đo đủ lâu dưới tải thật, và cần biết vòng chịu được bao nhiêu trễ (F5.8).
+(d) **SAI** (suy luận). p50 không nói gì về đuôi; bài tập trên cho p50 = 1000 µs và max có tải 13–52 ms trên cùng máy. Muốn kết luận cần đuôi đo đủ lâu dưới tải thật, và cần biết vòng chịu được bao nhiêu trễ (F5.8).
 
 </details>
 
@@ -744,7 +748,7 @@ Checklist để chấm một khẳng định về lập lịch/jitter/WCET:
 
 (a) *Roadmap mục 2.4:* "Jitter: **phương sai** của latency."
 
-(b) *Tài liệu K7 cũ (7A Bài 3) và nhiều bài viết:* "10 phút ở 100 Hz là 60 000 chu kỳ; giá trị lớn nhất đo được là WCET của vòng lặp."
+(b) *Khẳng định hay gặp trong báo cáo đo jitter (kịch bản):* "10 phút ở 100 Hz là 60 000 chu kỳ; giá trị lớn nhất đo được là WCET của vòng lặp."
 
 (c) *Gemini K7 Bài 3, bảng "Nếu ra khác":* "Jitter p99 nhảy lên hàng mili-giây ngay từ đầu → đang gọi hàm điều khiển từ task FreeRTOS dùng `vTaskDelay` thay vì Hardware Timer Interrupt → chuyển toàn bộ logic đọc encoder và xuất PWM vào ngắt timer."
 
@@ -754,7 +758,7 @@ Checklist để chấm một khẳng định về lập lịch/jitter/WCET:
 
 (a) **ĐÚNG MỘT PHẦN.** Phương sai (hay độ lệch chuẩn) là **một** cách tóm tắt jitter, và là cách tệ nhất cho thời gian thực: nó bị trung bình hóa và không nói gì về cú tệ nhất. Mô phỏng ở mục 5 có σ gần như nhau giữa hai cấu hình nhưng max chênh 13 lần. Định nghĩa dùng được: jitter = độ lệch so với danh định, báo bằng max−min hoặc max |lệch| kèm thời gian quan sát, cộng phân bố. Cũng cần nói **jitter của cái gì** (chu kỳ hay latency).
 
-(b) **SAI.** Max của mẫu hữu hạn là **cận dưới** của WCET (bản K7 cũ đã tự sửa đúng điều này). 60 000 chu kỳ chỉ chạm được sự kiện có xác suất cỡ ≥ 1/60 000 mỗi chu kỳ, và chỉ những sự kiện **có xảy ra** trong 10 phút đó (ghi NVS, WiFi reconnect có thể không). Cách nói đúng: "max quan sát được X µs trong 10 phút dưới tải Y; WCET chưa biết; biên an toàn dùng X × hệ số + cận của các đoạn tắt ngắt đã biết".
+(b) **SAI.** Max của mẫu hữu hạn là **cận dưới** của WCET (nguyên liệu K7 cũ, `khoa-7/_nguyen-lieu-cu/7a-chassis-odometry.md` Bài 3, đã viết đúng: "giá trị tệ nhất trong 10 phút không phải WCET"). 60 000 chu kỳ chỉ chạm được sự kiện có xác suất cỡ ≥ 1/60 000 mỗi chu kỳ, và chỉ những sự kiện **có xảy ra** trong 10 phút đó (ghi NVS, WiFi reconnect có thể không). Cách nói đúng: "max quan sát được X µs trong 10 phút dưới tải Y; WCET chưa biết; biên an toàn dùng X × hệ số + cận của các đoạn tắt ngắt đã biết".
 
 (c) **ĐÚNG MỘT PHẦN.** Chẩn đoán đúng một nửa: `vTaskDelay` tính tương đối nên chu kỳ trôi và phân giải theo tick (10 ms ở tick 100 Hz `[tự đo sdkconfig]`), nên đổi sang `xTaskDelayUntil` hoặc timer. Lời giải "chuyển **toàn bộ** logic vào ngắt" là phản mẫu: ISR dài làm trễ mọi ngắt khác, không được gọi API chặn, không nên dùng FPU trong ISR trên Xtensa (mặc định không hỗ trợ `[spec ESP-IDF, kiểm cho S3]`), và PID dùng float. Mẫu đúng: timer phần cứng (`esp_timer` hoặc GPTimer) → ISR ngắn chụp PCNT + timestamp → `xTaskNotifyFromISR` → task ưu tiên cao ghim một nhân tính PID và đặt PWM. Đo cả hai bằng GPIO trước khi tin.
 
@@ -972,19 +976,19 @@ VM vs máy thật: …
 
 <details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
 
-Máy soạn: container Docker trong VM, 4 vCPU Xeon 2,8 GHz, kernel `PREEMPT_DYNAMIC`, không có cpufreq, timerslack 50 000 ns. Ba lần chạy (µs):
+Máy soạn: container Docker trong VM, 4 vCPU Xeon 2,8 GHz, kernel `PREEMPT_DYNAMIC`, không có cpufreq, timerslack 50 000 ns. Khoảng (nhỏ nhất–lớn nhất) qua 5–6 lần chạy (µs):
 
 | Ca | p50 | p99 | p99.9 | max |
 |---|---|---|---|---|
-| yên, không ghim | 102–106 | 493–1076 | 1895–8821 | 4222–13 807 |
-| tải mọi CPU, không ghim | 79–81 | 995–2377 | 3704–7747 | 4858–9731 |
-| tải mọi CPU, ghim CPU cuối | 81–83 | 901–1325 | 2912–3708 | 3904–4360 |
-| tải CPU khác, ghim CPU cuối | 97–109 | 967–2045 | 2240–15 229 | 4193–20 210 |
-| tải mọi CPU, ghim + FIFO 80 | 29–33 | 325–660 | 1878–5833 | 2251–9433 |
+| yên, không ghim | 100–108 | 295–1076 | 1615–8821 | 2400–13 807 |
+| tải mọi CPU, không ghim | 79–82 | 507–2600 | 3466–22 635 | 4246–27 618 |
+| tải mọi CPU, ghim CPU cuối | 79–83 | 402–1325 | 2226–3934 | 3719–4360 |
+| tải CPU khác, ghim CPU cuối | 97–109 | 967–3095 | 2240–19 902 | 4193–23 071 |
+| tải mọi CPU, ghim + FIFO 80 | 28–34 | 190–660 | 1226–5833 | 2132–9433 |
 
 1. **FIFO có p50 thấp nhất (~30 µs so với ~80–100 µs)** — phần lớn khoảng chênh là **timer slack 50 µs**, thứ kernel không áp cho thread RT. Không phải "FIFO làm CPU nhanh hơn". Phần còn lại ~30 µs là chi phí Python + đánh thức trong VM.
-2. FIFO thường tốt nhất ở p99, nhưng **max và p99.9 không ổn định**: có lần FIFO max 9 ms. "Tải CPU khác, ghim CPU cuối" (giả lập isolcpus) có một lần tệ nhất cả bảng (20 ms) — trong VM, nhân "cô lập" của bạn vẫn là vCPU mà hypervisor có thể lấy đi.
-3. max chênh 2–4 lần giữa các lần chạy cùng cấu hình. Đuôi xa của 5000 mẫu không so sánh được giữa hai lần chạy đơn lẻ (→ F1.2, F1.5); cần chạy lâu (cyclictest 10 phút–vài giờ) và lặp.
+2. FIFO thường tốt nhất ở p99, nhưng **max và p99.9 không ổn định**: có lần FIFO max 9 ms. "Tải CPU khác, ghim CPU cuối" (giả lập isolcpus) nhiều lần cho max hơn 20 ms — trong VM, nhân "cô lập" của bạn vẫn là vCPU mà hypervisor có thể lấy đi.
+3. max chênh tới ~6 lần giữa các lần chạy cùng cấu hình. Đuôi xa của 5000 mẫu không so sánh được giữa hai lần chạy đơn lẻ (→ F1.2, F1.5); cần chạy lâu (cyclictest 10 phút–vài giờ) và lặp.
 4. Lớn hơn nhiều. Trên máy thật có PREEMPT_RT, cấu hình đúng, độ trễ thức dậy max thường được báo cỡ vài chục µs — **con số đó bạn phải tự đo trên N100** `[tự đo]`; đừng lấy số của người khác.
 
 Bài học cho việc đánh giá: một con số "Linux đạt X µs" không có loại máy, ảo hóa, kernel, tải, thời gian đo thì không mang thông tin.
@@ -1977,7 +1981,7 @@ d=2, thêm trễ áp lệnh (20 seed)    | |e| 1 s cuối, trung vị | số see
 2. 0% → 14% → 56% → 97%: tăng nhanh hơn tuyến tính khi gần ranh giới. Không có cảnh báo sớm kiểu "chậm hơn một chút" — chất lượng sụp dồn ở cuối.
 3. Cố định 12 ms: tổng ≈ 20 + 12 + 5 = 37 ms < 39,3 → ổn định (0/20). Đều 4–20 ms: hơi tệ hơn, vẫn ổn định. **Đều 0–24 ms, cùng trung bình 12 ms: 16/20 seed mất ổn định.** Cùng trễ trung bình, độ biến thiên lớn đủ đẩy hệ qua ranh giới — đây là "jitter phá ổn định", đã chạy thật.
 4. **10/20 seed mất ổn định** — trung bình chỉ tăng 0,4 ms nhưng cú trễ hiếm khi trúng lúc hệ gần biên thì đủ. Với 5% cú, gần như mọi seed phân kỳ. Đuôi, không phải trung bình, quyết định.
-5. Ví dụ đuôi F5.1 của máy soạn: max có tải 20–50 ms. Muốn biên 45° (π/4) với θ ≈ 50 ms (đuôi) + ~15 ms (USB, xử lý, ZOH) `[ước lượng]`: ω_c ≤ (π/4)/0,065 ≈ 12 rad/s — chậm hơn 3 lần vòng trên MCU, và vẫn chỉ là "biên theo trễ cố định" trong khi trễ thật biến thiên. Đây là lý do định lượng để PID vận tốc ở MCU (F5.1).
+5. Ví dụ đuôi F5.1 của máy soạn: max có tải 13–52 ms. Muốn biên 45° (π/4) với θ ≈ 50 ms (đuôi) + ~15 ms (USB, xử lý, ZOH) `[ước lượng]`: ω_c ≤ (π/4)/0,065 ≈ 12 rad/s — chậm hơn 3 lần vòng trên MCU, và vẫn chỉ là "biên theo trễ cố định" trong khi trễ thật biến thiên. Đây là lý do định lượng để PID vận tốc ở MCU (F5.1).
 
 </details>
 
