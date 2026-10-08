@@ -269,3 +269,226 @@ Copy vào `build-log/c01.md`, một mục mỗi buổi:
 ```
 
 ---
+
+## Bài C1.1 — Pin lithium: hóa học, S/P, C-rate, BMS làm gì và không làm gì (4h)
+
+> **Vị trí:** C0.2 (điện gây hại bằng cách nào) → **C1.1** → C1.2 · **Cần trước:** K7 C0.2, → F5.7 mục 2, → F1.1 · **Sau bài này bạn quyết định được:** mua pack hóa học nào, mấy S mấy P, BMS phải có thông số gì; và biết chính xác những rủi ro nào BMS **không** che.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Ngày 7/1/2013, một chiếc Boeing 787 của Japan Airlines đậu ở sân bay Boston Logan, hành khách đã xuống. Thợ máy thấy khói trong khoang điện tử phía sau: pin lithium-ion của APU (8 cell nối tiếp, GS Yuasa) đang cháy. Chín ngày sau, chuyến ANA 692 hạ cánh khẩn cấp ở Takamatsu vì pin chính cùng loại bốc khói. FAA cấm bay toàn bộ đội 787 Mỹ đăng ký ngày 16/1/2013, lần đầu tiên sau nhiều thập kỷ một dòng máy bay chở khách bị cấm bay `[chuẩn — tin rộng rãi]`. Báo cáo cuối của NTSB (2014) kết luận: **chập mạch bên trong một cell** khởi phát thermal runaway, lan sang các cell bên cạnh, gây khói và lửa. Lỗi được quy cho thiết kế và chứng nhận: Boeing không đưa vào yêu cầu thiết kế để hạn chế hậu quả nặng nhất của chập trong một cell, và FAA không phát hiện thiếu sót đó. Bằng chứng thời đó chỉ về cell 6; nguyên nhân gốc của chỗ chập không bao giờ được xác định chắc chắn `[spec — NTSB, điều tra DCA13IA037, báo cáo cuối 2014]`.
+
+Pin có mạch giám sát, có bảo vệ sạc. Không thứ nào ngăn được một lỗi **nằm trong** cell. Cách sửa của Boeing (vỏ thép, cách nhiệt giữa các cell, ống thoát khí ra ngoài thân máy bay) không ngăn cell hỏng; nó **chứa** hậu quả. Đây là bài học trung tâm của bài này: BMS là một lớp bảo vệ có phạm vi xác định, và bạn phải biết phạm vi đó.
+
+### 2. Mô hình tư duy
+
+```
+ 1 cell = nguồn áp phụ thuộc mức sạc (OCV) nối tiếp điện trở trong R_cell
+     ┌────┐
+  ───┤OCV ├──[R_cell]───          OCV(SOC): NMC 3,0 → 4,2 V, dốc đều
+     └────┘                                 LFP 2,5 → 3,65 V, phẳng ở ~3,2–3,3 V giữa dải
+
+ Pack xSyP:  áp ×S, dung lượng Ah ×P, năng lượng Wh ×S×P, R_pack = R_cell·S/P
+ C-rate:     1C = dòng xả hết dung lượng trong 1 h (pack 6 Ah: 1C = 6 A, 2C = 12 A)
+
+ ┌──────────────────────── PACK ────────────────────────┐
+ │ [cell1]─[cell2]─[cell3]─[cell4]                      │
+ │    │       │       │       │   ← dây cân bằng       │
+ │  ┌─┴───────┴───────┴───────┴──┐   ┌──────────────┐   │
+ │  │ IC giám sát: áp TỪNG cell, │──►│ 2 MOSFET     │──►│── P− (hoặc B−/C−)
+ │  │ dòng (shunt), NTC          │   │ xả | sạc     │   │
+ │  └────────────────────────────┘   └──────────────┘   │
+ └──────────────────────────────────────────────────────┘
+```
+
+Bốn điều bản chất:
+1. **Điện áp pack là một hàm của mức sạc**, không phải hằng số. "12 V" trên nhãn là áp danh định (nominal) ở giữa dải. 4S NMC đi từ ~16,8 V (đầy) xuống ~12 V (cạn); 4S LFP từ ~14,6 V xuống ~10 V `[chuẩn]`. Mọi tải phía sau phải sống được cả dải này (Bài C1.4).
+2. **Dòng làm áp tụt tức thì:** V_đầu cực = OCV − I·R_pack. Pin già, lạnh, gần cạn thì R tăng → cùng dòng đỉnh, áp tụt sâu hơn.
+3. **Năng lượng của pack lớn hơn mọi thứ khác trên bàn.** Pack 77 Wh = 277 kJ. Đổ hết năng lượng đó vào một chỗ (chập ngoài, chập trong) là cháy.
+4. **BMS là một công tắc MOSFET do một IC giám sát điều khiển.** Nó chỉ làm được những gì IC nhìn thấy (áp từng cell, dòng qua shunt, có khi nhiệt độ) và công tắc cắt được (dòng ra/vào ở cực pack).
+
+**BMS làm gì và KHÔNG làm gì** (pack dựng sẵn loại phổ biến; BMS "thông minh" có thêm báo SOC qua UART/Bluetooth):
+
+| BMS làm (khi thông số ghi có) | BMS KHÔNG làm |
+|---|---|
+| Cắt sạc khi một cell vượt ngưỡng quá áp (OV) | Ngăn chập **trong** cell (lỗi sản xuất, móp, đâm thủng) → thermal runaway vẫn xảy ra (787, Note 7 ở Bài C1.6) |
+| Cắt xả khi một cell dưới ngưỡng thấp áp (UV) | Báo trước cho mini PC tắt đúng cách: cắt UV là **cắt cứng**, mini PC mất điện như rút phích |
+| Cắt xả khi dòng vượt ngưỡng quá dòng (OC) sau một khoảng trễ | Bảo vệ **dây nhánh** của bạn: ngưỡng OC của pack 20–30 A, dây 22 AWG của nhánh 5 V cháy trước đó rất lâu |
+| Cắt rất nhanh khi ngắn mạch (SC), thường cỡ trăm µs `[ước lượng — đọc thông số BMS của bạn]` | Bảo vệ đoạn dây **trước** MOSFET; bảo vệ khi chính MOSFET hỏng chập (hỏng kiểu "luôn đóng" là kiểu hỏng có thật của MOSFET) |
+| Cân bằng cell (thường thụ động, xả cell cao qua điện trở, vài chục mA) | Cân bằng nhanh một pack lệch nặng; thay sạc đúng hóa học (CC/CV là việc của sạc, BMS chỉ là chốt chặn cuối) |
+| Cắt sạc khi lạnh/nóng (chỉ khi có NTC và ghi rõ) | Biết hóa học của chính nó nếu ai đó dùng sạc sai; biết pack đã rơi, phồng |
+
+So ba lựa chọn cho robot này (số cell điển hình `[ước lượng]`; dải áp `[chuẩn]`):
+
+| | 4S LiFePO4 (LFP) | 4S Li-ion NMC (18650) | 3S Li-ion NMC |
+|---|---|---|---|
+| Dải áp pack (cạn → đầy) | ~10 → 14,6 V, phẳng ~13,0–13,3 V | ~12 → 16,8 V, dốc | ~9 → 12,6 V |
+| Mật độ năng lượng cell | thấp hơn (~90–160 Wh/kg) | cao hơn (~150–250 Wh/kg) | như NMC |
+| Ổn định nhiệt | cao hơn rõ: khó vào runaway hơn, ít tỏa nhiệt hơn khi vào `[chuẩn]` | thấp hơn | như NMC |
+| Tuổi thọ chu kỳ | ~2000+ `[ước lượng]` | ~300–1000 `[ước lượng]` | như NMC |
+| Motor 12 V | áp đầy 14,6 V vượt 22% định mức | áp đầy 16,8 V vượt 40% | dưới 12 V gần suốt dải |
+| Mini PC 12 V | cần **buck-boost** (Bài C1.4) | buck được nếu ngắt mềm đủ sớm, buck-boost dư dả | cần boost/buck-boost |
+| Sạc | 14,6 V (3,65 V/cell) | 16,8 V (4,2 V/cell) | 12,6 V |
+
+**Mặc định của K7 cho người mới: 4S LFP dựng sẵn có BMS.** Lý do theo thứ tự: an toàn nhiệt; áp đầy gần định mức motor 12 V; pack "12 V LiFePO4" có BMS và sạc riêng dễ mua. Cái giá: nặng hơn NMC cùng Wh, và bắt buộc buck-boost. Chọn 4S NMC nếu khối lượng là ràng buộc cứng sau C2.4; ghi vào `decisions.md`.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Circuit breaker / rate limiter ở gateway | BMS cắt khi quá dòng | Breaker bảo vệ **downstream** khỏi tải; BMS bảo vệ **chính pin** khỏi bạn. Nó không biết nhánh nào đang quá tải; và lỗi nằm trong cell thì không có request nào để chặn | Tin "có BMS rồi khỏi cầu chì nhánh" → dây nhỏ cháy trong khi BMS thấy dòng tổng vẫn dưới ngưỡng |
+| Graceful shutdown khi nhận SIGTERM | Ngắt mềm theo áp pin trước ngưỡng UV | BMS cắt UV là SIGKILL. Không có SIGTERM trừ khi bạn tự đo áp (INA226, Bài C1.5) và tự tắt mini PC trước | Hệ file mini PC hỏng, MCAP mất đuôi (C7) vì mỗi lần pin cạn là một lần rút phích |
+| Dung lượng đĩa: 1 TB là 1 TB | "6 Ah" | Dung lượng lấy ra được phụ thuộc dòng, nhiệt độ, tuổi, và áp cắt bạn chọn; 1C và 0,2C cho số khác nhau | Runtime thật ngắn hơn bảng tính; chạy tới UV thường xuyên làm pin già nhanh hơn |
+| Blast radius: cô lập lỗi bằng cell/shard | Cách nhiệt giữa các cell, vỏ chứa (787 sau sửa) | Cell là shard có thể **làm nóng shard bên cạnh**: lỗi lan qua vật lý, không qua mạng | Thiết kế "một cell hỏng không sao" mà không có rào nhiệt = bài học 787 |
+
+**Chấm mô hình:**
+- *"Pack có BMS thì an toàn, cứ cắm vào là được."* — **SAI.** BMS che lỗi về áp và dòng ở cực pack. Phản ví dụ: 787 có giám sát và bảo vệ sạc; chập trong cell vẫn thành cháy. Gần hơn với bạn: BMS ngưỡng OC 25 A; nhánh 5 V dây 22 AWG chập ở 15 A → BMS không cắt, dây nóng chảy vỏ.
+- *"Áp cao hơn thì nguy hiểm hơn, nên 3S an toàn hơn 4S."* — **ĐÚNG MỘT PHẦN.** Ở dải dưới 60 V DC, rủi ro chính với người là **năng lượng và dòng** (bỏng, cháy), không phải giật `[chuẩn — C0.2]`. Pack 3S cùng Wh có Ah lớn hơn và dòng lớn hơn cho cùng công suất; dây phải to hơn. Phản ví dụ: 3S 65 Wh và 4S 77 Wh chập ngoài đều cho dòng hàng trăm A (phần 7).
+- Mô hình của bạn ở K3 lượt 11, *"mọi thiết bị chung nguồn luôn có trường hợp sụt nguồn… chiếm dụng nguồn chung"* — chấm ở Bài C1.2.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | S / P (4S2P) | Số cell nối tiếp / số nhánh song song | "4S = 4 cell" (4S2P là 8 cell) |
+| 🟢 | OCV, SOC | Áp hở mạch khi nghỉ; mức sạc 0–100% | "Đo áp lúc đang chạy là biết SOC" (áp lúc chạy đã trừ I·R) |
+| 🟢 | C-rate | Dòng chia dung lượng, đơn vị 1/h | Định mức an toàn tuyệt đối (thực ra phụ thuộc nhiệt, tuổi) |
+| 🟢 | BMS: OV/UV/OC/SC | Bốn ngưỡng cắt cơ bản | "Bảo vệ mọi thứ" |
+| 🟢 | Thermal runaway | Cell tự nóng làm phản ứng tỏa nhiệt nhanh hơn, không tự dừng | "Cháy pin thông thường", dập là xong |
+| 🟡 | Cân bằng thụ động/chủ động | Xả cell cao qua điện trở / chuyển năng lượng giữa cell | "Cân bằng = sạc" |
+| 🟡 | Cổng chung / cổng riêng (common/separate port) | BMS dùng chung hay tách cực sạc và cực xả | Không quan trọng (quan trọng: cổng riêng thì đường xả có thể không có bảo vệ quá áp sạc) |
+| 🔴 | Hóa học điện cực chi tiết (SEI, mạ lithium) | Cơ chế lão hóa bên trong | Cần cho bài này |
+
+### 5. Dự đoán
+
+Với pack bạn **định mua** (đọc từ trang bán: hóa học, xSyP, Ah; tra datasheet cell nếu shop ghi mã cell; nếu không, dùng số điển hình trong code dưới và ghi `[ước lượng]`):
+1. Dải áp pack (cạn → đầy), năng lượng Wh.
+2. Dòng chập ngoài ngay đầu pack, **trước khi BMS cắt**: I ≈ V_nom / (R_pack + R_dây). Tra R trong của cell (datasheet: "AC impedance" hoặc "DC IR").
+3. Khi bạn đo OCV một pack mới nhận, nó nằm ở đâu trong dải (shop thường giao pin ở mức sạc lưu kho)?
+4. Đo R_pack thô bằng điện trở 10 Ω 50 W: ΔV dự kiến bao nhiêu mV, và UT33D+ ở thang 20 V (độ phân giải 10 mV `[spec — tra manual]`) có đo nổi không?
+
+```python
+# [đã chạy] So ba cấu hình pack: dải áp, năng lượng, dòng ngắn mạch thô
+# Số cell là [ước lượng] điển hình; thay bằng số trên nhãn pack/datasheet cell của bạn
+packs = {
+    # tên: (S, P, V_min_cell, V_nom_cell, V_max_cell, Ah_cell, R_cell_ohm)
+    "4S2P NMC 18650": (4, 2, 3.0, 3.6, 4.20, 3.0, 0.030),
+    "4S2P LFP 26650": (4, 2, 2.5, 3.2, 3.65, 3.0, 0.020),
+    "3S2P NMC 18650": (3, 2, 3.0, 3.6, 4.20, 3.0, 0.030),
+}
+R_wire = 0.010   # ohm: dây + đầu nối từ pack tới chỗ chập [ước lượng]
+print(f"{'pack':16s} {'Vmin':>5s} {'Vnom':>5s} {'Vmax':>5s} {'Wh':>5s} {'I_sc(A)':>8s}")
+for name, (S, P, vmin, vnom, vmax, ah, rc) in packs.items():
+    R_pack = rc * S / P                  # S cell nối tiếp cộng R, P nhánh song song chia R
+    wh = S * vnom * P * ah
+    i_sc = S * vnom / (R_pack + R_wire)  # chập ngay đầu pack, chưa tính BMS cắt
+    print(f"{name:16s} {S*vmin:5.1f} {S*vnom:5.1f} {S*vmax:5.1f} {wh:5.0f} {i_sc:8.0f}")
+```
+
+Mẫu `prediction.md`:
+```markdown
+# C1.1 — dự đoán (commit trước khi đo)
+- Pack: hóa học __, __S__P, __ Ah, nguồn số liệu: __
+- Dải áp: __ → __ V; năng lượng: __ Wh
+- R_cell (nguồn: __) → R_pack ≈ __ mΩ; I chập ngoài ≈ __ A
+- OCV khi nhận: __ V (lý do: __)
+- ΔV với tải 10 Ω: __ mV; UT33D+ đo được không: __ (vì __)
+```
+
+### 6. Làm
+
+1. **Kiểm khi nhận** (bàn trống, không dụng cụ kim loại gần cực): nhìn 6 mặt (phồng, móp, rách co nhiệt, dây ra bị kẹp); đọc nhãn; chụp ảnh. Bất thường → không dùng (C1.6).
+2. **Đo OCV** sau khi pack nghỉ ≥1 h ở nhiệt độ phòng: UT33D+ thang 20 V DC (sai số tra manual, cỡ ±(0,5% + vài digit) `[spec — tra manual UT33D+]`), que đo vào **trong** đầu nối, không chạm hai cực cùng lúc bằng que. Ghi `quantity=ocv_pack`.
+3. **Đo áp sạc không tải**, ghi `quantity=charger_vout`. Sạc lần đầu theo C1.6.
+4. **Đo R_pack thô** (sau khi sạc, pack nghỉ 1 h): làm một dây tải: XT60 đực → 18 AWG → điện trở nhôm 10 Ω 50 W **bắt lên tấm nhôm hoặc đế kim loại** → về. Đo OCV ngay trước; nối tải 10 s; đọc V trong lúc tải; tháo. R ≈ (OCV − V_tải)/(V_tải/10 Ω). Lặp 3 lần, cách nhau 1 phút. Ghi cả độ phân giải: ΔV chỉ vài digit thì kết quả có bất định lớn (→ F1.1, bất định loại B = độ phân giải/√3). Số chính xác hơn có ở Bài C1.5 bằng INA226.
+5. **Kiểm thông số BMS** (đọc, không thử): ngưỡng OC xả, trễ cắt OC, có SC không, có NTC không, cổng chung hay riêng. Thiếu thông số nào → ghi `unknown` vào `decisions.md`, không đoán.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Chạy code phần 5 với số điển hình:
+
+| pack | V cạn | V danh định | V đầy | Wh | I chập (A) |
+|---|---|---|---|---|---|
+| 4S2P NMC 18650 | 12,0 | 14,4 | 16,8 | 86 | ~206 |
+| 4S2P LFP 26650 | 10,0 | 12,8 | 14,6 | 77 | ~256 |
+| 3S2P NMC 18650 | 9,0 | 10,8 | 12,6 | 65 | ~196 |
+
+- Dòng chập **hàng trăm ampe** ở mọi lựa chọn. Áp thấp không cứu bạn; chỉ có BMS SC (nếu hoạt động), cầu chì sát pin và việc không để chập xảy ra.
+- OCV khi nhận: shop thường giao pin ở mức sạc lưu kho (khoảng giữa dải; LFP thì nằm trên đoạn phẳng ~13,0–13,3 V nên OCV gần như **không nói được SOC** của LFP — đây là lý do người ta đếm coulomb thay vì đọc áp).
+- ΔV với 10 Ω: I ≈ 1,3 A, R_pack ~40–80 mΩ → ΔV ~50–100 mV, tức 5–10 digit ở độ phân giải 10 mV: bất định ±10–20% chỉ riêng từ lượng tử hóa. Kết quả 3 lần lệch nhau 1–2 digit là bình thường. Nếu ΔV vài trăm mV: R lớn bất thường (pack già, dây ra mảnh, đầu nối kém, hoặc cell kém chất lượng).
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| OCV = 0 V hoặc vài V | BMS đang ở trạng thái cắt (sau UV/SC), hoặc pack hỏng | Một số BMS cần nối sạc để "đánh thức" `[spec — đọc tài liệu pack]` | Nối sạc đúng hóa học, có người trông, 5 phút, đo lại; vẫn 0 V → trả hàng (C1.6) |
+| OCV vượt V đầy của hóa học | Nhãn sai hóa học (pack NMC dán nhãn LFP hoặc ngược lại) | So với cả hai bảng dải áp | Không sạc; đối chiếu với người bán |
+| R_pack lệch nhiều giữa 3 lần đo | Que đo không ổn định; điện trở nóng lên làm I đổi | Đo V và I cùng lúc (nguồn bàn không dùng được ở đây; dùng 2 đồng hồ nếu có) | Lấy trung vị, ghi `inconclusive` nếu chênh >30% |
+| Pack ấm lên sau 10 s tải 1,3 A | Bất thường với 0,2C | Nhiệt kế IR | Dừng, xem C1.6 |
+
+### 9. Câu hỏi ngược
+
+1. **[Vì sao không]** Vì sao BMS đo áp **từng cell** mà không chỉ áp pack? Một pack 4S đo 14,0 V có thể đang nguy hiểm không?
+   <details><summary>Hướng nghĩ</summary>
+
+   14,0 V có thể là 3,5 × 4 hoặc 3,9 + 3,9 + 3,9 + 2,3. Cell yếu nhất quyết định. Giống p50 của cụm server đẹp trong khi một node đang chết: tổng hợp che phân bố.
+
+   </details>
+2. **[Failure mode]** Một MOSFET xả của BMS hỏng kiểu chập (luôn dẫn). Từ lúc đó, lớp bảo vệ nào còn lại giữa cell và một chỗ chập trên bo của bạn? Kiểu hỏng này có tự lộ ra không?
+   <details><summary>Hướng nghĩ</summary>
+
+   Chỉ còn cầu chì chính. Hỏng "luôn dẫn" là hỏng **im lặng**: robot vẫn chạy bình thường cho tới lần chập đầu tiên. Đây là lý do cần lớp bảo vệ độc lập (cầu chì không dùng chung cơ chế với BMS) và lý do kiểm định kỳ một bảo vệ chỉ được dùng khi có sự cố (→ F7.6, latent failure).
+
+   </details>
+3. **[Quy mô]** 100 robot, mỗi con một pack, chạy 8 h/ngày. Bạn không thể nhìn từng pack. Dữ liệu nào phải ghi từ hôm nay để phát hiện pack sắp hỏng trước khi nó phồng?
+   <details><summary>Hướng nghĩ</summary>
+
+   R trong ước lượng từ mỗi bước dòng (ΔV/ΔI từ log INA226), dung lượng thật mỗi chu kỳ (coulomb), nhiệt độ, số lần BMS cắt. Xu hướng theo thời gian của từng pack quan trọng hơn giá trị tuyệt đối. Đây là bài toán fleet health, giống theo dõi SMART của ổ đĩa.
+
+   </details>
+4. **[Phản biện]** "LFP an toàn hơn nên không cần túi chống cháy khi sạc." Bảo vệ hoặc bác.
+   <details><summary>Hướng nghĩ</summary>
+
+   "Ít nguy hiểm hơn" khác "không nguy hiểm": LFP vẫn có năng lượng lớn, vẫn cháy dây khi chập ngoài, khí thoát ra vẫn độc và dễ cháy. Quy tắc không phụ thuộc hóa học rẻ hơn quy tắc có điều kiện mà người mệt phải nhớ.
+
+   </details>
+5. **[Liên ngành]** 787 sửa bằng cách chứa hậu quả, không loại bỏ nguyên nhân. Ở hệ thống phần mềm của bạn, đâu là chỗ bạn đã chọn "chứa" thay vì "ngăn"?
+   <details><summary>Hướng nghĩ</summary>
+
+   Bulkhead, sandbox, cgroup memory limit, giới hạn blast radius của deploy. Chứa là đúng khi không thể chứng minh nguyên nhân đã hết, như chập trong cell.
+
+   </details>
+
+### 10. Liên kết ra ngoài
+
+- **Hàng không (787):** giống: lỗi một thành phần không được phép lan; khác: phần mềm có thể restart thành phần hỏng, cell đã runaway thì không có "restart", chỉ có chứa và thoát khí.
+- **Lưu trữ điện lưới (BESS):** các trạm pin quy mô MW chuyển nhiều sang LFP vì lý do an toàn nhiệt và tuổi thọ, chấp nhận mật độ năng lượng thấp hơn `[ước lượng — xu hướng ngành]`; cùng trao đổi bạn vừa làm ở bảng so sánh, ở quy mô lớn hơn triệu lần.
+- **Y sinh (máy tạo nhịp):** dùng pin sơ cấp lithium (không sạc), hóa học chọn vì đường xả có thể dự báo được để báo "sắp thay pin" trước nhiều tháng. Giống: SOC đọc được từ áp là một tính năng an toàn. Khác: LFP của bạn có đường phẳng, đọc áp gần như vô ích ở giữa dải.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Kết luận NTSB về 787 (chập trong cell, lan runaway, lỗi thiết kế/chứng nhận) | [spec] | NTSB, điều tra DCA13IA037, báo cáo cuối 2014 |
+| Dải áp NMC 3,0–4,2 V, LFP 2,5–3,65 V mỗi cell | [chuẩn] | Ngưỡng UV thật do BMS của bạn quyết định |
+| R_cell 20–30 mΩ; mật độ năng lượng; tuổi thọ chu kỳ | [ước lượng] | Tra datasheet cell; tuổi thọ phụ thuộc độ sâu xả, nhiệt |
+| Thời gian cắt SC của BMS cỡ trăm µs | [ước lượng] | Đọc thông số BMS; không tự thử bằng chập |
+| Độ phân giải 10 mV ở thang 20 V UT33D+ | [spec] | UT33D+ 2000 count; tra manual |
+
+**Đã sửa so với bản gốc:** K7 gốc ghi "pin 3S/4S + BMS + sạc" không phân biệt hóa học, không nói áp pack trôi; bài này chọn mặc định 4S LFP (thay vì để mở) với lý do bằng số, và tách rõ phạm vi của BMS. Đề xuất đổi mặc định so với `_KE-HOACH-K7.md` mục 5 (ví dụ 4S Li-ion): kế hoạch cho phép chọn, chọn LFP vì áp đầy gần định mức motor 12 V và ổn định nhiệt.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** NTSB, *Auxiliary Power Unit Battery Fire, Japan Airlines Boeing 787-8, Boston, MA, January 7, 2013* (Aircraft Incident Report NTSB/AIR-14/01); datasheet cell của pack bạn mua.
+- **Giải thích:** Battery University (Cadex), các mục về Li-ion và LiFePO4 — đọc có phê phán, số liệu thường là giá trị điển hình.
+- **Đào sâu (tùy chọn):** datasheet một IC BMS 4S phổ biến (ví dụ họ BQ769x0 của TI): đọc phần ngưỡng và độ trễ để thấy BMS "nhìn" gì.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao "pack có BMS" không thay cầu chì; (2) vẽ lại sơ đồ pack + BMS; (3) Pack 4S2P cell 3,5 Ah: 1C là bao nhiêu A? Dòng 7 A là bao nhiêu C?
+  <details><summary>Đáp án</summary>
+
+  Pack 2P → 7 Ah → 1C = 7 A; 7 A = 1C. (Nhầm phổ biến: lấy Ah của một cell.)
+
+  </details>

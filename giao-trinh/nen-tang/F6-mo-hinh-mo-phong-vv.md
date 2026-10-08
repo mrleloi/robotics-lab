@@ -1463,3 +1463,256 @@ Checklist khi đọc một khẳng định về sim-to-real gap hoặc cách thu
   </details>
 
 ---
+
+## F6.6 — Độ nhạy và bất định của mô hình: sensitivity analysis, Monte Carlo (4h)
+
+> **Dùng cho:** K1 Bài 9 (lướt phần Monte Carlo) · K3 Bài 8 · K4 Bài 8 · K6 Bài 5, Bài 6, Bài 14, Bài 16 · **Cần trước:** F1.1 (lan truyền sai số), F1.2 (phân bố, đuôi), F6.1 · **Sau viên nang này bạn đánh giá được:** một phân tích "tham số nào quan trọng" trả lời đúng câu hỏi nào (phương sai, đuôi, hay hỏng); một kết luận "đã thử ±2σ từng tham số, vẫn an toàn" có đứng được không; Monte Carlo cần bao nhiêu mẫu cho xác suất cỡ nào.
+
+### 1. Câu chuyện
+
+Năm 1946, Stanislaw Ulam nằm dưỡng bệnh và chơi solitaire. Ông thử tính xác suất thắng một ván Canfield bằng tổ hợp, thấy vô vọng, và nghĩ: chơi thật nhiều ván rồi đếm thì nhanh hơn. Ông mang ý đó về Los Alamos; cùng John von Neumann và Nicholas Metropolis, họ dùng nó cho bài toán khuếch tán neutron, nơi không ai giải được tích phân nhiều chiều, và đặt tên "Monte Carlo" [chuẩn: N. Metropolis, *The Beginning of the Monte Carlo Method*, Los Alamos Science, 1987; Metropolis & Ulam, JASA 1949]. Ý tưởng cốt lõi từ đó không đổi: khi hàm quá phức tạp để lan truyền bất định bằng giải tích, **lấy mẫu đầu vào, chạy mô hình, nhìn phân bố đầu ra**.
+
+Sáu thập kỷ sau, Andrea Saltelli và Paola Annoni rà các bài báo mô hình hóa đã công bố và thấy phần lớn phân tích độ nhạy vẫn làm theo kiểu "từng tham số một" (one-at-a-time, OAT): giữ mọi tham số ở danh định, đẩy một cái lên xuống, ghi đầu ra [chuẩn: Saltelli & Annoni, *How to avoid a perfunctory sensitivity analysis*, Environmental Modelling & Software 25, 2010]. Họ chỉ ra bằng hình học rằng ở nhiều chiều, OAT khám phá một phần gần như bằng 0 của không gian đầu vào, và mù hoàn toàn với tương tác. Bạn đã gặp ý này ở K6 Bài 6 (góc tương tác) và K6 Bài 17 (miền là tập điểm, không phải hộp). Viên nang này thêm một tầng: **"quan trọng" cho phương sai và "quan trọng" cho hỏng là hai câu hỏi khác nhau**, và phương pháp trả lời câu này có thể chỉ sai câu kia.
+
+### 2. Mô hình tư duy
+
+Ba câu hỏi, ba công cụ:
+
+| Câu hỏi | Công cụ | Đầu ra | Gãy khi |
+|---|---|---|---|
+| Đầu ra phân bố thế nào khi đầu vào bất định? (**lan truyền**) | Tuyến tính hóa (GUM, F1.1) / Monte Carlo | σ, percentile, P(vượt ngưỡng) | Tuyến tính hóa gãy khi mô hình phi tuyến hoặc có ngưỡng |
+| Tham số nào chiếm phần lớn **phương sai** đầu ra? (**độ nhạy toàn cục**) | Chỉ số Sobol bậc một S₁ và tổng S_T; xấp xỉ: phương sai của trung bình có điều kiện | Tỉ lệ phương sai giải thích | Câu hỏi thật là về đuôi/hỏng, không về phương sai |
+| Tham số nào đẩy hệ vào **vùng hỏng**? (**phân bổ hỏng**) | Monte Carlo + nhìn mẫu hỏng; dịch chuyển trung bình có điều kiện; (nâng cao) importance sampling, FORM | Vị trí vùng hỏng trong không gian tham số | Hỏng quá hiếm so với số mẫu |
+
+OAT là một trường hợp đặc biệt rất hẹp của hàng thứ hai, làm quanh **một điểm**. Hình học của nó:
+
+```
+không gian 2 tham số (±2σ mỗi trục)          OAT thử:  dấu +  (5 điểm trên hai trục)
+  p2 ▲                                       Monte Carlo: đám mây · phủ cả góc
+     │ ·   ·  ·    ·   ·  ·   ✗ ✗            ✗ = vùng hỏng (cần CẢ HAI tham số lệch cùng lúc)
+     │    ·  ·   ·  + ·    · ✗ ✗ ✗
+     │  ·   ·  · ·  │ ·  ·  ·  ✗
+     │ ·  +─────────+─────────+  ·            Với k tham số, "dấu +" chiếm phần thể tích
+     │   ·  · ·  ·  │  ·   ·  ·               ~0 của hộp k chiều; các góc (nơi nhiều
+     │  ·   ·   ·   +  ·  ·   ·               tham số cùng xấu) không bao giờ được thử.
+     └──────────────────────────────► p1
+```
+
+Ba ý bản chất:
+
+1. **Vùng hỏng thường nằm ở góc.** Hệ được thiết kế với biên an toàn cho từng tham số; hỏng xảy ra khi **vài** tham số cùng lệch về phía xấu. OAT không bao giờ đặt hai tham số lệch cùng lúc, nên có thể báo "an toàn" trong khi Monte Carlo cho xác suất hỏng vài phần trăm.
+2. **Phương sai và đuôi là hai thứ.** Một tham số có thể đóng góp ít phương sai (vì phần lớn dải của nó không ảnh hưởng gì) nhưng **quyết định** hỏng (vì ở một phía, nó kích hoạt một cơ chế mới, F6.1 cạnh dốc). Chỉ số Sobol trả lời "tham số nào làm đầu ra dao động nhiều nhất", không trả lời "tham số nào làm robot đâm tường".
+3. **Monte Carlo có sai số của chính nó.** Ước lượng xác suất p từ N mẫu có độ lệch chuẩn `√(p(1−p)/N)` [chuẩn]. Muốn sai số tương đối 10% ở p = 1% cần N ≈ 10⁴; ở p = 10⁻⁴ cần ≈ 10⁶. Với sim đắt (một episode vài giây), đó là lý do người ta dùng mô hình thay thế rẻ (surrogate) hoặc lấy mẫu có trọng số vào vùng hỏng. Cũng là lý do K6 Bài 12 tính n trước khi chạy.
+
+**Monte Carlo cần phân bố đầu vào, và phân bố đó là một khẳng định mô hình.** "Đo ±3 mm" là σ hay là cận? Chuẩn hay đều? Các tham số có tương quan không (ma sát và mòn bánh cùng tăng theo thời gian)? Kết quả Monte Carlo không tốt hơn phân bố bạn đưa vào: đây là "input pedigree" của NASA-STD-7009 (F6.2).
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Latency budget: cộng thời gian từng tầng | Lan truyền bất định qua chuỗi | Trung bình cộng được; **p99 thì không**: p99 của tổng thường nhỏ hơn tổng các p99 (các tầng hiếm khi cùng xấu), trừ khi chúng tương quan (cùng bị GC, cùng một host bận) — lúc đó có thể lớn hơn trực giác. Monte Carlo trên phân bố đo được cho câu trả lời; cộng p99 thì không | Ngân sách quá chặt (cộng p99 độc lập) hoặc quá lỏng (bỏ qua tương quan) |
+| Chaos engineering: tiêm **một** lỗi mỗi lần | OAT | Sự cố thật thường là tổ hợp (một node chậm **và** một retry storm **và** một cache lạnh); một lỗi mỗi lần là OAT trên không gian lỗi | "Đã thử mọi lỗi đơn lẻ" được đọc như "đã thử hết" |
+| Feature importance (permutation, SHAP) để chọn feature | Độ nhạy theo phương sai | Importance cho **độ chính xác trung bình**; câu hỏi an toàn là về **đuôi** | Bỏ một feature ít quan trọng trung bình nhưng quyết định các ca hỏng hiếm |
+| Load test từng tham số cấu hình (pool size, timeout) riêng | OAT trên cấu hình | Tương tác: timeout ngắn chỉ có hại khi pool nhỏ | Cấu hình "tối ưu từng cái" không tối ưu cùng nhau |
+
+**Tên chuẩn của thứ bạn đã làm:** biểu đồ "đẩy từng tham số lên xuống 20% xem latency đổi bao nhiêu" có tên là **tornado chart**, một dạng OAT. Script tiêm lỗi ngẫu nhiên nhiều loại cùng lúc là Monte Carlo trên không gian lỗi. Thứ còn thiếu: phân biệt câu hỏi phương sai với câu hỏi hỏng, và tính trước N theo xác suất muốn ước lượng.
+
+**Chấm mô hình:**
+
+- *"Đã đẩy từng tham số tới ±2σ, đầu ra vẫn trong giới hạn, vậy an toàn ở mức ~95%."* **SAI.** ±2σ từng trục không nói gì về xác suất của tổ hợp; và với k tham số độc lập, xác suất **mọi** tham số cùng trong ±2σ là 0,954ᵏ, nhưng vùng hỏng có thể nằm ngay trong hộp đó (góc). Phản ví dụ: mục 5.
+- *"Tham số giải thích nhiều phương sai nhất là tham số cần đo kỹ nhất."* **ĐÚNG MỘT PHẦN.** Đúng khi mục tiêu là dự đoán chính xác (K6 Bài 16: L chiếm phần lớn bất định của chu kỳ, đo L kỹ là đúng). Sai khi mục tiêu là tránh hỏng và tham số có cạnh dốc. Phản ví dụ: mục 5, tham số ít phương sai nhất lại là tham số dẫn hỏng.
+- *"Cộng sai số theo căn tổng bình phương (GUM) là đủ, Monte Carlo là thừa."* **ĐÚNG MỘT PHẦN.** Đủ khi mô hình gần tuyến tính trong dải bất định và phân bố gần chuẩn (GUM Supplement 1 nói rõ điều kiện và đề xuất Monte Carlo khi không thỏa [spec: JCGM 101:2008]). Có ngưỡng (phanh bị ma sát chặn) hay phân bố lệch thì không.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Lan truyền bất định (uncertainty propagation) | Từ phân bố đầu vào suy phân bố đầu ra | Độ nhạy |
+| 🟢 | OAT / tornado chart | Đổi từng tham số một quanh danh định | Phân tích độ nhạy đầy đủ |
+| 🟢 | Monte Carlo | Lấy mẫu đầu vào, chạy mô hình, thống kê đầu ra | Chỉ để tính số π / chỉ dùng khi lười |
+| 🟢 | Độ nhạy cục bộ vs toàn cục | Đạo hàm tại một điểm vs ảnh hưởng trên toàn dải | Một thứ |
+| 🟢 | Tương tác (interaction) | Ảnh hưởng của tham số này phụ thuộc giá trị tham số kia | Hiếm, bỏ qua được |
+| 🟢 | Xác suất hỏng và sai số của nó √(p(1−p)/N) | Ước lượng Monte Carlo cũng là một phép đo | "Chạy 1000 lần không hỏng là an toàn" (rule of three, K4 Bài 7) |
+| 🟡 | Chỉ số Sobol S₁, S_T | Phần phương sai do một tham số một mình / kể cả tương tác | Thước đo rủi ro |
+| 🟡 | Latin hypercube | Lấy mẫu phân tầng để phủ đều mỗi trục với ít mẫu | Luôn tốt hơn ngẫu nhiên (tùy mục tiêu) |
+| 🟡 | Surrogate model | Mô hình rẻ (hồi quy, GP) thay sim đắt để chạy Monte Carlo | Kết quả của nó là của sim (phải validate, F6.2) |
+| 🔴 | FORM/SORM, importance sampling, subset simulation | Ước lượng xác suất hỏng rất hiếm | Cần ở lộ trình này |
+
+### 5. Bài tập dự đoán
+
+**Đề.** Robot dừng khẩn: quãng dừng `d = v·t_trễ + v²/(2·a)`, với a = min(a_lệnh, μ·f·g) (phanh bị ma sát chặn, F6.1), a_lệnh = 2 m/s², f = 0,55. Giới hạn: dừng trong 15 cm. Danh định v = 0,50 m/s, t_trễ = 80 ms, μ = 0,40; bất định (1σ, chuẩn, độc lập): 0,03 m/s; 20 ms; 0,07. Dự đoán:
+
+1. Quãng dừng danh định.
+2. OAT ±2σ: tham số nào cho biên độ lớn nhất? Có trường hợp nào vượt 15 cm không? Với μ: đẩy lên +2σ và xuống −2σ có đối xứng không, vì sao?
+3. Monte Carlo 200 000 mẫu: P(vượt 15 cm) cỡ bao nhiêu (0? 0,01%? 1%? 10%?).
+4. Ở các mẫu hỏng, tham số nào lệch xa danh định nhất (tính bằng σ)?
+5. Chỉ số kiểu S₁ (phương sai của trung bình có điều kiện / phương sai tổng): xếp hạng ba tham số. Có cùng thứ hạng với câu 4 không?
+6. Với N = 200 000 và p ở câu 3, sai số chuẩn của ước lượng P(vượt) là bao nhiêu?
+
+```python
+# [đã chạy] F6.6 — quãng đường dừng khẩn: OAT (từng tham số một) vs Monte Carlo
+import numpy as np
+rng = np.random.default_rng(3)
+g, F_DRIVE, A_CMD, LIMIT = 9.81, 0.55, 2.0, 0.15          # LIMIT: phải dừng trong 15 cm
+NOM = dict(v=0.50, delay=0.08, mu=0.40)                   # danh định
+SD  = dict(v=0.03, delay=0.02, mu=0.07)                   # bất định (1σ) [ước lượng — thay bằng số bạn đo]
+
+def stop_dist(v, delay, mu):
+    a = np.minimum(A_CMD, mu * F_DRIVE * g)               # phanh bị chặn bởi ma sát (F6.1)
+    return v * delay + v**2 / (2 * a)
+
+d0 = stop_dist(**NOM)
+print(f"danh định: {d0*100:.1f} cm (giới hạn {LIMIT*100:.0f} cm)")
+print("OAT ±2σ, từng tham số một (các tham số khác giữ danh định):")
+for p in NOM:
+    lo = stop_dist(**{**NOM, p: NOM[p] - 2 * SD[p]}); hi = stop_dist(**{**NOM, p: NOM[p] + 2 * SD[p]})
+    print(f"  {p:6s}: {lo*100:5.1f} … {hi*100:5.1f} cm   biên độ {abs(hi-lo)*100:4.1f} cm"
+          f"   {'VƯỢT' if max(lo, hi) > LIMIT else 'ok'}")
+N = 200_000
+S = {p: rng.normal(NOM[p], SD[p], N) for p in NOM}
+d = stop_dist(**S)
+fail = d > LIMIT
+print(f"Monte Carlo N={N}: trung bình {d.mean()*100:.1f} cm, p99 {np.percentile(d, 99)*100:.1f} cm, "
+      f"P(vượt {LIMIT*100:.0f} cm) = {fail.mean():.2%}")
+for p in NOM:                                             # mẫu "hỏng" nằm ở đâu trong không gian tham số?
+    z = (S[p][fail] - NOM[p]) / SD[p]
+    print(f"  ở các lần hỏng, {p:6s} lệch trung bình {z.mean():+.2f}σ")
+# Độ nhạy bậc một kiểu "phương sai giải thích được" (thô): chia theo bin của từng tham số
+for p in NOM:
+    bins = np.quantile(S[p], np.linspace(0, 1, 21)); idx = np.digitize(S[p], bins[1:-1])
+    cond_mean = np.array([d[idx == i].mean() for i in range(20)])
+    print(f"  S1({p}) ≈ {cond_mean.var() / d.var():.2f}")
+```
+
+```markdown
+# prediction.md — F6.6
+1. d danh định ≈ ___ cm
+2. OAT: lớn nhất ___ ; vượt 15 cm? ___ ; μ đối xứng? ___ vì ___
+3. P(vượt) ≈ ___
+4. tham số lệch xa nhất ở mẫu hỏng: ___ (≈ ___σ)
+5. xếp hạng S₁: ___ > ___ > ___ ; cùng câu 4? ___
+6. sai số chuẩn ≈ ___
+Độ tự tin (1–5): ___
+```
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+Kết quả khi chạy (numpy 2.5.3, seed 3):
+
+| | v | t_trễ | μ |
+|---|---|---|---|
+| OAT −2σ … +2σ (cm) | 8,4 … 12,3 | 8,2 … 12,2 | 12,9 … 10,2 |
+| Biên độ OAT (cm) | 4,0 | 4,0 | 2,7 |
+| Lệch trung bình ở mẫu hỏng | +1,22σ | +0,97σ | **−2,05σ** |
+| S₁ (xấp xỉ theo bin) | 0,39 | 0,37 | **0,19** |
+
+Danh định 10,2 cm. Monte Carlo: trung bình 10,6 cm, p99 15,1 cm, **P(vượt 15 cm) = 1,14%**.
+
+1. 0,5 × 0,08 + 0,25 / (2 × 2) = 0,04 + 0,0625 ≈ 10,2 cm (ở danh định, μ·f·g = 2,16 > 2 nên phanh theo lệnh).
+2. v và t_trễ cùng biên độ 4 cm; không trường hợp nào vượt 15 cm. μ **không đối xứng**: tăng μ không làm gì (phanh đã bị chặn bởi a_lệnh = 2), giảm μ tới 0,26 thì ma sát thành giới hạn (a = 1,40) và d tăng lên 12,9 cm. OAT "đối xứng ±" giả định tuyến tính; ở đây có ngưỡng.
+3. ~1,1%. OAT nói "mọi trục đều an toàn với biên hơn 2 cm"; Monte Carlo nói cứ khoảng 90 lần dừng khẩn thì một lần vượt. Hỏng nằm ở **góc**: μ thấp **và** v hơi cao **và** trễ hơi dài.
+4. **μ** (−2σ), dù OAT xếp nó cuối.
+5. v ≈ t_trễ > μ. Theo phương sai, μ ít quan trọng nhất (phần lớn dải của nó nằm ở vùng phanh không bị chặn, nơi μ không ảnh hưởng gì). Theo hỏng, μ quan trọng nhất (nó kích hoạt cơ chế "phanh bị ma sát chặn", cạnh dốc của F6.1). **Hai câu hỏi, hai thứ hạng ngược nhau.** Nếu dùng S₁ để quyết định "đo kỹ tham số nào", bạn sẽ đo v và trễ, bỏ qua ma sát sàn, đúng tham số gây hỏng. S₁ ba tham số cộng ≈ 0,95: phần tương tác nhỏ **theo phương sai**, nhưng vùng hỏng lại hoàn toàn là tương tác.
+6. √(0,0114 × 0,9886 / 200 000) ≈ 0,024% → P = 1,14% ± 0,05% (95%). Với sim thật mỗi lần chạy 5 s, 200 000 lần là ~11 ngày CPU: lý do dùng mô hình rút gọn như công thức ở đây để sàng lọc, rồi chỉ chạy sim/thật quanh vùng hỏng.
+
+</details>
+
+### 6. Lăng kính đánh giá
+
+Checklist khi đọc một phân tích độ nhạy hoặc bất định:
+
+1. Câu hỏi là gì: phân bố đầu ra, đóng góp phương sai, hay xác suất/nguyên nhân hỏng? Phương pháp có khớp câu hỏi không?
+2. OAT hay toàn cục? Nếu OAT: mô hình có ngưỡng, tương tác không? Có ai thử góc không?
+3. Phân bố đầu vào đến từ đâu (đo, datasheet, đoán)? σ hay cận? Có tương quan giữa tham số không?
+4. Với xác suất được báo: N bao nhiêu, sai số chuẩn bao nhiêu? "0 lần hỏng trong N" được đọc thế nào (rule of three)?
+5. Con số nhỏ được trừ/bù có lớn hơn độ bất định của phép đo nó nằm trong không?
+6. Kết quả có kèm miền (dải tham số đã lấy mẫu) không (F6.1)?
+
+**ĐÚNG** nếu phương pháp khớp câu hỏi và có sai số Monte Carlo; **SAI** nếu dùng OAT để khẳng định an toàn, hoặc dùng S₁ để chọn tham số an toàn khi có ngưỡng; **CHƯA RÕ** nếu không nói phân bố đầu vào.
+
+**Khẳng định mẫu — tự chấm trước khi mở:**
+
+(a) Bản Gemini K3 Bài 8: *"Ở tầng web/API thông thường, bạn lập latency budget bằng cách cộng dồn thời gian xử lý qua các service"*, và trong cùng bảng: chặng không khí loa → mic 30 cm là *"0.87 ms... tuy nhỏ nhưng bắt buộc phải trừ ra trong các phép đo ở Bài 9"*, trong khi chặng Submit form → Sheet được dự đoán *"1–3 s"*.
+
+(b) K6 Bài 16 (bản giáo trình), phần F: *"Độ nhạy của T(30°): u(L) = 3 mm → ≈ 4.3 ms; u(θ₀) = 2° → ≈ 3.4 ms; u(g) → ≈ 1.5 ms; u(r) = 2 mm → ≈ 0.1 ms. Monte Carlo gộp: σ ≈ 5.6 ms. L chiếm phần lớn; đo bán kính quả nặng kỹ hơn là phí giờ."*
+
+(c) Một câu hay gặp trong báo cáo eval: *"Chạy 500 episode Monte Carlo trên phân bố DR, 0 lần va chạm, vậy xác suất va chạm bằng 0."*
+
+<details><summary>🔒 Đáp án</summary>
+
+(a) **ĐÚNG MỘT PHẦN.** Cộng dồn đúng cho **trung bình** (kỳ vọng của tổng = tổng kỳ vọng). Không đúng cho p99 hay cho ngân sách có cam kết đuôi; ở đó cần phân bố từng tầng và Monte Carlo (hoặc ít nhất biết các tầng có tương quan không). Về 0,87 ms: "bắt buộc trừ" chỉ đúng cho phép đo mà nó nằm trong và có độ bất định nhỏ hơn nó (đo GPIO → mic ở Bài 9, độ phân giải cỡ chục µs). Trong ngân sách end-to-end có một chặng bất định cỡ giây, 0,87 ms nằm dưới sàn nhiễu hàng nghìn lần; trừ hay không không đổi kết luận nào. Độ nhạy quyết định cái gì đáng trừ.
+
+(b) **ĐÚNG**, và là ví dụ dùng đúng độ nhạy theo phương sai: câu hỏi là "đo cái gì để dự đoán chu kỳ chính xác hơn", mô hình gần tuyến tính trong dải bất định, không có ngưỡng, nên OAT + Monte Carlo cho cùng kết luận và S₁ trả lời đúng câu hỏi. Khác với mục 5 ở đúng hai điểm: câu hỏi là phương sai (không phải hỏng), và không có cạnh dốc.
+
+(c) **SAI.** 0/500 cho cận trên 95% của xác suất va chạm ≈ 3/500 = 0,6% (rule of three, K4 Bài 7). Thêm hai câu hỏi: phân bố DR có phủ θ* không (F6.5), và va chạm có nằm ở góc tham số mà 500 mẫu hầu như không chạm tới không (mục 2).
+
+</details>
+
+### 7. Câu hỏi ngược
+
+1. **[Vì sao không]** Vì sao không luôn chạy Monte Carlo thật lớn trên sim đầy đủ và bỏ hẳn OAT?
+   <details><summary>Hướng nghĩ</summary>
+
+   Chi phí (mục 5 câu 6), và OAT vẫn có giá trị: rẻ, dễ đọc, kiểm nhanh hướng và dạng của từng ảnh hưởng (đây là chỗ bạn thấy μ không đối xứng). Quy trình thường gặp: OAT để hiểu, Monte Carlo trên mô hình rút gọn để sàng lọc, sim đầy đủ quanh vùng nghi ngờ.
+
+   </details>
+2. **[Quy mô]** 1000 episode mỗi đêm, 12 tham số randomize. Bạn muốn biết tham số nào gây phần lớn thất bại. Thiết kế phân tích nào dùng lại dữ liệu đã có, không chạy thêm?
+   <details><summary>Hướng nghĩ</summary>
+
+   Mỗi episode đã là một mẫu Monte Carlo (tham số + kết cục), miễn là bạn **ghi tham số đã lấy mẫu vào metadata** (K6 Bài 5). Từ đó: so phân bố từng tham số ở episode hỏng với episode đạt (dịch chuyển σ như mục 5), hoặc fit một mô hình phân loại đơn giản. Thiếu metadata thì không làm được gì: đây là quyết định infra, không phải thống kê.
+
+   </details>
+3. **[Failure mode]** Monte Carlo dùng phân bố chuẩn cho μ với σ ước từ 5 phép đo. Thật ra μ có hai cụm (sàn khô / sàn vừa lau). Kết quả sai thế nào?
+   <details><summary>Hướng nghĩ</summary>
+
+   Phân bố chuẩn đặt rất ít khối lượng ở cụm thấp, nên P(hỏng) bị ước thấp, có thể hàng bậc. 5 phép đo cùng một ngày không thấy được cụm thứ hai. "Input pedigree": phân bố đầu vào là một khẳng định cần validate như mô hình.
+
+   </details>
+4. **[Phản biện]** "Phân tích độ nhạy chỉ cần khi mô hình phức tạp." Phản biện bằng mục 5.
+   <details><summary>Hướng nghĩ</summary>
+
+   Công thức ở mục 5 có ba tham số và một hàm min. Độ phức tạp không nằm ở số tham số mà ở ngưỡng và tương tác. Mô hình đơn giản nhưng có cạnh dốc là chỗ trực giác OAT hỏng nhanh nhất.
+
+   </details>
+
+### 8. Liên kết ra ngoài
+
+- **Kỹ thuật độ tin cậy kết cấu.** Thiết kế cầu, nhà theo "xác suất hỏng mục tiêu" (cỡ 10⁻⁴–10⁻⁶ mỗi năm) dùng FORM/importance sampling vì Monte Carlo trực tiếp không đủ mẫu; và tìm "điểm hỏng có khả năng nhất" trong không gian tham số [chuẩn]. Giống: câu hỏi hỏng ≠ câu hỏi phương sai; vùng hỏng ở góc. Khác: họ có tiêu chuẩn pháp lý cho xác suất mục tiêu; robot thì bạn tự đặt.
+- **Stress test ngân hàng.** Cơ quan giám sát yêu cầu kịch bản **kết hợp** (lãi suất tăng + bất động sản giảm + thất nghiệp tăng) thay vì từng cú sốc một, vì khủng hoảng là tổ hợp [chuẩn]. Giống: thoát khỏi OAT. Khác: kịch bản được chọn bởi chuyên gia (không phải lấy mẫu), vì phân bố đuôi kinh tế không đo được.
+
+### 9. Áp vào khóa chính
+
+- **K1 Bài 9:** script Monte Carlo cho divider là lan truyền bất định; khi đổi sang 1 MΩ, nhìn phân bố của R_m suy ra, không chỉ một con số.
+- **K3 Bài 8:** dựng ngân sách độ trễ bằng Monte Carlo trên phân bố từng tầng (đo hoặc giả định có căn cứ), báo p50/p99 của tổng; so với cộng p99 từng tầng; khẳng định (a).
+- **K4 Bài 8:** độ nhạy theo lớp khi quantize là OAT trên lớp; nhớ tương tác (hai lớp cùng 4-bit có thể tệ hơn tổng hai lớp riêng).
+- **K6 Bài 5–6:** ghi tham số đã lấy mẫu vào metadata mỗi episode để mọi chạy đêm đều dùng được cho phân bổ hỏng (câu hỏi ngược 2); "góc tương tác" của Bài 6 là mục 2 ở đây.
+- **K6 Bài 14:** khi chọn tham số để đo (system ID) thay vì randomize, dùng câu hỏi hỏng, không chỉ S₁. **K6 Bài 16:** khẳng định (b) là trường hợp S₁ dùng đúng.
+
+### 10. Độ tin cậy
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Ulam 1946 solitaire; Los Alamos với von Neumann, Metropolis; tên Monte Carlo | [chuẩn] | Metropolis, *Los Alamos Science* Special Issue 1987; Metropolis & Ulam, JASA 44 (1949) |
+| Saltelli & Annoni 2010: phần lớn phân tích độ nhạy đã công bố dùng OAT | [chuẩn] | Environmental Modelling & Software 25 (2010) 1508–1517 |
+| GUM Supplement 1 dùng Monte Carlo khi tuyến tính hóa không đủ | [spec] | JCGM 101:2008 |
+| Sai số chuẩn Monte Carlo √(p(1−p)/N) | [chuẩn] | |
+| Tham số phanh, μ, f | [ước lượng] | Bài tập; đo thật ở K6 Bài 17, K7 C2.4 |
+| Bảng mục 5 | [đã chạy] | numpy 2.5.3, seed 3; S₁ xấp xỉ bằng 20 bin, không phải ước lượng Sobol chuẩn |
+
+Đã sửa so với bản gốc/Gemini: (Gemini K3 Bài 8) "lập latency budget bằng cách cộng dồn" → đúng cho trung bình, không cho p99; "0,87 ms bắt buộc phải trừ" → chỉ khi lớn hơn độ bất định của phép đo chứa nó.
+
+### 11. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** A. Saltelli, P. Annoni, *How to avoid a perfunctory sensitivity analysis* (Environmental Modelling & Software, 2010).
+- **Giải thích:** A. Saltelli và cộng sự, *Global Sensitivity Analysis: The Primer* (Wiley, 2008), chương 1–2.
+- **Đào sâu (tùy chọn):** JCGM 101:2008, *Evaluation of measurement data — Supplement 1 to the GUM: Propagation of distributions using a Monte Carlo method* (miễn phí trên trang BIPM).
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer vì sao chaos engineering một lỗi mỗi lần là OAT; (2) vẽ lại hình "dấu + và đám mây"; (3) câu hỏi:
+
+  Muốn khẳng định "xác suất robot vượt quãng dừng < 0,1%" với độ tin 95%, cần bao nhiêu episode Monte Carlo không hỏng?
+  <details><summary>Đáp án</summary>
+
+  Rule of three: 0 hỏng trong N cho cận trên 95% ≈ 3/N, nên N ≈ 3 000. Nếu có vài lần hỏng, dùng khoảng Wilson hoặc Clopper–Pearson (F1.4) và cần nhiều hơn. Điều kiện: phân bố đầu vào phải đúng (câu hỏi ngược 3).
+
+  </details>
+
+---
