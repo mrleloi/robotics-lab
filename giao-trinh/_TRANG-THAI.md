@@ -1,5 +1,7 @@
 # TRẠNG THÁI CÔNG VIỆC — bàn giao cho session sau
 
+> **CẬP NHẬT 2026-10-08 (session 2):** đã thống nhất với bản Kiro. Đọc `_PHOI-HOP.md` trước. Tên file đã đổi theo mục 8 quy chuẩn (bảng dưới còn tên cũ). K7 đã có kế hoạch chốt `khoa-7/_KE-HOACH-K7.md` (mục 3 dưới đây đã lỗi thời). Tiến độ mới ở mục 6 cuối file.
+
 > Cập nhật: 2026-10-08 12:50 UTC. Branch: `claude/kind-newton-m2ocmb`.
 > Đọc file này **trước tiên** khi mở session mới. Nó đủ để tiếp tục mà không làm lại phần đã xong.
 
@@ -189,3 +191,12 @@ Tài liệu cần đọc khi thiết kế lại:
   - Cảnh báo cho reviewer K4 Bài 7: câu "cùng seed 3 lần → giống hệt" chỉ đúng trên cùng máy, cùng image, có bật cờ tất định.
   - Tiêu chí 4 của Gate K4 ("xác nhận công khai") được *diễn giải* là cần JSON + `env` + output `compare.py`, theo ACM badges v1.1.
 - **Quy chuẩn chưa nói rõ:** khung rút gọn có phần 11 hay không. Brief bắt ghi sửa lỗi ở phần 11, nên các agent đã thêm phần 11 vào khung rút gọn. Giữ nguyên.
+
+## 6. Session 2 — tiến độ
+
+| Đợt | Việc | Trạng thái |
+|---|---|---|
+| 1 | Hợp nhất K1, K2 (m1, m2), K3 (m1, m2–m4); viết K6 m2 | đang chạy |
+| 2 | K6 m4, m5–m6; F1–F7 | chờ |
+| 3 | K7 C0–C12 | chờ |
+| 4 | Hợp nhất K4, K5 (khi Kiro đẩy), tổng quan, README | chờ |

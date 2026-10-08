@@ -19,7 +19,7 @@ Repo: `/home/user/robotics-lab` (gọi là GỐC). Bạn là một trong nhiều
 - **Dạng không phải chữ**: Mermaid, ASCII timing, bảng số, WaveDrom JSON, hoặc mô phỏng Python ≤60 dòng. Python đã cài sẵn numpy/matplotlib/scipy. **Mọi khối Python bạn đưa vào phải chạy thử** trong thư mục scratchpad riêng của bạn (đường dẫn trong đề bài đơn vị; tạo nếu chưa có), dùng `matplotlib.use("Agg")` và savefig thay show khi chạy thử (trong bài có thể để `plt.show()`). Dòng đầu khối: `# [đã chạy]` hoặc `# [chưa chạy]` (chỉ cho code cần phần cứng/thư viện không cài được, như ESP-IDF, ROS 2, LeRobot).
 - **Kiểm sự thật**: con số datasheet, API/phiên bản, URL — nếu không chắc, dùng WebSearch/WebFetch (tải schema qua ToolSearch nếu cần) hoặc gắn `[tự đo]`/bỏ URL chỉ ghi tên tài liệu + tác giả. Không bịa.
 - **Sửa lỗi gốc**: mục 7 của quy chuẩn là bắt buộc nếu chạm bài của bạn. Khi thấy thêm lỗi kỹ thuật trong bản gốc hoặc Gemini, sửa và ghi ở phần 11 của bài (dòng "Đã sửa so với bản gốc/Gemini").
-- **Liên kết chéo** dùng mã cố định trong mục 6 quy chuẩn (`→ F4.5`, `→ K5 Bài 9`). Ở dòng **Vị trí** của mỗi bài, ghi các viên nang nền cần trước.
+- **Liên kết chéo** dùng mã cố định trong mục 6 quy chuẩn (`→ F4.5`, `→ K5 Bài 9`). Khóa 7 đã thiết kế lại: dùng mã chặng/bài `→ K7 C3.2` theo `giao-trinh/khoa-7/_KE-HOACH-K7.md` (đọc mục 3–5 của file đó nếu bài của bạn liên quan robot thật). Tên file đầu ra theo mục 8 quy chuẩn. Có bản Kiro cùng tên trong `giao-trinh-kiro/` thì đọc để tham khảo (xem `giao-trinh/_PHOI-HOP.md`). Ở dòng **Vị trí** của mỗi bài, ghi các viên nang nền cần trước.
 - Bài thuần hậu cần (mua sắm, cài đặt, viết bài tiếng Anh, tìm người reproduce, gate) dùng **khung rút gọn**.
 - Không viết lời mở đầu kiểu "Chào bạn", không tóm tắt lặp cuối file.
 
