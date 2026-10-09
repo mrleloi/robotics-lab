@@ -813,3 +813,297 @@ Vì sao lệch là bình thường: latency phụ thuộc mạnh vào cache; s�
   <details><summary>Đáp án</summary>Percentile của các phần không xác định percentile của tổng (phụ thuộc toàn bộ hình dạng phân bố). Lưu histogram với biên bucket cố định (ví dụ log-spaced) mỗi giờ; cộng bucket để có histogram ngày rồi đọc percentile, với sai số bị chặn bởi độ rộng bucket.</details>
 
 ---
+
+## Bài 16 — Validation theo vật lý, không chỉ theo schema (10h)
+
+> **Vị trí:** Bài 15 (index, cột `n_saturated`) → **Bài 16** → Bài 17 (drop có ghi nhận; rule `dt` của bài này phát hiện lỗ) · **Cần trước:** F3.7 (bốn tầng kiểm, tiền điều kiện của rule — đọc mục 2 và 6), F2.1 (rule là detector có FP/FN), F1.1 (dung sai từ độ bất định), F1.4 (CI cho tỉ lệ báo giả), K5 Bài 4 (nhiễu và offset IMU đã đo), K2 Bài 11–12 (detector và lỗi tiêm) · **Sau bài này bạn quyết định được:** rule nào **chặn** dữ liệu, rule nào chỉ **gắn cờ**, mỗi rule có tiền điều kiện gì, và ngưỡng lấy từ con số đo nào.
+
+**Câu hỏi của bài:** dữ liệu hợp lệ về schema nhưng sai về vật lý thì bắt bằng gì? Đây là tiêu chí PASS số 3 của gate.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Tháng 9/1999, Mars Climate Orbiter cháy trong khí quyển sao Hỏa. Báo cáo của Mishap Investigation Board (NASA, 11/1999) nêu nguyên nhân gốc: phần mềm mặt đất `SM_FORCES` của nhà thầu xuất xung lực của các lần đốt động cơ nhỏ theo pound-force·giây, trong khi phần mềm điều hướng đọc file đó như newton·giây, đúng như giao diện quy định. File đúng định dạng, đúng số cột, đúng kiểu số. Mọi phép kiểm cấu trúc đều xanh suốt chín tháng bay. Thứ có thể bắt nó là một phép kiểm **theo vật lý**: quỹ đạo dự báo và quỹ đạo đo bằng tín hiệu radio lệch nhau dần; vài người trong đội điều hướng đã thấy điều đó nhưng không có quy trình nào biến "lệch" thành "chặn".
+
+IMU của bạn có đúng loại lỗi này ở quy mô bàn làm việc: ghi `ACCEL_CONFIG` sang ±4g nhưng code vẫn chia 16384. Message `sensor_msgs/Imu` vẫn hoàn hảo về CDR. Dataset vào training, model học rằng trọng lực bằng một nửa, và không ai biết vì sao.
+
+### 2. Mô hình tư duy
+
+Một rule vật lý là **một detector có tiền điều kiện**: "nếu thế giới đang ở trạng thái S thì đại lượng X phải nằm trong khoảng K". Thiếu S, rule báo giả. Thiếu K đo được, rule hoặc báo giả hoặc mù.
+
+```mermaid
+flowchart LR
+    W["Cửa sổ 1 s<br/>(theo header.stamp)"] --> F["Lọc mẫu MỚI<br/>theo seq / data-ready"]
+    F --> P{"Tiền điều kiện?<br/>đứng yên: gyro rms nhỏ,<br/>|a| ít dao động"}
+    P -- "không thỏa" --> NA["not_applicable<br/>(không phải PASS)"]
+    P -- "thỏa" --> R["So với K<br/>K = dung sai từ Bài 4"]
+    R -- "trong K" --> OK["ok"]
+    R -- "ngoài K" --> A{"Hành động<br/>định trước"}
+    A --> B["chặn: không vào dataset"]
+    A --> Q["cách ly: chờ người"]
+    A --> C["gắn cờ: cột chất lượng<br/>+ /diagnostics"]
+```
+
+Ba ý lõi:
+
+1. **Schema kiểm hình dạng, vật lý kiểm nghĩa.** `float64` mang m/s² và `float64` mang g là cùng một chuỗi byte với parser. Sai đơn vị chỉ lộ ra khi bạn so giá trị với một sự thật bên ngoài dữ liệu: trọng lực khi đứng yên, áp suất khí quyển, khoảng cách không âm.
+2. **Rule thấy một bất biến, và mù với mọi phép biến đổi giữ bất biến đó.** |a| không đổi khi xoay cảm biến, nên rule |a| = g không thể thấy IMU lắp ngược hay hai trục bị tráo. Muốn thấy hướng, cần rule về hướng (trọng lực dọc +z của `imu_link` khi robot nằm ngang, REP-103).
+3. **Cửa sổ tính theo mẫu mới, không theo lần đọc.** Nếu host đọc thanh ghi nhanh hơn ODR của chip mà không chờ data-ready, nó đọc lại cùng một mẫu nhiều lần. Rule "giá trị lặp lại = kênh đơ" sẽ báo động trên kênh lành. Rule "σ = 0" chỉ có nghĩa khi tính trên các mẫu có `seq`/data-ready khác nhau, và khi cửa sổ chứa đủ mẫu mới (BME280 ở 1 Hz cho tối đa một mẫu mới trong cửa sổ 1 s: σ không xác định, không phải bằng 0).
+
+Mô phỏng: ma trận lỗi × rule. Năm rule, bảy kịch bản, 120 s (60 s đứng yên, 60 s chuyển động).
+
+```python
+# [đã chạy] Ma trận lỗi × rule: rule vật lý nào bắt lỗi nào, và báo giả ở đâu
+import numpy as np
+rng = np.random.default_rng(16)
+G, ODR, T = 9.787, 200, 120                    # g Hà Nội, 200 Hz, 120 s (60 s yên + 60 s chạy)
+LSB_A, LSB_G = 9.80665/16384, np.radians(1/131) # MPU6050 ±2g, ±250 °/s
+t = np.arange(T*ODR)/ODR
+moving = t >= 60
+
+def clean():
+    a = rng.normal(0, 0.033, (t.size, 3)); a[:, 2] += G          # đứng yên, z lên (REP-103)
+    w = rng.normal(0, 7e-4, (t.size, 3))
+    a[moving, 0] += 3.0*np.sin(2*np.pi*0.5*t[moving])             # chạy: gia tốc tịnh tiến + quay
+    w[moving, 2] += 0.5*np.sin(2*np.pi*0.5*t[moving])
+    return np.round(a/LSB_A)*LSB_A, np.round(w/LSB_G)*LSB_G      # lượng tử về LSB
+
+def fault(name):
+    a, w = clean(); seq = np.arange(t.size)
+    if name == "scale x0.5": a *= 0.5          # chip ±4g, code vẫn chia 16384
+    if name == "scale x1.02": a *= 1.02
+    if name == "scale x1.01": a *= 1.01
+    if name == "lắp ngược": a[:, [0, 2]] *= -1   # xoay 180° quanh trục y
+    if name == "kênh đơ t>30s": a[t > 30] = a[t <= 30][-1]; w[t > 30] = w[t <= 30][-1]
+    if name == "host đọc 1 kHz": # không chờ data-ready: mỗi mẫu bị đọc lại 5 lần
+        a, w, seq = (np.repeat(x, 5, axis=0) for x in (a, w, seq))
+    return a, w, seq
+
+def rules(a, w, seq):
+    fresh = np.r_[True, np.diff(seq) != 0]                      # mẫu mới theo seq
+    out = {k: 0 for k in ("R1 thô", "R1 có ĐK", "R2 hướng g", "R3 lặp 5", "R3 σ theo seq")}
+    n_win = int(seq[-1]//ODR) + 1
+    for k in range(n_win):
+        m = (seq//ODR) == k; mf = m & fresh
+        am, wm = a[mf], w[mf]
+        mag = np.linalg.norm(am, axis=1)
+        still = np.sqrt((wm**2).mean()) < 0.01 and mag.std() < 0.1   # tiền điều kiện đứng yên
+        e = abs(mag.mean() - G) > 0.15
+        out["R1 thô"] += e
+        out["R1 có ĐK"] += e and still
+        out["R2 hướng g"] += still and am[:, 2].mean() < 0.8*G
+        x = w[m, 0]; runs = np.diff(np.flatnonzero(np.r_[True, np.diff(x) != 0, True]))
+        out["R3 lặp 5"] += runs.max() >= 5                         # trên chuỗi host đọc
+        out["R3 σ theo seq"] += np.ptp(wm[:, 0]) == 0              # mẫu mới; ptp, không std()==0
+    return {k: f"{v}/{n_win}" for k, v in out.items()}
+
+names = ["lành", "scale x0.5", "scale x1.02", "scale x1.01", "lắp ngược", "kênh đơ t>30s", "host đọc 1 kHz"]
+res = {n: rules(*fault(n)) for n in names}
+cols = list(res["lành"])
+print(f"{'lỗi tiêm':15s}" + "".join(f"{c:>14s}" for c in cols))
+for n in names:
+    print(f"{n:15s}" + "".join(f"{res[n][c]:>14s}" for c in cols))
+```
+
+Đọc bảng in ra theo hai chiều: theo hàng (lỗi này có rule nào bắt không), theo cột (rule này báo bao nhiêu trên hàng "lành", và trên những hàng mà nó không được thiết kế để bắt). Ghi dự đoán trước khi chạy (phần 5, đề 1).
+
+Một chi tiết số học trong code: cột R3 dùng `np.ptp(...) == 0` (max − min) chứ không dùng `std() == 0`. Trên máy người soạn, `np.std` của 200 giá trị `0.1 + 0.2` giống hệt nhau trả về `5.55e-17`, không phải 0. Đếm số mã LSB phân biệt hoặc so số nguyên raw là cách chắc chắn.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| JSON Schema / Pydantic / Protobuf validate | Tầng 1 của F3.7: giải mã được, đủ trường, đúng kiểu | Request sai → 400, client gửi lại. Phép đo sai → không ai gửi lại; và schema không có khái niệm đơn vị | Tin "contract xanh = dữ liệu đúng"; sai scale vào dataset |
+| Great Expectations / dbt `between(min, max)` | Rule dải tĩnh (ToF ≥ 0, áp suất trong dải) | Expectation xét từng dòng độc lập; rule vật lý xét **cửa sổ** (σ, đạo hàm), **trạng thái** (đứng yên) và **nhiều luồng** | Viết `between(-19.6, 19.6)` cho gia tốc và tưởng đã validate vật lý |
+| Invariant / assertion trong code (`assert balance >= 0`) | Bất biến vật lý (|a| = g khi đứng yên) | Assertion trong code đúng mọi lúc; bất biến vật lý chỉ đúng **dưới tiền điều kiện** và chỉ **trong dung sai đo** | Rule báo động mỗi khi robot chạy; người ta tắt rule; lỗi thật lọt qua |
+| Alert có FPR cao → pager fatigue | Rule báo giả trên dữ liệu lành | Ở backend alert giả tốn giấc ngủ; ở đây rule **chặn** giả là mất dữ liệu thật vĩnh viễn | Chặn cả phiên vì một rule chưa đo FPR |
+| Liveness probe (`/health` trả 200) | Đọc `WHO_AM_I`, process còn sống | Chip trả đúng ID, process sống, mà kênh vẫn đơ (K5 Bài 3) | Dashboard xanh trong khi dữ liệu là một hằng số |
+
+**Chấm mô hình** (chấm chi tiết ở → F3.7 mục 6; ở đây kèm phản ví dụ từ mô phỏng trên):
+
+- *"Schema validation bắt được: thiếu trường, sai kiểu, sai đơn vị đo."* (bản gốc) — **SAI ở vế cuối.** Phản ví dụ: hàng `scale x0.5` của mô phỏng là message hợp lệ tuyệt đối; chỉ rule có tham chiếu vật lý thấy nó. Chính đoạn cuối của bài gốc ("sai scale factor tạo ra dữ liệu hoàn toàn hợp lệ về cấu trúc") mâu thuẫn với câu này.
+- *"Rule |a| = g phát hiện được sai scale factor ngay lập tức."* (bản gốc) — **ĐÚNG MỘT PHẦN.** Đúng khi có đoạn đứng yên và lỗi scale lớn hơn dung sai. Gãy ở ba chỗ: chỉ trong đoạn đứng yên; lỗi scale nhỏ hơn dung sai thì không thấy; và rule mù với lắp ngược/tráo trục vì |a| bất biến khi xoay. Phản ví dụ: hai hàng `scale x1.01` và `lắp ngược`.
+- *"σ = 0 trong > 1 s = kênh đơ."* (bản gốc) — **ĐÚNG MỘT PHẦN.** Ý đúng: kênh thật luôn có nhiễu. Gãy khi host đọc nhanh hơn ODR (đọc lặp cùng một mẫu), khi cửa sổ chứa quá ít mẫu mới (cảm biến chậm), và khi nhiễu nhỏ hơn một LSB. Phản ví dụ: hàng `host đọc 1 kHz`, cột "R3 lặp 5".
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Physical validation / plausibility check | Kiểm giá trị theo quy luật của thế giới | Kiểm dải min/max |
+| 🟢 | Tiền điều kiện (precondition) | Trạng thái thế giới mà rule có nghĩa | Chi tiết cài đặt, bỏ được |
+| 🟢 | Frozen / stuck channel | Kênh trả mãi một giá trị trong khi đại lượng thật thay đổi | Kênh không gửi gì (đó là mất dữ liệu, freshness bắt) |
+| 🟢 | False positive rate (FPR) của rule | Tỉ lệ cửa sổ lành bị rule báo | Hằng số của rule (nó phụ thuộc dữ liệu và ngưỡng) |
+| 🟢 | Chặn / cách ly / gắn cờ | Ba hành động khi vi phạm | Mọi vi phạm đều chặn |
+| 🟢 | Data-ready / sample counter | Cờ hoặc bộ đếm cho biết chip có mẫu mới | Không cần nếu đọc đủ nhanh |
+| 🟡 | Cross-sensor check | Hai nguồn độc lập phải đồng ý | Hai kênh cùng MCU là "độc lập" (chung đồng hồ, chung nguồn) |
+| 🟡 | Delta check | So giá trị với giá trị trước, giới hạn tốc độ đổi | Rule dải |
+| 🔴 | Anomaly detection bằng ML | Học "bình thường" rồi báo lạ | Thay được rule vật lý (nó coi lỗi có hệ thống từ ngày đầu là bình thường) |
+
+### 5. Dự đoán
+
+**Đề 1 — ma trận mô phỏng.** Trước khi chạy code phần 2, điền bảng 7 hàng × 5 cột: mỗi ô là "0", "≈ một nửa", hay "gần hết" số cửa sổ. Lý do cho từng ô "≠ 0" ở hàng `lành`.
+
+**Đề 2 — dung sai cho R1 trên IMU của bạn.** Lấy từ dữ liệu K5 Bài 4: offset còn lại sau hiệu chuẩn (hoặc dung sai offset/độ nhạy trong datasheet nếu chưa hiệu chuẩn — `PS-MPU-6000A-00`, bảng thông số accelerometer), σ nhiễu mỗi mẫu, số mẫu mỗi cửa sổ. Công thức: dung sai ≈ k × √(sai số hiệu chuẩn² + (σ/√N)²), chọn k. Với dung sai đó, lỗi scale nhỏ nhất bắt được là bao nhiêu %?
+
+**Đề 3 — lỗi cố tình gây ở bước 3, rule nào bắt.** Với bốn lỗi của bản gốc (rút dây, hơ nóng, sai scale, nghẽn USB): rule nào của bạn bắt, sau bao lâu, và có lỗi nào **không** rule nào bắt? Trước khi rút dây, đọc firmware của bạn: khi `i2c_master_transmit_receive` (hoặc hàm bạn dùng) trả lỗi, code gửi gì lên host — không gửi, gửi giá trị cũ, gửi 0, hay gửi cờ lỗi? Câu trả lời quyết định rule nào sẽ thấy.
+
+**Đề 4 — FPR.** Với 7 ngày dữ liệu lành (hoặc vài giờ nếu chưa có), mỗi rule báo bao nhiêu cửa sổ? Nếu rule báo 0 lần trên n cửa sổ, cận trên 95% của FPR là bao nhiêu (quy tắc ba, → F1.4)?
+
+```markdown
+# prediction.md — K5 Bài 16
+## Đề 1: bảng 7×5 (0 / ½ / hết) + lý do cho mỗi ô ≠ 0 ở hàng "lành"
+## Đề 2: offset sau hiệu chuẩn = __ m/s², σ = __, N = __ → dung sai = __ → lỗi scale nhỏ nhất = __%
+## Đề 3: rút dây → firmware gửi ____ → rule ____ bắt sau __ s
+##        hơ nóng → rule ____ (có/không) vì ____
+##        sai scale → rule ____ ; nghẽn USB → rule ____ dựa trên (seq / thời gian nhận / thời gian nguồn)
+## Đề 4: FPR dự đoán mỗi rule: __ ; n cửa sổ = __ → cận trên nếu 0 lần = __
+## Độ tự tin (1–5) từng đề: __
+```
+
+### 6. Làm
+
+**Bước 1 — Implement ≥5 rule, mỗi rule kèm test tổng hợp (≈4h).** Dùng lại phương pháp K2 Bài 12: mỗi rule có (a) test sạch không báo, (b) test lỗi tiêm phải bắt, (c) test **không áp dụng** (tiền điều kiện không thỏa → trả `not_applicable`, không trả `ok`). Bộ rule khởi đầu của bản gốc, kèm tiền điều kiện và chỗ đã sửa:
+
+| Rule | Cơ sở vật lý | Ngưỡng (gốc) | Tiền điều kiện / cách tính đúng |
+|---|---|---|---|
+| \|a\| lúc đứng yên = g địa phương | Trọng trường | 9.787 m/s² ở Hà Nội, ± ngưỡng đo ở Bài 4 | Chỉ khi đứng yên (gyro rms nhỏ và \|a\| ít dao động trong cửa sổ). Dung sai từ đề 2 |
+| *(thêm)* Trọng lực dọc +z của `imu_link` | Trọng trường + REP-103 | a_z trung bình > 0.8 g | Đứng yên **và** robot/bàn nằm ngang. Bắt lắp ngược mà rule trên mù |
+| Nhiệt độ không đổi > X °C trong 100 ms | Quán tính nhiệt | Nhiệt độ không khí đổi chậm | Cửa sổ phải chứa ≥ 2 mẫu mới: BME280 ở normal mode chỉ ra mẫu theo `t_standby` bạn chọn (tra datasheet BME280, mục chế độ và bảng `t_sb`). Ngưỡng X lấy từ tốc độ đổi lớn nhất đo được trên dữ liệu lành |
+| ToF không đọc giá trị âm | Khoảng cách không âm | Bất kỳ giá trị âm nào | Kiểm cả `range_status` của VL53L1X: giá trị dương với status lỗi cũng không hợp lệ |
+| Áp suất trong dải hợp lý | Khí quyển | ~870–1085 hPa ở mặt đất | Dải này là áp suất **quy về mực nước biển** của các kỷ lục khí tượng. Áp suất trạm ở độ cao ~1.5 km (Đà Lạt) thấp hơn ~850 hPa `[ước lượng: khí quyển chuẩn]`: dải phải theo độ cao nơi đặt rig |
+| Gyro có phương sai > 0 | Mọi cảm biến thật có nhiễu | σ = 0 trong > 1 s = kênh đơ | Tính trên **mẫu mới** theo `seq`/data-ready; so số mã LSB phân biệt, không `std() == 0` trên float; cửa sổ phải có đủ mẫu mới |
+| dt giữa hai mẫu ≈ 1/ODR | Cấu hình phần cứng | Lệch > 10% là frame drop | dt theo **timestamp nguồn** hoặc khe hở `seq`. Theo thời gian host nhận, jitter USB (khung 1 ms ở full-speed) đã vượt 10% của 5 ms |
+| Timestamp đơn điệu tăng | Thời gian một chiều | Bất kỳ vi phạm nào | Trong một epoch: ESP32 reset làm `t_mcu` và `seq` về 0 hợp lệ; tách epoch theo sự kiện reset (→ F3.3) |
+| Gia tốc và gyro cùng thấy cú va | Tương quan vật lý | Va chạm thấy trên cả hai | Hai kênh cùng chip, cùng MCU không độc lập. Rule chéo mạnh hơn khi nguồn thứ hai đi đường khác (camera rung, bản gốc gợi ý) |
+
+**Bước 2 — Chạy trên toàn bộ dữ liệu đã thu (≈1h).** Kết quả mỗi rule cho mỗi cửa sổ là một trong `ok / violation / not_applicable`, ghi vào cột chất lượng của index Bài 15 (theo giây) và vào `/diagnostics` trong MCAP. Báo `not_applicable` theo tỉ lệ: một rule không áp dụng 99% thời gian thì gần như không bảo vệ gì.
+
+**Bước 3 — Cố tình gây lỗi thật và chứng minh rule bắt được (≈3h).** Bốn lỗi của bản gốc, kèm điều kiện an toàn và cách đọc kết quả:
+
+- **Rút dây một cảm biến giữa lúc ghi → kênh đơ.** Rút **dây SDA** (không rút VCC/GND, tránh chạm chập trên breadboard). Kết quả phụ thuộc firmware (đề 3): nếu firmware không gửi gì, đây là mất dữ liệu và rule `dt`/freshness bắt (Bài 18), không phải rule kênh đơ; nếu gửi lại giá trị cũ, rule σ bắt; nếu gửi 0, cả rule dải và σ. Ghi cả ba trường hợp vào bảng lỗi × rule; sửa firmware để khi đọc lỗi thì gửi cờ lỗi rõ ràng.
+- **Hơ nóng cảm biến đột ngột → rule quán tính nhiệt.** Dùng máy sấy tóc cách ≥ 20 cm hoặc đầu ngón tay; **không** dùng bật lửa (bản Gemini đề xuất): lửa trần gần mạch và dây nhựa. Ghi tốc độ đổi nhiệt lớn nhất đo được. Đọc kết quả cẩn thận: hơ nóng là một thay đổi **có thật về vật lý**. Nếu rule quán tính nhiệt của bạn báo, hoặc ngưỡng quá chặt, hoặc nó đúng là thứ bạn muốn gắn cờ (môi trường bất thường). Rule quán tính nhiệt được thiết kế để bắt bước nhảy **không thể có** (lỗi đọc, sai trim, bit lật), loại mà máy sấy không tạo ra. Thêm một lỗi tiêm phần mềm cho đúng lớp này: trong firmware, ghép sai một byte của giá trị nhiệt raw trong một mẫu.
+- **Chỉnh sai scale factor → |a| lúc đứng yên khác g.** Ghi `ACCEL_CONFIG` sang ±4g, giữ chia 16384 (hoặc ngược lại). Thêm một lần **lắp ngược** IMU (lật module, dán băng dính) để thấy rule nào mù.
+- **Làm nghẽn USB → frame drop.** Cắm webcam thứ hai ở độ phân giải cao nhất chung hub/controller với ESP32 (`lsusb -t` xem chung bus nào), hoặc ép CPU host. Rule `dt` theo `seq` phải thấy lỗ; theo thời gian host nhận, nó báo cả khi không mất gì.
+
+Sai số dụng cụ: "rule bắt sau bao lâu" đo theo `header.stamp` của cửa sổ đầu tiên vi phạm trừ thời điểm gây lỗi (ghi thời điểm bằng một nút nhấn GPIO vào ESP32, hoặc một dòng log có timestamp host). Độ phân giải bị chặn bởi độ dài cửa sổ (1 s).
+
+**Bước 4 — FPR cho mỗi rule trên dữ liệu lành (≈2h).** Đếm cửa sổ vi phạm / cửa sổ áp dụng, kèm CI (Wilson; quy tắc ba khi 0 lần). Tiêu chí bản gốc: phải đo và ghi; rule báo động liên tục là rule vô dụng. Với rule có FPR đo được > 0, quyết định: chặn (chỉ khi FPR ≈ 0 và lỗi nghiêm trọng), cách ly, hay gắn cờ. Ghi vào `decisions.md`.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Mô phỏng phần 2** (seed 16, đã chạy):
+
+| Lỗi tiêm | R1 thô | R1 có ĐK | R2 hướng g | R3 lặp 5 | R3 σ theo seq |
+|---|---|---|---|---|---|
+| lành | **60/120** | 0/120 | 0/120 | **1/120** | 0/120 |
+| scale ×0.5 | 120/120 | 60/120 | 60/120 | 0/120 | 0/120 |
+| scale ×1.02 | 120/120 | 60/120 | 0/120 | 0/120 | 0/120 |
+| scale ×1.01 | 60/120 | **0/120** | 0/120 | 0/120 | 0/120 |
+| lắp ngược | 60/120 | **0/120** | 60/120 | 0/120 | 0/120 |
+| kênh đơ t > 30 s | **0/120** | 0/120 | 0/120 | 91/120 | 90/120 |
+| host đọc 1 kHz | 60/120 | 0/120 | 0/120 | **120/120** | 0/120 |
+
+Đọc:
+- **R1 thô** báo cả 60 cửa sổ chuyển động của dữ liệu lành: gia tốc tịnh tiến cộng vào g. Cột R1 thô ở các hàng lỗi vì vậy không nói gì; "120/120" ở `scale ×0.5` là 60 bắt thật + 60 báo giả.
+- **R1 có ĐK** bắt `scale ×0.5` và `×1.02` trong đúng 60 cửa sổ đứng yên, mù với `×1.01` (lệch ≈ 0.098 m/s², dưới dung sai 0.15) và mù hoàn toàn với `lắp ngược`. "Ngay lập tức" của bản gốc = "ở cửa sổ đứng yên đầu tiên".
+- **R2** bắt `lắp ngược`. Nó cũng bắt `scale ×0.5` (a_z ≈ 0.5 g), không bắt `×1.02`.
+- **Kênh đơ** làm R1 thô *im lặng* ở cả đoạn chuyển động: giá trị bị giữ ở lúc đứng yên, |a| = g. Kênh đơ trông "khỏe" hơn kênh lành dưới rule sai.
+- **R3 lặp 5** báo 120/120 khi host đọc 1 kHz không chờ data-ready, và 1/120 trên dữ liệu lành (gyro nhiễu ≈ 5 LSB, thỉnh thoảng có 5 mã liền nhau trùng). **R3 σ theo seq** bắt kênh đơ, không báo giả ở cả hai.
+
+**Trên rig thật** (kỳ vọng, không phải số chắc):
+
+| Kiểm tra | Kết quả đúng | Ghi chú |
+|---|---|---|
+| Rule bắt được lỗi cố tình gây | **≥ 1 rule bắt được lỗi thật** ← tiêu chí PASS | Sai scale với R1 có ĐK gần như chắc chắn đạt, nếu có đoạn đứng yên |
+| FPR trên dữ liệu lành | Đo và ghi cho mỗi rule (tiêu chí gốc) | R1 thô, rule `dt` theo thời gian host nhận: cao. Rule có tiền điều kiện, theo `seq`: thấp `[tự đo]` |
+| Rule \|a\| = g | Bắt sai scale ±4g/±2g ở cửa sổ đứng yên đầu tiên; không bắt lắp ngược | Lỗi scale nhỏ hơn dung sai đề 2 không bắt được |
+| Rút SDA | Rule nào bắt tùy firmware gửi gì | Nếu không rule nào bắt: firmware đang nuốt lỗi; đó là phát hiện đáng ghi |
+| Máy sấy | Thường không vượt ngưỡng quán tính nhiệt đặt từ dữ liệu lành có biên rộng `[tự đo]` | Thay đổi có thật; rule đúng khi im |
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| R1 báo liên tục khi robot/bàn rung nhẹ | Tiền điều kiện đứng yên quá lỏng | Vẽ gyro rms và σ(\|a\|) của các cửa sổ bị báo | Siết ngưỡng đứng yên; ghi tỉ lệ `not_applicable` |
+| R1 báo trên mọi cửa sổ đứng yên dù không tiêm lỗi | Offset accel chưa hiệu chuẩn (datasheet cho phép ±50/±80 mg) hoặc dùng 9.80665 với dung sai rất hẹp | So \|a\| trung bình với g ở sáu tư thế (Bài 4) | Áp hiệu chuẩn Bài 4 trước rule; dung sai theo đề 2 |
+| Rule kênh đơ báo trên kênh lành | Host đọc nhanh hơn ODR; hoặc cửa sổ có quá ít mẫu mới | Đếm `seq` phân biệt trong cửa sổ | Tính trên mẫu mới; dùng data-ready; cửa sổ ≥ k mẫu mới |
+| Rút SDA mà không rule nào báo | Firmware gửi giá trị cũ kèm `seq` mới, hoặc không gửi gì | Đọc log firmware khi I2C trả lỗi | Firmware gửi cờ lỗi; freshness (Bài 18) cho trường hợp không gửi |
+| Rule `dt` báo drop khắp nơi | dt tính theo thời gian host nhận | So khe hở `seq` với số báo | Dùng `seq` hoặc timestamp nguồn |
+| Rule áp suất báo cả ngày ở nơi cao | Dải 870–1085 là áp suất mực nước biển | Tra độ cao nơi đặt rig | Dải theo áp suất trạm |
+
+### 9. Câu hỏi ngược
+
+1. **[Failure mode]** Liệt kê ba lớp lỗi mà **không** rule nào trong bảng bước 1 bắt được, kể cả khi mọi tiền điều kiện thỏa.
+   <details><summary>Hướng nghĩ</summary>
+
+   Nghĩ theo bất biến: rule nào cũng mù với phép biến đổi giữ bất biến của nó. Tráo trục x↔y khi đứng yên ngang, timestamp lệch hằng số (đơn điệu, dt đúng, chỉ sai offset), scale sai nhỏ hơn dung sai, gyro bias trôi chậm. Cái cuối cùng cần đối chiếu với nguồn ngoài (odometry, camera).
+
+   </details>
+2. **[Quy mô]** 100 robot, 9 rule, cửa sổ 1 s, FPR mỗi rule 10⁻⁴. Mỗi ngày có bao nhiêu cửa sổ bị báo giả? Nếu rule chặn dữ liệu, mất bao nhiêu giờ dữ liệu lành mỗi ngày?
+   <details><summary>Hướng nghĩ</summary>
+
+   100 × 9 × 86 400 × 10⁻⁴ ≈ 7 800 cửa sổ/ngày. Phép tính này là lý do phần lớn rule chỉ gắn cờ, và chỉ rule có FPR đo được gần 0 trên lượng dữ liệu lớn mới được chặn. Nghĩ thêm: báo theo tỉ lệ trong phiên thay vì theo từng cửa sổ (→ F1.5, bội so sánh).
+
+   </details>
+3. **[Vì sao không]** Vì sao không bỏ hết rule tay, để một mô hình ML học "bình thường" rồi báo bất thường?
+   <details><summary>Hướng nghĩ</summary>
+
+   Lỗi có hệ thống từ ngày đầu (sai scale trên mọi file) là "bình thường" với mô hình học từ chính dữ liệu đó. Rule vật lý có oracle **ngoài** dữ liệu (g, áp suất). ML là lớp bổ sung cho lỗi hiếm và phức tạp.
+
+   </details>
+4. **[Nếu…thì]** Nếu robot của K7 không bao giờ đứng yên quá 1 s trong lúc làm việc, rule |a| = g còn dùng được không? Bạn tạo tiền điều kiện cho nó bằng cách nào?
+   <details><summary>Hướng nghĩ</summary>
+
+   Tạo trạng thái đứng yên có chủ đích (lúc khởi động, lúc sạc, lúc dừng chờ), hoặc đổi bất biến: khi biết gia tốc tịnh tiến từ odometry, |a − a_odom| ≈ g. Rule thứ hai phụ thuộc odometry đúng: một rule chéo, kèm chế độ hỏng chung nếu cùng ESP32.
+
+   </details>
+5. **[Liên ngành]** Phòng xét nghiệm dùng "delta check": so kết quả mới của bệnh nhân với kết quả cũ, nếu đổi quá nhanh thì giữ lại kiểm. Rule nào của bạn là delta check, và ngưỡng của họ lấy từ đâu?
+   <details><summary>Hướng nghĩ</summary>
+
+   Rule quán tính nhiệt. Ngưỡng của họ dựa trên biến thiên sinh học trong người và sai số phép đo; của bạn: tốc độ đổi lớn nhất trên dữ liệu lành + sai số cảm biến. Cả hai giữ lại để kiểm, không xóa kết quả.
+
+   </details>
+
+### 10. Liên kết ra ngoài
+
+- **Hàng không (737 MAX, 2018–2019):** MCAS đọc **một** cảm biến góc tấn; báo cáo điều tra tai nạn Lion Air 610 (KNKT, 2019) nêu cảm biến bị lệch khoảng 21° sau khi thay, và cảnh báo "AOA disagree" so sánh hai cảm biến không hoạt động trên chiếc máy bay đó `[chuẩn — kiểm chi tiết trong báo cáo KNKT]`. Giống: rule chéo giữa hai nguồn độc lập là phép kiểm duy nhất thấy một cảm biến lệch nhưng "hợp lệ". Khác: ở đó rule chéo là an toàn tính mạng và phải chạy trong vòng điều khiển; ở bạn nó chạy sau, trên dataset.
+- **Xét nghiệm lâm sàng:** ngoài delta check (câu hỏi 5), phòng xét nghiệm có kiểm "giới hạn tương thích với sự sống": kết quả vượt dải sinh học thì không được trả, vì gần như chắc là lỗi mẫu. Giống: rule dải tĩnh (áp suất, ToF âm). Khác: họ có mẫu lưu để đo lại; bạn không.
+- **Kế toán (bút toán kép):** tổng Nợ = tổng Có là một bất biến; sổ cân vẫn có thể sai nếu ghi nhầm cả hai vế cùng một lượng. Giống: rule |a| = g mù với lỗi giữ bất biến (lắp ngược). Bài học chung: một bất biến chỉ loại một lớp lỗi; cần nhiều bất biến trực giao.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Ma trận lỗi × rule ở phần 7 | [đã chạy] | numpy, seed 16; nhiễu accel 0.033 m/s², gyro 7·10⁻⁴ rad/s là giả định gần MPU6050 |
+| MPU6050 ±2g 16384 LSB/g, ±250 °/s 131 LSB/(°/s); dung sai độ nhạy ±3%, offset 0 g ±50/±80 mg | [spec] | PS-MPU-6000A-00; như K5 Bài 4 phần 11, cần kiểm lại bảng |
+| `np.std` của 200 giá trị giống hệt nhau trả `5.55e-17` | [đã chạy] | numpy trên máy người soạn; giá trị cụ thể phụ thuộc số |
+| Dải 870–1085 hPa là áp suất mực nước biển (kỷ lục thấp ~870 hPa bão Tip 1979, cao ~1084 hPa Mông Cổ/Siberia) | [chuẩn] | Kiểm số trong danh mục kỷ lục của WMO |
+| Áp suất trạm ở ~1.5 km khoảng 850 hPa | [ước lượng] | Khí quyển chuẩn ISA |
+| Mars Climate Orbiter: lbf·s vs N·s trong output `SM_FORCES` | [chuẩn] | Mars Climate Orbiter Mishap Investigation Board Phase I Report, NASA, 11/1999 |
+
+**Đã sửa so với bản gốc/Gemini:**
+- Bản gốc: "Schema validation bắt được … sai đơn vị đo". Sai: schema không có khái niệm đơn vị; đơn vị chỉ lộ ra qua rule vật lý (→ F3.7).
+- Bản gốc: "Rule |a| = g phát hiện sai scale factor ngay lập tức". Thêm tiền điều kiện (chỉ khi đứng yên), giới hạn (lỗi nhỏ hơn dung sai không thấy), và điểm mù (lắp ngược, tráo trục); thêm rule hướng trọng lực.
+- Bản gốc: "σ = 0 trong > 1 s = kênh đơ". Báo nhầm khi host đọc nhanh hơn ODR; sửa: tính trên mẫu mới theo `seq`/data-ready, đủ mẫu mới, so mã LSB.
+- Bản gốc: rule `dt` lệch > 10%: thêm "theo timestamp nguồn hoặc `seq`". Rule đơn điệu: thêm "trong một epoch". Rule áp suất: thêm "theo độ cao".
+- Bản gốc bước 3 "hơ nóng → vi phạm quán tính nhiệt": giữ bước, sửa cách đọc (thay đổi có thật; rule nhắm bước nhảy bất khả), thêm lỗi tiêm phần mềm cho đúng lớp.
+- Gemini: "dùng bật lửa" → máy sấy ở khoảng cách, vì an toàn. Gemini: "FPR < 0.1%" và "1000 mẫu < 5 ms" là ngưỡng tự đặt không có trong bản gốc; bỏ, tiêu chí gốc là đo và ghi FPR. Gemini: "rút SDA → rule σ báo sau đúng 1 giây" phụ thuộc firmware gửi gì; có thể không rule nào thấy. Gemini: kênh đơ "so `== 0.0` với float đã bị làm tròn" — hướng đúng, đã kiểm bằng số.
+- Tiêu chí PASS (≥ 1 rule bắt lỗi thật, đo FPR) giữ nguyên.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Mars Climate Orbiter Mishap Investigation Board, *Phase I Report*, NASA, 10/11/1999. Datasheet MPU-6000/6050 (PS-MPU-6000A-00) và BME280 (Bosch), mục chế độ đo và thông số nhiễu.
+- **Giải thích:** → F3.7 (bốn tầng kiểm, ma trận lỗi × rule, data contract).
+- **Đào sâu (tùy chọn):** tài liệu Great Expectations hoặc dbt về "data tests", đọc để thấy chính xác chúng dừng ở đâu so với rule cửa sổ/trạng thái.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer trong 5 câu vì sao một rule vật lý cần tiền điều kiện; (2) vẽ lại sơ đồ phần 2; (3) hai câu dưới.
+
+  (a) IMU lắp ngược 180° quanh trục y, robot đứng yên ngang. R1 có ĐK và R2 trả gì? Còn khi lật 90° quanh trục x?
+  <details><summary>Đáp án</summary>Lật 180° quanh y: |a| không đổi nên R1 im; a_z ≈ −g nên R2 báo. Lật 90° quanh x: trọng lực nằm trên trục y, a_z ≈ 0, R2 báo; R1 vẫn im. R1 chỉ thấy độ lớn, không bao giờ thấy hướng.</details>
+
+  (b) BME280 chạy normal mode với `t_standby` = 1000 ms, host đọc 10 lần/giây. Rule "σ = 0 trong 1 s" trên chuỗi host đọc báo gì, và vì sao đó không phải kênh đơ?
+  <details><summary>Đáp án</summary>Phần lớn cửa sổ 1 s chỉ có tối đa một mẫu mới; mười lần đọc trả cùng giá trị từ thanh ghi dữ liệu → σ = 0 → báo đơ trên kênh lành. Sửa: chỉ tính trên mẫu mới (theo cờ `measuring`/bộ đếm, hoặc so thời điểm đo), cửa sổ đủ dài cho ≥ k mẫu mới.</details>
+
+---

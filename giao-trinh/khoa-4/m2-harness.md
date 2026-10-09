@@ -421,3 +421,342 @@ if len(sys.argv) > 1:
      <details><summary>Đáp án</summary>Thuộc về mọi thứ model giả không có: máy khác nhau (power limit, xung boost, driver), nhiệt, warmup và autotune của runtime, hàng xóm trên host. Harness đóng góp không quá sàn của nó. Đó là lý do hiệu chuẩn với model giả là bước đầu tiên: nó cho bạn quyền nói "phần lệch này không phải do dụng cụ".</details>
 
 ---
+
+## Bài 5 — Đo model đầu tiên trên GPU thuê (5h)
+
+> **Vị trí:** K4 Bài 4 (harness đã hiệu chuẩn) → **Bài 5** → K4 Bài 6 (cô lập nhiệt) · **Cần trước:** F1.3 (warmup, steady state, coordinated omission, A/A, active benchmarking), F7.3 (USE, profiling), F2.2 (hermetic, thứ không ghim được); K4 Bài 2 (bảng mốc, n cho p99), Bài 3 (`METHODOLOGY.md`, quy tắc ba trạng thái), Bài 4 (harness, schema 1.1) · **Sau bài này bạn quyết định được:** con số GPU đầu tiên của SmolVLA có qua kiểm tỉnh táo bậc độ lớn không, thuộc về **model** hay về **chiếc máy thuê**, và cấu hình precision/batch/solver step nào đi tiếp vào ma trận Module 3–4.
+
+**Câu hỏi của bài (bản gốc):** SmolVLA chạy bao nhiêu ms trên một GPU thật?
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 2010, Schad, Dittrich và Quiané-Ruiz đo cùng một tải trên hàng loạt máy ảo EC2 cùng loại trong nhiều tuần (*Runtime Measurements in the Cloud*, VLDB 2010) `[chuẩn]`. Kết quả: hai máy "giống hệt" trên bảng giá cho hiệu năng CPU, bộ nhớ và I/O khác nhau rõ, vì chúng nằm trên các đời phần cứng vật lý khác nhau, và sự khác biệt đó không thấy được từ bên trong máy ảo. Leitner và Cito lặp lại nghiên cứu trên nhiều nhà cung cấp năm 2016 (*Patterns in the Chaos*, ACM TOIT) `[chuẩn]` và đi tới cùng kết luận: trên cloud, **máy là một biến ngẫu nhiên**, không phải một hằng số. Ai benchmark một lần trên một máy rồi công bố là đang công bố một mẫu của biến đó.
+
+GPU thuê theo giờ (vast.ai, RunPod) còn lộ hơn. Nhiều máy là máy của cá nhân hoặc trung tâm dữ liệu nhỏ, cho thuê qua container. Chủ máy tự đặt power limit, tự chọn riser PCIe, tự chọn CPU host `[tự đo — xem thông tin máy trên trang thuê và `nvidia-smi -q`]`. Image Docker của bạn giống hệt nhau giữa hai lần thuê. Những thứ đó thì không. Bài này lấy con số đầu tiên. Nó cũng dạy bạn chứng minh rằng con số thuộc về SmolVLA chứ không thuộc về chiếc máy bạn tình cờ được giao.
+
+### 2. Mô hình tư duy
+
+Mỗi lần thuê là một phiên đo có vòng đời cố định. Mỗi tầng của máy thuê có những biến bạn không ghim được, chỉ ghi lại được:
+
+```mermaid
+flowchart TB
+  subgraph HOST["Máy thuê: ghi lại, không ghim được"]
+    PL["power limit, xung tối đa<br/>(chủ máy đặt)"] --- GPU["GPU vật lý<br/>(gpu_uuid, VBIOS)"]
+    PCIE["PCIe gen × width<br/>(riser?)"] --- GPU
+    CPUH["CPU host, RAM, đĩa<br/>(preprocess chạy ở đây)"] --- PCIE
+    DRV["driver host"] --- GPU
+  end
+  subgraph IMG["Image của bạn: ghim được"]
+    TORCH["torch, CUDA runtime, lerobot"] --> H["harness Bài 4"]
+  end
+  H --> DRV
+  H --> R["results/*.json<br/>(provenance + telemetry)"]
+  CTRL["mẫu đối chứng GPU<br/>(GEMM biết trước)"] -.->|"đầu mỗi phiên"| R
+```
+
+Vòng đời một lần thuê, theo thời gian:
+
+```
+thuê ──► capture_env ──► mẫu đối chứng ──► [warmup ô 1 | đo ô 1] [warmup ô 2 | đo ô 2] ... ──► sync ──► hủy máy
+           (Bài 14)        GEMM + null        thứ tự ô XÁO NGẪU NHIÊN, warmup LẠI cho mỗi shape mới
+           telemetry 1 Hz chạy nền suốt từ đầu tới cuối ─────────────────────────────────────────►
+```
+
+Bốn ý bản chất:
+
+1. **Warmup trên GPU phụ thuộc shape.** Lần gọi đầu tạo CUDA context, nạp kernel, cho allocator xin bộ nhớ, và nếu bật `cudnn.benchmark` thì thử nhiều thuật toán conv. Đổi `batch_size` hay độ dài input là shape mới, có thể kéo theo đợt autotune mới. Vì vậy warmup thuộc về **ô** (model × precision × batch), không thuộc về phiên. Bài 3 đã định nghĩa steady state. Ở đây bạn chứng minh nó bằng một **quy tắc viết trước**, không bằng mắt nhìn đồ thị.
+2. **Hiệu chuẩn chiếc máy trước khi đo model.** Một GEMM có số FLOP biết trước, đo bằng CUDA event, cho TFLOPS đạt được của chiếc card này. So số đó với spec và với lần thuê trước, bạn phát hiện máy bị hạ power limit trước khi nó làm bẩn SmolVLA. Đây là mẫu đối chứng của Bài 4, chuyển sang GPU.
+3. **CI trong phiên không thấy được máy.** Bootstrap 400 mẫu cho CI rất hẹp quanh p50 của *phiên đó*. Lệch giữa hai máy nằm ở cấp cao hơn (Bài 3, sơ đồ bốn cấp), và chỉ thấy được khi lặp lại ở đúng cấp đó: phiên mới, máy mới.
+4. **Active benchmarking:** trong lúc đo, nhìn tài nguyên để xác nhận nút thắt là thứ bạn nghĩ (→ F1.3, F7.3). `utilization.gpu` thấp trong khi `t_inference` lớn nghĩa là GPU đang chờ: chờ CPU host, chờ copy, chờ Python. Lúc đó bạn đang đo máy host, không đo GPU.
+
+Mô phỏng đồ chơi cho ý 1 và 3. Dữ liệu là giả: một vết latency có đoạn "nguội" tắt dần, và ba máy thuê, trong đó máy C bị hạ power limit:
+
+```python
+# [đã chạy] b5_warmup_aa.py — (1) quy tắc phát hiện steady state viết TRƯỚC; (2) A/A giữa các máy thuê
+import numpy as np
+rng = np.random.default_rng(3)
+
+def session(p50, n_warm=60, n=400, cold=(900, 6), drift=0.0):
+    """Vết latency giả: vài lần đầu cực chậm (CUDA context, autotune), rồi tắt dần; tùy chọn trôi chậm."""
+    i = np.arange(n_warm + n)
+    warm = cold[0] * np.exp(-i / cold[1])                      # phần "nguội": giảm theo hàm mũ
+    return p50 * (1 + drift * i / len(i)) + warm + rng.normal(0, 0.02 * p50, len(i))
+
+def steady_index(x, w=20, tol=0.01, k=3):
+    """Quy tắc cam kết trước: điểm đầu tiên mà median của k cửa sổ liên tiếp (mỗi cửa sổ w mẫu)
+    lệch nhau < tol. Không tìm thấy -> trả None = 'không đạt steady state' (một KẾT QUẢ, không phải lỗi)."""
+    med = np.array([np.median(x[j:j + w]) for j in range(0, len(x) - w, w)])
+    for j in range(len(med) - k + 1):
+        m = med[j:j + k]
+        if (m.max() - m.min()) / m.mean() < tol:
+            return j * w
+    return None
+
+x = session(150)
+print("steady từ iteration:", steady_index(x), "| warmup 20 của bản gốc có đủ không?",
+      "đủ" if (steady_index(x) or 1e9) <= 20 else "KHÔNG")
+def drift(x, start, q=100):
+    """Quy tắc thứ hai: trung vị 100 mẫu ĐẦU vs 100 mẫu CUỐI của phần đo. Cửa sổ ngắn không thấy trôi chậm."""
+    y = x[start:]
+    return (np.median(y[-q:]) - np.median(y[:q])) / np.median(y)
+xd = session(150, drift=0.06)
+print("phiên trôi chậm: steady từ", steady_index(xd), f"| trôi đầu→cuối = {drift(xd, 60):+.1%}",
+      f"(phiên sạch: {drift(x, 60):+.1%})")
+
+# A/A: 3 máy thuê cùng loại card, mỗi máy 3 phiên. Máy khác nhau ở power limit/xung (biến ẩn).
+machines = {"máy A": 150, "máy B": 151, "máy C": 163}            # C: power limit bị chủ máy hạ (giả định)
+rows = []
+for name, p in machines.items():
+    for s in range(3):
+        y = session(p * rng.normal(1, 0.004))[60:]               # bỏ warmup, giữ 400 mẫu đo
+        b = np.median(rng.choice(y, (2000, y.size)), axis=1)    # bootstrap CI của p50 trong phiên
+        rows.append((name, s + 1, np.median(y), *np.percentile(b, [2.5, 97.5])))
+for r in rows:
+    print(f"{r[0]} phiên {r[1]}: p50 = {r[2]:6.1f} ms  CI95 trong phiên [{r[3]:6.1f}, {r[4]:6.1f}]")
+p = np.array([r[2] for r in rows]).reshape(3, 3)
+print(f"lệch giữa phiên (cùng máy), max: {np.max((p.max(1) - p.min(1)) / p.mean(1)):.1%}")
+print(f"lệch giữa máy (theo trung bình máy): {(p.mean(1).max() - p.mean(1).min()) / p.mean():.1%}")
+```
+
+Đừng chạy trước khi làm Đề 4 ở phần 5.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Load test trên một instance staging rồi suy ra production | Đo trên một máy thuê rồi công bố "SmolVLA trên 4090" | Staging và production của bạn cùng một loại máy do bạn kiểm soát. Máy thuê là một mẫu từ quần thể máy của người khác (power limit, PCIe, CPU host) | Công bố số của một máy bị hạ power limit như số của dòng card |
+| Health check trước khi nhận traffic | Mẫu đối chứng GEMM đầu phiên | Health check hỏi "sống không". Mẫu đối chứng hỏi "**nhanh đúng mức** không", nên phải có giá trị kỳ vọng và dung sai | Máy sống nhưng chậm 15% vẫn được dùng để đo |
+| Đọc dashboard CPU% để biết service bận | `utilization.gpu` của `nvidia-smi` | Chỉ số này là tỉ lệ thời gian có **ít nhất một** kernel đang chạy, không phải tỉ lệ đơn vị tính đang bận `[chuẩn — tài liệu nvidia-smi]` | Thấy 100% rồi kết luận "GPU đã bão hòa, hết dư địa" trong khi kernel chỉ dùng vài phần trăm sức tính (Bài 12) |
+| Tăng concurrency để tăng throughput | Quét `batch_size` 1–8 | Server phục vụ nhiều client độc lập. Robot có **một** observation mỗi tick, nên batch > 1 chỉ có nghĩa khi nhiều robot chung một server | Chọn batch 8 vì throughput đẹp, trong khi robot cần latency batch 1 |
+
+**Chấm mô hình:**
+
+- *Bản gốc, bảng "Nếu ra khác": "Batch lớn không tăng throughput → bị bound bởi compute chứ không phải bandwidth."* → **ĐÚNG MỘT PHẦN.** Đúng khi batch 1 đã đủ nhiều token để vượt ridge của GPU, ví dụ encoder ảnh với hàng nghìn patch. Gãy: còn ít nhất ba nguyên nhân khác cho cùng triệu chứng. Thứ nhất, preprocess trên CPU host chạy tuần tự từng mẫu. Thứ hai, adapter tự lặp `for` qua batch nên GPU không bao giờ thấy batch thật. Thứ ba, overhead launch kernel và Python chiếm phần lớn thời gian (Bài 2 đã thấy khoảng cách cả bậc giữa ước lượng compute và số đo). **Phản ví dụ:** `t_preprocess` tăng tuyến tính theo batch trong khi `t_inference` gần như phẳng. Throughput end-to-end không tăng, nhưng GPU **không** compute-bound. Kết luận về bound chỉ được rút từ `t_inference` có đồng bộ, kèm roofline theo pha (Bài 12).
+- *Bản gốc và Gemini: "Latency dao động mạnh → chia sẻ GPU với tenant khác."* → **ĐÚNG MỘT PHẦN.** Trên vast.ai và RunPod, một instance thường được cấp **trọn** GPU `[tự đo — kiểm điều khoản và `nvidia-smi` trên máy thuê]`. Hàng xóm thường chia sẻ CPU host, băng thông RAM, đĩa và mạng, không chia sẻ GPU. GPU bị chia thật chỉ khi dùng MIG hoặc vGPU, và `nvidia-smi -q` cho biết điều đó (trường `mig_mode`, `virtualization_mode` trong schema Bài 4). **Phản ví dụ:** GPU riêng, nhưng hàng xóm chạy nén video trên CPU host. `t_preprocess` dao động, end-to-end dao động theo. Đổ cho "tenant trên GPU" thì bạn đổi máy mà không biết vì sao máy mới tốt hơn.
+- *"CI 95% của p50 chỉ rộng ±0,3%, vậy số của tôi chính xác tới ±0,3%."* → **SAI.** CI trong phiên chỉ đo nhiễu **trong phiên**. Phản ví dụ chạy được ở phần 2: CI của từng phiên hẹp, nhưng các máy lệch nhau nhiều hơn hẳn bề rộng CI. Đơn vị độc lập để nói về "SmolVLA trên dòng card X" là **máy**. Để nói về "chiếc máy này", đơn vị là **phiên**. Mẫu trong một phiên không phải đơn vị độc lập cho cả hai câu đó.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Warmup / steady state | Đoạn đầu chưa ổn định / trạng thái mà phân bố latency không còn trôi | "Bỏ 20 lần đầu là xong" |
+| 🟢 | Quy tắc steady state viết trước | Tiêu chí số (cửa sổ, dung sai) ghi trong methodology trước khi nhìn dữ liệu | Nhìn đồ thị thấy phẳng |
+| 🟢 | Mẫu đối chứng GPU | Kernel có FLOP biết trước, đo đầu mỗi phiên để biết chiếc card này đạt bao nhiêu | Benchmark phụ cho vui |
+| 🟢 | A/A giữa máy | Cùng cấu hình trên hai máy thuê khác nhau để đo biến thiên do máy | Thừa, vì cùng loại card |
+| 🟢 | Active benchmarking | Nhìn tài nguyên trong lúc đo để xác nhận nút thắt | Chạy nhiều lần |
+| 🟢 | Throughput vs latency theo batch | Mẫu/giây của cả batch vs thời gian một lần gọi | Hai cách nói cùng một thứ |
+| 🟢 | Power limit (`power.limit`) | Trần công suất card đang áp, có thể thấp hơn mặc định | TDP trên spec sheet |
+| 🟡 | TF32 | Chế độ matmul của Ampere/Ada dùng mantissa 10 bit cho phép tính "fp32" | fp32 thật |
+| 🟡 | `clocks_event_reasons` | Bộ cờ `nvidia-smi` cho biết vì sao xung đang thấp (power cap, nhiệt, idle) | Chỉ có ở GPU datacenter |
+
+### 5. Dự đoán
+
+**Tham số cần tra:**
+- Spec của card bạn định thuê, tra spec sheet hoặc whitepaper kiến trúc của NVIDIA: FP32 TFLOPS, FP16/BF16 Tensor TFLOPS (dense, không tính sparsity), băng thông bộ nhớ, công suất mặc định.
+- Trên máy thuê, sau khi khởi động: `nvidia-smi -q -d POWER,CLOCK,PERFORMANCE` cho power limit đang áp và xung tối đa. `nvidia-smi -q | grep -i -A2 "link"` cho PCIe gen và width hiện tại.
+- Bảng mốc K4 Bài 2 (VLA-0 4 Hz trên RTX 5090, các điểm SmolVLA công khai). Số tham số SmolVLA, `num_steps`, `chunk_size` trong config của policy (Bài 1).
+- PyTorch: `torch.get_float32_matmul_precision()` và `torch.backends.cuda.matmul.allow_tf32` `[chuẩn — PyTorch docs, mục TF32]`. Chúng quyết định "fp32" của bạn có thật là fp32 không.
+
+**Đề:**
+1. p50 `t_inference` của SmolVLA batch 1 ở fp32, bf16, fp16 trên card bạn chọn. Tỉ lệ fp32/fp16.
+2. Mẫu đối chứng: GEMM fp16 4096² đạt bao nhiêu phần trăm Tensor TFLOPS spec? GEMM fp32 với TF32 tắt và bật khác nhau bao nhiêu?
+3. Cần bao nhiêu iteration để đạt steady state theo quy tắc ở phần 2 (cửa sổ 20, dung sai 1%, 3 cửa sổ)? 20 warmup của bản gốc có đủ không?
+4. Chạy mô phỏng ở phần 2 trong đầu: CI trong phiên rộng bao nhiêu so với lệch giữa máy A và máy C?
+5. Batch 1 → 8: throughput tăng bao nhiêu lần? Latency mỗi lần gọi tăng bao nhiêu lần? Phần nào (`t_preprocess`, `t_inference`) tăng?
+6. Ba phiên A/A (hai trên cùng một máy, một trên máy khác cùng loại card): lệch p50 giữa phiên và giữa máy là bao nhiêu %?
+7. Chi phí: số giờ thuê thực tế so với số giờ bạn lên kế hoạch.
+
+```markdown
+# prediction-b5.md — commit trước khi thuê máy
+- Card: ___ ; spec FP32 ___ TFLOPS, FP16 Tensor (dense) ___ , BW ___ GB/s, power mặc định ___ W
+- p50 t_inference batch 1: fp32 ___ ms ; bf16 ___ ; fp16 ___ ; fp32/fp16 = ___  (lập luận: ___)
+- Mẫu đối chứng: GEMM fp16 ___% spec ; fp32 TF32 tắt/bật = ___ / ___ TFLOPS
+- Steady state từ iteration ___ ; 20 warmup đủ? ___
+- Mô phỏng: CI trong phiên ±___% ; lệch máy A–C ___%
+- Batch 8 / batch 1: throughput ×___ ; latency ×___ ; phần tăng: ___
+- A/A: giữa phiên ___% ; giữa máy ___%
+- Giờ thuê dự kiến ___ h ; chi phí dự kiến ___
+```
+
+### 6. Làm
+
+Thời gian gợi ý cho 5h: chuẩn bị ở local 1,5h; trên máy thuê 2h (gồm hai lần thuê ngắn cho A/A giữa máy); phân tích và ghi `METHODOLOGY.md` 1,5h.
+
+**Bước 0 — Kỷ luật thuê GPU** (bản gốc, giữ nguyên checklist, dán cạnh màn hình). Ngân sách của bản gốc là 500k–1,5tr VNĐ cho cả khóa `[ước lượng — theo bản gốc, giá 10/2026, kiểm lại trên trang thuê]`. Đủ nếu bạn kỷ luật: chuẩn bị mọi thứ ở local, thuê máy, chạy, tải kết quả về, tắt máy.
+
+```
+[ ] Dockerfile / script setup đã test ở local (dùng CPU) trước khi thuê
+[ ] Config file đã viết xong và commit
+[ ] Script chạy toàn bộ benchmark không cần tương tác
+[ ] Kết quả tự động sync ra ngoài (S3/HF Hub) phòng khi máy bị thu hồi
+[ ] Đặt hẹn giờ tự tắt máy
+[ ] Ghi giờ thuê và chi phí vào hours.csv / costs.csv
+```
+
+Thêm hai dòng (mới): `[ ] tải weight model vào image hoặc volume trước, không tải trong giờ thuê`; `[ ] chạy thử toàn bộ ma trận với FakePolicy (Bài 4) trên CPU local, kể cả sync và hủy máy`. Máy spot có thể bị thu hồi giữa chừng. Harness resumable theo ô của Bài 4 tồn tại vì lý do này.
+
+**Bước 1 — Chọn GPU** (bản gốc). Một GPU phổ thông, dễ để người khác lặp lại: RTX 3090/4090 hoặc A10. Đừng chọn card hiếm. Trên trang thuê, ghi lại các thông tin máy mà trang hiển thị (PCIe, CPU host, vị trí) vào `notes/rental-<ngày>.md` `[tự đo — trường hiển thị khác nhau giữa các trang]`.
+
+**Bước 2 — Đầu phiên: môi trường + mẫu đối chứng + overhead (mới, Bài 4 đã hứa).** Chạy `capture_env.py` (K4 Bài 14) để điền khối `env` của schema 1.1. Bật telemetry nền **trước** mọi thứ khác:
+
+```bash
+# [chưa chạy] cần máy có GPU NVIDIA; tên trường đổi theo driver — kiểm bằng `nvidia-smi --help-query-gpu` [tự đo]
+nvidia-smi --query-gpu=timestamp,temperature.gpu,power.draw,power.limit,clocks.sm,clocks.max.sm,\
+clocks_event_reasons.active,utilization.gpu,memory.used,pcie.link.gen.current,pcie.link.width.current \
+  --format=csv,nounits -l 1 > results/telemetry_gpu_<session>.csv &
+# driver cũ: clocks_throttle_reasons.active thay cho clocks_event_reasons.active
+```
+
+Rồi chạy mẫu đối chứng. Một GEMM đo bằng hai cách (CUDA event, và đồng hồ CPU + `synchronize`). Đây cũng là "model giả trên GPU" mà Bài 4 câu hỏi ngược 3 đề xuất:
+
+```python
+# [chưa chạy] cần GPU + PyTorch; gpu_control.py — mẫu đối chứng đầu mỗi phiên. Ghi kết quả vào JSON của phiên.
+import time, torch
+
+def gemm_control(n=4096, dtype=torch.float16, iters=50):
+    a = torch.randn(n, n, device="cuda", dtype=dtype); b = torch.randn(n, n, device="cuda", dtype=dtype)
+    for _ in range(10): a @ b                                  # warmup: context, heuristics của cuBLAS
+    torch.cuda.synchronize()
+    ev, cpu = [], []
+    for _ in range(iters):
+        s, e = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+        t0 = time.perf_counter_ns(); s.record(); a @ b; e.record(); torch.cuda.synchronize()
+        cpu.append((time.perf_counter_ns() - t0) / 1e6); ev.append((s, e))
+    g = sorted(s.elapsed_time(e) for s, e in ev)[iters // 2]   # median, ms
+    c = sorted(cpu)[iters // 2]
+    return {"n": n, "dtype": str(dtype), "ms_event": g, "ms_cpu_sync": c,
+            "tflops": 2 * n**3 / (g / 1e3) / 1e12,
+            "fp32_matmul_precision": torch.get_float32_matmul_precision()}
+
+print(gemm_control(dtype=torch.float16))
+print(gemm_control(dtype=torch.float32))                       # TF32 tắt (mặc định matmul) — kiểm trường in ra
+```
+
+Ghi `tflops` so với spec. Đặt dung sai cho mẫu đối chứng **sau** lần thuê đầu tiên, theo tinh thần A/A. Từ lần thuê thứ hai, máy nào thấp hơn mức đó quá dung sai thì đánh dấu `status: "suspect_host"`, ghi lý do (power limit, xung), rồi quyết định đổi máy hay đo tiếp và ghi rõ. Tiếp theo là overhead của harness trên GPU: policy rỗng chỉ gọi `torch.cuda.synchronize()`, n = 2000, ghi `timer.harness_overhead_ms_p50`.
+
+**Bước 3 — SmolVLA qua harness ở fp32, bf16, fp16** (bản gốc: mỗi cấu hình 200 iteration sau 20 warmup). Giữ con số đó làm mức tối thiểu. Hai điều chỉnh có lý do:
+- Nếu báo p99 thì đo ≥ 400 iteration (Bài 2: p99 cần n ≥ 368). Với latency ~0,1–0,4 s, việc này chỉ tốn thêm vài chục giây mỗi ô. Nếu giữ 200, ghi p99 thành "max (n = 200)".
+- Warmup 20 là giá trị khởi đầu. Số chính thức là số mà quy tắc ở Bước 4 xác nhận.
+
+Xáo thứ tự các ô ngẫu nhiên, ghi seed của phép xáo (Bài 3: tránh trôi theo thời gian trùng với cấu hình). Ghi `fp32_matmul_precision` vào `config` của ô fp32. Kiểm số học trước khi kiểm thời gian: với 5 observation cố định, so action của bf16/fp16 với fp32 (max |Δ|), và có NaN thì ô đó là `status: "numeric_fail"`. Trục chất lượng đầy đủ để Module 3.
+
+**Bước 4 — Chứng minh warmup đủ** (bản gốc: vẽ latency theo chỉ số iteration). Vẽ **toàn bộ** iteration, kể cả warmup, trục y log, mỗi ô một hình. Áp hai quy tắc đã viết trong `METHODOLOGY.md` trước khi thuê máy: (a) quy tắc cửa sổ của `steady_index`; (b) trôi đầu–cuối của phần đo nhỏ hơn ngưỡng bạn chọn (ví dụ 2%). Phần đo bắt đầu sau điểm steady state *và* sau warmup tối thiểu, lấy cái muộn hơn. Không đạt (a) hoặc (b) thì ghi "không đạt steady state sau X iteration". Đó là một kết quả (Bài 3, Barrett 2017), không được cắt đồ thị cho đẹp.
+
+**Bước 5 — Quét `batch_size` 1, 2, 4, 8** (bản gốc), đo throughput. Ghi riêng ba tầng thời gian cho mỗi batch. Throughput = batch / p50(end-to-end). Warmup lại cho mỗi batch, vì đó là shape mới. Kiểm adapter có thật sự đưa batch vào một lời gọi model không: in shape tensor ở đầu `infer`.
+
+**Bước 6 — Quét số solver step nếu model cho phép** (bản gốc). Ba mức (ví dụ 5, 10, 20) là đủ cho bài này. Fit affine đầy đủ `t_prefix + N·t_step` ở K4 Bài 10.
+
+**Bước 7 — Telemetry mỗi giây suốt phép đo, vẽ nhiệt độ và power** (bản gốc). File CSV ở Bước 2 đã chạy nền từ đầu phiên. Vẽ nhiệt, power, `clocks.sm` theo thời gian, đánh dấu ranh giới các ô. Phân tích đầy đủ (ghép với latency từng mẫu, ±2 °C, cờ throttle) là việc của Bài 6. Ở bài này chỉ cần file tồn tại, đủ dòng, và cùng `run_id`.
+
+**Bước 8 — Active benchmarking (mới).** Trong lúc một ô đang đo, ở terminal thứ hai:
+- `nvidia-smi dmon -s pucm -d 1` xem power, util, xung, bộ nhớ theo giây `[tự đo — cờ theo phiên bản]`.
+- `mpstat -P ALL 1` hoặc `top` trên CPU host: một nhân 100% trong khi GPU util thấp nghĩa là nút thắt nằm ở Python/preprocess.
+- Một iteration dưới `torch.profiler.profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA])`. In `key_averages().table(...)` sắp theo thời gian GPU, rồi xem khoảng trống giữa các kernel `[tự đo — tên cột sort đổi giữa các bản PyTorch]`. Giữ file trace. Bài 12 dùng nó.
+
+Ghi một dòng cho mỗi ô vào `METHODOLOGY.md`: "trong lúc đo, GPU util ≈ __%, CPU host nhân bận nhất ≈ __%, nút thắt nghi ngờ: __".
+
+**Bước 9 — A/A (Bài 3), có cấp máy.** Ba phiên cho ô chuẩn (SmolVLA, fp16, batch 1). Phiên 1 và 2 trên cùng máy, mỗi phiên một tiến trình mới. Phiên 3 trên **một máy thuê khác** cùng loại card. Báo hai con số: lệch giữa phiên và lệch giữa máy. Quy tắc ba trạng thái của Bài 3 dùng ngưỡng lớn hơn trong hai con số khi so hai cấu hình đo trên hai lần thuê khác nhau.
+
+**Bước 10 — Kiểm tra tỉnh táo, sync, hủy máy, ghi chi phí** (bản gốc). So với mốc Bài 2 trước khi tin bất cứ số nào (phần 7). Sync `results/`, kiểm checksum ở đích, rồi mới hủy máy. Ghi `hours.csv`, `costs.csv`.
+
+**Sai số của dụng cụ:** CUDA event ~0,5 µs `[spec — CUDA Runtime API]`; `nvidia-smi` lấy mẫu 1 Hz nên sự kiện ngắn hơn 1 s có thể không hiện; `power.draw` là số trung bình driver báo, cách tính khác nhau giữa các đời card `[tự đo]`. Biến thiên giữa máy thường lớn hơn mọi sai số này, nên A/A ở Bước 9 là phép đo quan trọng nhất của bài.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Bảng kỳ vọng của bản gốc** (giữ nguyên), SmolVLA (~450M) trên GPU tiêu dùng hiện đại, batch 1:
+
+| Cấu hình | Latency p50 kỳ vọng | Ghi chú |
+|---|---|---|
+| fp32 | thang 100–400 ms | Mốc tham chiếu |
+| bf16 / fp16 | nhanh hơn fp32 đáng kể | Tăng tốc tùy kiến trúc và card |
+| batch 8 | latency mỗi request tăng, throughput tổng tăng | Đường cong quen thuộc |
+
+**Kiểm tra tỉnh táo bắt buộc** (bản gốc): VLA-0 chạy 4 Hz trên RTX 5090 với PyTorch chuẩn, tức 250 ms. SmolVLA ra **5 ms** thì gần như chắc chắn bạn đang đo nhầm: thiếu đồng bộ, bấm giờ nhầm hàm (`select_action` trả action từ hàng đợi chunk, Bài 1), hoặc chạy ít bước solver. Ra **3 giây** thì có gì đó chặn bạn: model chạy trên CPU, copy host↔device mỗi bước, hoặc swap. Cả hai trường hợp đều phải điều tra trước khi đi tiếp. Chính xác hóa (mới): cận dưới roofline của SmolVLA fp16 trên 4090 ở 100% sức tính chỉ cỡ vài ms (K4 Bài 12, đã chạy). Vậy 5 ms không bất khả về vật lý, nhưng đòi hiệu suất gần trần ở batch 1, điều không runtime PyTorch nào đạt. Vì vậy dùng quy tắc "nghi ngờ mạnh, chứng minh bằng mẫu đối chứng và profiler", không dùng quy tắc "bất khả".
+
+**Bảng mốc Bài 2** cho SmolVLA trên GPU tiêu dùng nằm ở thang ~100–400 ms `[tự đo — chưa kiểm bảng gốc của các nguồn]`. Số của bạn lệch hơn một bậc khỏi dải đó thì phải có lời giải thích bằng số, không bằng tính từ.
+
+**Mô phỏng phần 2** (`[đã chạy]`, numpy 2.x, seed 3; dữ liệu giả):
+
+| Đo | Kết quả |
+|---|---|
+| Steady state theo quy tắc cửa sổ | từ iteration 80. Với vết giả này, 20 warmup **không đủ** |
+| Phiên trôi chậm 6% | quy tắc cửa sổ vẫn báo steady từ 40; quy tắc đầu–cuối bắt được trôi +3,8% (phiên sạch +0,3%) |
+| CI 95% của p50 trong phiên | rộng ~±0,25% |
+| Lệch giữa phiên cùng máy | ≤ 0,8% |
+| Lệch giữa máy (A/B vs C) | 8,0% |
+
+Đọc: hằng số "nguội" của vết giả là tự đặt, nên con số 80 không nói gì về GPU của bạn. Điều bài học cần là cơ chế. (1) Một quy tắc cửa sổ ngắn không thấy trôi chậm, nên cần quy tắc thứ hai trên toàn phiên. (2) CI trong phiên hẹp gấp hơn chục lần lệch giữa máy. Báo "±0,25%" cho một con số mà máy kế tiếp có thể lệch 8% là báo sai độ chính xác.
+
+**Kỳ vọng trên máy thật `[ước lượng — tự đo]`:**
+- Lần gọi đầu chậm hơn steady hàng chục đến hàng trăm lần (context, nạp kernel), thường phẳng sau vài chục iteration. `torch.compile` nếu dùng là cold-start riêng, không phải warmup.
+- fp16/bf16 so với fp32: tăng tốc end-to-end thường **nhỏ hơn** tỉ lệ Tensor TFLOPS / FP32 TFLOPS của spec, vì ở batch 1 phần lớn thời gian không nằm ở GEMM lớn (Bài 12).
+- Mẫu đối chứng GEMM fp16: phần lớn nhưng không trọn Tensor TFLOPS dense. Máy bị hạ power limit cho TFLOPS thấp hơn kèm cờ `SW Power Cap`.
+- Batch 1 → 8: throughput tăng dưới 8 lần, latency mỗi lần gọi tăng dưới 8 lần; tỉ lệ phụ thuộc pha nào chiếm thời gian. Ví dụ 150 → 350 ms của Gemini là số học minh họa, không phải số đo.
+- A/A: giữa phiên cùng máy cỡ dưới 1–2%; giữa máy có thể vài phần trăm hoặc hơn. Con số này là ngưỡng "không phân biệt được" cho mọi so sánh giữa các lần thuê.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| fp16 **không** nhanh hơn fp32 (bản gốc) | Model chưa thật sự chạy fp16; bị chặn bởi preprocess hoặc copy; "fp32" thật ra đang chạy TF32 | `dtype` của weight và activation trong `infer`; tách ba tầng (Bài 4); `fp32_matmul_precision` | Ghi lại; nếu TF32 bật thì ô "fp32" phải ghi là TF32 |
+| Latency dao động mạnh (bản gốc) | Hàng xóm trên CPU host, nhiệt/power của card, GPU bị chia (MIG/vGPU) | `t_preprocess` dao động?; `clocks_event_reasons`; `mig_mode` | Thử máy khác và **ghi lại hiện tượng**. Đó là dữ liệu về giới hạn của GPU thuê (bản gốc) |
+| VRAM peak lớn hơn nhiều so với kích thước model (bản gốc) | Activation, KV cache của prefix, batch, CUDA context, allocator giữ chỗ | So `max_memory_allocated` với `max_memory_reserved` và `nvidia-smi` | Bình thường. Ghi tỉ lệ, nó hữu ích cho người khác (bản gốc) |
+| Batch lớn không tăng throughput (bản gốc) | Pha nhiều token đã compute-bound ở batch 1; **hoặc** preprocess tuần tự, adapter lặp `for`, overhead launch | Ba tầng thời gian theo batch; shape trong `infer`; profiler | Đây là một phát hiện thật khi đã loại ba nguyên nhân sau. Xem Bài 12 |
+| Mẫu đối chứng thấp hơn spec nhiều | Power limit bị hạ, xung bị khóa, PCIe không liên quan (GEMM nằm trong VRAM) | `nvidia-smi -q -d POWER,CLOCK,PERFORMANCE` | Đổi máy hoặc ghi `suspect_host` kèm số |
+| Không đạt steady state | Nhiệt/power trôi; allocator mở rộng dần; input lặp lại làm cache ấm dần | Bài 6; đổi input theo vòng tập observation | Báo "không đạt steady state sau X"; không cắt đồ thị |
+| GPU util thấp, `t_inference` vẫn lớn | Thiếu đồng bộ làm thời gian rơi sai tầng; nút thắt ở CPU host | Profiler: khoảng trống giữa kernel | Đồng bộ ở ranh giới tầng; ghi CPU host vào `env` |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** Một đội cần số "SmolVLA trên 4090" đáng tin cho 100 robot sẽ gọi về server. Bạn có ngân sách 20 giờ thuê. Chia thế nào: 1 máy × 20 phiên, 20 máy × 1 phiên, hay 5 máy × 4 phiên? Cái gì gãy trước nếu chọn sai?
+   <details><summary>Hướng nghĩ</summary>Thiết kế lồng nhau (nested): biến thiên giữa máy và giữa phiên là hai thành phần phương sai riêng. Nhiều máy ít phiên ước lượng tốt thành phần giữa máy, nhưng không tách được nó khỏi thành phần giữa phiên. Một máy nhiều phiên thì không nói gì về dòng card. Kalibera & Jones (Bài 3) có công thức chia ngân sách theo thành phần phương sai. Ở 100 robot, số bạn cần là đuôi của *server* dưới tải nhiều robot, một câu hỏi vòng mở (coordinated omission, Bài 3), không phải p50 batch 1.</details>
+2. **[Failure mode]** Máy spot bị thu hồi lúc ô bf16 xong, ô fp16 chưa chạy. Máy mới có power limit thấp hơn 10%. Bạn so fp16 với bf16 và thấy fp16 chậm hơn 8%. Bạn viết gì vào báo cáo, và harness lẽ ra phải chặn điều này ở đâu?
+   <details><summary>Hướng nghĩ</summary>So sánh này lẫn biến "máy" với biến "precision" (confounding). Mẫu đối chứng đầu phiên trên máy mới lẽ ra đã lộ chênh lệch. Quy tắc: mọi cặp so sánh phải đo trên cùng một máy, xen kẽ trong cùng phiên. Nếu không được, ngưỡng "không phân biệt được" là lệch giữa máy từ A/A. Câu đúng ở đây là "chưa phân biệt được".</details>
+3. **[Vì sao không]** Vì sao không khóa xung GPU (`nvidia-smi -lgc`) cho mọi phép đo để triệt biến "máy"?
+   <details><summary>Hướng nghĩ</summary>Trên máy thuê thường không có quyền `[tự đo]`. Kể cả có quyền, khóa xung đổi câu hỏi: bạn đo SmolVLA ở một xung nhân tạo, không phải ở chế độ người dùng thật gặp. Khóa xung hợp cho so sánh A/B (giảm nhiễu). Báo số tuyệt đối thì nên đo ở mặc định và ghi xung thật. Hai mục đích, hai chế độ, ghi rõ trong methodology.</details>
+4. **[Nếu…thì]** Nếu `utilization.gpu` báo 100% suốt phép đo, bạn đã chứng minh được GPU là nút thắt chưa?
+   <details><summary>Hướng nghĩ</summary>Chưa. 100% nghĩa là luôn có ít nhất một kernel đang chạy, kể cả kernel nhỏ dùng vài SM. Cần thêm chỉ số tách được (throughput pipe tính, băng thông DRAM, Nsight "Speed of Light") hoặc thí nghiệm can thiệp: đổi byte, đổi FLOP. Đây là cầu sang Bài 12, và là lỗi "SM Active" mà F7.2 mục 6(d) đã chấm.</details>
+
+### 10. Liên kết ra ngoài
+
+- **Đo lường học: repeatability vs reproducibility (ISO 5725).** Chuẩn này tách độ lặp lại (cùng phòng thí nghiệm, cùng người, cùng thiết bị, thời gian ngắn) với độ tái lập (khác phòng thí nghiệm). Nó ước lượng hai thành phần bằng thí nghiệm liên phòng (interlaboratory study) `[chuẩn]`. Giống: phiên ≈ lặp lại, máy thuê ≈ phòng thí nghiệm khác. Khác: thí nghiệm liên phòng gửi **cùng một mẫu vật** tới mọi nơi. Bạn thì mang model tới nhiều máy, và "mẫu vật" (image) giống hệt nhau, nên toàn bộ lệch còn lại là của máy.
+- **Thử nghiệm lâm sàng đa trung tâm.** Kết quả có "hiệu ứng trung tâm" (center effect): cùng phác đồ, khác bệnh viện, khác kết quả. Thiết kế đúng là phân tầng theo trung tâm và so điều trị **trong** từng trung tâm `[chuẩn]`. Giống: so precision **trong cùng máy**, xen kẽ. Khác: bệnh nhân không chạy lại được; bạn thì chạy lại được, nên không có lý do bỏ A/A.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Schad và cộng sự (VLDB 2010), Leitner & Cito (ACM TOIT 2016): hiệu năng máy ảo cùng loại biến thiên | `[chuẩn]` | Đọc paper để lấy số cụ thể; giáo trình không trích số |
+| `utilization.gpu` là tỉ lệ thời gian có kernel chạy | `[chuẩn]` | `nvidia-smi --help-query-gpu`, mô tả trường `utilization.gpu` |
+| Trường `clocks_event_reasons.*` (driver cũ: `clocks_throttle_reasons.*`) | `[tự đo]` | `nvidia-smi --help-query-gpu` trên máy thuê |
+| PyTorch mặc định không dùng TF32 cho matmul, cuDNN conv thì có | `[chuẩn]` | PyTorch docs, "TensorFloat-32 (TF32) on Ampere (and later) devices"; kiểm theo phiên bản |
+| Instance vast.ai/RunPod thường được trọn GPU | `[tự đo]` | Điều khoản của trang; `mig_mode`, `virtualization_mode` |
+| API `torch.profiler`, cờ `nvidia-smi dmon` | `[tự đo]` | Đổi theo phiên bản |
+| Ngân sách 500k–1,5tr VNĐ | `[ước lượng]` | Theo bản gốc, 10/2026; kiểm giá trên trang thuê |
+| Kết quả mô phỏng | `[đã chạy]` | Dữ liệu giả, chỉ minh họa cơ chế |
+
+**Đã sửa so với bản gốc/Gemini:**
+- Bản gốc, "Nếu ra khác": "Batch lớn không tăng throughput → compute-bound" → chấm ĐÚNG MỘT PHẦN; thêm ba nguyên nhân khác và cách tách bằng ba tầng thời gian.
+- Bản gốc và Gemini: "Latency dao động mạnh → chia sẻ GPU với tenant khác" → hàng xóm thường chia CPU host/đĩa/mạng; GPU chỉ bị chia khi có MIG/vGPU. Hành động của bản gốc ("ghi lại hiện tượng") giữ nguyên.
+- Bản gốc, kiểm tỉnh táo "5 ms là đo nhầm" → giữ quy tắc hành động (điều tra). Chính xác hóa: cận dưới roofline fp16 trên 4090 cỡ vài ms, nên 5 ms là "nghi ngờ mạnh" chứ không phải "bất khả".
+- Gemini Bài 5, bước 3: "20 lần đầu cao rồi phẳng lì" được nói như sự thật → thay bằng quy tắc steady state viết trước, cộng quy tắc trôi đầu–cuối (mô phỏng cho thấy quy tắc cửa sổ ngắn bỏ sót trôi chậm).
+- Gemini Bài 5, bước 6: lệnh `nvidia-smi` thiếu `power.limit`, `clocks.max.sm`, cờ lý do giảm xung, PCIe → bổ sung, và ghi chú tên trường đổi theo driver.
+- Bổ sung so với bản gốc (giữ đủ 6 bước gốc): mẫu đối chứng GEMM đầu phiên, overhead trên GPU (Bài 4 đã hứa), xáo thứ tự ô, ≥ 400 iteration nếu báo p99, kiểm NaN/lệch số học trước khi đo thời gian, active benchmarking, A/A có cấp máy, TF32.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** J. Schad, J. Dittrich, J.-A. Quiané-Ruiz, "Runtime Measurements in the Cloud: Observing, Analyzing, and Reducing Variance", *PVLDB* 3(1), 2010. PyTorch docs, *CUDA semantics* (mục asynchronous execution, TF32).
+- **Giải thích:** Brendan Gregg, *Systems Performance* (ấn bản 2), chương Benchmarking, mục active benchmarking.
+- **Đào sâu (tùy chọn):** P. Leitner, J. Cito, "Patterns in the Chaos — A Study of Performance Variation and Predictability in Public IaaS Clouds", *ACM Transactions on Internet Technology*, 2016.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao CI trong phiên không nói gì về dòng card; (2) vẽ lại vòng đời một lần thuê ở phần 2 từ trí nhớ, đánh dấu chỗ đặt mẫu đối chứng và telemetry; (3) hai câu dưới.
+
+  1. Ô fp32 trên RTX 4090: `t_inference` p50 = 120 ms, `utilization.gpu` ≈ 35%, một nhân CPU host 100%. Ô fp16: 110 ms. Bạn kết luận gì về "fp16 chỉ nhanh hơn 8%"?
+     <details><summary>Đáp án</summary>Chưa kết luận được gì về fp16. GPU rảnh gần hai phần ba thời gian, và một nhân CPU bão hòa: nút thắt là Python/launch kernel/preprocess trên host. Đổi precision chỉ rút ngắn phần GPU, vốn đã nhỏ. Kiểm bằng profiler (khoảng trống giữa kernel). Hướng sửa (CUDA Graphs, `torch.compile`, gộp op) là một cấu hình khác, ghi riêng.</details>
+  2. Mẫu đối chứng GEMM fp16 trên máy thuê lần 2 đạt thấp hơn lần 1 khoảng 12%, `clocks_event_reasons` có `SW Power Cap`. Ô SmolVLA fp16 trên máy 2 chậm hơn máy 1 khoảng 5%. Bạn có được hiệu chỉnh số máy 2 lên 12% không?
+     <details><summary>Đáp án</summary>Không. GEMM lớn là compute-bound và nhạy với xung. SmolVLA batch 1 gồm nhiều phần ít nhạy với xung hơn (overhead, pha memory-bound), nên tỉ lệ lệch khác nhau, đúng như số cho thấy (5% vs 12%). Mẫu đối chứng dùng để **phát hiện** và **ghi lý do**, không để hiệu chỉnh. Báo hai máy riêng, hoặc chỉ dùng máy 1 cho so sánh và nêu máy 2 như một điểm dữ liệu về biến thiên của GPU thuê.</details>
+
+---

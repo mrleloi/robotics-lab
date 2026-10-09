@@ -1,5 +1,12 @@
 # TRẠNG THÁI CÔNG VIỆC — bàn giao cho phiên sau
 
+> **CẬP NHẬT 2026-10-09 (session 3, dừng vì hết usage).** Đã merge `main` (K4 của Kiro). Viết thêm: `khoa-7/00-tong-quan.md`, `README.md`, K4 Bài 5, K5 Bài 5, Bài 10, Bài 16 (các bài này đủ khung, kết thúc gọn). Agent bị dừng giữa chừng — **còn thiếu chính xác:**
+> - K4: Bài 6 (cuối `khoa-4/m2-harness.md`), Bài 12 (cuối `khoa-4/m4-nhieu-target.md`).
+> - K5: Bài 6 (cuối `m1-cam-bien.md`); Gate Module 0 (port từ `giao-trinh-kiro/khoa-5/m0-chon-phan-cung.md`); Bài 11, 12 (cuối `m2-dong-bo-thoi-gian.md`; Bài 7 trỏ tới `b12_budget.py` của Bài 12); Bài 17 (cuối `m3-data-stack.md`) + hai sửa nhỏ m3 trong `_hop-nhat/ghi-chu-cho-K4-K5.md` (có thể agent đã áp một phần — kiểm `git diff`); `m4-van-hanh.md` (Bài 18, 19, Gate K5) chưa tạo; `khoa-5/00-tong-quan.md` chưa có.
+> - Sau khi K5 đủ: cập nhật bảng trạng thái trong `README.md` (đang ghi K4/K5 "đang soạn").
+> - Câu hỏi mới chờ người học: đường lõi tối thiểu K7 không có C8 nhưng C11.3 cần Nav2 → thêm C8 tối thiểu (~360–370h) hay đổi C11.3 (ghi trong `khoa-7/00-tong-quan.md`).
+> - Lời giao mẫu cho từng việc còn thiếu: dùng lại prompt kiểu "w-k4 / w-k5a / w-k5b / w-k5c" — đọc `_ref/brief-writer.md`, nối bài vào cuối file, KHÔNG sửa bài đã có, áp `_hop-nhat/ghi-chu-cho-K4-K5.md` và quy chuẩn mục 7 (Bài 11 rolling shutter (t_pulse+t_exp)/t_row; Bài 12 N100 ~0,19–0,22 TFLOPS CPU, decode batch 1 memory-bound).
+
 > Cập nhật: 2026-10-08, cuối session 2 (Claude). Branch: `claude/quirky-allen-21hvip`.
 > Dừng chủ động vì gần hết credit cloud (còn ~20 USD / 250 USD). Đọc file này rồi `_PHOI-HOP.md` trước khi làm tiếp.
 
