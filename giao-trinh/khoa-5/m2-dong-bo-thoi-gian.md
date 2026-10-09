@@ -1195,3 +1195,451 @@ Cửa sổ Allan thắng ở cả hai pha. Cửa sổ dài "để triệt tiêu 
   <details><summary>Đáp án</summary>A: SAI cho thạch anh 40 MHz. −0,034…−0,04 ppm/°C² là hệ số parabol của tuning-fork 32,768 kHz; câu đúng cho RTC 32 kHz. Thạch anh 40 MHz là AT-cut, bậc ba, lệch cỡ vài ppm trong dải đó; tra datasheet hoặc đo. B: 200 s dài hơn thời gian đổi nhiệt, nên trong pha sốc, độ dốc ước lượng là trung bình làm mờ cú sốc (biên độ thấp hơn thật, lệch thời gian). Báo cáo: dùng W theo Allan cho các pha nhiệt đổi chậm, ghi rõ pha sốc bị làm mờ; muốn thấy sốc thì giảm W và chấp nhận nhiễu lớn hơn (ghi σ của W đó), hoặc làm sốc chậm hơn.</details>
 
 ---
+
+## Bài 11 — TN-4: Hardware trigger và rig 2 camera + IMU (14h)
+
+> **Vị trí:** Bài 8 (ESP32 phát xung, đóng dấu bằng `esp_timer`), Bài 9 bước 7 (offset ESP32 ↔ host), Bài 10 → **Bài 11** → Bài 12 (dòng camera của ngân sách), K5 Bài 13 (ghép camera ↔ IMU trong MCAP) · **Cần trước:** F4.6 (thời điểm của một phép đo: giữa phơi sáng, rolling shutter, cross-correlation), F5.6 (cross-correlation), F3.4 (ghép luồng khác tần số), F4.7 (trọng tài đo); K5 Bài 6 (khung gói, `seq`, đường bao dưới) · **Sau bài này bạn quyết định được:** rig không trigger có dùng được cho fusion không và với sai số bao nhiêu; có phải bù thời gian theo từng hàng ảnh không; và câu "sai số thời gian của dataset là ___" trong README của dataset đầu tiên mang tên bạn.
+
+**Câu hỏi của bài (bản gốc):** hai camera "chụp cùng lúc" thực sự lệch nhau bao nhiêu?
+
+Bản gốc ghi đây là thí nghiệm đắt nhất về mặt bài học, và là chỗ bạn tạo ra **dataset của riêng mình**, trả lời câu hỏi "nguồn dữ liệu thật ở đâu" bạn từng hỏi. Giữ nguyên.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 2014, nhóm ETH Zürich và Skybotix công bố VI-Sensor: một camera stereo cộng IMU, có FPGA đồng bộ **phần cứng** lúc phơi sáng với lúc lấy mẫu IMU (Nikolic và cộng sự, ICRA 2014) `[chuẩn]`. Họ phải tự làm phần cứng vì bộ camera và IMU rời, đóng dấu bằng phần mềm, cho sai số thời gian đủ lớn để làm hỏng visual-inertial odometry khi rig quay nhanh. Bộ dữ liệu EuRoC MAV (Burri và cộng sự, IJRR 2016), một trong những benchmark VIO được dùng nhiều nhất, được ghi bằng chính thiết bị đó `[chuẩn]`. Cùng thời gian, công cụ hiệu chuẩn Kalibr của ETH (Furgale, Rehder, Siegwart, IROS 2013) đưa **độ lệch thời gian camera–IMU** vào danh sách tham số phải ước lượng, cạnh vị trí và hướng lắp `[chuẩn]`. Thông điệp của ngành: thời gian là một tham số hiệu chuẩn, không phải thứ driver cho sẵn.
+
+Rig của bạn là phiên bản nghèo của câu chuyện đó: 2 webcam USB khác model, 1 IMU trên ESP32-S3, 1 LED, tất cả vào mini PC. Nó hỏng ở **đúng những chỗ robot thật hỏng** (bản gốc): hai webcam chia băng thông một USB controller; rolling shutter cho mỗi hàng một thời điểm; đồng hồ ESP32 trôi so với mini PC (Bài 8, 10); không có trigger nên ba luồng không bao giờ thật sự cùng lúc; IMU 200 Hz, camera 30 fps phải nội suy về cùng mốc.
+
+### 2. Mô hình tư duy
+
+**Ảnh rolling shutter là một cái đồng hồ.** Hàng r của khung được *đọc ra* ở thời điểm R_r = S + r·t_row (S là lúc đọc hàng 0). Mỗi hàng phơi sáng trong cửa sổ [R_r − t_exp, R_r]. Một xung LED [t_on, t_on + t_pulse] làm sáng mọi hàng có cửa sổ phơi chạm vào xung:
+
+```
+thời gian ──────────────────────────────────────────────────────────────►
+LED              ┌──────┐ t_pulse
+           ──────┘      └──────────────────────────────────────────────
+                 t_on
+hàng r−1   [=====phơi=====]R          ← R_{r−1} < t_on: chưa chạm xung → tối
+hàng r       [=====phơi=====]R        ← R_r ≥ t_on: hàng SÁNG ĐẦU TIÊN, R_r ≈ t_on (lúc ĐỌC, không phải lúc bắt đầu phơi)
+  ...                   (mọi hàng có R_r trong [t_on, t_on + t_pulse + t_exp] đều sáng)
+hàng r+k              [=====phơi=====]R ← R − t_exp > t_on + t_pulse: tối lại
+                                       số hàng sáng N ≈ (t_pulse + t_exp) / t_row
+```
+
+Ba hệ quả:
+
+1. **N ≈ (t_pulse + t_exp) / t_row**, không phải t_pulse / t_row (quy chuẩn mục 7). Nếu exposure 1 ms và xung 200 µs, phần lớn dải sáng là do exposure. Có hai cách đo t_row không cần biết t_exp: đặt exposure nhỏ nhất, hoặc chụp hai độ dài xung rồi lấy hiệu, vì t_exp triệt tiêu: t_row = (t_p2 − t_p1) / (N2 − N1).
+2. **Hàng sáng đầu tiên cho t_on theo lúc đọc**: t_on ≈ S + r*·t_row. Chỉ dùng được khi cạnh lên của xung rơi **trong** lúc khung đang được đọc (r* > 0). Nếu nó rơi vào khoảng trống giữa hai khung (vertical blanking), dải sáng bắt đầu ở hàng 0 và chỉ cho một cận.
+3. **Timestamp của driver là một đồng hồ khác.** Driver gán cho khung một thời điểm T = S + β + nhiễu, trong đó β là độ lệch chưa biết: lúc nhận gói USB đầu hay cuối, có cộng exposure không. β khác nhau giữa hai model camera. Ảnh cho bạn S mà không cần β. Hiệu S_B − S_A của hai khung cùng thấy một xung là **lệch thật** giữa hai camera, đo bằng chính ảnh.
+
+Hai camera chạy tự do có hai dao động riêng. Lệch pha giữa chúng không ngẫu nhiên: nó trượt đều theo thời gian và quay vòng sau mỗi chu kỳ phách 1/|f_A − f_B|. Đó là đồ thị răng cưa.
+
+Mô phỏng: hai camera giả định khác model, khác t_row, khác exposure, khác β. Phần A đo t_row theo ba cách. Phần B nháy LED 5 ms mỗi 3 s trong 10 phút.
+
+```python
+# [đã chạy] b11_rows.py — rolling shutter làm thước đo thời gian: đếm hàng đúng cách, và lệch pha hai camera tự do
+import numpy as np
+rng = np.random.default_rng(11)
+# Camera giả định: (fps thật, số hàng, t_row µs, exposure µs, bias timestamp driver µs, jitter timestamp µs)
+CAM = {"camA": (30.000, 480, 31.25, 1000, 1800, 300), "camB": (29.970, 720, 25.00, 1500, 6200, 900)}
+
+def lit_rows(t_on, t_pulse, start, rows, t_row, t_exp):
+    """Hàng r sáng nếu cửa sổ phơi [R_r - t_exp, R_r] chạm xung [t_on, t_on + t_pulse]; R_r = start + r*t_row."""
+    R = start + np.arange(rows) * t_row
+    return np.flatnonzero((R >= t_on) & (R - t_exp <= t_on + t_pulse))
+
+# Phần A — đo t_row: một xung 200 µs (bản gốc) vs hiệu hai độ dài xung (exposure triệt tiêu)
+fps, H, tr, te, _, _ = CAM["camA"]
+n = lambda tp: np.mean([lit_rows(5000 + rng.uniform(0, tr), tp, 0, H, tr, te).size for _ in range(200)])
+n200, n2000 = n(200), n(2000)
+print(f"A) camA t_row thật {tr} µs | 200/N = {200 / n200:.1f} µs (sai) | (200+t_exp)/N = {(200 + te) / n200:.1f} µs"
+      f" (cần biết t_exp) | (2000-200)/(N2-N1) = {1800 / (n2000 - n200):.1f} µs (không cần t_exp)")
+
+# Phần B — 10 phút, LED 5 ms mỗi 3 s; mỗi camera chạy tự do theo dao động riêng
+flashes = np.arange(1e6, 600e6, 3e6); flashes += rng.uniform(0, 1e5, flashes.size)
+est, used, ts_err, phase = {}, 0, [], []
+for t_on in flashes:
+    S = {}
+    for k, (fps, H, tr, te, bias, jit) in CAM.items():
+        P = 1e6 / fps
+        start = np.floor((t_on - (H - 1) * tr) / P) * P            # khung có thể chứa xung: thử vài khung quanh đó
+        for s in start + P * np.arange(0, 4):
+            r = lit_rows(t_on, 5000, s, H, tr, te)
+            if r.size and r[0] > 0:                                # cạnh lên nằm TRONG lúc đọc khung → dùng được
+                S[k] = (t_on - r[0] * tr, s, s + bias + rng.normal(0, jit)); break
+    if len(S) == 2:
+        used += 1
+        d_true = S["camB"][1] - S["camA"][1]                       # lệch thật giữa hai khung cùng thấy xung
+        d_rows = S["camB"][0] - S["camA"][0]                       # đo từ ảnh, không cần đồng hồ nào
+        d_ts = S["camB"][2] - S["camA"][2]                         # điều timestamp driver "nói"
+        ts_err.append(d_ts - d_true); phase.append(d_true); est.setdefault("rows", []).append(d_rows - d_true)
+phase, e_rows, e_ts = np.array(phase) / 1e3, np.array(est["rows"]), np.array(ts_err) / 1e3
+print(f"B) dùng được {used}/{len(flashes)} lần nháy | lệch thật giữa hai khung: {phase.min():.1f} .. {phase.max():.1f} ms,"
+      f" chu kỳ phách 1/|Δf| = {1 / abs(30.000 - 29.970):.0f} s")
+print(f"   sai số phương pháp hàng: RMS {np.sqrt(np.mean(e_rows**2)):.1f} µs, max {np.abs(e_rows).max():.1f} µs")
+print(f"   sai số nếu tin timestamp driver: trung bình {e_ts.mean():+.2f} ms, σ {e_ts.std():.2f} ms")
+```
+
+Mô phỏng giả định một cạnh lên sắc, ngưỡng sáng/tối hoàn hảo, và t_row đã biết. Ảnh thật có nhòe do exposure, blooming quanh LED, và nhiễu ngưỡng. Đừng chạy trước khi làm Đề 1–3.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Synthetic probe trong monitoring: bơm một giao dịch giả qua mọi tầng để đo end-to-end | LED: một sự kiện vật lý được mọi camera thấy, ESP32 ghi thời điểm | Probe đi đúng đường của traffic thật. LED chỉ tới được các cảm biến **nhìn thấy nó**: IMU không thấy LED, phải nối qua đồng hồ ESP32 và qua một sự kiện cơ học (gõ bàn) | Kết luận về lệch camera–IMU chỉ từ LED, quên trễ bộ lọc trong IMU |
+| Event time vs processing time (F3.3) | Lúc photon tới hàng r vs lúc driver gán timestamp cho khung | Ở stream processing, mỗi event có **một** event time. Một khung rolling shutter có H event time, trải dài 10–30 ms | Gán một timestamp cho cả khung; vật chuyển động nhanh bị "xé" theo thời gian, không chỉ theo không gian |
+| Hai cron job chu kỳ gần bằng nhau trôi pha dần rồi trùng nhau định kỳ | Hai camera 30,00 và 29,97 fps | Cron chạy theo đồng hồ chung của máy nên trôi là do cấu hình. Camera mỗi cái một thạch anh, nên fps thật chỉ đo được, không đọc được từ cấu hình | Đo lệch một lần lúc đầu rồi coi là hằng số cho cả phiên ghi |
+| Health check pass ≠ dịch vụ đúng | Timestamp hai camera "trông hợp lý" | Driver luôn trả một số đơn điệu tăng. Đúng hay sai so với photon thì chỉ ảnh mới biết | Tin timestamp driver; sai số là β_B − β_A cỡ ms, không ai thấy |
+
+**Chấm mô hình:**
+
+- *Bản gốc, Phần A bước 3: "t_mỗi_hàng = 200 µs / số_hàng_sáng".* → **SAI** (quy chuẩn mục 7, ghi chú hợp nhất w-F4). Bỏ quên exposure. **Phản ví dụ:** mô phỏng Phần A so ba cách tính t_row với giá trị thật (kết quả ở phần 7). Sửa: N ≈ (t_pulse + t_exp)/t_row; đo bằng exposure nhỏ nhất hoặc hai độ dài xung.
+- *Bản gốc: "t_bật_LED = t_đầu_frame + (số_hàng_trước_ranh_giới / tổng_số_hàng) × t_đọc_frame".* → **ĐÚNG MỘT PHẦN.** Hình dạng đúng. Gãy ở hai chỗ. (1) "t_đầu_frame" không có sẵn trên đồng hồ host: timestamp driver lệch β chưa biết so với lúc đọc hàng 0. (2) Ranh giới là lúc hàng đó được **đọc**, không phải lúc nó bắt đầu phơi (ghi chú w-F4). **Phản ví dụ:** cùng một xung, camera exposure 1,5 ms và camera exposure 1 ms cho cùng hàng ranh giới nếu cùng S và t_row. Nếu ranh giới ứng với lúc bắt đầu phơi thì hai hàng phải lệch nhau 0,5 ms / t_row.
+- *Bản gốc và Gemini: "Lệch giữa hai camera, không trigger: hàng chục ms, và biến thiên."* → **ĐÚNG**, cần thêm "biến thiên **theo quy luật**". Hai camera tự do cho lệch pha răng cưa với chu kỳ phách 1/|Δf|, không phải nhiễu. **Phản ví dụ** cho chữ "ngẫu nhiên" của Gemini ("biến thiên liên tục từ 0 đến 33 ms"): hai camera trong mô phỏng có fps lệch nhau một chút, và lệch pha giữa chúng lặp lại theo đúng chu kỳ phách tính từ hai fps (phần 7). Đo fps thật của hai camera là dự đoán được lệch ở mọi thời điểm.
+- *Gemini, "Nếu ra khác": "Băng thông USB 2.0 480 Mbps chỉ đủ cho 1 luồng raw YUYV 1080p30."* → **SAI.** 1920 × 1080 × 2 byte × 30 = 124 MB/s ≈ 995 Mbit/s, gấp đôi 480 Mbit/s. Một luồng cũng không vừa. Webcam USB 2.0 thường chỉ cho YUYV 1080p ở vài fps `[tự đo: v4l2-ctl --list-formats-ext]`.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Rolling / global shutter | Đọc từng hàng lần lượt / mọi pixel phơi cùng một cửa sổ | "Rolling shutter chỉ làm méo hình" |
+| 🟢 | t_row (line time), thời gian đọc khung | Khoảng cách giữa lúc đọc hai hàng liên tiếp; ≈ H·t_row | Chu kỳ khung (1/fps) |
+| 🟢 | Exposure (t_exp) | Thời gian mỗi hàng tích ánh sáng, kết thúc lúc hàng được đọc | Không liên quan tới thời điểm |
+| 🟢 | Vertical blanking | Khoảng giữa lúc đọc hàng cuối và hàng 0 của khung sau | Thời gian không tồn tại |
+| 🟢 | Timestamp driver, β | Thời điểm driver gán cho khung; lệch β chưa biết so với lúc đọc hàng 0 | Thời điểm chụp |
+| 🟢 | Chu kỳ phách | 1/|f_A − f_B|: thời gian để hai camera tự do trượt hết một chu kỳ pha | Nhiễu |
+| 🟢 | `v4l2_buffer.sequence` | Số thứ tự khung do driver đếm; lỗ = khung bị rớt | Số khung app đọc được |
+| 🟡 | Time offset camera–IMU (t_d) | Tham số hiệu chuẩn: lệch giữa hai đồng hồ cộng trễ trong cảm biến | Hằng số bằng 0 |
+| 🟡 | UVC, băng thông isochronous | Chuẩn webcam USB; mỗi camera xin trước một phần băng thông chu kỳ | "USB còn trống thì cắm thêm được" |
+| 🟡 | Hardware trigger / genlock | Tín hiệu ngoài bắt camera phơi đúng lúc; khóa nhiều camera vào một nhịp | Có trên webcam thường |
+| 🔴 | Hiệu chỉnh hình học rolling shutter | Sửa méo ảnh theo chuyển động | Việc của bài này |
+
+### 5. Dự đoán
+
+**Tham số cần tra:**
+- Mỗi camera: `v4l2-ctl -d /dev/videoN --list-formats-ext` (độ phân giải, fps, YUYV/MJPG), `v4l2-ctl -d /dev/videoN -l` (tên control exposure và dải; đơn vị UVC là 100 µs `[spec: V4L2_CID_EXPOSURE_ABSOLUTE]`). Exposure nhỏ nhất cho phép.
+- Tên sensor ảnh nếu tìm được (`lsusb -v`, trang sản phẩm) để tra thời gian đọc khung. Không có thì ghi "không công bố". Đó là kết quả hợp lệ (Bài 7).
+- Trễ bộ lọc của IMU theo cấu hình DLPF (MPU6050: bảng register 26 CONFIG, cột Delay) `[spec: RM-MPU-6000A-00]`.
+- Bảng ngân sách Bài 7 dòng 7–10. Mô hình đồng hồ ESP32 ↔ host từ Bài 6 (đường bao dưới) và Bài 9 bước 7.
+
+**Đề:**
+1. **Phần A.** Với exposure nhỏ nhất của camera A và t_row theo giả định của bạn (thời gian đọc khung / số hàng), xung 200 µs làm sáng bao nhiêu hàng? Công thức "200 µs / số hàng" sẽ cho t_row bao nhiêu? Xung 2 ms thì bao nhiêu hàng?
+2. **Tỉ lệ dùng được.** Phần nào của các lần nháy có cạnh lên rơi trong lúc đọc ở **cả hai** camera? (Gợi ý: tỉ số thời gian đọc / chu kỳ khung của từng camera.)
+3. **Mô phỏng, chỉ đọc code:** t_row theo ba cách; dải lệch thật giữa hai khung; chu kỳ phách; sai số RMS của phương pháp hàng; sai số nếu tin timestamp driver.
+4. **Phần B.** Lệch giữa hai camera của bạn theo thời gian: răng cưa hay hằng số? Chu kỳ phách bao nhiêu giây? Sai số của timestamp driver so với phương pháp hàng (trung bình và σ)?
+5. **Phần C.** Lệch camera ↔ IMU trước khi bù (chỉ dùng timestamp host) và sau khi bù bằng LED + trễ DLPF. Đóng góp lớn nhất của phần còn lại là gì?
+6. **Phần D.** Hai camera chung một hub: ở độ phân giải/định dạng nào thì một camera không mở được hoặc bắt đầu rớt khung? Rớt bao nhiêu phần trăm?
+
+```markdown
+# prediction-b11.md — K5 Bài 11 (commit trước khi ghi video đầu tiên)
+- camA: H = ___ , t_exp min = ___ µs , t_row giả định = ___ µs → xung 200 µs sáng ___ hàng ; "200/N" = ___ µs ; xung 2 ms sáng ___ hàng
+- camB: (cùng dòng)
+- Tỉ lệ lần nháy dùng được ở cả hai camera: ___%
+- Mô phỏng: t_row ba cách ___ / ___ / ___ ; lệch ___..___ ms ; phách ___ s ; RMS hàng ___ µs ; timestamp driver ___ ± ___ ms
+- Phần B (rig của tôi): dạng ___ ; phách ___ s ; driver lệch ___ ± ___ ms
+- Phần C: trước bù ___ ms ; sau bù ___ ms ; đóng góp lớn nhất ___
+- Phần D: hỏng ở ___ (định dạng/độ phân giải/fps) ; rớt ___%
+```
+
+### 6. Làm
+
+Chia 14h gợi ý: dựng rig và đọc timestamp driver 2,5h; Phần A 2h; Phần B 3h; Phần C 2,5h; Phần D 1,5h; Phần E 2,5h.
+
+**Bước 0 — Dựng rig và lấy đúng timestamp (mới, mọi phần sau cần).**
+- LED (kit K1) qua điện trở vào một GPIO của ESP32 đã dùng ở Bài 8. Firmware ghi `esp_timer_get_time()` **ngay trước** `gpio_set_level(…, 1)` và gửi sự kiện đó về host như một luồng riêng (khung Bài 6, `stream_id` riêng). Sai số giữa lệnh và cạnh lên thật cỡ µs `[ước lượng — kiểm bằng logic analyzer như Bài 8]`.
+- Camera: exposure **thủ công**, fps cố định, tắt auto-exposure. Tên control khác nhau theo driver và kernel (`exposure_time_absolute` hay `exposure_absolute`, `auto_exposure` hay `exposure_auto`) `[tự đo]`.
+- Đọc timestamp **của driver** (`v4l2_buffer.timestamp`) và `v4l2_buffer.sequence` cho từng khung, không dùng `time.time()` sau `read()`. Cách nhanh nhất để thấy chúng: `v4l2-ctl -d /dev/videoN --stream-mmap --stream-count=300 --verbose`. Cờ của buffer cho biết đồng hồ (`ts-monotonic`) và nguồn timestamp (SOE/EOF) `[tự đo — xem dòng in ra]`. OpenCV có giấu timestamp driver hay không tùy backend và phiên bản `[tự đo]`. Nếu không lấy được, dùng thư viện V4L2 cho Python hoặc ghi bằng `v4l2-ctl` rồi đọc file.
+- Phòng tối vừa phải, **không** có đèn huỳnh quang hay LED dùng nguồn xoay chiều trong khung hình. Điện lưới 50 Hz ở Việt Nam làm đèn nhấp nháy 100 Hz, và rolling shutter biến nó thành các dải ngang trông rất giống dải LED.
+
+**Phần A — đo thời gian đọc khung** (bản gốc, sửa công thức).
+1. ESP32 nháy LED đúng 200 µs, lặp mỗi 2 giây (bản gốc). Thêm một loạt 2 ms, cùng exposure.
+2. Ghi video, tìm khung có dải sáng. Đếm số hàng sáng N theo một ngưỡng cố định viết trước, ví dụ hàng có trung bình kênh sáng nhất vượt nền + 5σ. Chỉ lấy khung mà dải **không** chạm hàng 0 và hàng cuối.
+3. t_row = (2000 − 200) µs / (N₂₀₀₀ − N₂₀₀) (hiệu hai độ dài xung, exposure triệt tiêu). Kiểm chéo: N₂₀₀ ≈ (200 + t_exp)/t_row với t_exp đọc từ control. Lệch nhiều nghĩa là đơn vị control khác bạn nghĩ. Thời gian đọc khung ≈ H·t_row.
+4. Làm với **cả hai** camera (bản gốc). Chúng sẽ khác nhau. Đó là lý do mua khác model.
+5. **Sai số:** N đếm sai ±1 hàng ở mỗi cạnh, do ngưỡng và nhòe. Với 20 khung mỗi độ dài xung, sai số chuẩn của trung bình N giảm theo √20. Báo t_row kèm CI.
+
+**Phần B — đo lệch giữa hai camera** (bản gốc).
+1. Cả hai camera nhìn thấy LED. ESP32 nháy LED 5 ms mỗi 3 giây và ghi timestamp của chính nó (bản gốc).
+2. Ghi đồng thời 10 phút (bản gốc).
+3. Với mỗi lần nháy và mỗi camera: tìm khung chứa cạnh lên trong lúc đọc (hàng sáng đầu r* > 0), tính S = t_on − r*·t_row theo **trục thời gian của ảnh**. Lần nháy nào cạnh lên rơi vào blanking ở một camera thì loại, và đếm số lần loại.
+4. Lệch giữa hai camera = S_B − S_A cho hai khung cùng thấy một xung (bản gốc: "hiệu hai giá trị"). Vẽ theo thời gian, không chỉ histogram: răng cưa thì đo chu kỳ phách và so với 1/|f_A − f_B|, với fps thật tính từ timestamp driver trong 10 phút.
+5. So với điều timestamp driver nói: (T_B − T_A) − (S_B − S_A) cho từng lần nháy. Trung bình là β_B − β_A, σ là jitter timestamp. Đây là con số đi vào ngân sách Bài 12, dòng 9.
+
+**Phần C — đo lệch camera ↔ IMU** (bản gốc).
+1. Đổi mỗi khung camera sang đồng hồ ESP32: dùng LED để ước lượng β của từng camera so với đồng hồ host, rồi dùng mô hình ESP32 ↔ host (Bài 6, Bài 9 bước 7) để đổi sang đồng hồ ESP32. Bây giờ IMU và camera cùng một trục thời gian, trừ trễ trong IMU.
+2. Bù trễ bộ lọc của IMU theo cấu hình DLPF (datasheet). Ghi giá trị đã bù.
+3. Kiểm end-to-end bằng một sự kiện cơ học (bản gốc): gõ nhẹ vào mặt bàn có gắn cả IMU và camera, đồng thời nháy LED làm mốc. So đỉnh IMU với khung/hàng đầu tiên thấy chuyển động. Nếu đỉnh khó thấy, tăng ODR lên 500–1000 Hz (bản gốc) và nội suy đỉnh. Phép kiểm này thô, cỡ ms. Nó bắt lỗi lớn (bù sai dấu, sai đơn vị), không đo tinh.
+4. Tùy chọn, đường thứ ba: cầm rig xoay qua lại 30 s, ước lượng vận tốc góc từ video (optical flow) và từ gyro, cross-correlation hai chuỗi để ra độ lệch (→ F4.6, F5.6). Nếu ba đường gặp nhau trong sai số của từng đường thì con số đáng tin.
+
+**Phần D — ép nó hỏng** (bản gốc).
+1. Cắm cả hai camera vào cùng một USB hub. Đo lại. Đếm khung rớt bằng lỗ của `sequence`.
+2. Tăng độ phân giải/fps (YUYV rồi MJPG) tới khi một camera không mở được hoặc rớt khung. Ghi ngưỡng và **thông báo lỗi nguyên văn** (`dmesg`).
+3. Chạy tải CPU nặng (`stress-ng --cpu 4`). Đo lại: jitter của timestamp driver và S_B − S_A có đổi không? Chỉ timestamp nên đổi, ảnh thì không.
+
+**Phần E — đóng gói thành dataset** (bản gốc): ghi ra MCAP (K5 Bài 13 dạy chi tiết; ở đây có thể ghi thô rồi chuyển sau), publish lên HF Hub với README ghi phương pháp và sai số. Ba điều thêm: (a) README có câu "sai số thời gian giữa camera A, camera B và IMU là ___, đo bằng ___" lấy từ Bài 12; (b) chỉ quay cảnh bàn và LED. Không để mặt người, màn hình hay giấy tờ lọt vào khung trước khi công bố (→ K7 C9); (c) ghi giấy phép của dataset.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Bảng của bản gốc** (giữ nguyên; cột cuối là phần sửa):
+
+| Đại lượng | Giá trị kỳ vọng | Chú thích |
+|---|---|---|
+| `t_đọc_frame` webcam USB thường | 10–30 ms | Đo bằng hai độ dài xung, không bằng 200 µs / N |
+| Độ phân giải theo hàng | Vài chục µs | Đây là **độ phân giải**. Độ bất định còn gồm sai số t_row × số hàng, ngưỡng, nhòe, và β nếu so với đồng hồ khác (Bài 12) |
+| Lệch giữa hai camera, không trigger | **Hàng chục ms, và biến thiên** | Biến thiên theo răng cưa, chu kỳ 1/|Δf| |
+| Lệch camera ↔ IMU, không trigger | Hàng chục ms | |
+| Frame drop khi chung USB controller, độ phân giải cao | Rõ rệt, hàng phần trăm | Hoặc camera thứ hai không mở được (băng thông isochronous đã bị giữ) |
+| Sau khi dùng LED làm mốc chung | Lệch xác định được tới dưới 1 ms | Phần còn lại thường do trễ trong IMU và β, không do ảnh |
+
+**Mô phỏng** (`[đã chạy]`, seed 11, camera giả định):
+
+| Đo | Kết quả |
+|---|---|
+| t_row camA thật 31,25 µs: "200/N" | **5,2 µs**, sai khoảng sáu lần |
+| (200 + t_exp)/N | 31,3 µs, đúng nhưng cần biết t_exp |
+| (2000 − 200)/(N₂ − N₁) | 31,2 µs, không cần t_exp |
+| Lần nháy dùng được ở cả hai camera | 41/200 (cạnh lên phải rơi trong lúc đọc ở cả hai) |
+| Lệch thật giữa hai khung cùng thấy xung | −14,0 … 12,0 ms; chu kỳ phách 33 s |
+| Sai số phương pháp hàng | RMS 11,6 µs, max 30,6 µs (lượng tử một hàng ở mỗi camera) |
+| Sai số nếu tin timestamp driver | trung bình +4,56 ms (= β_B − β_A), σ 1,02 ms |
+
+Đọc: ảnh đo lệch hai camera tốt hơn timestamp driver hơn hai bậc. Phần lớn sai số của timestamp driver là **bias** (β), không phải nhiễu, nên trung bình nhiều lần đo không khử được. Chỉ một tham chiếu ngoài như LED mới lộ ra. Tỉ lệ dùng được thấp (≈ tích hai tỉ số đọc/chu kỳ) nên cần nhiều lần nháy. Dùng thêm cạnh xuống (hàng sáng cuối ≈ t_on + t_pulse + t_exp) thì tăng được tỉ lệ, nhưng khi đó phải biết t_exp.
+
+**Kỳ vọng trên rig thật** `[ước lượng — tự đo]`:
+- t_row webcam VGA cỡ vài chục µs. Hai model khác nhau rõ.
+- fps thật lệch 30,000 vài phần nghìn tới phần trăm, nên phách từ chục giây tới vài phút.
+- β_B − β_A cỡ ms, khác nhau giữa các lần mở camera nếu driver đóng dấu theo gói USB đầu tiên.
+- Hai webcam YUYV 640×480 @30 chung một USB 2.0 controller có thể không mở được camera thứ hai. Đó là băng thông isochronous mà camera xin trước, không phải băng thông đang dùng. MJPG thường giải quyết được, nhưng tùy camera.
+- Camera ↔ IMU sau bù: dưới 1 ms nếu đã bù DLPF và mô hình ESP32 ↔ host tốt. Phép gõ bàn chỉ xác nhận được ở mức vài ms.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Không thấy dải sáng, chỉ thấy cả khung sáng (bản gốc) | LED nháy quá dài, exposure quá dài, hoặc camera global shutter | N theo hai độ dài xung; nếu N không đổi theo t_pulse, nghi global shutter | Giảm xung và exposure. Global shutter thì ghi lại: mất phương pháp tinh, có một phát hiện (bản gốc) |
+| Ranh giới mờ, không sắc (bản gốc) | Exposure dài; LED lóa (blooming) | Profile độ sáng theo hàng | Giảm exposure, tăng sáng nền (bản gốc); che LED bằng giấy mờ hoặc lùi xa ống kính |
+| Lệch giữa hai camera rất nhỏ và ổn định (bản gốc) | Driver đóng dấu cả hai bằng cùng một đồng hồ lúc nhận; **hoặc** hai camera cùng model có fps gần trùng nên phách rất dài | So T_B − T_A với S_B − S_A từ ảnh | Kiểm timestamp đến từ đâu (bản gốc); phách dài là kết quả thật, ghi lại |
+| Không tìm được đỉnh IMU khi gõ bàn (bản gốc) | Gõ quá nhẹ, ODR quá thấp, DLPF quá mạnh | Phổ gia tốc quanh cú gõ | Tăng ODR lên 500–1000 Hz (bản gốc), nới DLPF trong phép thử |
+| Dải ngang xuất hiện cả khi LED tắt | Đèn phòng nhấp nháy 100 Hz | Dải trôi đều theo khung, không trùng lịch LED | Tắt đèn xoay chiều, hoặc đặt exposure bội số của 10 ms cho cảnh nền |
+| Camera thứ hai không mở được (`No space left on device` trong `dmesg`) | Băng thông isochronous USB đã bị camera thứ nhất xin trước | `dmesg`; thử MJPG hoặc độ phân giải thấp | Ghi ngưỡng; hai controller USB khác nhau nếu máy có `[tự đo: lsusb -t]` |
+| `sequence` có lỗ, app không báo rớt | Driver rớt khung khi app đọc chậm | So lỗ `sequence` với số khung app nhận | Tăng số buffer (`--stream-mmap=N`), luồng đọc riêng |
+| Lệch camera–IMU sau bù vẫn cỡ chục ms | Đổi đồng hồ sai dấu; dùng `CLOCK_REALTIME` lẫn `MONOTONIC`; quên DLPF | Kiểm từng chặng bằng một sự kiện; vẽ phần dư | Sửa chặng sai; xem cờ `ts-monotonic` |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** Một đội ghi 1.000 giờ dữ liệu từ 20 rig giống hệt rig của bạn, không trigger, không LED. Sáu tháng sau một nhóm muốn huấn luyện mô hình VIO trên dữ liệu đó. Cái gì gãy, và còn cứu được gì?
+   <details><summary>Hướng nghĩ</summary>Mỗi rig, mỗi lần mở camera có β và phách riêng. Không có sự kiện chung thì không còn thước đo nào ngoài chính nội dung. Cứu được một phần bằng cross-correlation chuyển động video–gyro (Phần C bước 4) trên từng đoạn có chuyển động đủ mạnh, ở mức ms. Bài học vận hành: một LED nháy định kỳ trong góc khung, hoặc một sự kiện đồng bộ đầu mỗi phiên ghi, rẻ hơn nhiều so với việc hiệu chuẩn lại sau này.</details>
+2. **[Failure mode]** Sau khi cập nhật kernel, β của camera A đổi 8 ms vì driver chuyển từ đóng dấu theo gói đầu sang gói cuối. Pipeline Module 3 không đổi một dòng nào. Bạn phát hiện bằng gì, và ở tầng nào?
+   <details><summary>Hướng nghĩ</summary>Không thể bằng schema hay validation thống kê đơn thuần: timestamp vẫn đơn điệu, nhịp vẫn 30 fps. Phải có một kiểm tra vật lý định kỳ, như LED trong khung hay một sự kiện chung đầu phiên, và một rule so β với giá trị lần trước (→ K5 Bài 16). Cũng là lý do ghi phiên bản kernel và driver vào metadata của mỗi file (→ F3.8).</details>
+3. **[Vì sao không]** Vì sao không mua luôn hai camera có chân trigger ngoài (camera công nghiệp, global shutter) cho xong?
+   <details><summary>Hướng nghĩ</summary>Có thể là quyết định đúng cho robot thật. Nhưng trigger chỉ ép lúc **bắt đầu phơi** trùng nhau. Timestamp trên host vẫn qua driver, vẫn có β. Bạn vẫn cần một phép đo như bài này để biết trigger có làm đúng không. Ngân sách khóa (đợt 3) và mục tiêu là học đo, không phải mua.</details>
+4. **[Nếu…thì]** Nếu robot quay 90°/s và một đặc trưng nằm ở hàng cuối của khung 720 hàng với t_row 25 µs, thì gán timestamp hàng 0 cho đặc trưng đó gây sai góc bao nhiêu? So với sai số do lệch camera–IMU sau bù?
+   <details><summary>Hướng nghĩ</summary>Hàng cuối đọc sau hàng 0 khoảng 720 × 25 µs = 18 ms; 90°/s × 18 ms ≈ 1,6°. Lớn hơn nhiều so với sai số camera–IMU dưới 1 ms sau bù (dưới 0,09°). Vì vậy bù theo hàng không phải chi tiết thẩm mỹ: nó là thành phần thống trị khi chưa làm.</details>
+5. **[Liên ngành]** Ở đường đua, máy ảnh photo finish là camera quét dòng: trục ngang của ảnh là **thời gian**, không phải không gian. Rolling shutter của bạn có gì giống và khác?
+   <details><summary>Hướng nghĩ</summary>Giống: vị trí trên ảnh mã hóa thời điểm, nên ảnh là một đồng hồ. Khác: photo finish chỉ có một cột không gian và quét liên tục với đồng hồ chuẩn được chứng nhận. Rolling shutter của bạn quét cả khung, có blanking, và đồng hồ của nó chưa ai hiệu chuẩn, nên Phần A tồn tại.</details>
+
+### 10. Liên kết ra ngoài
+
+- **Truyền hình: genlock.** Studio nhiều camera khóa mọi camera vào một tín hiệu đồng bộ chuẩn (reference/black burst, tri-level sync) để chuyển cảnh không giật `[chuẩn]`. Giống: đồng bộ phải đến từ một nguồn chung, áp vào lúc **chụp**, không vào lúc nhận. Khác: genlock khóa cả tần số lẫn pha liên tục. LED của bạn chỉ là phép đo lấy mẫu mỗi 3 s, và giữa hai lần nháy bạn dựa vào mô hình răng cưa.
+- **VIO và Kalibr.** Kalibr ước lượng t_d (lệch thời gian camera–IMU) bằng cách fit quỹ đạo liên tục (B-spline) cho cả hai luồng rồi tối ưu t_d cùng các tham số hình học `[chuẩn — Furgale và cộng sự, IROS 2013]`. Giống: Phần C bước 4 là phiên bản rút gọn của cùng ý tưởng. Khác: Kalibr cần mẫu hiệu chuẩn (bảng AprilGrid) và chuyển động kích thích tốt. LED cho bạn một phép đo trực tiếp, không cần mô hình chuyển động.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| VI-Sensor đồng bộ phần cứng (Nikolic và cộng sự, ICRA 2014); EuRoC (Burri và cộng sự, IJRR 2016); Kalibr ước lượng t_d (Furgale và cộng sự, IROS 2013) | `[chuẩn]` | |
+| N ≈ (t_pulse + t_exp)/t_row; hàng sáng đầu ứng với lúc đọc | `[chuẩn]` | Quy chuẩn mục 7; ghi chú hợp nhất w-F4; mô phỏng |
+| Đơn vị exposure UVC là 100 µs | `[spec: V4L2 V4L2_CID_EXPOSURE_ABSOLUTE]` | Tên control đổi theo kernel `[tự đo]` |
+| `v4l2_buffer` có `timestamp`, `sequence`, cờ nguồn timestamp | `[spec: V4L2 API]` | Nguồn thật (SOE/EOF) của uvcvideo `[tự đo]` |
+| YUYV 1080p30 ≈ 995 Mbit/s > USB 2.0 | `[chuẩn — tính]` | |
+| Camera thứ hai báo hết băng thông isochronous | `[tự đo]` | `dmesg` |
+| Đèn điện lưới 50 Hz nhấp nháy 100 Hz | `[chuẩn]` | |
+| Bảng trễ DLPF của MPU6050 | `[spec: RM-MPU-6000A-00, register 26]` | ICM-42688 khác |
+| Kết quả mô phỏng | `[đã chạy]` | Camera giả định, ngưỡng hoàn hảo |
+
+**Đã sửa so với bản gốc/Gemini:**
+- Bản gốc và Gemini, Phần A: "t_mỗi_hàng = 200 µs / số hàng sáng" → N ≈ (t_pulse + t_exp)/t_row. Đo t_row bằng hiệu hai độ dài xung hoặc exposure nhỏ nhất (quy chuẩn mục 7).
+- Bản gốc: công thức t_bật_LED từ "t_đầu_frame" → "t_đầu_frame" không có trên đồng hồ host (β). Đo lệch hai camera bằng S từ ảnh, rồi đo β bằng cách so với timestamp driver. Hàng ranh giới ứng với lúc đọc, không với lúc bắt đầu phơi.
+- Gemini: lệch hai camera "biến thiên liên tục 0–33 ms" như nhiễu → răng cưa có chu kỳ phách 1/|Δf|, dự đoán được.
+- Gemini, "Nếu ra khác": "USB 2.0 đủ cho 1 luồng YUYV 1080p30" → sai, ~995 Mbit/s.
+- Gemini, Phần C: "ESP32 phát LED khi phát hiện va chạm" → giữ ý dùng LED làm mốc, nhưng tách vai: LED cho ánh xạ đồng hồ camera ↔ ESP32. Cú gõ chỉ kiểm end-to-end, cỡ ms, gồm cả trễ DLPF.
+- Bổ sung so với bản gốc (giữ đủ Phần A–E): lấy timestamp và `sequence` của driver, cảnh báo đèn 100 Hz, chọn khung có cạnh lên trong lúc đọc, vẽ theo thời gian để thấy phách, đường thứ ba bằng cross-correlation, quyền riêng tư và giấy phép khi publish.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** J. Nikolic và cộng sự, "A Synchronized Visual-Inertial Sensor System with FPGA Pre-Processing for Accurate Real-Time SLAM", *ICRA* 2014. P. Furgale, J. Rehder, R. Siegwart, "Unified Temporal and Spatial Calibration for Multi-Sensor Systems", *IROS* 2013.
+- **Giải thích:** tài liệu Linux kernel, *Video for Linux API*, mục "Buffers" (`struct v4l2_buffer`, cờ timestamp).
+- **Đào sâu (tùy chọn):** E. Ringaby, P.-E. Forssén, "Efficient Video Rectification and Stabilisation for Cell-Phones", *IJCV* 2012 (mô hình rolling shutter theo hàng).
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao ảnh đo lệch hai camera tốt hơn timestamp của chính driver; (2) vẽ lại timing diagram ở phần 2 từ trí nhớ, đánh dấu R_r, cửa sổ phơi và hàng sáng đầu tiên; (3) hai câu dưới.
+
+  1. Camera có exposure 2 ms. Xung 200 µs sáng 74 hàng, xung 1 ms sáng 100 hàng. t_row và t_exp suy ra là bao nhiêu? Con số "200 µs / 74" sai bao nhiêu lần?
+     <details><summary>Đáp án</summary>t_row = (1000 − 200) / (100 − 74) = 800/26 ≈ 30,8 µs. Từ N₂₀₀: 200 + t_exp ≈ 74 × 30,8 ≈ 2.277 µs, nên t_exp ≈ 2,08 ms, khớp 2 ms trong sai số ±1 hàng. "200/74" ≈ 2,7 µs, nhỏ hơn thật khoảng 11 lần.</details>
+  2. Lệch S_B − S_A đo bằng LED đi từ −15 ms lên +15 ms đều đặn trong 50 s, nhảy về −15 ms, rồi lặp lại. fps của camera A đo được là 30,00. fps của B là bao nhiêu?
+     <details><summary>Đáp án</summary>Chu kỳ phách 50 s → |f_A − f_B| = 0,02 Hz → f_B ≈ 29,98 hoặc 30,02. Dấu: S_B − S_A tăng dần nghĩa là khung B đến muộn dần so với A, tức chu kỳ khung của B dài hơn: f_B ≈ 29,98 fps. Kiểm bằng timestamp driver trong 10 phút.</details>
+
+---
+
+## Bài 12 — Tổng hợp ngân sách sai số (không tính giờ riêng, làm cùng Bài 7–11) (khung rút gọn, thêm phần 7)
+
+> **Vị trí:** Bài 7 (bảng dự đoán) → Bài 8–11 (đo từng dòng) → **Bài 12** → Module 3 (K5 Bài 13 dùng con số này cho sai số ghép camera ↔ IMU), Gate K5 tiêu chí 2 · **Cần trước:** F4.7 (ngân sách sai số và trọng tài đo), F1.1 (GUM loại A/B, lan truyền sai số), F1.7 (báo cáo trung thực, kết quả âm) · **Sau bài này bạn quyết định được:** câu cam kết về độ đồng bộ của hệ mà bạn được phép viết vào README và nói trong phỏng vấn; và dòng nào của ngân sách đáng tốn giờ tiếp theo.
+
+Bản gốc: quay lại bảng ở Bài 7 và **thay mọi dự đoán bằng số đo**, đúng tiêu chí của K3 Bài 8, áp cho miền thời gian. Sau đó viết một câu: *"Với hệ này, hai phép đo từ hai cảm biến khác nhau, được gán cùng một timestamp, thực tế cách nhau không quá ___ µs, với độ tin cậy ___, đo bằng phương pháp ___, sai số của phép đo là ___."* Bản gốc ghi đó là câu bạn sẽ nói trong phỏng vấn, và rất ít ứng viên nói được. Giữ nguyên.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Từ năm 2018, MiFID II buộc các công ty giao dịch ở EU đồng bộ đồng hồ nghiệp vụ với UTC. Giới hạn lệch tối đa tùy loại giao dịch, chặt nhất là 100 µs cho giao dịch tần suất cao. Điều đáng chú ý là quy định không dừng ở một con số: công ty phải chứng minh được **truy nguyên** (traceability) tới UTC, tức là mô tả được chuỗi đồng bộ, sai số từng mắt xích, và cách họ giám sát nó (Commission Delegated Regulation (EU) 2017/574, "RTS 25") `[chuẩn]`. Một con số "đồng hồ chúng tôi chuẩn tới 10 µs" không có chuỗi và không có sai số của phép đo thì không qua được kiểm tra.
+
+Câu cam kết của bài này là phiên bản nhỏ của yêu cầu đó: một con số, kèm phương pháp, kèm độ tin cậy, kèm sai số của chính phép đo. Ngành tài chính phải bị luật ép mới làm. Bạn làm vì nó là cái phân biệt một benchmark với một lời kể.
+
+### 2. Mô hình tư duy
+
+```mermaid
+flowchart LR
+  P["Bài 7<br/>bảng DỰ ĐOÁN<br/>(đã commit)"] --> M["Bài 8–11<br/>đo từng dòng<br/>+ sai số của phép đo"]
+  M --> B["b12_budget.py<br/>phân loại → nhóm tương quan → u_c, U<br/>+ bias chưa bù (ngoài RSS)"]
+  M --> E["một phép đo END-TO-END<br/>(Bài 11 Phần C: LED + gõ bàn)"]
+  B --> V{"hai đường<br/>khớp trong U?"}
+  E --> V
+  V -->|"có"| S["câu cam kết<br/>+ dòng thống trị"]
+  V -->|"không"| X["thiếu một dòng,<br/>hoặc sai loại / sai nhóm"]
+  P -. "chấm từng dòng:<br/>trong khoảng? sai vì đâu?" .-> S
+```
+
+Bốn ý bản chất:
+
+1. **Độ phân giải không phải độ bất định.** Một hàng ảnh 25–50 µs, một mẫu logic analyzer 24 MHz ≈ 41,7 ns là bước lượng tử của dụng cụ. Độ bất định của phép đo gồm bước đó *cộng* mọi thứ khác: sai số t_row nhân với số hàng, ngưỡng sáng/tối, jitter ngắt của chính trọng tài, β chưa biết. Ghi chú hợp nhất (w-F4) đã bắt Gemini nhầm hai thứ này.
+2. **Bias chưa bù không được đưa vào RSS.** GUM yêu cầu bù mọi bias đã biết, rồi đưa *sai số của phép bù* vào ngân sách `[chuẩn — JCGM 100:2008, mục 3.2.4]`. Một bias 4,8 ms (trễ DLPF chưa bù) cộng vào RSS như một độ lệch chuẩn sẽ bị "pha loãng". Bias đó phải đứng riêng và phải được sửa.
+3. **Hai đường phải gặp nhau.** Ngân sách là một mô hình: tổng các thành phần bạn *nghĩ ra*. Phép đo end-to-end là thực tế: gồm cả thành phần bạn quên. End-to-end lớn hơn U của ngân sách rõ rệt nghĩa là ngân sách thiếu dòng. Nhỏ hơn rất nhiều nghĩa là có dòng bị đếm thừa, thường là coi tương quan thành độc lập hoặc ngược lại.
+4. **Câu cam kết có hai con số, không phải một.** Phần ngẫu nhiên cho U = k·u_c với độ tin cậy ~95% khi k = 2 (nếu phân bố gần chuẩn). Phần biên (rolling shutter chưa bù, drift ở thời điểm xấu nhất) cho một trần cộng thẳng. Báo trần như "95%" là nói quá. Báo U như "không bao giờ quá" cũng là nói quá.
+
+Script gộp ngân sách mà Bài 7 bước 4 đã dùng với số dự đoán. Bảng dưới là **ví dụ giả định**, hai kịch bản trước và sau khi bù. Thay bằng bảng của bạn:
+
+```python
+# [đã chạy] b12_budget.py — gộp ngân sách sai số thời gian theo GUM: phân loại, nhóm tương quan, biên → u
+# Dùng ở Bài 7 (số dự đoán) và Bài 12 (số đo). Mọi giá trị dưới đây là GIẢ ĐỊNH — thay bằng bảng của bạn.
+import math
+T_SYNC = 1.0   # s: khoảng thời gian giữa hai lần cập nhật offset ESP32↔host (dòng drift tính ở thời điểm xấu nhất)
+
+# (tên, loại, giá trị, đơn vị, nhóm tương quan, trạng thái)
+# loại: sigma = độ lệch chuẩn đo được; bound = chỉ biết |sai| ≤ a  → u = a/√3 (GUM loại B, phân bố đều)
+#       ppm = hiệu tần số; sai pha xấu nhất = y·T_SYNC, xử lý như bound; bias = bias CHƯA bù (không được RSS!)
+BEFORE = [
+    ("drift ESP32↔host giữa hai lần cập nhật", "ppm",   30, "ppm", "xtal", "đo"),
+    ("drift thêm do nhiệt (ΔT 10 °C)",          "ppm",    3, "ppm", "xtal", "đo"),
+    ("jitter ISR",                              "sigma",  3, "us",  "-",    "đo"),
+    ("ước lượng offset ESP32↔host (phần dư)",   "sigma", 60, "us",  "usb",  "đo"),
+    ("rolling shutter không bù (±nửa t_đọc)",   "bound", 7500, "us", "cam-hàng", "đo"),
+    ("timestamp camera: đầu/giữa/cuối phơi?",   "bound", 1500, "us", "cam-ts", "dự đoán"),
+    ("IMU: trễ DLPF chưa bù",                   "bias",  4800, "us", "imu", "dự đoán"),
+]
+AFTER = BEFORE[:4] + [
+    ("rolling shutter, bù theo hàng (sai số t_row × hàng)", "sigma", 40, "us", "cam-hàng", "đo"),
+    ("bias timestamp camera đo bằng LED (phần dư)",         "sigma", 120, "us", "cam-ts", "đo"),
+    ("IMU: trễ DLPF đã bù theo datasheet (phần dư)",        "bound", 300, "us", "imu", "dự đoán"),
+]
+
+def budget(rows, label):
+    u, bias, worst, pending = {}, 0.0, 0.0, []
+    for name, kind, v, unit, grp, st in rows:
+        a = v * T_SYNC if kind == "ppm" else v                     # ppm × s = µs
+        ui = a if kind == "sigma" else a / math.sqrt(3)
+        if st != "đo": pending.append(name)
+        if kind == "bias": bias += a; worst += a; continue        # bias chưa bù: cộng thẳng, đứng ngoài RSS
+        g = grp if grp != "-" else name                            # cùng nhóm: tương quan hoàn toàn → cộng thẳng
+        u[g] = u.get(g, 0.0) + ui
+        worst += a if kind != "sigma" else 3 * ui                  # "xấu nhất": biên, hoặc 3σ cho phần ngẫu nhiên
+    uc = math.sqrt(sum(x * x for x in u.values()))
+    print(f"--- {label}: u_c = {uc:.0f} µs, U (k=2) = {2 * uc:.0f} µs, bias chưa bù = {bias:.0f} µs, "
+          f"cộng thẳng 'xấu nhất' = {worst:.0f} µs")
+    for g, x in sorted(u.items(), key=lambda kv: -kv[1]):
+        print(f"    {g:45s} u = {x:7.1f} µs  ({100 * x * x / uc**2:5.1f}% phương sai)")
+    print("    còn là dự đoán:", pending if pending else "không — được phép viết câu cam kết")
+
+budget(BEFORE, "TRƯỚC khi bù")
+budget(AFTER, "SAU khi bù")
+```
+
+Đọc code trước khi chạy: dòng nào bạn nghĩ sẽ thống trị ở mỗi kịch bản, và câu cuối có được in "được phép viết câu cam kết" không?
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| SLO: "p99 < 200 ms, đo bằng X, trên 28 ngày" | Câu cam kết đồng bộ | SLO đo **trực tiếp** trên quần thể request. Câu cam kết ghép một mô hình (ngân sách) với một phép đo trực tiếp thưa (vài trăm lần nháy LED), và phải kèm sai số của chính phép đo | Viết U của ngân sách như thể đó là một p95 đã đo |
+| Latency budget theo tầng trong một request | Ngân sách sai số theo mắt xích | Latency cộng thẳng vì các tầng nối tiếp. Sai số ngẫu nhiên độc lập thì cộng RSS, tương quan thì cộng thẳng, bias thì phải bù | Cộng thẳng mọi thứ (quá bi quan) hoặc RSS mọi thứ, kể cả bias (quá lạc quan) |
+| Postmortem: "nguyên nhân gốc là X" | Dòng thống trị của ngân sách | Postmortem tìm một nguyên nhân. Ngân sách RSS cho biết **tỉ lệ phương sai** từng dòng, nên dòng chiếm 3% thì sửa xong tổng gần như không đổi (Bài 7, quy tắc 4) | Tối ưu jitter ISR 3 µs trong khi rolling shutter chưa bù chiếm 96% |
+
+**Chấm mô hình:**
+
+- *Bản gốc: "Mọi dòng phải là số đo, không dòng nào là ước tính."* → **ĐÚNG MỘT PHẦN.** Đúng là mục tiêu, và đúng tinh thần K3 Bài 8. Gãy: có dòng không đo trực tiếp được với dụng cụ của khóa, ví dụ trễ trong IMU khi không có tham chiếu cơ học đủ sắc. GUM cho phép đánh giá loại B (datasheet, biên) nếu ghi rõ nguồn và loại `[chuẩn]`. Cách đọc giữ được tinh thần: mọi dòng có **nguồn và loại**; dòng loại B được đánh dấu; và câu cam kết phải nói phần nào là loại B. Script in ra danh sách "còn là dự đoán" vì lý do này. **Phản ví dụ** cho cách đọc cứng nhắc: kịch bản "SAU" của ví dụ còn đúng một dòng loại B (DLPF), và dòng đó lại chiếm phương sai lớn nhất. Câu cam kết vẫn viết được, nhưng phải ghi "trong đó ___ µs là ước lượng từ datasheet".
+- *Gemini, bảng Bài 12: "Sai số của phép đo: 41,7 ns (logic analyzer 24 MHz)" và "1 hàng pixel ≈ 52 µs".* → **SAI** khi đặt trong cột "sai số của phép đo". Đó là độ phân giải (ghi chú w-F4). **Phản ví dụ:** Bài 11 mô phỏng có độ phân giải 25–31 µs mỗi hàng, nhưng nếu tin timestamp driver thì sai 4,6 ms. Độ bất định là của cả chuỗi đo, không phải của bước lượng tử.
+- *Gemini, tự kiểm 2: trọng tài có độ rộng kẹp 1,5 µs, PTP tự báo 0,2 µs → "công bố offset nhỏ hơn 1,5 µs".* → **ĐÚNG MỘT PHẦN.** Đúng tinh thần: không được báo dưới mức trọng tài phân biệt được. Gãy ở con số: cận trên là giá trị *đo được* cộng sai số của phép đo, không phải sai số của phép đo một mình. Và giá trị đo phải là số trọng tài đo, không phải số `ptp4l` tự báo (K5 Bài 9). **Phản ví dụ:** trọng tài đo |offset| p99 = 0,9 µs với biên kẹp 1,5 µs. Câu đúng là "≤ 2,4 µs (p99, gồm sai số trọng tài)". "< 1,5 µs" là sai.
+
+### 6. Làm
+
+Không có giờ riêng. Làm từng phần ngay sau mỗi bài 8–11, rồi một buổi 1–2h cuối Module 2 để gộp và viết.
+
+1. **Sau mỗi bài 8–11: điền dòng tương ứng.** Chép bảng Bài 7 sang `lab/k5/b12/budget.md`, thêm cột: *số đo*, *phương pháp* (bài, bước), *sai số của phép đo* (trọng tài nào, độ bất định của nó, **không** chỉ độ phân giải), *đo/dự đoán*, *trong khoảng dự đoán?*, *nếu không thì vì sao*. Không xóa cột dự đoán. Bảng có giá trị vì nó cho thấy dự đoán sai ở đâu (Bài 7 phần 7).
+2. **Phân loại lại từng dòng** theo số đo: sigma, bound, ppm, hay bias chưa bù. Gán nhóm tương quan. Hai dòng chung một nguyên nhân (cùng nhiệt độ, cùng đường USB, cùng camera) là một nhóm.
+3. **Chạy `b12_budget.py`** với bảng đo. Ghi u_c, U (k = 2), trần cộng thẳng, bias chưa bù, dòng thống trị và tỉ lệ phương sai của nó.
+4. **Bù mọi bias đã biết rồi chạy lại.** Mỗi bias bù xong để lại một dòng "phần dư của phép bù". Mục tiêu: cột "bias chưa bù" = 0. Nếu có bias không bù được, giữ nó trong câu cam kết như một con số riêng.
+5. **Kiểm bằng phép đo end-to-end.** Lấy phép đo camera ↔ IMU của Bài 11 Phần C (LED + bù DLPF, kiểm bằng gõ bàn hoặc cross-correlation). Phân bố của nó phải nằm trong U của ngân sách cho cùng cặp cảm biến. Không khớp thì quay lại bước 2: tìm dòng thiếu hoặc sai nhóm, và ghi lại.
+6. **Viết câu cam kết** theo mẫu của bản gốc, có hai con số. Ví dụ dạng: *"Với rig này, một mẫu IMU và một hàng ảnh camera A được gán cùng timestamp thực tế cách nhau không quá ___ µs (U, k = 2, ~95%; phần ngẫu nhiên), cộng không quá ___ µs (trần, phần biên), đo bằng ___ (LED + rolling shutter, ánh xạ đồng hồ ESP32 ↔ host bằng ___), sai số của phép đo là ___ µs; trong đó ___ µs là ước lượng loại B từ datasheet ___."* Đưa câu này vào README repo K5 và README dataset Bài 11.
+7. **Chấm dự đoán của `GOALS.md`.** Với mỗi TN-1…TN-4: dự đoán, số đo, trong hay ngoài khoảng, và lập luận nào sai. Ít nhất một dự đoán sai được giải thích là dấu hiệu dự đoán thật (K2 gate, mục tự kiểm).
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT budget.md (bảng số đo)</summary>
+
+**Ví dụ giả định** (`[đã chạy]`, `b12_budget.py`):
+
+| Kịch bản | u_c | U (k = 2) | Bias chưa bù | Trần cộng thẳng | Dòng thống trị (tỉ lệ phương sai) | Còn là dự đoán |
+|---|---|---|---|---|---|---|
+| TRƯỚC khi bù | 4.416 µs | 8.833 µs | 4.800 µs | 14.022 µs | rolling shutter không bù, 96,1% | 2 dòng |
+| SAU khi bù | 224 µs | 447 µs | 0 | 1.002 µs | trễ DLPF (loại B), 60,0%; bias timestamp camera 28,8% | 1 dòng (DLPF) |
+
+Đọc:
+1. Trước khi bù, một dòng chiếm 96% phương sai. Sửa jitter ISR, drift thạch anh hay USB không đổi tổng chút nào. Bù theo hàng ảnh là việc duy nhất đáng làm trước.
+2. Bias DLPF 4,8 ms **lớn hơn** cả u_c, nhưng nếu nhét vào RSS như độ lệch chuẩn thì nó bị pha loãng. Script giữ nó riêng. Đó là quy tắc 2 ở phần 2.
+3. Sau khi bù, tổng giảm khoảng 20 lần. Dòng thống trị mới lại là dòng loại B duy nhất còn lại. Đây là chỗ đáng tốn giờ tiếp theo: một tham chiếu cơ học sắc hơn (Bài 11 Phần C) để biến dòng DLPF thành số đo.
+4. Câu cam kết cho ví dụ: "≤ 447 µs (k = 2, phần ngẫu nhiên), trần ≤ 1,0 ms (cộng thẳng), trong đó trễ DLPF là ước lượng loại B từ datasheet". Con số của bạn sẽ khác. Điều không được khác là cấu trúc của câu.
+
+**Kỳ vọng trên rig thật** `[ước lượng — tự đo]`: trước khi bù, dòng camera (rolling shutter, β) thống trị ở mức ms. Sau khi bù, tổng thường xuống cỡ trăm µs, và các dòng còn lại là ánh xạ đồng hồ ESP32 ↔ host qua USB cùng các trễ bên trong cảm biến. PTP giữa hai PHC (Bài 9) nhỏ hơn mọi dòng camera hai–ba bậc. Nó quan trọng cho mạng nhiều máy, không phải cho rig này.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| End-to-end lớn hơn U rõ rệt | Thiếu dòng (trễ trong cảm biến, β, đổi đồng hồ sai) | Đo từng chặng bằng một sự kiện; vẽ phần dư theo thời gian | Thêm dòng, ghi vì sao Bài 7 bỏ sót |
+| End-to-end nhỏ hơn U nhiều lần | Đếm thừa: coi hai dòng tương quan là độc lập (cộng thẳng thành RSS hoặc ngược lại), hoặc biên quá rộng | Xem lại nhóm tương quan; biên loại B lấy từ đâu | Sửa nhóm; thu hẹp biên bằng số đo |
+| Một dòng vẫn chỉ có độ phân giải trong cột sai số | Nhầm resolution với uncertainty | Hỏi: "nếu đo lại với một trọng tài khác, có thể lệch bao nhiêu?" | Ước lượng các thành phần còn lại của chuỗi đo |
+| Không viết được câu cam kết vì còn dòng "dự đoán" | Dòng không đo được với dụng cụ hiện có | Có tham chiếu nào khác không (cơ học, quang học)? | Ghi rõ loại B trong câu. Không đổi nó thành "đo" |
+| Tổng trước/sau bù gần như không đổi | Đã bù dòng không thống trị | Tỉ lệ phương sai | Bù dòng thống trị trước |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** Bạn có 20 rig giống nhau. Ngân sách của rig của bạn có đại diện cho 20 rig không? Những dòng nào phải đo lại cho từng rig, dòng nào đo một lần cho cả loại?
+   <details><summary>Hướng nghĩ</summary>Dòng theo **thiết kế** (trễ DLPF theo cấu hình, công thức rolling shutter) đo một lần. Dòng theo **cá thể** (ppm thạch anh, t_row của từng camera nếu khác lô, β sau mỗi lần cắm) đo cho từng rig, có dòng phải đo mỗi phiên. Giống phân biệt "lỗi thiết kế" và "lỗi sản xuất" trong FMEA (→ F7.6).</details>
+2. **[Failure mode]** Ba tháng sau, câu cam kết trong README vẫn ghi "≤ 447 µs", nhưng ai đó đã đổi DLPF từ cấu hình 3 sang 5 để giảm nhiễu. Không ai sửa README. Cái gì phải tồn tại để README không nói dối?
+   <details><summary>Hướng nghĩ</summary>Ngân sách phải là **dữ liệu sinh ra từ cấu hình**, không phải văn bản viết tay: cấu hình DLPF nằm trong metadata của mỗi file MCAP (Bài 13), script ngân sách đọc cấu hình đó, và CI chạy lại câu cam kết khi cấu hình đổi. Đây là provenance (→ F3.8) áp cho một con số trong tài liệu.</details>
+3. **[Phản biện]** "Ngân sách sai số là bài tập giấy. Chỉ cần đo end-to-end thật nhiều là đủ." Dựng lập luận mạnh nhất, rồi chỉ ra chỗ gãy.
+   <details><summary>Hướng nghĩ</summary>Phía ủng hộ: end-to-end gồm mọi thứ, kể cả thứ bạn quên. Gãy: (1) end-to-end chỉ đo được ở điều kiện bạn tạo ra, còn ngân sách dự đoán được điều kiện chưa đo (robot nóng hơn, chu kỳ sync dài hơn); (2) end-to-end không chỉ ra **dòng nào** phải sửa; (3) phép đo end-to-end thưa (vài trăm lần nháy) không cho đuôi xa. Hai thứ bổ sung nhau, nên bước 5 tồn tại.</details>
+4. **[Liên ngành]** Phòng thí nghiệm hiệu chuẩn công bố "độ không đảm bảo đo mở rộng U với k = 2" kèm một bảng ngân sách theo GUM. Chỗ nào giống bảng của bạn, và chỗ nào bạn còn thiếu so với họ?
+   <details><summary>Hướng nghĩ</summary>Giống: phân loại A/B, hệ số độ nhạy, nhóm tương quan, U = k·u_c. Thiếu: chuỗi truy nguyên tới một chuẩn được công nhận (họ có, bạn không có đồng hồ tham chiếu được hiệu chuẩn); số bậc tự do hiệu dụng (Welch–Satterthwaite) để chọn k khi số mẫu ít; và đánh giá liên phòng. Trung thực là ghi "không truy nguyên tới UTC" trong câu cam kết.</details>
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** JCGM 100:2008, *Evaluation of measurement data — Guide to the expression of uncertainty in measurement* (GUM). Commission Delegated Regulation (EU) 2017/574 (RTS 25, đồng bộ đồng hồ nghiệp vụ).
+- **Giải thích:** B. N. Taylor, C. E. Kuyatt, *Guidelines for Evaluating and Expressing the Uncertainty of NIST Measurement Results*, NIST Technical Note 1297 (1994).
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao bias chưa bù không được đưa vào RSS; (2) vẽ lại sơ đồ "hai đường gặp nhau" ở phần 2; (3) câu dưới.
+
+  1. Ngân sách của bạn: u_c = 180 µs từ năm dòng ngẫu nhiên, cộng một biên ±2 ms do chưa bù rolling shutter, cộng bias 1,2 ms do chưa biết camera đóng dấu đầu hay cuối khung. Viết câu cam kết, và chỉ ra việc phải làm trước khi câu đó đáng công bố.
+     <details><summary>Đáp án</summary>Câu trung thực hiện tại: "phần ngẫu nhiên ≤ 360 µs (k = 2), cộng biên ±2 ms (rolling shutter chưa bù), cộng một bias chưa xác định cỡ 1,2 ms; chưa đủ để công bố một con số đồng bộ dưới ms". Việc phải làm: bù theo hàng (biến ±2 ms thành vài chục µs, Bài 11 Phần A) và đo β bằng LED (biến bias thành một số đã bù kèm phần dư, Bài 11 Phần B). Khi đó dòng thống trị sẽ đổi, và câu cam kết mới viết được.</details>
+
+---

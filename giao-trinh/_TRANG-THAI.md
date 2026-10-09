@@ -1,11 +1,14 @@
 # TRẠNG THÁI CÔNG VIỆC — bàn giao cho phiên sau
 
-> **CẬP NHẬT 2026-10-09 (session 3, dừng vì hết usage).** Đã merge `main` (K4 của Kiro). Viết thêm: `khoa-7/00-tong-quan.md`, `README.md`, K4 Bài 5, K5 Bài 5, Bài 10, Bài 16 (các bài này đủ khung, kết thúc gọn). Agent bị dừng giữa chừng — **còn thiếu chính xác:**
-> - K4: Bài 6 (cuối `khoa-4/m2-harness.md`), Bài 12 (cuối `khoa-4/m4-nhieu-target.md`).
-> - K5: Bài 6 (cuối `m1-cam-bien.md`); Gate Module 0 (port từ `giao-trinh-kiro/khoa-5/m0-chon-phan-cung.md`); Bài 11, 12 (cuối `m2-dong-bo-thoi-gian.md`; Bài 7 trỏ tới `b12_budget.py` của Bài 12); Bài 17 (cuối `m3-data-stack.md`) + hai sửa nhỏ m3 trong `_hop-nhat/ghi-chu-cho-K4-K5.md` (có thể agent đã áp một phần — kiểm `git diff`); `m4-van-hanh.md` (Bài 18, 19, Gate K5) chưa tạo; `khoa-5/00-tong-quan.md` chưa có.
-> - Sau khi K5 đủ: cập nhật bảng trạng thái trong `README.md` (đang ghi K4/K5 "đang soạn").
-> - Câu hỏi mới chờ người học: đường lõi tối thiểu K7 không có C8 nhưng C11.3 cần Nav2 → thêm C8 tối thiểu (~360–370h) hay đổi C11.3 (ghi trong `khoa-7/00-tong-quan.md`).
-> - Lời giao mẫu cho từng việc còn thiếu: dùng lại prompt kiểu "w-k4 / w-k5a / w-k5b / w-k5c" — đọc `_ref/brief-writer.md`, nối bài vào cuối file, KHÔNG sửa bài đã có, áp `_hop-nhat/ghi-chu-cho-K4-K5.md` và quy chuẩn mục 7 (Bài 11 rolling shutter (t_pulse+t_exp)/t_row; Bài 12 N100 ~0,19–0,22 TFLOPS CPU, decode batch 1 memory-bound).
+> **CẬP NHẬT 2026-10-09 (session 4).** K4 và K5 đã **đủ bài**. Viết thêm trong phiên này:
+> - K4: Bài 6 (cuối `m2-harness.md`), Bài 12 (cuối `m4-nhieu-target.md`).
+> - K5: Gate Module 0 (cuối `m0`, chuyển từ bản Kiro, khớp với các bước Bài 1–2 của bản cuối); Bài 6 (cuối `m1`); Bài 11, 12 (cuối `m2`, có `b12_budget.py` mà Bài 7 trỏ tới); Bài 17 (cuối `m3`); `m4-van-hanh.md` mới (Bài 18, 19, Gate K5); `00-tong-quan.md` mới (lịch dàn lại thành 25 tuần ≤ 7h).
+> - Hai sửa nhỏ ở K5 m3 (gốc con số 50 byte; tên output extractor có version) **đã áp đủ**, kiểm bằng grep.
+> - `README.md`: bảng trạng thái K4/K5 đã cập nhật.
+> - Mọi khối Python mới đã chạy lại từ chính file markdown (venv `.venv-giaotrinh`, numpy 2.2.6, scipy 1.15.2). Nháp ở `_scratch/K4-m2`, `K4-b12`, `K5-b6`, `K5-b11`, `K5-b12`, `K5-b17`, `K5-m4`.
+> - **Chưa review độc lập:** mọi bài chỉ có một bản của K4 (Bài 4–6, 10–12) và K5 (Bài 5–19, hai gate, tổng quan). Ưu tiên review: K5 Bài 11 (nhiều công thức rolling shutter, cách đọc ảnh), Bài 6, Bài 17–18 (định nghĩa completeness đi vào gate), K4 Bài 12 (mô hình roofline theo pha).
+> - **Câu hỏi vẫn chờ người học:** đường lõi tối thiểu K7 không có C8 nhưng C11.3 cần Nav2 → thêm C8 tối thiểu (~360–370h) hay đổi C11.3 (ghi trong `khoa-7/00-tong-quan.md`).
+> - **Việc còn lại theo thứ tự ưu tiên:** mục 2 bên dưới, từ mục 2 trở đi (review an toàn K7 C2–C5, C8–C10; review F1–F3, F5–F7, K7 C11–C12; kiểm liên kết chéo bằng script).
 
 > Cập nhật: 2026-10-08, cuối session 2 (Claude). Branch: `claude/quirky-allen-21hvip`.
 > Dừng chủ động vì gần hết credit cloud (còn ~20 USD / 250 USD). Đọc file này rồi `_PHOI-HOP.md` trước khi làm tiếp.
@@ -31,7 +34,7 @@
 
 ## 2. Còn lại — theo thứ tự ưu tiên
 
-1. **K4, K5: chờ Kiro.** Kiểm `giao-trinh-kiro/khoa-4`, `khoa-5` trên `main`. Khi đủ: hợp nhất theo `_ref/brief-merger.md` (bản Claude có K4 m1, m3, m4 Bài 10, m5; K5 m0, m1 Bài 3–4, m2 Bài 7–9, m3 Bài 13–15), áp `_hop-nhat/ghi-chu-cho-K4-K5.md`. Mỗi module 1 agent. Còn thiếu `00-tong-quan.md` của K4, K5.
+1. ~~**K4, K5: chờ Kiro.**~~ **Xong ở session 4** (đủ bài, xem đầu file). Kiểm `giao-trinh-kiro/khoa-4`, `khoa-5` trên `main`. Khi đủ: hợp nhất theo `_ref/brief-merger.md` (bản Claude có K4 m1, m3, m4 Bài 10, m5; K5 m0, m1 Bài 3–4, m2 Bài 7–9, m3 Bài 13–15), áp `_hop-nhat/ghi-chu-cho-K4-K5.md`. Mỗi module 1 agent. Còn thiếu `00-tong-quan.md` của K4, K5.
 2. **Review an toàn K7 C2–C5** (motor quay lần đầu, cấp điện cả robot) — agent đã bị dừng trước khi sửa gì. Đề bài đầy đủ: xem lời giao `r-k7b` dưới đây (mục 3). Phải thống nhất với C10.1: chân RELAY_HOLD là GPIO đảo bằng phần mềm (KHÔNG LEDC); bảng chân C4.1 dành chân VM_SENSE, RELAY_FB (87a), RESET, PRECHARGE.
 3. **Review K7 C8–C10** (robot tự đi gần người, dữ liệu khuôn mặt, E-stop) — bị dừng trước khi sửa gì.
 4. **`khoa-7/00-tong-quan.md`** — chưa viết. Nội dung theo `_KE-HOACH-K7.md` cuối mục 8; trần giờ FAIL action K7 gốc 450h cần cập nhật theo ngân sách mới (C9 và C7 đã ghi đề xuất).

@@ -366,3 +366,35 @@ Ba câu bản chất: (1) dự đoán không phải để đúng, mà để **sa
 <details><summary>Câu 3: Một dự đoán "TN-2 sau PTP: 50 ns" có vấn đề gì kể cả khi số đo ra đúng 50 ns?</summary>
 Nếu trọng tài có độ rộng kẹp cỡ µs, bạn không thể đo được 50 ns. Kết luận đúng chỉ là "offset nhỏ hơn X µs", với X là sai số trọng tài. Dự đoán phải nói cả về giới hạn của phép đo, không chỉ về đại lượng.
 </details>
+
+---
+
+## Gate Module 0
+
+Bản gốc không có gate riêng cho Module 0. Gate này gom tiêu chí "Đạt bài" của Bài 1 và các deliverable của Bài 2 để có một điểm dừng rõ ràng **trước khi mua cảm biến và trước khi tốn giờ Module 2**. Không thêm ngưỡng mới. Mọi tiêu chí là nhị phân.
+
+| # | Tiêu chí | Cách kiểm | Nguồn |
+|---|---|---|---|
+| 1 | Hai cổng mini PC có hardware TX/RX timestamping và hai PHC **khác nhau** | `ethtool -T` dán nguyên văn trong `decisions.md`, kèm `uname -r`, `ethtool --version` | Bài 1, "Đạt bài này khi" |
+| 2 | Ánh xạ cổng ↔ `/dev/ptpN` ↔ `clock_name` (MAC) đã ghi; script đo tìm PHC theo tên interface, không hardcode `/dev/ptp0` | `decisions.md`; grep script | Bài 1, bước 1b |
+| 3 | Tầng phần cứng (T0/T1/T2) đã chọn, lý do bằng số; đơn hàng tầng T0 đã đặt | `decisions.md`; hóa đơn | Bài 1, bước 3–4 |
+| 4 | Nếu đã chạy bước 1c: drift tương đối A−B (ppm) **kèm sai số phép đo** (độ rộng kẹp). Drift lớn hơn rõ so với sai số thì T0 hợp lệ cho TN-2 "trong một hộp" | Đồ thị A−B theo thời gian + fit, trong `decisions.md` | Bài 1, bước 1c |
+| 5 | `GOALS.md` + `prediction.md` cho TN-1…TN-4 đã commit **trước** dòng code đo đầu tiên; hash commit ghi trong `GOALS.md`; mỗi TN có trọng tài và tỉ số "trọng tài tốt hơn thứ được đo bao nhiêu lần" | `git log --follow prediction.md`; đọc `GOALS.md` | Bài 2, bước 1, 2, 4 |
+| 6 | Hai FAIL action cam kết trước có trong `GOALS.md` và `decisions.md`: PTP không chạy sau 60h → hardware-trigger-only; chạm 200h chưa PASS → cắt Module 3 xuống MVP, giữ Module 2 | Đọc hai file | Bài 1 bước 4, Bài 2 bước 1 |
+| 7 | `hours.csv` đã bắt đầu, có tag module (`k5-m0`…`k5-m4`); trần Module 3 = 55h ghi rõ | `hours.csv` | Bài 2, bước 3 |
+
+**Khuyến nghị, không bắt buộc:** chạy thử hai `ptp4l` cùng máy trong 5 phút, mỗi instance một file cấu hình riêng (`uds_address`, interface; mẫu ở K5 Bài 9). Nếu không lên, bạn biết sớm, trước khi đồng hồ 60h của Bài 9 bắt đầu chạy. Không dùng `-p` để tách socket: `-p` là thiết bị PHC (quy chuẩn mục 7).
+
+**FAIL action:**
+
+| Tình huống | Làm |
+|---|---|
+| Một cổng không có hardware timestamping | Đổi trả máy (mục 0.7 lộ trình tổng), như cam kết ở Bài 1 |
+| Chỉ một PHC, hoặc drift A−B không phân biệt được với 0 trong sai số phép đo | Không làm TN-2 "trong một hộp". Chuyển T1 (máy thứ hai có PTP) hoặc hardware-trigger-only theo cam kết. Kiểm phần 8 Bài 1 trước: đang đọc cùng một PHC hai lần là lỗi hay gặp hơn phần cứng lạ |
+| Chưa commit `prediction.md` mà đã có số đo đầu tiên | Không tính số đó. Viết dự đoán cho TN tiếp theo trước khi đo tiếp; ghi sự cố vào `decisions.md` |
+
+Đặt hàng cảm biến vẫn làm ngay dù gate chưa qua, vì Module 1 không phụ thuộc PTP.
+
+**Ngân sách:** 8h (Bài 1 3h + Bài 2 5h). Vượt 12h ở module này thường do loay hoay với driver hoặc chọn mua. Dừng lại, ghi cái đang chặn vào `decisions.md`, rồi sang Module 1 song song.
+
+---

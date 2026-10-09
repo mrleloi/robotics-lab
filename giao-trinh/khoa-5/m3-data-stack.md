@@ -1107,3 +1107,242 @@ Sai số dụng cụ: "rule bắt sau bao lâu" đo theo `header.stamp` của c�
   <details><summary>Đáp án</summary>Phần lớn cửa sổ 1 s chỉ có tối đa một mẫu mới; mười lần đọc trả cùng giá trị từ thanh ghi dữ liệu → σ = 0 → báo đơ trên kênh lành. Sửa: chỉ tính trên mẫu mới (theo cờ `measuring`/bộ đếm, hoặc so thời điểm đo), cửa sổ đủ dài cho ≥ k mẫu mới.</details>
 
 ---
+
+## Bài 17 — Backpressure và drop policy (6h)
+
+> **Vị trí:** Bài 16 (rule `dt` phát hiện lỗ) → **Bài 17** → K5 Bài 18 (soak 7 ngày: tỉ lệ drop là một chỉ số theo dõi) · **Cần trước:** F3.9 (hàng đợi có giới hạn, load shedding, đếm cái đã drop), F7.1 (định luật Little, đầu gối utilization); K5 Bài 6 (`seq` gán lúc lấy mẫu, `dropped_at_source`), Bài 13 (writer MCAP, kích thước message), K2 Bài 11–12 (lớp lỗi L2, detector rớt frame) · **Sau bài này bạn quyết định được:** hàng đợi trước writer cần bao nhiêu byte; khi tràn thì bỏ luồng nào, bỏ cũ hay mới; và bản ghi drop nằm ở đâu, dạng gì, để audit về sau kiểm được.
+
+**Câu hỏi của bài (bản gốc):** khi ghi không kịp, bỏ cái gì?
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Năm 2010–2011, Jim Gettys đặt tên cho một hiện tượng mà kỹ sư mạng đã thấy từ lâu mà ít ai đo: **bufferbloat**. Router và modem gia đình có bộ đệm rất lớn, theo lý lẽ "không bao giờ drop". Khi đường truyền nghẽn, bộ đệm đầy nhưng không drop, nên TCP không nhận được tín hiệu giảm tốc. Độ trễ của mọi gói tăng lên hàng giây, một cuộc gọi video trở nên vô dụng dù không mất gói nào `[chuẩn — Gettys & Nichols, "Bufferbloat: Dark Buffers in the Internet", ACM Queue 2011]`. Lời giải là quản lý hàng đợi chủ động: drop sớm, có chủ đích. Trước đó có RED (Floyd & Jacobson, 1993), sau đó là CoDel (Nichols & Jacobson, 2012), drop theo *thời gian gói nằm trong hàng đợi* chứ không theo độ dài hàng đợi `[chuẩn]`.
+
+Ngành mạng học được rằng kích thước hàng đợi và chính sách drop là **quyết định thiết kế**, không phải thứ để mặc định. Robot thêm một điều mạng không có: gói mạng bị drop thì TCP gửi lại. Phép đo vật lý bị drop thì **mất vĩnh viễn**, vì thời điểm đó đã qua (bản gốc). Nên quy tắc của bản gốc là: được phép drop, nhưng phải ghi lại việc đã drop. Một dataset có lỗ và biết mình có lỗ thì dùng được. Một dataset có lỗ mà im lặng thì độc hại.
+
+### 2. Mô hình tư duy
+
+Mất dữ liệu có thể xảy ra ở bốn tầng. Mỗi tầng có một bộ đếm riêng, và chỉ một phần trong đó được "khai":
+
+```mermaid
+flowchart LR
+  S["Cảm biến → MCU<br/>gán seq LÚC LẤY MẪU"] -->|"hàng đợi MCU đầy<br/>dropped_at_source (khai, Bài 6)"| T["Dây USB / Wi-Fi"]
+  T -->|"mất trên đường<br/>KHÔNG AI KHAI"| H["Ingest host"]
+  H -->|"hàng đợi có giới hạn đầy<br/>bản ghi drop (khai, bài này)"| W["Writer MCAP → đĩa"]
+  W --> A["Audit (K2 L2 / lỗ seq)<br/>thấy MỌI lỗ"]
+  A -->|"lỗ thấy ≥ drop đã khai"| R{"phần chênh = mất chưa khai<br/>(một phát hiện, không phải lỗi audit)"}
+```
+
+Năm ý bản chất:
+
+1. **Hàng đợi phải đủ chứa một lần khựng, không phải tải trung bình.** Định luật Little cho số byte nằm trong hàng đợi: L = λ·W (→ F7.1). Khi đĩa khựng S giây, hàng đợi phải chứa λ_byte·S. Tải trung bình vài phần trăm băng thông đĩa không nói gì về một lần khựng gần một giây của thẻ nhớ.
+2. **Chính sách drop là chọn *ai* chịu lỗ, và lỗ trông thế nào.** Tail drop chung: luồng nào đến lúc đầy thì mất, thường là luồng nhịp cao (IMU), và mất thành **một lỗ liền** dài. Ưu tiên theo luồng: hy sinh khung camera (mất một khung là mất 33 ms, bù được bằng khung kế) để giữ IMU (mất 300 ms IMU là hỏng tích phân). Drop cũ (head drop) giữ dữ liệu tươi, hợp cho người xem trực tiếp. Drop mới (tail drop) giữ thứ tự liền mạch phía trước. Thưa đều (giữ 1 trong k) giữ độ phủ thời gian nhưng đổi tần số hiệu dụng, và phải ghi lại.
+3. **`seq` phải được gán trước mọi chỗ có thể drop.** Nếu MCU bỏ mẫu *trước khi* gán `seq`, mọi audit sau đó đều mù với lỗ đó. Bài 6 bước 2 đặt `seq` tăng lúc lấy mẫu vì lý do này. ROS 2 `std_msgs/Header` không có trường `seq` (ROS 1 có) `[chuẩn]`. Nên `seq` của MCU phải đi vào trường `sequence` của Message record MCAP, hoặc vào payload `[spec: MCAP specification, Message record]`.
+4. **Bản ghi drop không được phép bị drop.** Nếu bản ghi drop đi qua chính hàng đợi đang đầy, nó mất đúng lúc cần nhất. Hai cách: (a) giữ một khe dự trữ riêng cho bản ghi drop; (b) gộp drop thành **bộ đếm cộng dồn** theo luồng, ghi định kỳ (heartbeat). Một heartbeat mất thì heartbeat sau vẫn mang tổng đúng.
+5. **Audit thấy nhiều lỗ hơn số drop đã khai, và điều đó đúng.** Lỗ do mất trên dây (trước host) không có bản ghi nào. Quan hệ đúng là *số lỗ audit thấy ≥ số drop đã khai*, kèm điều kiện mỗi drop đã khai phải trùng một lỗ (ghi chú hợp nhất w-F3). Phần chênh là mất chưa khai ở tầng dưới. Đó là một phát hiện về hệ thống.
+
+Mô phỏng: IMU 200 Hz, một camera 30 fps (MJPEG ~60 kB/khung), BME280 1 Hz, vào hàng đợi 1 MB trước writer. Đĩa ghi 50 MB/s nhưng thỉnh thoảng khựng 200–900 ms. Có 0,05% mất trên dây, không ai khai. **Mọi tham số là giả định.**
+
+```python
+# [đã chạy] b17_drop.py — hàng đợi có giới hạn trước writer MCAP: chính sách drop, bản ghi drop, và audit theo seq
+from collections import deque
+import numpy as np
+rng = np.random.default_rng(17)
+T_MS, CAP = 120_000, 1_000_000                      # 120 s mô phỏng theo bước 1 ms; hàng đợi tối đa 1 MB
+STREAMS = {"imu": (5, 370), "cam": (33, 60_000), "env": (1000, 120)}   # (chu kỳ ms, byte/msg) [giả định]
+DISK = 50_000                                       # byte/ms ≈ 50 MB/s khi đĩa không khựng [giả định]
+stall = np.zeros(T_MS, bool)                        # đĩa/thẻ nhớ khựng: mỗi ~10 s một lần, 200–900 ms
+for s in rng.integers(0, T_MS, 12): stall[s:s + rng.integers(200, 900)] = True
+LOST = 0.0005                                       # mất trên đường truyền (USB/UDP) TRƯỚC host: không ai khai
+
+def run(policy):
+    q, used = deque(), 0
+    seq = {k: 0 for k in STREAMS}; got = {k: [] for k in STREAMS}; drops = {k: 0 for k in STREAMS}
+    records, open_run, lat, credit = [], {}, [], 0
+    def drop(k, s, t):                              # gộp các drop liên tiếp của một luồng thành MỘT bản ghi
+        drops[k] += 1
+        if k in open_run and open_run[k][1] == s - 1: open_run[k][1] = s
+        else:
+            if k in open_run: records.append((k, *open_run[k]))
+            open_run[k] = [s, s]
+    for t in range(T_MS):
+        for k, (per, size) in STREAMS.items():
+            if t % per: continue
+            s = seq[k]; seq[k] += 1
+            if rng.random() < LOST: continue        # mất trên dây: host không biết, không có bản ghi
+            if used + size > CAP and policy == "ưu tiên" and k != "cam":
+                while used + size > CAP and any(m[0] == "cam" for m in q):   # đuổi khung camera cũ nhất
+                    i = next(j for j, m in enumerate(q) if m[0] == "cam")
+                    m = q[i]; del q[i]; used -= m[2]; drop("cam", m[1], t)
+            if used + size > CAP: drop(k, s, t); continue
+            q.append((k, s, size, t)); used += size
+        credit += 0 if stall[t] else DISK            # byte ghi được trong ms này; khung lớn ghi qua nhiều ms
+        while q and q[0][2] <= credit:
+            k, s, size, ta = q.popleft(); used -= size; credit -= size
+            got[k].append(s); lat.append(t - ta)
+        if not q: credit = 0                          # đĩa rảnh không tích "tín dụng"
+    records += [(k, *v) for k, v in open_run.items()]
+    holes = {k: int(np.sum(np.diff(np.array(v)) - 1)) for k, v in got.items()}    # audit: lỗ theo seq
+    imu_gap = 5 * (np.diff(np.array(got["imu"])).max())
+    print(f"--- {policy}: drop đã khai imu/cam/env = {drops['imu']}/{drops['cam']}/{drops['env']} "
+          f"({len(records)} bản ghi drop) | lỗ audit thấy = {holes['imu']}/{holes['cam']}/{holes['env']}")
+    print(f"    lỗ IMU dài nhất ≈ {imu_gap} ms | trễ hàng đợi p99/max = {np.percentile(lat, 99):.0f}/{max(lat)} ms"
+          f" | lỗ audit ≥ drop đã khai ở mọi luồng: {all(holes[k] >= drops[k] for k in STREAMS)}")
+
+for p in ("drop chung (tail drop)", "ưu tiên"): run(p)
+print(f"đĩa khựng {stall.mean():.1%} thời gian; tải trung bình {sum(b / per for per, b in STREAMS.values()) / DISK:.0%} băng thông đĩa")
+```
+
+Đừng chạy trước khi làm Đề 1 và Đề 2.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Backpressure: chặn producer cho tới khi consumer kịp | Chặn ingest khi writer chậm | Producer ở backend chờ được: request đợi thêm 200 ms. Cảm biến **không chờ được**: nó vẫn lấy mẫu theo ODR. Chặn ingest chỉ đẩy chỗ tràn ngược về hàng đợi MCU hoặc bộ đệm USB, nơi drop **không được khai** | Tưởng "không drop" vì host không drop, trong khi lỗ dời xuống tầng dưới và không ai đếm |
+| Load shedding: trả 503 cho request ít quan trọng | Drop khung camera để giữ IMU | Request bị từ chối thì client biết và thử lại. Mẫu bị drop không có ai thử lại, và người dùng dataset sau sáu tháng chỉ biết nếu có bản ghi | Shed mà không ghi lại, dataset im lặng có lỗ |
+| `printk` ratelimit: "N callbacks suppressed"; syslog "last message repeated N times" | Bộ đếm drop cộng dồn trong heartbeat | Log bị nén vẫn là log: mất vài dòng không làm sai phép đo nào. Ở đây số đếm drop là dữ liệu: nó quyết định completeness của Bài 18 | Ghi drop vào log rời rồi xoay vòng log mất; file MCAP không còn dấu vết |
+| Kafka consumer lag | Độ sâu hàng đợi trước writer | Lag Kafka không làm mất dữ liệu cho tới khi hết retention. Hàng đợi RAM có trần cứng, tràn là mất | Theo dõi lag mà không có ngưỡng drop và cảnh báo |
+
+**Chấm mô hình:**
+
+- *Bản gốc, "Số phải ra": "Tool Khóa 2 chạy trên file này: phát hiện đúng những lỗ hổng đã được ghi nhận."* → **ĐÚNG MỘT PHẦN.** Đúng hướng: audit độc lập phải thấy lại mọi drop đã khai. Gãy: audit còn thấy cả lỗ **không** được khai (mất trên dây, mất ở MCU nếu `dropped_at_source` không được gửi). "Khớp hoàn toàn" sẽ FAIL oan một hệ đúng, hoặc tệ hơn, khiến người ta xóa bớt lỗ cho khớp. **Phản ví dụ:** mô phỏng có mất trên dây mà không ai khai; so cột "drop đã khai" với cột "lỗ audit" ở phần 7. Tiêu chí đúng: mỗi drop đã khai trùng một lỗ, *và* số lỗ ≥ số drop đã khai; phần chênh được giải thích (ghi chú hợp nhất w-F3).
+- *"Tải trung bình mới 4% băng thông đĩa, hàng đợi vài trăm kB là thừa."* → **SAI.** Đây là trực giác sizing theo trung bình. **Phản ví dụ:** trong mô phỏng, tải trung bình chỉ vài phần trăm băng thông đĩa mà tail drop vẫn để lại một lỗ IMU liền dài (phần 7), vì một lần khựng dài của đĩa cần hàng đợi chứa λ·S.
+- *"Chặn (block) thay vì drop là an toàn hơn vì không mất gì."* → **SAI ở robot.** Chặn ở host làm tràn ở tầng không có bộ đếm (bộ đệm USB, hàng đợi MCU). **Phản ví dụ:** Bài 6 Bước 6(b) (`sleep` ở host) cho thấy lỗ `seq` xuất hiện mà host không ghi một bản ghi drop nào.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Hàng đợi có giới hạn | Hàng đợi có trần byte hoặc số phần tử, tràn thì phải chọn drop | "Không giới hạn cho an toàn" |
+| 🟢 | Tail drop / head drop | Bỏ phần tử mới đến / bỏ phần tử cũ nhất | Như nhau |
+| 🟢 | Drop theo ưu tiên | Khi tràn, đuổi phần tử của luồng ít quan trọng trước | Bỏ ngẫu nhiên |
+| 🟢 | Bản ghi drop | Một message trong chính file MCAP: luồng, khoảng `seq`, thời điểm, lý do, chính sách | Dòng log |
+| 🟢 | Bộ đếm cộng dồn (heartbeat) | Tổng số drop theo luồng, gửi định kỳ; mất một heartbeat không mất thông tin | Bản ghi từng sự kiện |
+| 🟢 | Khai / chưa khai | Drop có bản ghi / lỗ chỉ audit thấy | Lỗi của audit |
+| 🟢 | Ngưỡng tràn | Nhịp vào (msg/s hoặc MB/s) mà tại đó drop bắt đầu, ở một kiểu khựng đã định | Băng thông đĩa trên nhãn |
+| 🟡 | AQM (RED, CoDel) | Drop chủ động trước khi đầy, theo xác suất hoặc theo thời gian nằm trong hàng | Cần cho writer MCAP |
+| 🟡 | Trường `sequence` của MCAP Message | Bộ đếm u32 do publisher gán, có trong mỗi Message record | `seq` của ROS 1 Header |
+
+### 5. Dự đoán
+
+**Tham số cần tra:**
+- Kích thước thật mỗi message của từng luồng trong MCAP của bạn (Bài 13, đã đo) và nhịp thật (Bài 5).
+- Thời gian khựng ghi tệ nhất của ổ trên mini PC: chạy `fio` ghi tuần tự có `fsync` định kỳ trong 10 phút, xem độ trễ max của mỗi lần ghi `[tự đo]`. Nếu ghi ra thẻ nhớ hoặc USB stick, khựng có thể dài hơn nhiều.
+- Writer bạn dùng có cho đặt `sequence` không (`mcap` Python: tham số `sequence` của `add_message`) `[tự đo — kiểm theo phiên bản]`.
+
+**Đề:**
+1. **Sizing.** Với nhịp và kích thước message của bạn, tính λ_byte. Một lần khựng S_max (đo bằng `fio`) cần hàng đợi bao nhiêu MB để không drop? Với hàng đợi 1 MB trong mô phỏng và lần khựng dài nhất 840 ms, tail drop có drop không?
+2. **Mô phỏng, chỉ đọc code:** với tail drop và với ưu tiên: số drop IMU/camera đã khai, số lỗ audit thấy, lỗ IMU dài nhất. Quan hệ "lỗ ≥ drop" có đúng ở cả hai không, và vì sao?
+3. **Ngưỡng tràn trên máy bạn.** Tăng nhịp IMU (hoặc thêm camera, tăng độ phân giải) tới khi bắt đầu drop. Ngưỡng là bao nhiêu msg/s hoặc MB/s? Nó gần băng thông đĩa trên nhãn, hay thấp hơn nhiều?
+4. **Audit.** Chạy detector L2 của K2 và đếm lỗ `seq` trên file có drop: hai cách cho cùng số lỗ không? Lỗ nào chỉ một cách thấy?
+
+```markdown
+# prediction-b17.md — K5 Bài 17 (commit trước khi ép tràn)
+- λ_byte = ___ B/s (IMU ___ + cam ___ + env ___) ; S_max (fio) = ___ ms → hàng đợi cần ___ MB
+- Mô phỏng tail drop: drop imu/cam = ___/___ ; lỗ = ___/___ ; lỗ IMU dài nhất ___ ms
+- Mô phỏng ưu tiên:  drop imu/cam = ___/___ ; lỗ = ___/___ ; lỗ IMU dài nhất ___ ms
+- "lỗ ≥ drop": đúng / sai, vì ___
+- Ngưỡng tràn trên máy tôi: ___ (đơn vị ___), so với băng thông đĩa ___
+- Audit: L2 thấy ___ lỗ, seq thấy ___ ; lệch vì ___
+```
+
+### 6. Làm
+
+Chia 6h gợi ý: chính sách và bản ghi drop 2h; ép tràn và đo ngưỡng 1,5h; audit 1,5h; quyết định và ghi 1h.
+
+1. **Chính sách drop rõ ràng theo mức ưu tiên** (bản gốc, ví dụ: giữ IMU, drop video trước). Viết vào `decisions.md` trước khi code: thứ tự ưu tiên các luồng, kiểu drop trong mỗi luồng (khung camera: bỏ nguyên khung, không bỏ nửa), và kích thước hàng đợi tính từ Đề 1 kèm biên an toàn. Ghi luôn hành vi khi luồng ưu tiên cao nhất cũng tràn: drop và khai, không chặn.
+2. **Mỗi lần drop ghi một bản ghi** (bản gốc: lúc nào, luồng nào, bao nhiêu message, vì sao). Gộp các drop liên tiếp của một luồng thành một bản ghi: `stream`, `first_seq`, `last_seq`, `count`, `t_first`, `t_last` (đồng hồ host), `reason` (`queue_full`, `disk_stall`, `decode_error`), `policy`, `queue_bytes` lúc drop. Thêm heartbeat mỗi 1 s: bộ đếm cộng dồn theo luồng, gồm cả `dropped_at_source` mà MCU báo (Bài 6). Bản ghi drop và heartbeat đi qua **khe dự trữ riêng**, không qua hàng đợi dữ liệu.
+3. **Bản ghi drop đi vào chính file MCAP** (bản gốc: không phải file log riêng, để nó đi cùng dữ liệu mãi mãi). Một channel riêng, ví dụ `/k5/drops`, có schema có version (→ F3.2). Đặt `seq` của MCU vào trường `sequence` của mỗi Message record dữ liệu. Thêm vào metadata của file: chính sách drop và kích thước hàng đợi đang dùng (`CONVENTIONS.md` mục 4).
+4. **Ép tràn** (bản gốc: tăng tần số cảm biến tới khi hệ không kịp, đo ngưỡng). Hai cách ép, ghi riêng: (a) tăng nhịp vào: IMU ODR cao hơn, thêm camera, tăng độ phân giải; (b) giữ nhịp, làm đĩa chậm: chạy `fio` song song, hoặc ghi ra USB stick chậm. Ngưỡng ghi theo đơn vị msg/s hoặc MB/s, kèm kiểu khựng (bản gốc yêu cầu "một con số cụ thể"). Ghi thêm: trễ hàng đợi p99 và max lúc gần ngưỡng.
+5. **Audit bằng tool K2** (bản gốc: "có phát hiện được lỗ hổng không?"). Chạy detector L2 (theo timestamp) **và** đếm lỗ theo `sequence` trên file đã ép tràn. Kiểm ba điều: (i) mỗi bản ghi drop trùng một lỗ có cùng khoảng `seq`; (ii) tổng lỗ ≥ tổng drop đã khai (heartbeat); (iii) phần chênh được giải thích bằng mất ở tầng dưới (`dropped_at_source`, lỗ trên dây). Một bản ghi drop **không** có lỗ tương ứng là lỗi nghiêm trọng của writer: nó khai drop mà thật ra đã ghi, hoặc ghi sai `seq`.
+
+**Sai số của dụng cụ:** detector L2 theo timestamp có ngưỡng (ví dụ dt > 1,5 chu kỳ). Một lỗ một mẫu ở IMU có jitter lớn có thể lọt (âm tính giả), hoặc jitter có thể bị báo thành lỗ (dương tính giả) (K2 Bài 12). Đếm theo `sequence` thì chính xác, *nếu* `seq` được gán trước mọi chỗ drop. Vì vậy dùng `sequence` làm trọng tài, L2 làm phép kiểm độc lập.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Bảng của bản gốc** (giữ nguyên; cột cuối là phần sửa):
+
+| Kiểm tra | Kết quả đúng | Cách đọc |
+|---|---|---|
+| Ngưỡng tràn | Một con số cụ thể (msg/s hoặc MB/s) | Kèm kiểu khựng ghi đã dùng; ngưỡng thường thấp hơn băng thông đĩa trên nhãn nhiều lần vì khựng, không vì trung bình |
+| Mọi lần drop có bản ghi | 100%, không sót | Kiểm bằng heartbeat cộng dồn: tổng trong heartbeat = tổng `count` các bản ghi drop |
+| Tool Khóa 2 chạy trên file này | Phát hiện đúng những lỗ hổng đã được ghi nhận | Sửa: mỗi lỗ đã khai đều được phát hiện; tổng lỗ ≥ tổng đã khai; phần chênh có giải thích |
+
+**Mô phỏng** (`[đã chạy]`, seed 17; tham số giả định; đĩa khựng 4,9% thời gian, tải trung bình 4% băng thông đĩa):
+
+| Chính sách | Drop đã khai IMU / cam / env | Bản ghi drop | Lỗ audit IMU / cam / env | Lỗ IMU dài nhất | Trễ hàng đợi p99 / max |
+|---|---|---|---|---|---|
+| Tail drop chung | 169 / 25 / 0 | 12 | 182 / 26 / 0 | ≈ 315 ms | 489 / 840 ms |
+| Ưu tiên (đuổi camera) | 0 / 31 / 0 | 13 | 14 / 32 / 0 | ≈ 10 ms | 483 / 840 ms |
+
+Đọc:
+1. Tải trung bình chỉ 4%, nhưng hàng đợi 1 MB không chứa nổi một lần khựng 840 ms (cần ~1,6 MB). Sizing theo trung bình là sai.
+2. Tail drop làm IMU mất một lỗ liền ~315 ms, đúng loại lỗ phá tích phân gyro. Chính sách ưu tiên đổi lỗ đó lấy thêm vài khung camera bị bỏ.
+3. Ở cả hai chính sách, lỗ audit **lớn hơn** drop đã khai: 13–14 mẫu IMU và 1 khung camera mất trên dây. Đó là phần chênh mà tiêu chí "khớp hoàn toàn" sẽ FAIL oan.
+4. Trễ hàng đợi max = độ dài lần khựng dài nhất, ở cả hai chính sách. Với writer thì không sao. Với một consumer trực tiếp đọc cùng hàng đợi thì 840 ms là dữ liệu cũ. Khi đó head drop (giữ mẫu mới) mới là chính sách đúng. Một hàng đợi không phục vụ tốt cả hai mục đích, nên tách hai hàng đợi.
+
+**Kỳ vọng trên máy thật** `[ước lượng — tự đo]`: SSD NVMe của mini PC có khựng ngắn khi `fsync`, thường dưới vài chục ms. Ổ USB hoặc thẻ nhớ có thể khựng hàng trăm ms tới giây. Với một camera MJPEG và IMU, ngưỡng tràn thường do camera quyết định. Detector L2 và đếm `sequence` cho cùng số lỗ khi lỗ dài. Chúng lệch nhau ở các lỗ một mẫu và khi jitter lớn.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Audit thấy lỗ, không có bản ghi drop nào, host báo 0 drop | Mất ở tầng dưới (USB, MCU) hoặc host chặn thay vì drop | `dropped_at_source` trong heartbeat; Bài 6 parser có đếm lỗ không | Khai ở đúng tầng; không chặn ingest |
+| Có bản ghi drop nhưng không có lỗ tương ứng | Writer ghi `seq` sai, hoặc khai drop trước khi thật sự bỏ | So khoảng `seq` trong bản ghi với `sequence` trong file | Sửa writer; thêm test: drop tiêm vào phải tạo đúng lỗ |
+| Tổng `count` bản ghi < tổng heartbeat | Bản ghi drop đi qua hàng đợi đầy và bị drop chính nó | Thời điểm bản ghi mất trùng lúc tràn | Khe dự trữ riêng; tin heartbeat |
+| Ngưỡng tràn thấp hơn dự đoán nhiều | Khựng đĩa dài hơn đo ở `fio`; nén zstd chiếm CPU | `iostat -x 1`, `top` khi tràn | Nén ở luồng riêng; đĩa nhanh hơn; hàng đợi lớn hơn theo λ·S |
+| `sequence` trong MCAP toàn 0 | Writer/bridge không đặt trường này | Đọc vài Message record | Đặt từ payload; ghi rõ trong `CONVENTIONS.md` |
+| Detector L2 báo lỗ ở IMU khi không có drop | Jitter timestamp vượt ngưỡng L2 | Đếm `sequence` không có lỗ | Ngưỡng L2 theo phân bố dt thật (K2 Bài 12); đó là dương tính giả của detector |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot, mỗi con ghi 8 giờ một ngày. Ở quy mô đội, tỉ lệ drop 0,1% trông nhỏ. Cái gì gãy trước khi một nhóm ML huấn luyện trên dữ liệu đó, và chỉ số nào phải báo thay cho "tỉ lệ drop"?
+   <details><summary>Hướng nghĩ</summary>Phân bố độ dài lỗ quan trọng hơn tỉ lệ: 0,1% rải đều vô hại, 0,1% gom thành vài lỗ 300 ms đúng lúc robot quay thì làm hỏng episode. Báo histogram độ dài lỗ theo luồng, và lỗ có trùng với lúc chuyển động mạnh không (tương quan với |ω|). Đó cũng là chỉ số để chọn episode cho huấn luyện.</details>
+2. **[Failure mode]** Writer bị kill giữa lúc đang tràn. File MCAP được `mcap recover` cứu (K2). Bản ghi drop của 2 giây cuối nằm ở đâu, và người đọc file có phân biệt được "drop" với "mất do kill" không?
+   <details><summary>Hướng nghĩ</summary>Bản ghi drop chưa flush thì mất cùng chunk cuối. Heartbeat cộng dồn cho biết tổng tới lần ghi cuối cùng. Sau đó chỉ còn một vùng "không biết". Người đọc phân biệt được nếu file có dấu kết thúc sạch (footer, summary) hay không: không có nghĩa là kết thúc bất thường. Nên ghi "kết thúc bất thường từ t = ___" vào metadata khi recover.</details>
+3. **[Vì sao không]** Vì sao không dùng hàng đợi trên đĩa (spool) thay cho RAM để không bao giờ phải drop?
+   <details><summary>Hướng nghĩ</summary>Khựng của đĩa là nguyên nhân tràn. Spool ra cùng đĩa đó thì cùng khựng. Spool ra đĩa khác đổi vấn đề thành hai vấn đề (hai chỗ hỏng, hai chỗ đầy). Và "không bao giờ drop" là bufferbloat: dữ liệu vào chậm dần so với thời gian thật. Ranh giới hợp lý: hàng đợi RAM đủ cho S_max, drop có khai khi vượt, và cảnh báo.</details>
+4. **[Phản biện]** "Thưa đều (giữ 1 trong 2 mẫu IMU khi tràn) tốt hơn drop theo cụm, vì không có lỗ." Dựng lập luận mạnh nhất, rồi chỉ ra khi nào nó sai.
+   <details><summary>Hướng nghĩ</summary>Mạnh: độ phủ thời gian liên tục, tích phân vẫn chạy, chỉ giảm tần số. Sai: tần số hiệu dụng giảm có thể dưới mức Nyquist của chuyển động (→ F5.5), gây aliasing. Downstream nào giả định ODR cố định (bộ lọc, ước lượng bias) sẽ sai mà không báo, trừ khi mỗi đoạn thưa được khai rõ. Chọn theo downstream, và khai.</details>
+5. **[Liên ngành]** Hàng không ghi dữ liệu bay vào FDR với danh sách tham số bắt buộc và tần số tối thiểu cho từng tham số theo quy định `[chuẩn — ví dụ 14 CFR 121.344 ở Mỹ]`. Thiết kế đó trả lời câu "khi ghi không kịp thì bỏ gì" theo cách nào?
+   <details><summary>Hướng nghĩ</summary>Trả lời **trước**, lúc thiết kế: băng thông ghi được cấp cho từng tham số theo mức quan trọng, nên lúc chạy không phải chọn. Giống chính sách ưu tiên của bạn, nhưng tĩnh và được chứng nhận. Khác: FDR không có "dữ liệu tùy chọn" chen vào như camera của bạn. Hệ của bạn có tải biến đổi nên phải chọn lúc chạy, và phải khai.</details>
+
+### 10. Liên kết ra ngoài
+
+- **Mạng: bufferbloat, RED, CoDel.** Ngành mạng đi từ "đệm lớn, không drop" sang "drop sớm có chủ đích" sau khi đo được giá của độ trễ `[chuẩn]`. Giống: kích thước hàng đợi và chính sách drop là thiết kế, đo bằng thời gian nằm trong hàng. Khác: gói mạng bị drop là tín hiệu cho TCP giảm tốc. Mẫu cảm biến bị drop không làm cảm biến chậm lại, nên ở đây drop không phải cơ chế điều khiển. Nó chỉ là thiệt hại có kiểm soát, và phải khai.
+- **Thiên văn và vật lý hạt: trigger và dead time.** Detector ở máy gia tốc hạt sinh dữ liệu nhanh hơn khả năng ghi nhiều bậc. Hệ trigger chọn sự kiện nào ghi, và mỗi phép phân tích hiệu chỉnh theo **dead time** (thời gian hệ không nhận được) và hiệu suất trigger đã đo `[chuẩn]`. Giống: bỏ có chủ đích, và con số bỏ đi vào phép phân tích như một đại lượng đã biết. Khác: họ thiết kế để giữ sự kiện hiếm và quý. Bạn thường muốn giữ luồng liên tục (IMU) hơn là khung hiếm.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Bufferbloat (Gettys & Nichols 2011), RED (Floyd & Jacobson 1993), CoDel (Nichols & Jacobson 2012) | `[chuẩn]` | ACM Queue; IEEE/ACM ToN |
+| ROS 2 `std_msgs/Header` không có `seq` | `[chuẩn]` | Định nghĩa message `std_msgs/msg/Header` |
+| MCAP Message record có trường `sequence` u32 | `[spec: MCAP specification]` | Writer có cho đặt hay không `[tự đo]` |
+| Quan hệ "lỗ ≥ drop đã khai" | `[chuẩn]` | Ghi chú hợp nhất w-F3; mô phỏng |
+| Khựng ghi của SSD/USB/thẻ nhớ | `[tự đo]` | `fio` có `fsync` |
+| 14 CFR 121.344 (tham số FDR bắt buộc) | `[chuẩn]` | Ví dụ minh họa; chi tiết theo quy định hiện hành |
+| Kết quả mô phỏng | `[đã chạy]` | Tham số giả định |
+
+**Đã sửa so với bản gốc/Gemini:**
+- Bản gốc, "Số phải ra": "tool Khóa 2 phát hiện đúng những lỗ hổng đã được ghi nhận" → giữ tinh thần, sửa tiêu chí: mỗi lỗ đã khai đều được thấy, tổng lỗ ≥ tổng đã khai, phần chênh có giải thích (ghi chú hợp nhất w-F3). Lý do: mất ở tầng dưới không có bản ghi.
+- Bổ sung so với bản gốc (giữ đủ 5 bước): sizing hàng đợi theo λ·S_max thay vì trung bình; `seq` gán trước mọi chỗ drop và đi vào trường `sequence` của MCAP (ROS 2 Header không có `seq`); bản ghi drop gộp theo khoảng `seq` và heartbeat cộng dồn; khe dự trữ riêng để bản ghi drop không bị drop; hai cách ép tràn; kiểm ba điều khi audit; tách hàng đợi cho writer và cho người xem trực tiếp.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** K. Nichols, V. Jacobson, "Controlling Queue Delay", *ACM Queue* 10(5), 2012. Đặc tả MCAP, mục "Message".
+- **Giải thích:** J. Gettys, K. Nichols, "Bufferbloat: Dark Buffers in the Internet", *ACM Queue* 9(11), 2011.
+- **Đào sâu (tùy chọn):** S. Floyd, V. Jacobson, "Random Early Detection Gateways for Congestion Avoidance", *IEEE/ACM Transactions on Networking* 1(4), 1993.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao "chặn producer" là sai ở robot; (2) vẽ lại sơ đồ bốn tầng mất dữ liệu ở phần 2, đánh dấu tầng nào khai và tầng nào không; (3) hai câu dưới.
+
+  1. IMU 200 Hz × 370 B, hai camera 30 fps × 80 kB. Lần khựng ghi dài nhất đo được là 600 ms. Hàng đợi cần tối thiểu bao nhiêu?
+     <details><summary>Đáp án</summary>λ ≈ 200 × 370 + 2 × 30 × 80.000 ≈ 74 kB/s + 4,8 MB/s ≈ 4,87 MB/s. λ·S ≈ 4,87 × 0,6 ≈ 2,9 MB. Thêm biên cho lần khựng dài hơn chưa đo (ví dụ ×2), tức ~6 MB. Kèm chính sách ưu tiên để nếu vẫn tràn thì camera chịu trước.</details>
+  2. Heartbeat cuối file báo tổng drop IMU = 120. Các bản ghi drop cộng lại = 96. Audit `sequence` thấy 131 lỗ IMU. Có những gì đã xảy ra?
+     <details><summary>Đáp án</summary>Ba thứ. (1) 24 drop (120 − 96) có xảy ra và được đếm, nhưng bản ghi chi tiết của chúng bị mất, có lẽ vì bản ghi drop đi qua hàng đợi đầy. Sửa bằng khe dự trữ. (2) 11 lỗ (131 − 120) không được host khai: mất ở tầng dưới. Kiểm `dropped_at_source` và lỗ của parser USB. (3) Quan hệ "lỗ ≥ khai" vẫn đúng. File dùng được, với ghi chú về 11 lỗ chưa khai.</details>
+
+---

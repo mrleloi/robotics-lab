@@ -762,3 +762,351 @@ Không đủ dữ kiện để gọi là "lệch 4%": có thể là tấm kính 
 </details>
 
 ---
+
+## Bài 6 — ESP32-S3 làm node cảm biến: USB-serial vs mạng (12h)
+
+> **Vị trí:** Bài 5 (bảng "mỗi mẫu phải mang gì") → **Bài 6** → K5 Bài 7 (ngân sách sai số thời gian) · **Cần trước:** F3.9 (backpressure, đếm cái đã drop), F4.6 (thời điểm của một phép đo: source vs receive), F4.4 (NTP, giả định đối xứng), F1.2 (phân bố, đuôi, vì sao p99 cần nhiều mẫu); K3 Bài 4 (khung credit: magic, `seq`, `len`) · **Sau bài này bạn quyết định được:** luồng nào đi đường nào (USB hay Wi-Fi, UDP hay TCP), đóng dấu thời gian ở đúng chỗ nào trong firmware, và khung gói tối thiểu gồm những trường gì để host phát hiện được mất, trùng, đảo thứ tự, hỏng byte và MCU khởi động lại.
+
+**Câu hỏi của bài (bản gốc):** đưa dữ liệu từ MCU về máy chủ bằng đường nào?
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Cuối thập niên 1990, Vern Paxson đo thời gian truyền gói một chiều giữa hàng chục máy trên Internet. Ông phát hiện một phần đáng kể của cái trông như "trễ mạng" thật ra là **đồng hồ của máy đo**: lệch tần số giữa hai đầu, đồng hồ bị NTP chỉnh nhảy bậc giữa phép đo, hai đầu chạy hai tốc độ khác nhau (*On Calibrating Measurements of Packet Transit Times*, SIGMETRICS 1998) `[chuẩn]`. Một năm sau, Moon, Skelly và Towsley đưa ra cách ước lượng và loại skew từ chính chuỗi trễ đo được: trễ thật không bao giờ âm và có một mức sàn, nên đường bao dưới của dữ liệu lộ ra độ dốc của đồng hồ (*Estimation and Removal of Clock Skew from Network Delay Measurements*, INFOCOM 1999) `[chuẩn]`.
+
+Bài này lặp lại đúng câu chuyện đó trên bàn của bạn. ESP32 đóng dấu bằng đồng hồ của nó, mini PC nhận bằng đồng hồ của mình. Hiệu hai số là trễ cộng với một độ lệch không biết và trôi theo thời gian. Bản gốc ghi trước triệu chứng ở dòng cuối bảng "Nếu ra khác": "latency âm". Bài này cho bạn biết từ dữ liệu đó *được phép* rút ra gì, và giữ phần còn lại cho Module 2.
+
+### 2. Mô hình tư duy
+
+Đường đi của một mẫu, và các điểm có thể đóng dấu thời gian:
+
+```
+ cảm biến     ISR data-ready      task đọc I2C     đóng khung      USB / Wi-Fi           driver host      read() trả về
+ ──●──────────────●─────────────────●─────────────────●──────────── ~~~~~~~~~~~ ─────────────●─────────────────●──►
+   │ t_meas       │ t_isr            │ t_read          │ t_send                            │ t_kernel        │ t_app
+   │ (thật,       │ esp_timer        │ (+ jitter lập   │ (+ hàng đợi,                      │ (SO_TIMESTAMPNS │ (+ lịch của
+   │ trễ DLPF)    │ ← ĐÓNG DẤU ĐÂY   │  lịch FreeRTOS) │  gom gói)                         │  cho UDP)       │  tiến trình)
+```
+
+Hai đồng hồ, một phương trình. Gọi θ(t) là độ lệch giữa đồng hồ host và đồng hồ MCU, d là trễ truyền:
+
+```
+t_host,i − t_mcu,i = θ(t_i) + d_i ,      θ(t) ≈ θ0 + s·t   (s = skew, cỡ chục ppm)
+```
+
+Không có đồng hồ chung thì không tách được θ0 khỏi trễ nền min(d). Bạn đo được hai thứ, và chỉ hai thứ: **skew s** (độ dốc của đường bao dưới), và **biến thiên trễ** d_i − min(d). "Latency tuyệt đối" là việc của Module 2 (TN-1, TN-2).
+
+Năm ý bản chất:
+
+1. **Đóng dấu ở ISR data-ready, không ở task, không ở lúc gửi.** Giữa ISR và task là lịch của FreeRTOS. Giữa task và lúc gửi là hàng đợi và gom gói. Mọi thứ sau ISR đều cộng jitter vào timestamp. Bản thân t_isr cũng chưa phải t_meas: bộ lọc DLPF của IMU có trễ nhóm, phải ghi cấu hình DLPF để bù sau (→ F4.6).
+2. **Mỗi luồng một `seq` riêng, kèm `boot_id`.** `seq` phát hiện mất, trùng, đảo thứ tự mà không cần tin timestamp. `boot_id` (số ngẫu nhiên sinh lúc khởi động) phân biệt "MCU vừa reset, `seq` về 0" với "gói đảo thứ tự". Không có nó, một lần brownout trông như 60.000 gói đến sai thứ tự.
+3. **USB và UART là luồng byte, không phải luồng gói.** Ranh giới khung do bạn tạo (magic + độ dài + CRC), và parser phải **đồng bộ lại** được sau khi mất một byte. UDP giữ ranh giới gói, nhưng có thể mất, trùng, đảo thứ tự. TCP cho luồng byte không mất, bù lại bằng chặn đầu hàng (head-of-line blocking) khi phải truyền lại.
+4. **Hình dạng phân bố quan trọng hơn trung vị.** Đây là câu của bản gốc, giữ nguyên. Dây cho phân bố hẹp có trần. Wi-Fi cho phân bố có đuôi dài và mất theo cụm. Đuôi đó không làm chậm một request. Nó làm **sai một phép đo vật lý** nếu bạn đóng dấu ở đầu nhận.
+5. **"Không mất gói nào" là một ước lượng có cận trên.** 0 lần mất trong n gói cho cận trên 95% khoảng 3/n ("quy tắc ba", → F1.4). Báo cận trên, không báo "0%".
+
+Mô phỏng 1: parser nào sống sót khi luồng byte mất vài byte và lật vài bit.
+
+```python
+# [đã chạy] bai6_framing.py — luồng byte có mất byte và lật bit: parser nào còn sống, seq phát hiện được gì
+import struct, zlib
+import numpy as np
+rng = np.random.default_rng(1)
+MAGIC = b"\xAA\x55"
+HDR = struct.Struct("<2sBIQ")                          # magic, len payload, seq u32, t_us u64 (little-endian)
+
+def frame(seq, t_us, payload):
+    body = HDR.pack(MAGIC, len(payload), seq, t_us) + payload
+    return body + struct.pack("<I", zlib.crc32(body))  # CRC-32 cho gọn; firmware thật hay dùng CRC-16
+
+stream = bytearray()
+for s in range(20_000):                                # IMU 200 Hz × 100 s, payload 12 byte (6 × int16)
+    stream += frame(s, s * 5000, rng.integers(-32768, 32767, 6, dtype=np.int16).tobytes())
+FL = HDR.size + 12 + 4
+raw = np.frombuffer(bytes(stream), np.uint8).copy()
+keep = rng.random(raw.size) > 2e-5                     # mất byte lẻ tẻ (tràn ring buffer) [giả định]
+for i in rng.choice(raw.size, 30, replace=False):      # 30 lần lật 1 bit (nhiễu dây dài) [giả định]
+    raw[i] ^= 1 << rng.integers(8)
+data = raw[keep].tobytes()
+
+def parse_fixed(b):                                    # đọc từng khối FL byte, không đồng bộ lại
+    out = []
+    for i in range(0, len(b) - FL + 1, FL):
+        m, n, seq, t = HDR.unpack_from(b, i)
+        out.append(seq)
+    return out
+
+def parse_resync(b):                                   # tìm magic → kiểm len → kiểm CRC → sai thì trượt 1 byte
+    out, i, bad = [], 0, 0
+    while i + FL <= len(b):
+        if b[i:i + 2] != MAGIC: i += 1; continue
+        n = b[i + 2]
+        end = i + HDR.size + n
+        if n > 64 or end + 4 > len(b): i += 1; continue
+        if zlib.crc32(b[i:end]) != struct.unpack_from("<I", b, end)[0]: bad += 1; i += 1; continue
+        out.append(HDR.unpack_from(b, i)[2]); i = end + 4
+    return out, bad
+
+fx = parse_fixed(data)
+good = [k for k, s in enumerate(fx) if s == k]       # khung có seq đúng vị trí
+first_bad = next(k for k, s in enumerate(fx) if s != k)
+rs, bad = parse_resync(data)
+gaps = np.diff(np.array(rs, dtype=np.int64))
+print(f"gửi 20000 khung; mất {np.sum(~keep)} byte, lật 30 bit")
+print(f"parser cố định: khung #{first_bad} hỏng mà không bị phát hiện (không CRC); lệch pha vĩnh viễn sau khung #{good[-1]};"
+      f" tổng {len(good)}/20000 khung đúng seq")
+print(f"parser đồng bộ lại: nhận {len(rs)} khung; CRC loại {bad} ứng viên; "
+      f"seq: {np.sum(gaps > 1)} lỗ, thiếu {int(np.sum(gaps[gaps > 1] - 1))} khung, {np.sum(gaps <= 0)} lần lùi/trùng")
+```
+
+Mô phỏng 2: một giờ dữ liệu, hai đường, hai đồng hồ lệch nhau. So cách "trừ mốc t0" với cách đường bao dưới. Trễ thật được gài sẵn để bạn so.
+
+```python
+# [đã chạy] bai6_owd.py — "latency" MCU→host khi KHÔNG có đồng hồ chung: chỉ đo được biến thiên trễ.
+# Dữ liệu giả lập 1 giờ, 100 Hz. Thay bằng CSV thật: cột seq, t_mcu_us, t_host_ns (CLOCK_MONOTONIC_RAW).
+import numpy as np
+rng = np.random.default_rng(6)
+N, FS = 360_000, 100.0
+t_mcu = np.arange(N) / FS * 1e6                       # µs, đồng hồ ESP32 (esp_timer)
+SKEW, OFFSET = -23e-6, 4.2e9                          # host chạy chậm hơn 23 ppm; offset tùy ý (µs) [giả định]
+
+def link(kind):
+    if kind == "usb":                                 # nền + chờ khung 1 ms + đôi khi bị lịch host làm trễ
+        d = 150 + rng.uniform(0, 1000, N) + (rng.random(N) < 0.002) * rng.exponential(3000, N)
+        lost = np.zeros(N, bool)
+    else:                                             # Wi-Fi: nền vài ms, đuôi dài lognormal, mất gói theo cụm
+        d = 1500 + rng.lognormal(7.0, 0.9, N)
+        burst = np.convolve(rng.random(N) < 2e-4, np.ones(40), "same") > 0
+        lost = (rng.random(N) < 0.003) | burst
+    return d, lost
+
+def lower_envelope(t, x, win=60e6):
+    """Moon–Skelly–Towsley (1999) rút gọn: lấy cực tiểu mỗi cửa sổ, fit đường thẳng qua các cực tiểu."""
+    k = (t // win).astype(int)
+    idx = [np.flatnonzero(k == j)[np.argmin(x[k == j])] for j in np.unique(k)]
+    a, b = np.polyfit(t[idx], x[idx], 1)
+    return a, b
+
+for kind in ("usb", "wifi"):
+    d, lost = link(kind)
+    t_host = (t_mcu + d) * (1 + SKEW) + OFFSET        # thời điểm host nhận, theo đồng hồ host
+    tm, x, dt = t_mcu[~lost], (t_host - t_mcu)[~lost], d[~lost]
+    naive = x - x[0]                                  # cách "trừ mốc t0" (Gemini)
+    a, b = lower_envelope(tm, x)
+    est = x - (a * tm + b)                            # biến thiên trễ so với trễ nhỏ nhất
+    true = dt - dt.min()
+    q = lambda v: np.percentile(v, [50, 99, 99.9]) / 1e3
+    f = lambda v: " / ".join(f"{u:7.2f}" for u in q(v))
+    print(f"--- {kind}: mất {lost.mean():.2%} | skew ước lượng {a * 1e6:+.1f} ppm (thật {SKEW * 1e6:+.1f})")
+    print(f"  trừ t0  : p50/p99/p99.9 = {f(naive)} ms ; tỉ lệ 'latency âm' = {np.mean(naive < 0):.1%}")
+    print(f"  bao dưới: p50/p99/p99.9 = {f(est)} ms ; sai lệch so với thật p99 = {abs(q(est)[1] - q(true)[1]):.3f} ms")
+    print(f"  thật    : p50/p99/p99.9 = {f(true)} ms  (trễ nền {dt.min() / 1e3:.2f} ms KHÔNG đo được nếu thiếu đồng hồ chung)")
+```
+
+Hai mô hình đều thô. USB được mô tả bằng "nền + chờ khung 1 ms + đuôi hiếm", Wi-Fi bằng lognormal cộng mất theo cụm. Số thật của bạn sẽ khác. Cái phải giữ là **phương pháp**. Đừng chạy trước khi làm Đề 3 và Đề 4.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Distributed tracing: span con "bắt đầu trước" span cha vì hai máy lệch đồng hồ; UI Jaeger có chỉnh clock skew | t_host − t_mcu âm hoặc trôi dần | Trong tracing, lệch đồng hồ làm xấu một biểu đồ. Ở đây nó đi thẳng vào timestamp của phép đo vật lý, và skew chục ppm cộng dồn thành chục ms mỗi giờ | Trừ mốc t0 rồi báo "latency" mà thật ra là đường dốc của đồng hồ |
+| Length-prefixed Protobuf trên TCP | Khung magic + len + CRC trên USB/UART | TCP bảo đảm không mất và không hỏng byte. Ring buffer của MCU hoặc host thì có thể rơi byte, và dây dài có thể lật bit. Parser phải đồng bộ lại, không được tin độ dài | Một byte mất làm parser lệch pha vĩnh viễn (mô phỏng 1) |
+| Kafka producer `linger.ms` / Nagle | Firmware gom nhiều mẫu vào một lần ghi; khung USB 1 ms; latency timer của chip cầu UART | Ở backend, gom batch đổi latency lấy throughput, và timestamp của event vẫn đúng. Ở đây timestamp ở host bị cả batch chia chung một giá trị | Đóng dấu ở host theo `read()`: bốn mẫu trong một chunk nhận cùng một thời điểm |
+| StatsD qua UDP: mất vài gói không sao | Luồng IMU qua Wi-Fi UDP | Metric tổng hợp chịu được mất ngẫu nhiên. Tích phân gyro hay ghép camera thì không chịu được **lỗ theo cụm** dài hàng trăm ms | Báo "mất 0,3%" trong khi một cụm 400 ms làm hỏng đúng đoạn robot quay |
+| Request ID + consumer idempotent | `seq` + `boot_id` theo từng luồng | Request ID duy nhất toàn cục. `seq` chỉ tăng trong một lần khởi động của một luồng, và quay vòng nếu quá hẹp (uint16 ở 1 kHz quay vòng sau 65 s) | Dedup nhầm sau khi MCU reset, hoặc đếm lỗ sai khi `seq` quay vòng |
+
+**Chấm mô hình:**
+
+- *Bản gốc, bước 4: "Latency: từ timestamp MCU tới lúc máy chủ nhận."* → **SAI như một phép đo của bài này.** Hiệu đó là θ(t) + d. Không có đồng hồ chung thì không tách được θ0 khỏi trễ nền. **Phản ví dụ** (mô phỏng 2): skew vài chục ppm làm hiệu số trôi hàng chục ms mỗi giờ (đổi đơn vị của Bài 7: ppm × 3,6 = ms/giờ), lớn hơn mọi trễ USB cả hai bậc. Đại lượng đo được là biến thiên trễ sau khi loại skew. Bước 4 của phần 6 đổi định nghĩa cho đúng. Câu "latency âm → Module 2" của bản gốc giữ nguyên, vì đó đúng là cầu sang Module 2.
+- *Gemini, "Nếu ra khác": "Latency âm → chỉ cần trừ mốc t₀ của từng bên để so sánh delta."* → **SAI.** Trừ t₀ khử θ0 nhưng giữ nguyên skew. Nó còn đưa trễ của mẫu đầu tiên vào mọi mẫu sau. **Phản ví dụ:** mô phỏng 2, so dòng "trừ t0" với dòng "thật" (phần 7).
+- *Bản gốc, bảng ba lựa chọn: "đóng dấu ở MCU bằng timer phần cứng tại lúc lấy mẫu là tốt nhất."* → **ĐÚNG MỘT PHẦN.** Đúng về chỗ (MCU). Gãy ở chữ "lúc lấy mẫu": trong firmware có ít nhất ba chỗ gọi `esp_timer_get_time()` được, và chỉ ISR data-ready gần lúc lấy mẫu. **Phản ví dụ:** task đọc IMU theo `vTaskDelay(5 ms)` rồi mới gọi timer. Timestamp mang jitter tới 5 ms và nhịp của task, không mang nhịp ODR của chip (Bài 5, mô phỏng đếm ODR).
+- *Gemini, bước 3: "Jitter: độ lệch chuẩn và phân vị của khoảng cách thời gian giữa các gói liên tiếp."* → **ĐÚNG MỘT PHẦN.** Khoảng cách giữa hai lần đến (inter-arrival) cộng biến thiên trễ của **hai** gói, cộng biến thiên chu kỳ lấy mẫu của MCU. Một gói trễ tạo ra hai khoảng cách bất thường, một dài một ngắn. Tách hai nguồn: khoảng cách theo `t_mcu` cho biết jitter lấy mẫu, biến thiên trễ một chiều (đường bao dưới) cho biết jitter đường truyền.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Framing / sync word | Cách tạo ranh giới khung trên luồng byte (magic + độ dài + CRC) và tìm lại ranh giới sau lỗi | "Gửi struct là xong" |
+| 🟢 | CRC | Mã kiểm tra phát hiện lỗi byte trong khung; không sửa lỗi | Mã hóa / checksum cộng đơn giản |
+| 🟢 | `seq` theo luồng, `boot_id` | Bộ đếm tăng mỗi mẫu của một luồng; định danh lần khởi động | Timestamp đủ để phát hiện mất |
+| 🟢 | Biến thiên trễ một chiều | d_i − min(d), đo được không cần đồng hồ chung sau khi loại skew | Latency tuyệt đối |
+| 🟢 | Skew / đường bao dưới | Độ dốc của θ(t); ước lượng qua cực tiểu theo cửa sổ | Trung bình của hiệu số |
+| 🟢 | Head-of-line blocking | Một gói bị truyền lại chặn mọi byte sau nó trong TCP | "TCP chậm hơn UDP một chút" |
+| 🟢 | Quy tắc ba | 0 sự kiện trong n lần → cận trên 95% ≈ 3/n | "Mất 0%" |
+| 🟡 | USB full-speed, khung 1 ms, CDC-ACM | ESP32-S3 nói USB 12 Mbit/s; host lập lịch theo khung 1 ms; lớp serial ảo | "USB polling 1 ms" như một hằng số cố định |
+| 🟡 | Latency timer của chip cầu UART | Chip cầu giữ byte tới khi đủ gói hoặc hết hạn chờ | Trễ của dây |
+| 🟡 | `SO_TIMESTAMPNS` | Kernel đóng dấu lúc gói UDP tới socket, trước lịch của tiến trình | `time.time()` sau `recv()` |
+| 🟡 | Wi-Fi power save (modem sleep) | Station ngủ giữa các beacon; ảnh hưởng mạnh chiều host → ESP32 | Lỗi mạng ngẫu nhiên |
+| 🔴 | COBS | Mã hóa khung không cần magic (byte 0 làm ranh giới) | Cần cho bài này |
+
+### 5. Dự đoán
+
+**Tham số cần tra:**
+- Datasheet ESP32-S3, mục USB Serial/JTAG và USB OTG: tốc độ (full-speed), kích thước endpoint. ESP-IDF Programming Guide, mục "USB Serial/JTAG Controller Console" `[spec]`.
+- Chip cầu USB–UART trên DevKit của bạn: đọc chữ trên chip (CP2102N, CH343…), rồi tra datasheet về bộ đệm và thời gian chờ trước khi gửi gói `[tự đo]`.
+- Dung sai thạch anh 40 MHz của module ESP32-S3 (ESP32-S3 Hardware Design Guidelines, mục crystal) `[spec — kiểm revision]`.
+- ESP-IDF, mục Wi-Fi power save: chế độ mặc định của station và cách tắt (`esp_wifi_set_ps`) `[spec]`.
+- ODR thật của ba cảm biến từ Bài 5, và kích thước khung bạn định dùng.
+
+**Đề:**
+1. **Băng thông.** Tổng byte/giây của ba luồng với khung nhị phân của bạn. So với UART 921600 baud (8N1) và USB full-speed. Nếu thay bằng `printf` dạng chữ ~60 byte/dòng ở cùng nhịp IMU, còn vừa không?
+2. **Trễ USB.** Biến thiên trễ USB p50, p99, p99.9 của **đường native CDC** và **đường chip cầu UART**. Đường nào hẹp hơn, vì sao?
+3. **Mô phỏng 2, chỉ đọc code:** với skew −23 ppm, cách "trừ t0" cho p50 bao nhiêu sau một giờ, và tỉ lệ "latency âm" cỡ nào? Đường bao dưới ước lượng skew sai bao nhiêu ppm?
+4. **Mô phỏng 1, chỉ đọc code:** parser cố định còn đúng bao nhiêu khung? Parser đồng bộ lại mất bao nhiêu khung cho 12 byte mất và 30 bit lật?
+5. **Wi-Fi.** p99 của biến thiên trễ UDP ở mạng nhàn và khi chạy `iperf3`. Tỉ lệ mất, độ dài cụm mất dài nhất. Với TCP: có mất không, và p99.9 ra sao?
+6. **Skew.** Skew ESP32 so với mini PC đo bằng đường bao dưới, so với dung sai thạch anh trong datasheet. Một giờ thì cộng dồn bao nhiêu ms?
+
+```markdown
+# prediction-b6.md — K5 Bài 6 (commit trước khi nạp firmware đo)
+- Khung: ___ byte (IMU), ___ (ToF), ___ (BME); tổng ___ B/s; UART 921600 = ___ B/s; printf dạng chữ: vừa / không vừa vì ___
+- USB native: biến thiên trễ p50/p99/p99.9 = ___ / ___ / ___ ms ; chip cầu: ___ / ___ / ___ ms ; lý do: ___
+- Mô phỏng 2: trừ t0 p50 ≈ ___ ms, âm ___% ; skew sai ___ ppm
+- Mô phỏng 1: parser cố định đúng ___ khung ; đồng bộ lại mất ___ khung
+- Wi-Fi UDP: p99 nhàn ___ ms, tải nặng ___ ms ; mất ___% , cụm dài nhất ___ gói ; TCP: mất ___ , p99.9 ___ ms
+- Skew: ___ ppm (datasheet ±___ ppm) → ___ ms/giờ
+- Độ tự tin (1–5) từng dòng: ___
+```
+
+### 6. Làm
+
+Chia 12h gợi ý: khung + firmware 4h; chương trình đọc ở host 2h; hai lần đo 1 giờ để chạy không cần trông (1h công sức); ép hỏng 2h; phân tích 2h; quyết định và ghi chép 1h.
+
+**Bước 0 — Khung gói (mới, gốc bước 1–2 cần nó).** Từ bảng "trường bắt buộc" của Bài 5, viết `frame_spec.md` trước khi viết firmware:
+
+| Trường | Kiểu | Vì sao |
+|---|---|---|
+| magic | 2 byte | Tìm ranh giới khung trên luồng byte |
+| version, stream_id | u8, u8 | Đổi schema không làm parser cũ hiểu nhầm (→ F3.2); mỗi luồng một `seq` |
+| len | u8 hoặc u16 | Payload thay đổi theo luồng; parser kiểm giới hạn trước khi tin |
+| boot_id | u32, ngẫu nhiên lúc khởi động | Phân biệt reset với đảo thứ tự |
+| seq | **u32** | u16 ở 1 kHz quay vòng sau 65 s |
+| t_mcu_us | u64 (`esp_timer_get_time()`, µs từ lúc boot) | Đóng dấu ở ISR data-ready |
+| payload | raw + status + cấu hình rút gọn | Giữ raw để tái tạo (Bài 4); status bắt buộc (Bài 5) |
+| crc | CRC-16 hoặc CRC-32 trên mọi byte trước nó | Phát hiện byte hỏng |
+
+Little-endian, struct packed. Kiểm kích thước bằng `static_assert(sizeof(...) == N)` trong firmware và `struct.calcsize` ở host. Lệch một byte ở padding là lỗi kinh điển.
+
+**Bước 1 — Firmware: 3 cảm biến, 3 nhịp, đóng dấu ở ISR** (bản gốc). IMU và VL53L1X có chân ngắt data-ready. Nối chân đó vào GPIO, ISR chỉ ghi `esp_timer_get_time()` và đẩy vào hàng đợi; task đọc I2C và đóng khung. BME280 không có chân data-ready: dùng forced mode, đóng dấu lúc ra lệnh đo cộng thời gian đo danh định, và ghi rõ cách đóng dấu đó trong `frame_spec.md` `[tự đo]`. Dòng đầu mỗi khối code ESP-IDF ghi `# [chưa chạy]` và "kiểm API theo phiên bản IDF bạn cài".
+
+**Bước 2 — Số thứ tự** (bản gốc: "đừng bỏ qua nó"). Mỗi luồng một `seq` u32 riêng, tăng **trước khi** đưa vào hàng đợi gửi. Nếu hàng đợi đầy, firmware bỏ mẫu và tăng một bộ đếm `dropped_at_source`, gửi định kỳ trong một khung trạng thái. Như vậy host phân biệt được "MCU bỏ" (bộ đếm tăng) với "mất trên đường" (lỗ `seq` mà bộ đếm không giải thích được) (→ F3.9).
+
+**Bước 3 — Hai đường về mini PC** (bản gốc). Chạy **đồng thời** để cùng điều kiện, hoặc xen kẽ từng khối 10 phút:
+- Dây: cổng USB native (USB Serial/JTAG, CDC-ACM), **và** cổng UART qua chip cầu ở 921600 baud. Hai đường dây khác nhau, đo cả hai.
+- Wi-Fi: UDP tới mini PC; ghi chế độ power save đang dùng. Một khối TCP để đối chứng, bật `TCP_NODELAY` ở ESP32 `[tự đo — kiểm tùy chọn lwIP]`.
+- Host: một luồng chỉ đọc cho mỗi đường, đóng dấu ngay khi `read()`/`recv()` trả về bằng `time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW)`. Lý do không dùng `CLOCK_MONOTONIC`: nó bị NTP slew, nên làm sai chính độ dốc bạn đang đo (→ F4.3). Với UDP, bật `SO_TIMESTAMPNS` để lấy thêm thời điểm kernel `[chuẩn — socket(7)]`. Ghi thêm `n_frames_in_read` (số khung trong một lần `read()`): mọi khung trong cùng một chunk có chung một t_host.
+
+**Bước 4 — Đo trong 1 giờ cho mỗi đường** (bản gốc; sửa định nghĩa latency):
+- **Biến thiên trễ một chiều** thay cho "latency": x = t_host − t_mcu; ước lượng skew bằng đường bao dưới (`lower_envelope` ở mô phỏng 2, cửa sổ 60 s); báo p50/p99/p99.9 của x − đường bao, và skew (ppm). Ghi rõ trong báo cáo: "không gồm trễ nền, cần Module 2".
+- **Jitter:** phân bố đầy đủ (CCDF thang log), không phải một độ lệch chuẩn. Tách jitter lấy mẫu (khoảng cách `t_mcu` liên tiếp) khỏi jitter đường truyền.
+- **Packet loss** theo lỗ `seq`, trừ phần `dropped_at_source` đã khai. Báo tỉ lệ kèm CI Wilson, hoặc cận trên 3/n nếu 0. Báo thêm độ dài cụm mất dài nhất.
+- **Reorder và trùng** (UDP): `seq` lùi hoặc lặp trong cùng `boot_id`.
+- **Sai số của dụng cụ:** t_host lấy ở user space nên cộng lịch của tiến trình (cỡ chục µs tới ms khi máy bận `[tự đo]`). Với serial, một chunk nhiều khung gộp chung một thời điểm. Ước lượng skew từ 60 cửa sổ có sai số cỡ (độ rộng của "sàn" trễ) / (độ dài phép đo). Với sàn ~0,1 ms trên 1 giờ, sai số chỉ vài phần trăm ppm.
+
+**Bước 5 — Vẽ hai phân bố chồng nhau, thang log** (bản gốc). Dùng CCDF (1 − F(x), trục y log) thay histogram: đuôi Wi-Fi hiện rõ ở 10⁻³, 10⁻⁴ mà histogram không thấy.
+
+**Bước 6 — Ép nó hỏng** (bản gốc): tải Wi-Fi nặng bằng `iperf3` giữa laptop và mini PC qua cùng AP; che ăng-ten (bàn tay, hộp kim loại); dây USB dài, mỏng, qua hub rẻ không nguồn phụ. Thêm (mới): (a) firmware gửi `printf` dạng chữ ở nhịp IMU cao nhất qua UART, xem hàng đợi gửi đầy và `dropped_at_source` tăng; (b) chương trình host `sleep(0.2)` giữa hai lần đọc để bộ đệm host tràn; (c) rút cắm nguồn ESP32 giữa phép đo: host phải thấy `boot_id` mới, không thấy "đảo thứ tự".
+
+**Bước 7 — Quyết định (mới).** Một bảng trong `decisions.md`: luồng × đường × lý do bằng số. Ví dụ dạng: "IMU 200 Hz → USB native, vì p99.9 biến thiên trễ ___ ms và mất 0 (cận trên ___)". "BME280 1 Hz → đi đâu cũng được". "Wi-Fi chỉ cho log/telemetry không dùng để căn chỉnh thời gian." Đây là đầu vào trực tiếp của K5 Bài 7 (ngân sách, dòng 4) và K7 C4.3 (giao thức ESP32 ↔ host).
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Bảng của bản gốc** (giữ nguyên; cột cuối là phần sửa cách đọc):
+
+| Đường | Latency p50 | Jitter | Packet loss | Cách đọc đúng |
+|---|---|---|---|---|
+| USB-serial (CDC hoặc cầu UART 921600 baud) | Sub-ms tới vài ms, khá ổn định. USB có chu kỳ polling, đo nó | Nhỏ | ≈0 nếu không tràn buffer | "p50" ở đây là biến thiên trễ, không phải trễ tuyệt đối. Chip cầu có thể có thời gian chờ riêng, làm phân bố rộng hơn native CDC |
+| WiFi UDP, mạng nhàn | Vài ms | **Đuôi dài**, p99 có thể gấp nhiều lần p50 | Nhỏ nhưng khác 0 | Báo cụm mất dài nhất, không chỉ tỉ lệ |
+| WiFi UDP, mạng tải nặng | Tăng | Đuôi rất dài | Tăng rõ | |
+| WiFi TCP | Cao hơn UDP | Có spike do retransmit | ≈0, nhưng đổi bằng latency | Spike là head-of-line blocking: mọi mẫu sau gói mất cùng bị trễ |
+
+**Mô phỏng 1** (`[đã chạy]`, seed 1): mất 12 byte, lật 30 bit. Parser cố định nhận một khung hỏng **không bị phát hiện** ở #463 (không có CRC), rồi lệch pha vĩnh viễn sau khung #2070. Chỉ 2.070/20.000 khung đúng `seq`. Parser đồng bộ lại nhận **19.958** khung. CRC loại 38 ứng viên. `seq` báo 42 lỗ, thiếu 42 khung, 0 lần lùi. Đúng bằng 12 + 30 sự kiện lỗi, vì mỗi lỗi giết đúng một khung.
+
+**Mô phỏng 2** (`[đã chạy]`, seed 6; trễ giả định):
+
+| Đường | Cách | p50 / p99 / p99.9 (ms) | Ghi chú |
+|---|---|---|---|
+| USB | trừ t0 | −41,4 / −0,9 / 0,1 | 99,9% mẫu "âm" |
+| USB | đường bao dưới | 0,49 / 0,98 / 2,46 | skew ước lượng −23,0 ppm, lệch p99 so với thật 0,01 ms |
+| USB | thật (gài sẵn) | 0,50 / 0,99 / 2,47 | trễ nền 0,15 ms: không đo được |
+| Wi-Fi | trừ t0 | −40,7 / 0,1 / 5,4 | 99% mẫu "âm"; mất 1,03% |
+| Wi-Fi | đường bao dưới | 1,01 / 8,84 / 17,94 | lệch p99 0,07 ms |
+| Wi-Fi | thật (gài sẵn) | 1,08 / 8,91 / 18,01 | trễ nền 1,52 ms: không đo được |
+
+Đọc: "trừ t0" cho ra một đường dốc của đồng hồ, không ra trễ. Đường bao dưới lấy lại skew và phân bố biến thiên trễ gần như chính xác. Phần không bao giờ lấy lại được là trễ nền, cần Module 2.
+
+**Kỳ vọng trên phần cứng** `[ước lượng — tự đo]`:
+- Băng thông: ba luồng nhị phân ở 200/50/1 Hz chỉ vài kB/s, một phần nhỏ của 921600 baud (~92 kB/s ở 8N1). `printf` dạng chữ ở 1 kHz IMU (~60 kB/s) tiến sát trần UART. Đó là lúc hàng đợi gửi đầy.
+- USB native CDC: biến thiên trễ p99 cỡ ≤ 1–2 ms; đuôi hiếm vài ms do lịch của host. Chip cầu UART: có thể rộng hơn, tùy thời gian chờ của chip và driver.
+- Wi-Fi UDP nhàn: p99 vài tới chục ms; với `iperf3` đuôi tới hàng chục–trăm ms và mất theo cụm. Che ăng-ten làm tăng truyền lại ở lớp MAC trước khi tăng mất ở lớp UDP.
+- Skew: hiệu của hai sai số tần số, mỗi cái cỡ vài–vài chục ppm. Một giờ thì cộng dồn chục ms. Nếu skew bạn đo ra lớn hơn dung sai của hai thạch anh cộng lại, hãy kiểm `CLOCK_MONOTONIC` có lọt vào thay cho `MONOTONIC_RAW` không, hoặc host có đang bị NTP slew không.
+- Rút nguồn ESP32: `boot_id` đổi, `seq` về 0, t_mcu về gần 0. Đường bao dưới phải fit **riêng** cho từng `boot_id`.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Đường dây mất gói đều đặn (bản gốc) | Tràn buffer ở một trong hai đầu | `dropped_at_source` tăng? Lỗ `seq` có chu kỳ trùng với lúc host bận? | Tăng buffer, luồng đọc riêng ở host, giảm nhịp hoặc chuyển sang nhị phân |
+| WiFi p99 rất tệ (bản gốc) | Bình thường | CCDF; power save; kênh Wi-Fi đông | **Ghi lại, đây là kết quả** (bản gốc) |
+| Latency âm (bản gốc) | Hai đồng hồ chưa so | Hiệu số có dốc tuyến tính theo thời gian | Đường bao dưới cho biến thiên; Module 2 cho trễ tuyệt đối |
+| Skew đổi giữa đầu và cuối giờ | Nhiệt độ thay đổi (thạch anh), hoặc host bị NTP chỉnh | Fit riêng nửa đầu và nửa sau; ghi nhiệt độ phòng | Dùng `MONOTONIC_RAW`; ghi nhiệt (cầu sang K5 Bài 10) |
+| Mọi khung trong một chunk có cùng t_host | Đọc serial theo chunk | `n_frames_in_read` > 1 | Đúng là vậy. Dùng t_host chỉ để ghép thô, không để đo |
+| `seq` "lùi" hàng nghìn bậc một lần | MCU reset (brownout, watchdog) | `boot_id` đổi? | Xử lý như phiên mới. Nếu `boot_id` không đổi thì là lỗi firmware |
+| UDP không mất gói nào trong 1 giờ | Mạng nhàn, gần AP | n gói | Báo cận trên 3/n; chạy thêm khối `iperf3` |
+| Parser báo CRC sai liên tục | Sai thứ tự byte, padding struct, CRC tính trên phạm vi khác nhau ở hai đầu | So `struct.calcsize` với `sizeof`; một khung mẫu hex | Sửa spec; viết một golden frame dùng cho cả firmware lẫn host test |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot, mỗi con 3 ESP32 gửi IMU 200 Hz qua Wi-Fi về một server trong kho. Cái gì gãy trước: băng thông, airtime của kênh, hay độ chính xác thời gian? Tính thô trước khi trả lời.
+   <details><summary>Hướng nghĩ</summary>Byte thì nhỏ. Airtime thì không: mỗi gói nhỏ vẫn tốn overhead MAC (preamble, ACK, backoff), và 60.000 gói/s trên vài kênh chung là đầu gối của hàng đợi (→ F7.1). Gom nhiều mẫu mỗi gói giảm airtime nhưng tăng trễ, và chỉ an toàn vì timestamp nằm ở nguồn. Đây là lý do thiết kế "đóng dấu ở MCU" là điều kiện để được phép gom.</details>
+2. **[Failure mode]** Robot K7 chạy 3 giờ. Ở phút 97, ESP32 brownout khi motor kéo dòng, reset trong 300 ms. Liệt kê mọi thứ ở host sẽ sai nếu khung không có `boot_id`, và cách phát hiện nếu có.
+   <details><summary>Hướng nghĩ</summary>`seq` về 0: đếm lỗ ra số âm hoặc khổng lồ, dedup có thể vứt dữ liệu mới vì "đã thấy seq này". t_mcu về 0: đường bao dưới fit qua hai phiên cho skew vô nghĩa. Ghép theo thời gian ở Bài 13 đặt dữ liệu sau reset vào đầu file. Với `boot_id`: mỗi phiên một mô hình đồng hồ riêng; lỗ 300 ms được ghi là gián đoạn có lý do (→ F5.7, K7 C5).</details>
+3. **[Vì sao không]** Vì sao không chạy SNTP trên ESP32 rồi đóng dấu bằng giờ thực, cho khỏi phải ước lượng skew?
+   <details><summary>Hướng nghĩ</summary>SNTP qua Wi-Fi mang chính đuôi trễ bạn vừa đo vào phép chỉnh đồng hồ (giả định đối xứng của NTP, → F4.4). Mỗi lần chỉnh là một bước nhảy hoặc một đoạn slew trong timestamp. Bạn đổi một đường thẳng dễ fit lấy một đường gãy khó fit. Ghi t_mcu thô và mô hình hóa đồng hồ ở host thì giữ được mọi lựa chọn về sau.</details>
+4. **[Nếu…thì]** Nếu host đọc serial theo chunk 512 byte và mỗi khung 30 byte, sai số căn chỉnh tối đa khi dùng t_host làm timestamp là bao nhiêu ở IMU 200 Hz?
+   <details><summary>Hướng nghĩ</summary>Một chunk chứa ~17 khung, tức ~85 ms dữ liệu IMU, cùng một t_host. Sai số tới ~85 ms cộng trễ. Đó là con số đi vào |ω̇|·δ của K5 Bài 13. Đó cũng là lý do t_host chỉ dùng để ghép thô.</details>
+5. **[Liên ngành]** IETF có hai thước đo riêng: One-Way Delay (RFC 7679) đòi đồng hồ đồng bộ, còn IP Packet Delay Variation (RFC 3393) thì không. Phân tích của bạn ở bước 4 ứng với cái nào, và RFC 3393 xử lý skew thế nào?
+   <details><summary>Hướng nghĩ</summary>Bước 4 là IPDV: hiệu trễ của các gói so với một gói tham chiếu (ở đây là đường bao dưới), nên khử được offset hằng. RFC 3393 có phần thảo luận skew đồng hồ và cách ước lượng rồi loại nó. Khác: mạng đo trễ của gói; bạn đo trễ của **một phép đo vật lý**, nên còn thêm trễ trong cảm biến (DLPF) mà không RFC nào biết.</details>
+
+### 10. Liên kết ra ngoài
+
+- **Đo mạng: Paxson (1998), Moon–Skelly–Towsley (1999), RFC 3393.** Cả ngành đo Internet phải học cách tách đồng hồ khỏi trễ trước khi tin số trễ một chiều `[chuẩn]`. Giống: cùng phương trình θ(t) + d, cùng đường bao dưới. Khác: ở Internet đường đi đổi theo routing nên "sàn" có thể nhảy bậc. Đường USB của bạn ổn định, nên đường bao dưới dễ hơn nhiều.
+- **Hàng không: ARINC 429 và AFDX.** Bus dữ liệu điện tử hàng không cổ điển (ARINC 429) là đường điểm–điểm một chiều, nhịp cố định. AFDX (ARINC 664 phần 7) dùng Ethernet nhưng giới hạn băng thông và jitter cho từng "virtual link" bằng cấu hình tĩnh `[chuẩn]`. Giống: luồng điều khiển cần trần trễ chứng minh được, nên đi đường có trần. Khác: hàng không chứng minh trần bằng phân tích lúc thiết kế, còn bạn đo bằng thực nghiệm. Một giờ đo không chứng minh được p99.9999.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Paxson 1998; Moon, Skelly, Towsley 1999 | `[chuẩn]` | SIGMETRICS 1998; IEEE INFOCOM 1999 |
+| `esp_timer_get_time()` trả µs từ lúc boot, 64 bit | `[chuẩn — ESP-IDF API reference]` | Kiểm theo phiên bản IDF |
+| ESP32-S3 USB là full-speed; host lập lịch theo khung 1 ms | `[spec — ESP32-S3 datasheet; USB 2.0 spec]` | Biến thiên trễ thật phụ thuộc driver host `[tự đo]` |
+| Chip cầu UART có thời gian chờ/gom riêng | `[tự đo]` | Datasheet của đúng chip trên board |
+| Station ESP32 mặc định bật modem sleep | `[tự đo — ESP-IDF docs, mục Wi-Fi power save]` | Kiểm theo phiên bản; ghi chế độ trong `decisions.md` |
+| `CLOCK_MONOTONIC` bị NTP slew, `MONOTONIC_RAW` thì không | `[chuẩn — clock_gettime(2)]` | Ghi chú hợp nhất K4/K5 |
+| `SO_TIMESTAMPNS` cho thời điểm kernel nhận gói | `[chuẩn — socket(7)]` | |
+| Quy tắc ba (3/n) | `[chuẩn — F1.4]` | Xấp xỉ cho n lớn |
+| RFC 7679 (OWD), RFC 3393 (IPDV) | `[chuẩn]` | |
+| Kết quả hai mô phỏng | `[đã chạy]` | Mô hình trễ giả định |
+
+**Đã sửa so với bản gốc/Gemini:**
+- Bản gốc, bước 4 "latency từ timestamp MCU tới lúc host nhận": không đo được khi thiếu đồng hồ chung → đổi thành biến thiên trễ một chiều sau khi loại skew bằng đường bao dưới, kèm skew. Giữ câu "latency âm → Module 2".
+- Gemini, "Nếu ra khác": "trừ mốc t₀ là đủ" → sai, vì skew còn nguyên (mô phỏng 2).
+- Gemini, bước 3: jitter = độ lệch chuẩn khoảng cách giữa hai gói liên tiếp → trộn jitter lấy mẫu với jitter đường truyền; tách hai thứ.
+- Gemini, "Nếu ra khác": "WiFi không rớt gói → tăng ODR" → giữ gợi ý, thêm: 0 lần mất là một kết quả có cận trên 3/n.
+- Bản gốc, bảng ba chỗ đóng dấu: "tại lúc lấy mẫu" → chỉ rõ ISR data-ready, BME280 không có data-ready, và trễ DLPF.
+- Bổ sung so với bản gốc (giữ đủ 6 bước gốc): khung có magic/len/CRC/version/`boot_id`, `seq` u32, đếm `dropped_at_source`, parser đồng bộ lại, `MONOTONIC_RAW`, `SO_TIMESTAMPNS`, hai đường dây (native và chip cầu), CCDF, ba cách ép hỏng mới, bảng quyết định.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** S. Moon, P. Skelly, D. Towsley, "Estimation and Removal of Clock Skew from Network Delay Measurements", *IEEE INFOCOM* 1999. RFC 3393, "IP Packet Delay Variation Metric for IP Performance Metrics (IPPM)".
+- **Giải thích:** ESP-IDF Programming Guide, các mục "USB Serial/JTAG Controller Console" và "Wi-Fi Driver" (power save).
+- **Đào sâu (tùy chọn):** V. Paxson, "On Calibrating Measurements of Packet Transit Times", *ACM SIGMETRICS* 1998.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao "latency MCU → host" không đo được mà biến thiên của nó thì đo được; (2) vẽ lại đường đi của một mẫu ở phần 2 và đánh dấu năm chỗ có thể đóng dấu; (3) hai câu dưới.
+
+  1. Bạn đo 1 giờ qua UDP, 720.000 gói, không mất gói nào. Bạn ghi gì vào bảng quyết định?
+     <details><summary>Đáp án</summary>Tỉ lệ mất ≤ 3/720.000 ≈ 4,2 × 10⁻⁶ (cận trên 95%) **trong điều kiện đó** (mạng nhàn, khoảng cách X, kênh Y). Không ghi "0%". Kèm kết quả khối `iperf3`: thường đó mới là điều kiện quyết định có được dùng Wi-Fi hay không.</details>
+  2. Đường bao dưới của đường USB cho skew +31 ppm ở nửa giờ đầu và +28 ppm ở nửa giờ sau. Phòng có điều hòa bật lúc giữa giờ. Có gì sai không?
+     <details><summary>Đáp án</summary>Không nhất thiết sai. Tần số thạch anh phụ thuộc nhiệt độ, nên skew đổi 3 ppm khi phòng nguội là hợp lý (K5 Bài 10 đo đúng hiện tượng này). Kiểm thêm: host có dùng `MONOTONIC_RAW` không, NTP có chỉnh trong lúc đó không. Kết luận cho bài này: mô hình θ(t) tuyến tính chỉ đúng trong cửa sổ nhiệt ổn định, nên fit theo đoạn và ghi nhiệt độ.</details>
+
+---

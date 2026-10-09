@@ -638,3 +638,308 @@ python bench_n100.py --runtime ov --device CPU --iters 30 --warmup 5 --out resul
   </details>
 
 ---
+
+## Bài 12 — Roofline: nút thắt nằm ở đâu (6h)
+
+> **Vị trí:** K4 Bài 11 (N100: ba runtime, micro-benchmark π và β) → **Bài 12** → K4 Bài 13 (viết bài) · **Cần trước:** F7.2 (tự tính π, β, ridge, arithmetic intensity — **bắt buộc học trước**, bài này không dạy lại), F7.3 (profiling), F1.6 (fit mô hình vào số đo); K4 Bài 5 (mẫu đối chứng GEMM, trace profiler), Bài 8 (bảng precision), Bài 10 (fit t_prefix + N·t_step), Bài 11 (`microbench.json`) · **Sau bài này bạn quyết định được:** với từng **pha** của model trên từng target, đòn bẩy tiếp theo là giảm byte (quantization weight-only), nâng trần tính (kernel int8 thật, đổi runtime), hay cắt chi phí cố định (gộp kernel, CUDA Graphs). Bạn trả lời được câu "why not double?" của Bài 13 bằng số.
+
+**Câu hỏi của bài (bản gốc):** model chậm vì thiếu compute hay vì thiếu băng thông bộ nhớ?
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Trước năm 2022, attention trong transformer được tối ưu theo số FLOP. Các biến thể "attention xấp xỉ" giảm FLOP, nhưng nhiều cái không nhanh hơn trên đồng hồ treo tường. Tri Dao và cộng sự (*FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness*, NeurIPS 2022) chỉ ra lý do: attention chuẩn bị chặn bởi việc đọc và ghi ma trận trung gian ra bộ nhớ HBM của GPU, không bị chặn bởi phép tính `[chuẩn]`. Lời giải của họ chia ô (tiling) để ma trận trung gian không bao giờ rời SRAM. Ở lượt backward nó còn **tính lại** một phần thay vì lưu. Tức là làm **nhiều** FLOP hơn mà vẫn chạy nhanh hơn. Đọc theo roofline: họ không leo lên trần tính, họ dời điểm sang phải bằng cách giảm byte.
+
+Cùng năm, Horace He viết bài *Making Deep Learning Go Brrrr From First Principles* `[chuẩn]`. Bài chia thời gian chạy model thành ba vùng: compute, băng thông bộ nhớ, và **overhead** (Python, dispatch, launch kernel). Vùng thứ ba không có trên hình roofline của Williams–Patterson, vì hình đó giả định kernel đủ lớn. Ở batch 1, nhiều kernel không đủ lớn. Bài này dùng cả ba vùng.
+
+### 2. Mô hình tư duy
+
+F7.2 đã cho bạn hình roofline và cách tính I cho một lớp. Bài này thêm ba thứ: đặt **pha** chứ không đặt model; thêm vùng overhead; và **ba đường** phải gặp nhau trước khi được kết luận.
+
+```
+GFLOP/s đạt được (log)
+   ▲             ┌──────────────── trần tính π (đo bằng GEMM, Bài 5/11)
+   │           ╱ ★ pha A (gần trần: kernel lớn, I cao)
+   │         ╱
+   │       ╱   ☆ pha B: ĐÚNG phía mem, nhưng nằm xa dưới trần β·I
+   │     ╱       → khoảng trống dọc = overhead (launch, Python, kernel nhỏ)
+   │   ╱  trần β·I (đo bằng GEMV/STREAM)
+   └──────────────┼────────────────────► I (FLOP/byte)
+               ridge = π/β
+   Khoảng cách dọc từ điểm đo tới mái = "% trần đạt". Thấp tới mức đó thì mái nào cũng chưa chặn bạn.
+```
+
+```mermaid
+flowchart LR
+  A["Đường 1 — Tính trần<br/>FLOP, byte theo pha<br/>π, β ĐO (Bài 11)"] --> V{"Ba đường<br/>có cùng kết luận?"}
+  B["Đường 2 — Can thiệp<br/>đổi byte (int8 weight-only, Bài 8)<br/>đổi n token (chunk_size)<br/>đổi số kernel (CUDA Graphs)"] --> V
+  C["Đường 3 — Quan sát<br/>profiler: thời gian từng kernel,<br/>khoảng trống giữa kernel, IPC"] --> V
+  V -->|"có"| D["kết luận theo pha<br/>+ đòn bẩy tiếp theo"]
+  V -->|"không"| E["một giả định sai:<br/>đếm FLOP/byte, quant chưa áp,<br/>dequant ra DRAM, hoặc vùng overhead"]
+```
+
+Bốn ý bản chất:
+
+1. **Đơn vị phân tích là pha.** SmolVLA có ít nhất ba pha với cường độ rất khác nhau: vision encoder (hàng nghìn patch), prefix LM (vài trăm token), action expert (n = chunk_size token, chạy `num_steps` lần). Một điểm "SmolVLA" trên roofline là trung bình của ba điểm nằm ở ba chỗ khác nhau. Nó không nằm ở đâu cả.
+2. **Mái phải là số đo.** π lý thuyết của N100 giả định 4 nhân ở xung tối đa và kernel hoàn hảo. Bài 11 đã đo π (GEMM) và β (GEMV, STREAM). Dùng hai số đó. Trên GPU, mẫu đối chứng GEMM của Bài 5 cho π của *chiếc máy đó*.
+3. **"% trần đạt" thấp không có nghĩa là bị chặn bởi trần.** Một pha đạt 6% trần β·I của nó không bị băng thông chặn. Nó bị chặn bởi thứ khác: kernel quá nhỏ để lấp GPU, chi phí launch, đồng bộ, Python. Khi đó quantization (giảm byte) gần như không giúp, dù roofline xếp pha đó vào phía memory.
+4. **Roofline là dự đoán. Can thiệp là kiểm định.** Đổi byte mà giữ FLOP (weight-only), đổi FLOP mà giữ byte weight (đổi số token n), đổi số kernel mà giữ cả hai (CUDA Graphs). Pha phản ứng với can thiệp nào thì bị chặn bởi thứ đó. Đây là cách làm của bản gốc ("hai đường phải gặp nhau"), mở rộng thành ba can thiệp.
+
+Mô phỏng: một VLA cỡ SmolVLA, kích thước **giả định** theo config công khai (in lại từ checkpoint của bạn). Cận dưới roofline theo từng Linear, cộng một chi phí cố định mỗi kernel:
+
+```python
+# [đã chạy] b12_phases.py — đặt từng PHA của một VLA cỡ SmolVLA lên roofline, có và không có overhead
+import numpy as np
+# Kích thước [ước lượng] — IN LẠI từ config.json của checkpoint bạn dùng (Bài 1, Bài 11)
+def block(h, inter, kv, n):            # một lớp transformer = các Linear (n token, k vào, m ra); bỏ qua attention
+    return [(n, h, h), (n, h, kv), (n, h, kv), (n, h, h), (n, h, inter), (n, h, inter), (n, inter, h)]
+CAMS, STEPS = 2, 10
+PHASES = {   # tên: (các Linear của MỘT lần chạy, số kernel phụ mỗi lần chạy: norm, rotary, softmax..., số lần chạy)
+    "vision": (block(768, 3072, 768, 1024) * 12, 12 * 15, CAMS),
+    "prefix": (block(960, 2560, 320, CAMS * 64 + 49) * 16, 16 * 15, 1),
+    "expert": (block(720, 1920, 240, 50) * 16, 16 * 15, STEPS),
+}
+# (π FLOP/s, β B/s, byte/phần tử, chi phí cố định mỗi kernel s, trần int8 / trần gốc). Thay π, β bằng số ĐO ở Bài 11.
+HW = {"N100 CPU fp32": (0.12e12, 25e9, 4, 2e-6, 2),     # ~60% π, ~65% β lý thuyết; int8 VNNI ×2 [giả định]
+      "RTX 4090 bf16": (165e12, 1008e9, 2, 8e-6, 4)}    # spec dense; 8 µs/kernel PyTorch eager [giả định]
+
+def phase(linears, n_aux, P, B, b, t_k, b_w=None):
+    """Cận dưới roofline (cộng theo từng Linear) và thời gian khi thêm chi phí cố định mỗi kernel."""
+    b_w = b if b_w is None else b_w                       # byte/trọng số: weight-only quant đổi đúng số này
+    t, F, Y = 0.0, 0.0, 0.0
+    for n, k, m in linears:
+        f, y = 2 * n * k * m, b_w * k * m + b * (n * k + n * m)
+        t += max(f / P, y / B); F += f; Y += y
+    return np.array([t, t + (len(linears) + n_aux) * t_k]), F, Y
+
+for hw, (P, B, b, t_k, k8) in HW.items():
+    print(f"--- {hw}: ridge = {P / B:.0f} FLOP/B   (tăng tốc ghi dạng roofline / +overhead)")
+    print("  pha    | I (F/B) | phía | roofline ms | +overhead ms | % trần | int8 w-only  | W8A8")
+    tot = np.zeros((3, 2))
+    for ph, (lin, n_aux, reps) in PHASES.items():
+        t, F, Y = phase(lin, n_aux, P, B, b, t_k)
+        tw, _, _ = phase(lin, n_aux, P, B, b, t_k, b_w=1)          # chỉ weight 1 byte, tính vẫn ở dtype gốc
+        ta, _, _ = phase(lin, n_aux, k8 * P, B, 1, t_k)            # weight + activation int8, kernel int8 thật
+        tot += reps * np.array([t, tw, ta])
+        print(f"  {ph:6s} | {F / Y:7.1f} | {'CMP' if F / Y > P / B else 'MEM'}  | {reps * t[0] * 1e3:11.2f} |"
+              f" {reps * t[1] * 1e3:12.2f} | {100 * t[0] / t[1]:5.0f}% | {t[0] / tw[0]:4.2f}x/{t[1] / tw[1]:4.2f}x"
+              f" | {t[0] / ta[0]:4.2f}x/{t[1] / ta[1]:4.2f}x")
+    s = tot[0]
+    print(f"  TỔNG   |         |      | {s[0] * 1e3:11.2f} | {s[1] * 1e3:12.2f} | {100 * s[0] / s[1]:5.0f}% |"
+          f" {s[0] / tot[1][0]:4.2f}x/{s[1] / tot[1][1]:4.2f}x | {s[0] / tot[2][0]:4.2f}x/{s[1] / tot[2][1]:4.2f}x")
+```
+
+Mô hình này cố ý thô: bỏ attention (đáng kể ở vision 1024 patch), coi mọi Linear chạm DRAM (bỏ qua cache), và một chi phí cố định cho mọi kernel. Nó đủ để thấy **thứ tự độ lớn** và **hướng** của mỗi can thiệp. Nó không đủ để thay số đo. Đừng chạy trước khi làm Đề 2 và Đề 4.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| N+1 query: mỗi query nhanh, nhưng N lần round-trip giết latency | Vùng overhead: hàng nghìn kernel nhỏ, mỗi cái trả một chi phí launch cố định | Gộp query (JOIN, batch) chỉ cắt round-trip. Gộp kernel (fusion, `torch.compile`) cắt launch **và** cắt luôn byte, vì tensor trung gian không phải ghi ra DRAM | Chỉ đếm launch, không thấy fusion còn dời điểm sang phải trên roofline |
+| Trace APM: span nào chiếm bao nhiêu ms | Profiler: kernel nào chiếm bao nhiêu thời gian GPU | Span nói thời gian đi **đâu**. Nó không nói **vì sao** chậm (trần nào). Phải ghép với FLOP/byte của chính span đó | Tối ưu kernel chiếm nhiều thời gian nhất trong khi nó đã sát trần, bỏ qua kernel chỉ đạt 5% trần |
+| Service "CPU-bound" vs "IO-bound" | Compute-bound vs memory-bound | Service IO-bound nhanh lên khi tăng concurrency (async, thêm worker), vì chờ IO thì CPU rảnh. Kernel memory-bound **không** nhanh lên khi thêm nhân, sau khi các nhân đã lấp đầy β; 4 nhân N100 chung một kênh | Thêm luồng cho pha memory-bound, latency không đổi, rồi kết luận "runtime tệ" |
+| Load test đổi kích thước payload để tìm nút thắt | Can thiệp: đổi byte, đổi n, đổi số kernel | Mỗi can thiệp ML đổi **nhiều hơn một biến**. Weight-only int8 giảm byte, nhưng thêm FLOP giải nén và đổi kernel được chọn | Gán toàn bộ thay đổi latency cho "byte giảm" |
+
+**Chấm mô hình:**
+
+- *Bản gốc: "Hiệu năng của một phép tính bị chặn bởi một trong hai thứ: compute hoặc băng thông."* → **ĐÚNG MỘT PHẦN.** Đúng cho kernel đủ lớn, và đó là giả định của mô hình gốc. Gãy: ở batch 1 trên GPU lớn có vùng thứ ba, overhead, và nó thường chiếm phần lớn thời gian. **Phản ví dụ:** cột "% trần" của 4090 trong mô phỏng (phần 7). Một pha có thể nằm đúng phía memory mà chỉ đạt một phần nhỏ trần β·I, tức là mái nào cũng chưa chạm.
+- *Bản gốc: "Nếu roofline nói memory-bound mà quantization không giúp gì, một trong hai sai."* → **ĐÚNG MỘT PHẦN.** Tinh thần đúng: không gặp nhau là có giả định sai. Gãy: có ít nhất bốn giả định có thể sai mà không cái nào là "roofline sai". (1) Pha ở vùng overhead. (2) Kernel giải nén weight ra bf16 **trong DRAM** rồi mới nhân, nên byte đọc không giảm, thậm chí tăng. (3) Lượng tử chưa được áp (Bài 8 bước 3). (4) Bạn so end-to-end trong khi chỉ một pha memory-bound. **Phản ví dụ:** so hai cột "roofline" và "+overhead" của int8 weight-only trên 4090 trong mô phỏng (phần 7).
+- *Bản gốc, bảng "Nếu compute-bound thì quantization giúp ít hơn".* → **ĐÚNG MỘT PHẦN.** Đúng cho weight-only. Gãy: W8A8 có kernel int8 thật **nâng trần tính**, không chỉ giảm byte. Tensor core int8 của Ada có trần dense cao hơn bf16 `[spec — NVIDIA Ada whitepaper]`. Lệnh AVX-VNNI trên CPU Intel cũng nâng trần int8 `[tự đo — kiểm cờ avx_vnni bằng lscpu]`. Đó chính là trường hợp BitVLA mà bản gốc dẫn: cùng weight, đổi kernel sang đơn vị tính số nguyên. Nói theo roofline, họ nâng mái chứ không dời điểm. **Phản ví dụ:** so cột W8A8 với cột weight-only của N100 trong mô phỏng (phần 7).
+- *Bản gốc: "N100 chỉ có một kênh RAM, nên đừng giả định nó compute-bound như GPU."* → lời khuyên "đo rồi mới kết luận" đúng, **lý do ngược chiều**. Ridge N100 ~5 FLOP/B, 4090 ~82–164 FLOP/B. Cùng một pha dễ compute-bound trên N100 hơn. Đã chấm đầy đủ ở F7.2 mục 6(c).
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Roofline, I, ridge | Xem F7.2 | |
+| 🟢 | Điểm đạt được | (FLOP của pha) / (thời gian đo của pha), đặt tại I của pha | Điểm lý thuyết |
+| 🟢 | % trần đạt | Điểm đạt được / mái tại I đó | Hiệu suất so với π |
+| 🟢 | Vùng overhead | Thời gian bị chặn bởi chi phí cố định mỗi op (launch, dispatch, Python), không bởi FLOP hay byte | "GPU chậm" |
+| 🟢 | Can thiệp | Đổi một biến (byte, n, số kernel) để xem pha phản ứng thế nào | Thử nhiều cấu hình rồi chọn cái nhanh nhất |
+| 🟢 | Weight-only vs W8A8 trên roofline | Weight-only dời điểm sang phải (ít byte hơn); W8A8 có kernel int8 nâng mái π | Hai tên của cùng một thứ |
+| 🟡 | Kernel fusion, CUDA Graphs, `torch.compile` | Gộp nhiều op thành một kernel; ghi lại chuỗi launch để phát lại một lần; trình biên dịch làm cả hai | Tối ưu thuật toán |
+| 🟡 | `torch.utils.flop_counter.FlopCounterMode` | Đếm FLOP của các op PyTorch khi chạy thật | FLOP đo bằng phần cứng |
+| 🟡 | Nsight Compute "Speed of Light" | % thông lượng tính và % băng thông DRAM của **một** kernel so với trần | `utilization.gpu` |
+| 🟡 | IPC (`perf stat`) | Lệnh mỗi chu kỳ; thấp ở pha memory-bound trên CPU | %CPU |
+| 🔴 | Hierarchical roofline (L1/L2/DRAM) | Một mái cho mỗi tầng bộ nhớ | Cần cho bài này |
+
+### 5. Dự đoán
+
+**Tham số cần tra:**
+- Config của checkpoint: số lớp, hidden, intermediate, số head KV của vision encoder, của LM (số lớp *thật sự dùng*), của action expert; độ phân giải ảnh, patch size, số token ảnh sau khi nén (pixel shuffle); `chunk_size`, `num_steps`, số camera. Lấy từ `config.json` và code policy (Bài 1).
+- π, β đo được: `microbench.json` của Bài 11 (N100 CPU), mẫu đối chứng GEMM của Bài 5 (GPU). β của GPU: spec sheet, hoặc một phép copy lớn device→device (Bước 2).
+- Trần int8: NVIDIA Ada whitepaper (INT8 Tensor TOPS dense). N100: cờ `avx_vnni` trong `lscpu`.
+- Thời gian theo pha bạn đã có: t_prefix, t_step của Bài 10 (GPU), thời gian hai đồ thị export theo pha của Bài 11 (N100).
+
+**Đề:**
+1. FLOP và byte weight của từng pha, theo config của bạn (không theo mô phỏng). I của từng pha trên 4090 bf16, N100 CPU fp32, N100 iGPU fp16.
+2. Với π, β **đo được**: pha nào phía nào trên từng target? Có pha nào đổi phía giữa N100 và 4090 không?
+3. Cận dưới roofline của cả model trên từng target. So với latency đo được: % trần đạt của cả model, và của từng pha. Pha nào xa trần nhất?
+4. Weight-only int8 (Bài 8): roofline dự đoán mỗi pha nhanh lên bao nhiêu trên 4090? Bài 8 đã đo end-to-end bao nhiêu? Hai số có gặp nhau không, và nếu không thì vì giả định nào?
+5. Can thiệp n: tăng `chunk_size` từ 50 lên 100 (giữ weight). Nếu expert step memory-bound thì t_step đổi bao nhiêu? Nếu compute-bound? Nếu overhead-bound?
+6. Profiler một lần inference trên GPU: bao nhiêu kernel? Tổng thời gian kernel chiếm bao nhiêu phần trăm thời gian tường?
+
+```markdown
+# prediction-b12.md — commit trước khi mở profiler hay chạy mô phỏng
+| pha | FLOP | byte weight | I 4090 bf16 | I N100 fp32 | phía 4090 / N100 |
+|---|---|---|---|---|---|
+| vision | | | | | |
+| prefix | | | | | |
+| expert (1 bước) | | | | | |
+- π, β dùng: 4090 ___ / ___ ; N100 CPU ___ / ___ (nguồn: ___)
+- Cận dưới: 4090 ___ ms ; N100 ___ s ; % trần đạt cả model: ___ / ___ ; pha xa trần nhất: ___
+- int8 w-only trên 4090: dự đoán vision ___× prefix ___× expert ___× ; Bài 8 đo ___× ; gặp nhau? ___
+- chunk_size 50 → 100: t_step ×___ (nếu mem) / ×___ (nếu cmp) / ×___ (nếu overhead) ; tôi đoán: ___
+- Profiler: ___ kernel ; kernel chiếm ___% thời gian tường
+```
+
+### 6. Làm
+
+Gợi ý chia 6h: tính và vẽ 1,5h; can thiệp trên GPU 2h (gộp vào một lần thuê, chuẩn bị script từ trước); N100 1h; viết đoạn phân tích 1,5h.
+
+**Bước 1 — Tính arithmetic intensity theo pha** (gốc: "của model", sửa thành "của từng pha"). Thay `PHASES` trong mô phỏng bằng kích thước thật. Đếm FLOP bằng hai cách rồi so: (a) tay, theo công thức Linear (→ F7.2); (b) `FlopCounterMode` của PyTorch quanh **một** lần chạy mỗi pha `[tự đo — có từ PyTorch 2.1; op nào không có công thức thì nó không đếm]`. Lệch hơn 20% thì đi tìm phần bạn quên: attention, conv patch embedding, cross-attention của expert vào KV của prefix.
+
+**Bước 2 — Mái là số đo** (gốc: "tra thông số lý thuyết"; giữ, thêm số đo cạnh số lý thuyết). Bảng có hai cột cho mỗi target: lý thuyết `[ước lượng]` và đo `[tự đo]`. N100: `microbench.json`. GPU: π từ mẫu đối chứng GEMM của Bài 5; β đo bằng một phép copy lớn:
+
+```python
+# [chưa chạy] cần GPU + PyTorch — β sustained của chiếc card đang thuê (device→device)
+import torch
+x = torch.empty(512 * 2**20, dtype=torch.uint8, device="cuda"); y = torch.empty_like(x)   # 512 MB
+for _ in range(3): y.copy_(x)
+s, e = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+s.record(); [y.copy_(x) for _ in range(20)]; e.record(); torch.cuda.synchronize()
+print("β ≈", 2 * x.numel() * 20 / (s.elapsed_time(e) / 1e3) / 1e9, "GB/s (đọc + ghi)")
+```
+
+**Bước 3 — Vẽ roofline, đặt điểm đo** (gốc). Dùng khối vẽ của F7.2 mục 5, thay `HW` bằng mái đo. Thời gian từng pha lấy theo một trong hai cách, ghi rõ cách nào: (a) từ fit affine của Bài 10 (t_prefix gồm vision + prefix, t_step là một bước expert); (b) bọc từng pha bằng `torch.profiler.record_function("vision")`... rồi đọc thời gian GPU của từng nhãn. Mỗi pha một ngôi sao tại (I, FLOP/t), kèm thanh sai số từ CI của t (Bài 5). Ghi cạnh mỗi ngôi sao: "% trần".
+
+**Bước 4 — Kiểm chứng bằng can thiệp** (gốc: đối chiếu với quantization của Bài 8; mở rộng thành ba can thiệp, mỗi cái đổi một biến chính):
+
+| Can thiệp | Đổi | Giữ | Nếu pha memory-bound | Nếu compute-bound | Nếu overhead-bound |
+|---|---|---|---|---|---|
+| (a) weight-only int8 (Bài 8) | byte weight | FLOP (gần đúng) | nhanh lên rõ | không đổi hoặc chậm đi (giải nén) | gần như không đổi |
+| (b) `chunk_size` 50 → 100 | n token, tức FLOP và I | byte weight | gần như không đổi | gần gấp đôi | gần như không đổi |
+| (c) CUDA Graphs hoặc `torch.compile` | số lần launch, Python | FLOP, byte | ít đổi | ít đổi | nhanh lên rõ |
+
+Ba bảng trạng thái ở ba cột cuối là **dự đoán của mô hình**, không phải số đo. Bạn đối chiếu số đo với chúng. Lưu ý từng can thiệp:
+- (a) Đo **theo pha**, không chỉ end-to-end: lặp Bước 3 cho cấu hình int8. Kiểm byte thật sự giảm: profiler có kernel giải nén riêng ghi ra một tensor bf16 cỡ cả ma trận weight không? Nếu có, byte DRAM *không* giảm.
+- (b) Chỉ là phép đo thời gian, không phải cấu hình triển khai: đổi `chunk_size` làm hỏng policy đã train. Không chạy LIBERO với cấu hình này. Nếu code không cho đổi n mà không train lại, thay bằng vision encoder với 1 camera vs 2 camera gộp một batch.
+- (c) `torch.compile` có thể không chạy được với policy của bạn `[tự đo]`. Ghi lỗi; can thiệp (c) khi đó dựa vào profiler ở Bước 5.
+
+Kết luận một pha "bị chặn bởi X" chỉ khi đường 1 (vị trí so với ridge, % trần) và ít nhất một can thiệp đồng ý. Nếu không đồng ý, ghi "chưa xác định" kèm giả định nghi ngờ.
+
+**Bước 5 — Profiler** (gốc: "xem đơn vị tính được dùng bao nhiêu phần trăm"; sửa chỉ số). Dùng trace của Bài 5, Bước 8, hoặc chụp mới:
+- GPU: đếm số kernel một lần inference; tổng thời gian kernel / thời gian tường (phần còn lại là GPU rảnh, vùng overhead). Top 10 kernel theo thời gian, mỗi kernel ước I (GEMM nào, shape nào). Nếu được quyền: Nsight Compute cho 2–3 kernel lớn nhất, đọc % băng thông DRAM và % thông lượng tính trong mục "GPU Speed Of Light". Trên máy thuê, bộ đếm hiệu năng GPU thường bị khóa cho user thường. Lỗi `ERR_NVGPUCTRPERM` là triệu chứng, không phải lỗi của bạn `[chuẩn — tài liệu NVIDIA về quyền truy cập performance counter]`. Ghi lại rồi dựa vào profiler PyTorch.
+- **Không** dùng `utilization.gpu` hay "SM Active" làm bằng chứng compute-bound (Bài 5 câu hỏi ngược 4; F7.2 mục 6(d)).
+- N100: `perf stat -e cycles,instructions,cache-misses` quanh một lần chạy mỗi pha (đồ thị export theo pha của Bài 11). IPC thấp cùng nhiều LLC miss ở pha bạn đoán memory-bound là đồng thuận. IPC cao ở pha đoán compute-bound cũng vậy `[tự đo — tên sự kiện theo `perf list`]`.
+
+**Bước 6 — So ba target trên cùng hình** (gốc). CPU N100 fp32, iGPU N100 fp16 (OpenVINO, Bài 11), GPU thuê bf16. Một bảng pha × target: phía, % trần, đòn bẩy tiếp theo. Tìm ít nhất một pha đổi phía giữa N100 và GPU, và chứng minh bằng can thiệp (a) hoặc (b) trên **cả hai** máy. Bản gốc gọi đây là "kiểm tra chéo ba đường của Khóa 1, ở tầng cao hơn". Giữ đúng tinh thần đó.
+
+**Bước 7 — Viết đoạn "Why not double?" cho Bài 13.** Mỗi target một đoạn ≤ 5 câu: pha chiếm thời gian nhiều nhất, nó bị chặn bởi gì (kèm bằng chứng từ ít nhất hai đường), và nếu sửa nó thì cận trên của tăng tốc là bao nhiêu. Áp định luật Amdahl: nếu pha chiếm tỉ lệ p của thời gian và nhanh lên s lần, tăng tốc tổng là 1/((1−p) + p/s).
+
+**Sai số:** đếm FLOP tay sai ±20% là bình thường (bỏ attention, bias, norm). Byte còn bất định hơn, vì cache có thể giữ một phần weight hoặc activation: SmolVLA bf16 ~0,9 GB thì không vừa LLC, nhưng một lớp nhỏ thì vừa L2 của GPU `[ước lượng]`. Vì vậy % trần chỉ đáng tin tới thừa số ~1,5. Đủ để nói "6% hay 60%", không đủ để nói "38% hay 45%". Thời gian theo pha từ fit affine mang CI của fit (Bài 10). Lấy CI đó làm thanh sai số.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Bảng của bản gốc** (giữ nguyên tiêu chí, thêm chú thích):
+
+| Kiểm tra | Kỳ vọng | Chú thích |
+|---|---|---|
+| Dự đoán từ roofline vs số đo ở Bài 8 | **Phải khớp về hướng.** Nếu roofline nói memory-bound mà quantization không giúp gì, một trong hai sai | So **theo pha**. Không khớp thì kiểm theo thứ tự: quant đã áp chưa → dequant có ghi ra DRAM không → pha có ở vùng overhead không → đếm FLOP/byte |
+| Hiệu suất sử dụng đơn vị tính | Thường thấp hơn nhiều so với peak, đó là bình thường và là chỗ có dư địa | Đo bằng % trần tại I của pha, không bằng % π |
+| Vị trí N100 vs GPU trên roofline | Có thể khác phía, đo rồi mới kết luận | Chiều đúng: cùng pha dễ compute-bound trên N100 hơn (ridge thấp), không phải ngược lại |
+
+**Mô phỏng** (`[đã chạy]`, numpy 2.2; kích thước và overhead giả định):
+
+| Target | Pha | I | Phía | Roofline | + overhead | % trần | int8 w-only (roof / +oh) | W8A8 (roof / +oh) |
+|---|---|---|---|---|---|---|---|---|
+| N100 CPU fp32 (π 0,12 T, β 25 GB/s) | vision ×2 | 176 | CMP | 3865 ms | 3867 ms | 100% | 1,00 / 1,00 | 2,00 / 2,00 |
+| | prefix | 68 | CMP | 464 ms | 465 ms | 100% | 1,00 / 1,00 | 2,00 / 2,00 |
+| | expert ×10 | 22 | CMP | 737 ms | 744 ms | 99% | 1,00 / 1,00 | 2,00 / 1,98 |
+| | **tổng** | | | **5,07 s** | **5,08 s** | 100% | **1,00** | **2,00** |
+| RTX 4090 bf16 (ridge 164) | vision ×2 | 351 | CMP | 2,81 ms | 7,04 ms | 40% | 1,00 / 1,00 | 3,83 / 1,42 |
+| | prefix | 136 | MEM | 0,41 ms | 3,22 ms | 13% | 1,20 / 1,02 | 2,00 / 1,07 |
+| | expert ×10 | 45 | MEM | 1,96 ms | 30,1 ms | 6% | 1,81 / 1,03 | 2,00 / 1,03 |
+| | **tổng** | | | **5,18 ms** | **40,4 ms** | 13% | **1,22 / 1,02** | **2,70 / 1,09** |
+
+Đọc:
+1. **Expert đổi phía:** I ≈ 22 compute-bound trên N100 (ridge 5), I ≈ 45 memory-bound trên 4090 (ridge 164). Cùng pha, cùng model, hai kết luận ngược nhau. Đó là chiều đúng của câu bản gốc về N100.
+2. **Trên N100, weight-only int8 không giúp gì theo roofline**, vì mọi pha compute-bound. Đòn bẩy là kernel int8 thật (W8A8 có VNNI) hoặc giảm FLOP (ít camera, ảnh nhỏ hơn, ít bước solver). Điều này khớp với dự đoán đã ghi ở Bài 11 phần 7: "INT8 chỉ giúp ở pha memory-bound". Nếu Bài 11 đo được weight-only nhanh hơn rõ trên N100, hãy nghi phần nào đó memory-bound mà mô phỏng bỏ sót (attention, activation lớn) và kiểm bằng can thiệp (b).
+3. **Trên 4090, roofline dự đoán int8 weight-only nhanh 1,8 lần ở expert, nhưng khi cộng overhead chỉ còn ~1,03 lần.** Với overhead giả định 8 µs/kernel, khoảng 4.400 kernel chiếm phần lớn thời gian. Cận dưới roofline cỡ 5 ms, khớp câu "cận dưới vài ms" ở Bài 5 phần 7. Số đo thật thang 100–400 ms của bảng mốc Bài 2 còn xa hơn nữa so với mô phỏng: preprocess, copy host↔device, Python của policy. Pha nào chiếm phần đó thì profiler mới nói được.
+4. **Không có pha nào trên 4090 bị chặn bởi một mái.** Đòn bẩy lớn nhất là cắt overhead (CUDA Graphs, gộp kernel, ít bước solver), không phải quantization. "Why not double?" trên GPU có câu trả lời là overhead, không phải compute.
+
+**Kỳ vọng trên máy thật** `[ước lượng — tự đo]`:
+- Đếm FLOP tay vs `FlopCounterMode` lệch 5–20%. Phần lệch lớn nhất thường là attention của vision encoder.
+- 4090: số kernel mỗi inference cỡ nghìn tới vài nghìn ở PyTorch eager. Tổng thời gian kernel là phần nhỏ của thời gian tường ở batch 1. Can thiệp (b) cho t_step gần như không đổi khi nhân đôi chunk (overhead hoặc memory-bound). Phân biệt hai khả năng đó bằng (c) hoặc profiler.
+- N100 CPU: % trần của vision/prefix có thể cao (GEMM lớn, oneDNN tốt). Pha expert thấp hơn vì GEMM nhỏ (50 × 720). Weight-only int8 trên CPU: ít hoặc không tăng tốc. W8A8 có VNNI có thể nhanh hơn, phải kèm contract test (Bài 11 bước 4).
+- iGPU fp16: ridge cao hơn CPU (π fp16 cao hơn, cùng β) nhưng vẫn thấp: 0,58 T / 38,4 GB/s ≈ 15 FLOP/B lý thuyết `[ước lượng]`. I của expert ở fp16 ≈ 45, nên expert vẫn compute-bound trên iGPU; vision và prefix càng vậy. Trên cả CPU lẫn iGPU của N100, đòn bẩy là trần tính, không phải byte. Tự kiểm lại phía bằng mái đo.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Điểm đo nằm **trên** mái | Đếm thiếu byte (weight nằm trong cache), đếm thừa FLOP, đồng hồ thiếu đồng bộ, π/β đo thấp hơn thật | Đổi kích thước để vượt cache; `FlopCounterMode`; mẫu đối chứng | Sửa giả định, không sửa mái (F7.2 câu hỏi ngược 4) |
+| int8 weight-only chậm hơn bf16 trên GPU | Kernel giải nén ra DRAM; pha ở vùng overhead; kernel int8 của thư viện kém ở batch 1 | Profiler: kernel dequant, tensor tạm cỡ weight | Ghi đúng nguyên nhân. Đó là kết quả về **thư viện**, không về int8 |
+| Weight-only int8 nhanh rõ trên N100 dù roofline nói compute-bound | Phần memory-bound bị mô hình bỏ sót; runtime đổi đường kernel khi int8 | Can thiệp (b) trên N100; `PERF_COUNT` của OpenVINO | Thêm thành phần thiếu vào mô hình; ghi |
+| t_step không đổi khi đổi chunk_size | Memory-bound **hoặc** overhead | Can thiệp (c); profiler: % thời gian kernel | Không kết luận từ một can thiệp |
+| `FlopCounterMode` báo 0 cho một phần | Op tự viết, op không có công thức đếm | Liệt kê op theo profiler | Đếm tay phần đó |
+| Nsight Compute báo `ERR_NVGPUCTRPERM` | Bộ đếm hiệu năng bị khóa trên máy thuê | Thông báo lỗi | Ghi; dùng profiler PyTorch |
+| Ba target cho cùng phía ở mọi pha | Mái đặt bằng số lý thuyết, hoặc I tính sai dtype | Kiểm b (byte/phần tử) của từng target | Dùng dtype runtime thật sự chạy (Bài 11: iGPU mặc định fp16) |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** Đội 100 robot dùng N100. Một kỹ sư dành 3 tuần viết lại kernel expert cho nhanh gấp đôi. Một kỹ sư khác đề xuất mua Jetson cho cả đội. Bạn quyết bằng số nào từ bài này?
+   <details><summary>Hướng nghĩ</summary>Amdahl trước: pha expert chiếm bao nhiêu phần thời gian trên N100? Nếu vision chiếm phần lớn, nhân đôi expert gần như không đổi tổng. Rồi roofline: pha đó đang ở mấy % trần? Ở 90% thì không có gấp đôi nào để lấy. Ở 20% thì có. Chi phí phần mềm trả một lần cho 100 máy; phần cứng trả 100 lần. Nhưng phần mềm có rủi ro: kernel tự viết cần contract test và bảo trì qua mỗi lần đổi runtime.</details>
+2. **[Failure mode]** Sau khi nâng phiên bản OpenVINO, p50 trên N100 tăng 30%, không ai đổi model. CI của bạn (K6) chỉ đo end-to-end. Bạn muốn CI bắt được và chỉ ra ngay pha nào hỏng. Nó cần đo và lưu gì?
+   <details><summary>Hướng nghĩ</summary>Thời gian từng pha và % trần từng pha, lưu theo phiên bản runtime. Một kernel mất fusion hoặc runtime đổi đường kernel (AVX2 thay VNNI) sẽ hiện thành một pha tụt % trần trong khi FLOP/byte không đổi. Đó là regression có địa chỉ. Ngưỡng phải lấy từ A/A theo pha (Bài 3, Bài 14), không đặt tay.</details>
+3. **[Vì sao không]** Profiler đã cho biết kernel nào tốn thời gian. Vì sao còn cần roofline?
+   <details><summary>Hướng nghĩ</summary>Profiler nói thời gian đi đâu. Roofline nói thời gian đó có hợp lý không: một kernel chiếm 40% thời gian mà đã ở 95% trần thì không còn gì để lấy, phải giảm FLOP/byte bằng thuật toán. Một kernel chiếm 10% mà ở 3% trần có thể là mục tiêu tốt hơn. Thiếu roofline, bạn tối ưu theo kích thước thanh trong trace, không theo dư địa.</details>
+4. **[Phản biện]** "Ở batch 1 trên GPU, mọi thứ đều overhead-bound, nên roofline vô dụng cho robot." Dựng lập luận mạnh nhất, rồi chỉ ra nó gãy ở đâu.
+   <details><summary>Hướng nghĩ</summary>Phía ủng hộ có mô phỏng của chính bài này làm bằng chứng. Gãy ở ba chỗ: (1) N100, máy thật trên robot, không overhead-bound ở các pha lớn; (2) cận dưới roofline là kiểm tỉnh táo cho mọi số đo (Bài 5, Bài 11); (3) khi overhead được cắt (CUDA Graphs, runtime biên dịch), điểm leo lên và mái lại quyết định. Roofline cho biết điểm dừng của việc cắt overhead.</details>
+5. **[Liên ngành]** Router mạng có hai giới hạn: gói/giây (chi phí xử lý mỗi gói) và bit/giây (băng thông). Gói nhỏ thì router chạm giới hạn gói/giây trước. Ánh xạ hai giới hạn đó và "kích thước gói" vào ba vùng của bài này.
+   <details><summary>Hướng nghĩ</summary>Chi phí mỗi gói ≈ chi phí launch mỗi kernel (vùng overhead). Băng thông ≈ β. Kích thước gói ≈ lượng việc trong một kernel. Router không có trần "tính" theo nghĩa FLOP, nên ánh xạ không trọn: ở GPU, kernel lớn có thể chạm mái π, còn gói lớn chỉ chạm băng thông. Chỗ giống nhau đáng giữ: gộp gói (jumbo frame, GRO) cũng là cách cắt chi phí cố định, giống fusion.</details>
+
+### 10. Liên kết ra ngoài
+
+- **Lý thuyết ràng buộc (Goldratt, *The Goal*, 1984).** Throughput của một dây chuyền do khâu chậm nhất quyết định. Cải thiện khâu khác không đổi gì. Sửa xong khâu đó thì nút thắt chuyển sang khâu khác `[chuẩn]`. Giống: quantization int4 có thể chuyển một pha từ memory sang compute-bound (F7.2), và Amdahl giới hạn lợi ích theo tỉ lệ thời gian. Khác: dây chuyền tối ưu throughput ở trạng thái dừng. Bạn tối ưu latency của **một** lần chạy, nên các pha nối tiếp nhau chứ không chạy song song như các khâu của dây chuyền.
+- **Mạng: gói/giây vs bit/giây.** Thiết bị mạng được quảng cáo bằng cả hai con số. Bài kiểm tra RFC 2544 đo thông lượng ở nhiều kích thước khung, từ 64 tới 1518 byte, chính vì giới hạn đổi theo kích thước `[chuẩn — RFC 2544]`. Giống: một benchmark đúng phải quét kích thước để thấy giới hạn đổi chỗ, như can thiệp (b) quét n. Khác: mạng không có tương đương của "tính lại để đỡ đọc" kiểu FlashAttention.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| FlashAttention: attention chuẩn bị chặn bởi truy cập HBM; tiling + tính lại nhanh hơn dù nhiều FLOP hơn | `[chuẩn]` | Dao và cộng sự, NeurIPS 2022 |
+| Ba vùng compute / bandwidth / overhead | `[chuẩn]` | Horace He, "Making Deep Learning Go Brrrr From First Principles", 2022 |
+| Kích thước SmolVLA trong mô phỏng (SigLIP-B 1024 patch, LM 960/2560 × 16 lớp, expert 720 × 16 lớp, 64 token/ảnh) | `[ước lượng]` | In lại từ `config.json` của checkpoint |
+| 8 µs/kernel cho PyTorch eager trên GPU | `[giả định]` | Đo: chia (thời gian tường − tổng thời gian kernel) cho số kernel trong trace |
+| Ada: trần INT8 Tensor dense cao hơn BF16 (tích lũy fp32) | `[spec]` | NVIDIA Ada GPU Architecture whitepaper, bảng thông số RTX 4090 |
+| N100 có AVX-VNNI | `[tự đo]` | `lscpu | grep -o avx_vnni` |
+| `FlopCounterMode` có từ PyTorch 2.1 | `[tự đo]` | Kiểm theo phiên bản bạn cài |
+| Bộ đếm hiệu năng GPU bị khóa cho user thường (`ERR_NVGPUCTRPERM`) | `[chuẩn]` | Tài liệu NVIDIA Developer về quyền performance counters; tùy cấu hình máy thuê |
+| Kết quả mô phỏng | `[đã chạy]` | Chỉ minh họa hướng và bậc độ lớn |
+
+**Đã sửa so với bản gốc/Gemini** (phần N100 0,7 TFLOPS, "batch 1 compute-bound", chiều ridge, "SM Active" đã sửa và chấm ở F7.2 mục 6; ở đây chỉ ghi phần mới):
+- Bản gốc: "hiệu năng bị chặn bởi một trong hai thứ" → thêm vùng overhead; ở batch 1 trên GPU nó thường chiếm phần lớn thời gian.
+- Bản gốc, bước 1: "arithmetic intensity của model" → của từng pha. Một điểm cho cả model không nằm ở đâu.
+- Bản gốc, bước 2: "tra thông số lý thuyết" → giữ, thêm mái đo (Bài 5, Bài 11) và dùng mái đo để kết luận.
+- Bản gốc, bước 4: "nếu memory-bound mà quantization không giúp, một trong hai sai" → liệt kê bốn giả định có thể sai. Thêm hai can thiệp đổi n và đổi số kernel để không phải kết luận từ một can thiệp.
+- Bản gốc, bảng tối ưu: "compute-bound thì quantization giúp ít" → chỉ đúng cho weight-only; W8A8 có kernel int8 nâng mái π.
+- Bản gốc, bước 5: "xem đơn vị tính được dùng bao nhiêu phần trăm" → không dùng `utilization.gpu`/SM Active; dùng % trần tại I, tổng thời gian kernel / thời gian tường, Nsight Compute SOL nếu có quyền, `perf stat` IPC trên N100.
+- Bản gốc: "vla.cpp kết luận VLA batch 1 compute-bound" → xem F7.2 mục 6(b). Ở đây giữ đúng phần bài học "cùng weight, khác kernel" và đọc nó thành nâng mái.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** S. Williams, A. Waterman, D. Patterson, "Roofline: An Insightful Visual Performance Model for Multicore Architectures", *CACM* 52(4), 2009. T. Dao và cộng sự, "FlashAttention", NeurIPS 2022.
+- **Giải thích:** Horace He, "Making Deep Learning Go Brrrr From First Principles" (2022), blog cá nhân.
+- **Đào sâu (tùy chọn):** NVIDIA, *Nsight Compute Documentation*, mục "Roofline Charts" và "Speed Of Light".
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao một pha "memory-bound" có thể không nhanh lên khi giảm byte; (2) vẽ lại hình roofline có ba vùng ở phần 2 và đặt ba pha SmolVLA trên hai target từ trí nhớ; (3) hai câu dưới.
+
+  1. Trên GPU thuê: expert một bước đo 2,9 ms, FLOP 8,8 GFLOP, byte weight bf16 177 MB. Mái đo: π = 150 TFLOPS, β = 900 GB/s. Pha này ở đâu, và đòn bẩy tiếp theo là gì?
+     <details><summary>Đáp án</summary>I ≈ 8,8e9 / 177e6 ≈ 50 FLOP/B. Ridge đo ≈ 167, vậy phía memory. Mái tại I = 50 là β·I ≈ 45 TFLOPS. Điểm đạt 8,8e9 / 2,9e-3 ≈ 3 TFLOPS, tức ~7% trần. Không bị băng thông chặn. Đòn bẩy là cắt overhead (CUDA Graphs, gộp kernel, ít bước hơn). Weight-only int8 dự đoán gần như không giúp. Kiểm bằng can thiệp (c).</details>
+  2. Trên N100: vision chiếm 75% thời gian, ở 70% trần; expert chiếm 15%, ở 25% trần. Một kernel expert tốt hơn đưa expert lên 70% trần. Tăng tốc tổng tối đa là bao nhiêu?
+     <details><summary>Đáp án</summary>Expert nhanh lên 70/25 = 2,8 lần. Amdahl: 1 / (0,85 + 0,15/2,8) ≈ 1 / (0,85 + 0,054) ≈ 1,11 lần. Khoảng 11%. Muốn nhiều hơn phải đụng vision: giảm FLOP (ít camera, ảnh nhỏ hơn) hoặc nâng mái (W8A8 có VNNI, iGPU), vì vision đã gần trần.</details>
+
+---

@@ -50,8 +50,8 @@ Sơ đồ Mermaid, timing diagram, bảng số, hoặc **mô phỏng Python ≤6
 | **K1** Từ zero đến đo được | `khoa-1/` | `00-tong-quan.md`, `phan-a-nen.md`, `phan-b-dung-cu.md`, `phan-c-do-that.md`, `phan-d-du-lieu-tren-day.md` | 35 | ✅ đủ, hợp nhất Claude × Kiro |
 | **K2** Dữ liệu robot mà không cần robot | `khoa-2/` | `00-tong-quan.md`, `m1-mcap-cong-cu.md`, `m2-dataset-audit.md` | 80 | ✅ đủ, hợp nhất (số đo trên `data/` còn `[tự đo]`) |
 | **K3** Chuỗi audio | `khoa-3/` | `00-tong-quan.md`, `m1-chuoi-phat.md`, `m2-do-tre.md`, `m3-tts-kien-truc.md`, `m4-he-thong-v1.md` | 90 (tổng bài 92) | ✅ đủ, hợp nhất |
-| **K4** Đo hiệu năng inference trên edge | `khoa-4/` | `00-tong-quan.md`, `m1-nen-tang.md`, `m2-harness.md`, `m3-truc-chat-luong.md`, `m4-nhieu-target.md`, `m5-publish.md` | 70 | 🟡 đang hoàn thiện — còn thiếu Bài 5, 6, 12 |
-| **K5** Cảm biến, đồng bộ thời gian, data platform | `khoa-5/` | `m0-chon-phan-cung.md`, `m1-cam-bien.md`, `m2-dong-bo-thoi-gian.md`, `m3-data-stack.md` | 150 | 🟡 đang soạn — thiếu `00-tong-quan.md`, `m4-van-hanh.md`, Bài 5, 6, 10–12, 16–19, Gate |
+| **K4** Đo hiệu năng inference trên edge | `khoa-4/` | `00-tong-quan.md`, `m1-nen-tang.md`, `m2-harness.md`, `m3-truc-chat-luong.md`, `m4-nhieu-target.md`, `m5-publish.md` | 70 | ✅ đủ 15 bài + gate; m1 hợp nhất Claude × Kiro, m3/m5 đã review; Bài 4–6, 10–12 chỉ có một bản, chưa review độc lập |
+| **K5** Cảm biến, đồng bộ thời gian, data platform | `khoa-5/` | `00-tong-quan.md`, `m0-chon-phan-cung.md`, `m1-cam-bien.md`, `m2-dong-bo-thoi-gian.md`, `m3-data-stack.md`, `m4-van-hanh.md` | 150 | ✅ đủ 19 bài + Gate Module 0 + Gate K5; m0–m1 Bài 3–4 hợp nhất với Kiro; phần còn lại bản Claude, chưa review độc lập |
 | **K6** Hạ tầng mô phỏng và đánh giá | `khoa-6/` | `00-tong-quan.md`, `m1-determinism.md`, `m2-kich-ban.md`, `m3-quy-mo.md`, `m4-danh-gia-regression.md`, `m5-sim-to-real.md`, `m6-ci-publish.md` | 120 | ✅ đủ, review độc lập |
 | **K7** Dựng robot từ xưởng (khóa build mới) | `khoa-7/` | `00-tong-quan.md`, `_KE-HOACH-K7.md`, `c00-xuong-an-toan.md`, `c01-he-nguon.md`, `c02-co-khi.md`, `c03-bring-up-tren-ban.md`, `c04-firmware-esp32.md`, `c05-lap-hoan-chinh.md`, `c06-odometry.md`, `c07-cam-bien-ghi-du-lieu.md`, `c08-dieu-huong.md`, `c09-nhan-nguoi-privacy.md`, `c10-an-toan-van-hanh.md`, `c11-sim-hil-ci.md`, `c12-san-pham-confession.md` | 561 lõi (597 có tùy chọn) | ✅ đủ 13 chặng; C0–C1 review an toàn, C2–C12 chưa review |
 
@@ -148,7 +148,7 @@ Chi tiết và việc còn lại: `_TRANG-THAI.md`. Phối hợp hai nhóm soạ
 | K7 C0–C1 | **Review an toàn** (pin, điện, đồng hồ đo) — đã sửa theo review |
 | K7 C2–C12 | Viết xong, **chưa review độc lập**. Ưu tiên review an toàn C2–C5 (motor quay lần đầu, cấp điện cả robot) và C8–C10 (tự đi gần người, dữ liệu mặt, E-stop) |
 | F1–F7 | Viết xong, **chưa review độc lập** (F4 review dở, vài sửa nhỏ đã giữ) |
-| K4, K5 | Hợp nhất từ bản Kiro một phần; các bài Claude đang viết bù là **bài mới, chưa review độc lập** |
+| K4, K5 | Đủ bài. Phần có hai bản (K4 m1; K5 m0, m1 Bài 3–4) đã **hợp nhất**; K4 m3, m5 đã review. Các bài chỉ có một bản (K4 Bài 4–6, 10–12; K5 Bài 5–19, hai gate, tổng quan K5) **chưa review độc lập** |
 
 Với phần chưa review: các nhãn `[tự đo]` và `[spec, kiểm datasheet]` càng phải được kiểm. Với phần cứng, **không làm theo một bước lắp chưa review mà không tự kiểm checkpoint đo của nó**; quy tắc "KHÔNG …" trong mục An toàn của mỗi chặng K7 luôn áp dụng.
 

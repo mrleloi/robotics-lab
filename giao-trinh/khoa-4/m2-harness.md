@@ -760,3 +760,329 @@ Ghi một dòng cho mỗi ô vào `METHODOLOGY.md`: "trong lúc đo, GPU util �
      <details><summary>Đáp án</summary>Không. GEMM lớn là compute-bound và nhạy với xung. SmolVLA batch 1 gồm nhiều phần ít nhạy với xung hơn (overhead, pha memory-bound), nên tỉ lệ lệch khác nhau, đúng như số cho thấy (5% vs 12%). Mẫu đối chứng dùng để **phát hiện** và **ghi lý do**, không để hiệu chỉnh. Báo hai máy riêng, hoặc chỉ dùng máy 1 cho so sánh và nêu máy 2 như một điểm dữ liệu về biến thiên của GPU thuê.</details>
 
 ---
+
+## Bài 6 — Cô lập nhiệt và chứng minh bằng số (4h)
+
+> **Vị trí:** K4 Bài 5 (SmolVLA trên GPU thuê, telemetry đã chạy nền) → **Bài 6** → K4 Bài 7 (trục chất lượng) · **Cần trước:** F5.4 (tần số CPU, governor), F1.3 (steady state, cô lập nhiễu, active benchmarking), F1.6 (tương quan ≠ nhân quả), F7.3 (USE); K4 Bài 3 (mục Phần cứng: PL1/PL2 đọc từ powercap), Bài 4 (schema có `telemetry` cùng file), Bài 5 (CSV `nvidia-smi` 1 Hz) · **Sau bài này bạn quyết định được:** mỗi con số của bạn thuộc **chế độ** nào (burst hay sustained), và câu nào được phép ghi vào `METHODOLOGY.md`: "nhiệt/công suất ảnh hưởng không quá X% latency" (kèm cách tính X), hay "chưa chứng minh được".
+
+**Câu hỏi của bài (bản gốc):** làm sao chứng minh được với người lạ rằng phép đo của bạn không bị nhiễu nhiệt?
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Tháng 12/2017, John Poole (Primate Labs, công ty làm Geekbench) vẽ phân bố điểm Geekbench của iPhone 6s theo phiên bản iOS. Phân bố của iOS 10.2.0 có một đỉnh. Phân bố của iOS 10.2.1 và 11.2 có thêm các cụm thấp hơn hẳn `[chuẩn — bài blog "iPhone Performance and Battery Age", Geekbench, 12/2017]`. Vài ngày sau Apple xác nhận: từ iOS 10.2.1, hệ điều hành hạ trần hiệu năng khi pin đã chai không cấp nổi dòng đỉnh, để máy khỏi tắt đột ngột `[chuẩn]`. Không ai cảm thấy máy nóng. Nhiệt độ không liên quan. Nguyên nhân là **giới hạn công suất**, và nó chỉ lộ ra khi có người nhìn *phân bố* của hàng nghìn lần đo, không nhìn một con số.
+
+Bài học cho benchmark của bạn có hai nửa. (1) Chip hạ xung vì nhiều lý do, nhiệt chỉ là một. N100 trong Beelink hạ xung khi công suất trung bình chạm PL1, thường xảy ra lúc chip còn cách TjMax rất xa. (2) "Tôi có để quạt", "phòng có điều hòa" là lời kể. Người lạ cần thấy vết xung thật, bộ đếm throttle, và một con số giới hạn ảnh hưởng. Bài này dạy tạo ra ba thứ đó.
+
+### 2. Mô hình tư duy
+
+Latency không phụ thuộc trực tiếp vào nhiệt độ. Nó phụ thuộc vào **tần số thật** của chip. Tần số bị ít nhất hai vòng phản hồi kéo xuống, mỗi vòng có hằng số thời gian riêng:
+
+```mermaid
+flowchart LR
+  LOAD["tải liên tục"] --> P["công suất P"]
+  P -->|"trung bình trượt, cửa sổ τ ~ chục giây"| RAPL{"P_tb > PL1?<br/>(RAPL)"}
+  RAPL -->|"có: hạ xung về mức PL1"| F["tần số thật<br/>(APERF/MPERF, Bzy_MHz)"]
+  P -->|"R_th, quán tính nhiệt ~ phút"| T["nhiệt độ T"]
+  T -->|"rò rỉ tăng theo T"| P
+  T -->|"T ≥ TjMax (PROCHOT)"| F
+  F --> L["latency"]
+  T -.->|"tương quan, KHÔNG phải nhân quả"| L
+```
+
+Bốn ý bản chất:
+
+1. **Nhiệt là đại lượng ủy nhiệm (proxy). Tần số mới là biến gây ra latency.** Đo nhiệt mà không đo tần số là đo một biến chỉ liên quan gián tiếp tới latency. Trên CPU Intel, tần số thật lấy từ cặp bộ đếm APERF/MPERF (cột `Bzy_MHz` của `turbostat`), không lấy từ tần số governor *yêu cầu* `[chuẩn — man turbostat]`.
+2. **Có hai chế độ ổn định, không phải một.** *Burst:* máy nguội, còn ngân sách PL2, chạy ở xung cao trong vài chục giây đầu. *Sustained:* công suất trung bình bị ghim ở PL1, xung thấp hơn, nhiệt phẳng sau vài phút. Cả hai đều là steady state hợp lệ. Lỗi là trộn hai chế độ trong một phân bố, hoặc báo số burst như số robot chạy cả giờ sẽ gặp.
+3. **Nhiệt phẳng ±2 °C là điều kiện cần, không đủ.** Mô phỏng dưới đây có một cửa sổ nhiệt phẳng, không cờ throttle nhiệt nào bật, mà latency vẫn cao hơn lúc máy nguội một khoảng đáng kể.
+4. **"Không tương quan" không phải bằng chứng khi biến không đổi.** Trong một phiên đã cô lập tốt, nhiệt dao động ít, nên hệ số tương quan latency–nhiệt gần 0 *dù độ nhạy thật khác 0*. Thống kê gọi đây là thu hẹp miền (restriction of range) `[chuẩn — F1.6]`. Muốn chứng minh "ảnh hưởng nhỏ", phải **đo độ nhạy** ở nơi nhiệt có biến thiên (thí nghiệm nóng/lạnh), rồi nhân với dải nhiệt của phiên chính thức. Kết quả là một cận trên, đúng kiểu một hệ số độ nhạy trong ngân sách bất định GUM (→ F1.1).
+
+Mô phỏng 1: một N100 đồ chơi có PL2 → PL1, nhiệt RC, rò rỉ tăng theo nhiệt. **Mọi tham số là giả định**, không phải spec của máy bạn.
+
+```python
+# [đã chạy] n100_modes.py — Mô hình đồ chơi N100: PL2 -> PL1, nhiệt RC, rò rỉ tăng theo nhiệt. Tham số GIẢ ĐỊNH.
+import numpy as np
+from scipy import stats
+rng = np.random.default_rng(3)
+PL1, PL2, TAU = 12.0, 20.0, 28.0          # W, W, s  (đọc giá trị thật của máy bạn từ powercap, Bài 3)
+R_TH, TAU_TH, T_AMB, T_J = 3.0, 60.0, 25.0, 105.0   # °C/W, s, °C, °C
+F_MAX, C_DYN = 2.9, 0.64                  # GHz all-core (giả định), W/GHz^3
+leak = lambda T: 1.0 * np.exp((T - 25.0) / 40.0)    # W, rò rỉ tăng theo nhiệt
+
+dt, T, p_avg, t = 0.01, T_AMB + 5, 3.0, 0.0
+log = []                                  # (t_kết_thúc, latency, nhiệt cảm biến, f)
+work, done, t_start = 1.0, 0.0, 0.0       # mỗi iteration cần 1.0 "GHz·s" -> ở F_MAX mất 0.345 s
+while t < 900:
+    limit = PL2 if p_avg < PL1 else PL1                       # RAPL rút gọn: cửa sổ trượt TAU
+    f = min(F_MAX, max(0.4, ((limit - leak(T)) / C_DYN) ** (1 / 3)))
+    if T >= T_J: f = 0.8                                      # thermal throttle thật (PROCHOT)
+    P = leak(T) + C_DYN * f ** 3
+    p_avg += (P - p_avg) * dt / TAU
+    T += (T_AMB + P * R_TH - T) * dt / TAU_TH
+    done += f * dt; t += dt
+    if done >= work:                                          # xong một inference
+        log.append((t, (t - t_start) * (1 + rng.normal(0, 0.01)), np.round(T), f))
+        done, t_start = 0.0, t
+log = np.array(log)
+L0 = np.median(log[log[:, 0] < 10, 1])                       # latency "lạnh" làm mốc 1.00
+
+print(" cửa sổ (s) |  n  | T cảm biến (min..max) | f TB (GHz) | L/L_lạnh p50 | r(L,T) | trôi L (%/phút, CI95)")
+for a, b in [(0, 30), (30, 120), (120, 300), (600, 900)]:
+    w = log[(log[:, 0] >= a) & (log[:, 0] < b)]
+    L, Tm = w[:, 1] / L0, w[:, 2]
+    r = np.corrcoef(L, Tm)[0, 1] if Tm.std() > 0 else float("nan")
+    s, _, lo, hi = stats.theilslopes(L, w[:, 0] / 60)          # độ dốc bền vững theo thời gian
+    print(f" {a:4d}-{b:<4d}  | {len(w):3d} | {Tm.min():5.0f} .. {Tm.max():5.0f}        | {w[:, 3].mean():6.2f}"
+          f"     | {np.median(L):8.3f}     | {r:+.2f}  | {100*s/np.median(L):+6.2f} ({100*lo/np.median(L):+.2f}..{100*hi/np.median(L):+.2f})")
+print("có lần nào chạm T_J (throttle nhiệt)?", bool((log[:, 2] >= T_J).any()))
+```
+
+Mô phỏng 2: vì sao "r ≈ 0" trong phiên đã cô lập không chứng minh gì, và thiết kế nào chứng minh được. Độ nhạy thật được gài sẵn để bạn so.
+
+```python
+# [đã chạy] hot_cold.py — "Không tương quan" khi nhiệt gần như không đổi KHÔNG chứng minh gì.
+import numpy as np
+from scipy import stats
+rng = np.random.default_rng(11)
+BETA = 0.4            # %/°C: độ nhạy THẬT của latency theo nhiệt (giả định; người đo không biết)
+SIGMA = 1.5           # % nhiễu latency mỗi iteration
+
+def session(T_center, T_spread, n):
+    T_true = T_center + rng.uniform(-T_spread, T_spread, n)
+    T_read = np.round(T_true)                                  # cảm biến nguyên độ (PkgTmp, temperature.gpu)
+    L = 100 * (1 + BETA / 100 * (T_true - 60)) * (1 + rng.normal(0, SIGMA / 100, n))
+    return T_read, L
+
+def fit(T, L):
+    if np.ptp(T) == 0: return float("nan"), float("nan"), float("nan")
+    r = stats.linregress(T, L)
+    return r.rvalue, r.slope, 1.96 * r.stderr
+
+print("Thiết kế A — một phiên 'đã cô lập' (nhiệt 60 ± 0.8 °C), lặp 1000 lần:")
+res = np.array([fit(*session(60, 0.8, 200)) for _ in range(1000)])
+ok = ~np.isnan(res[:, 0])
+print(f"  |r| trung vị = {np.median(np.abs(res[ok, 0])):.2f};  tỉ lệ phiên có CI độ dốc chứa 0 = "
+      f"{np.mean(np.abs(res[ok, 1]) < res[ok, 2]):.0%}")
+
+print("Thiết kế B — nóng/lạnh: 3 phiên khởi động lạnh (~45 °C) + 3 phiên sau heat-soak (~75 °C):")
+sess = [session(c, 2.0, 200) for c in (45, 45, 45, 75, 75, 75)]
+T, L = np.concatenate([x[0] for x in sess]), np.concatenate([x[1] for x in sess])
+r, s, ci = fit(T, L)
+print(f"  r = {r:+.2f};  độ dốc = {s:.3f} ± {ci:.3f} %/°C  (thật: {BETA})")
+
+span = 4.0            # ±2 °C của tiêu chí PASS -> khoảng nhiệt tối đa 4 °C trong phiên
+print(f"Biên ảnh hưởng nhiệt trong một phiên đạt ±2 °C: ≤ {(s + ci) * span:.2f} % latency "
+      f"(= cận trên độ dốc × {span:.0f} °C) — so với ngưỡng A/A < 5 %")
+```
+
+Đừng chạy hai khối này trước khi làm Đề 2 và Đề 3 ở phần 5.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Instance burstable (AWS t3): tiêu hết CPU credit thì rơi về baseline | PL2 → PL1 sau cửa sổ τ của RAPL | Credit là số đếm bạn đọc được trên dashboard. RAPL là trung bình trượt công suất bên trong chip, không có "số dư" nào hiện ra; bạn chỉ thấy hệ quả ở `Bzy_MHz` và `PkgWatt` ≈ PL1. Thêm một vòng mà cloud không có: nhiệt làm tăng rò rỉ, rò rỉ ăn vào ngân sách công suất | Benchmark 20 giây trên máy nguội, báo số burst, robot chạy cả giờ chậm hơn mà không ai biết vì sao |
+| Đo trên host "yên tĩnh" để test khỏi nhiễu (việc bạn đã làm) | Cô lập nhiệt/công suất | Ở backend "yên tĩnh" nghĩa là không có tiến trình khác. Ở đây chính tải của bạn làm nóng máy: không có hàng xóm nào cũng vẫn trôi | Tin rằng tắt hết tiến trình khác là đủ, bỏ qua telemetry |
+| Dashboard "CPU% và latency không tương quan → CPU không phải nguyên nhân" | "r(latency, nhiệt) ≈ 0 → nhiệt không ảnh hưởng" | Tương quan đo độ đồng biến *trong dải đã quan sát*. Dải hẹp thì r nhỏ dù độ nhạy lớn | Viết "không ảnh hưởng" trong khi chỉ có "không đủ biến thiên để thấy" |
+| Warmup JIT trước load test | Heat-soak trước phép đo sustained | JIT ấm xong là xong. Heat-soak có hai giai đoạn với hai hằng số thời gian (τ của RAPL cỡ chục giây, quán tính nhiệt cỡ phút), và máy nguội lại khi bạn dừng | Warmup 20 iteration (vài giây) rồi đo, rơi đúng vào chuyển tiếp PL2 → PL1 |
+
+**Chấm mô hình:**
+
+- *Bản gốc và Gemini: "Một đồ thị nhiệt độ phẳng ±2 °C trong suốt 200 iteration là bằng chứng."* → **ĐÚNG MỘT PHẦN.** Đúng: nó loại được throttle nhiệt và trôi nhiệt lớn. Gãy: nó không loại được hạ xung do công suất, vốn xảy ra ở nhiệt độ thấp, và không cho biết bạn đang ở chế độ nào. **Phản ví dụ:** mô phỏng 1 có một cửa sổ nhiệt phẳng, không chạm TjMax, mà latency vẫn khác latency lúc nguội. Tìm cửa sổ đó ở Đề 2, kết quả ở phần 7. Vì vậy phải kèm vết tần số và công suất. Tổng quan K4 (bảng gate, tiêu chí 3) đã ghi chỗ này.
+- *Bản gốc và Gemini, bảng "Số phải ra": "Đã cô lập: tương quan latency–nhiệt không có (r ≈ 0)."* → **SAI như một bằng chứng.** Ghi chú hợp nhất (w-F1) đã nêu: không tương quan khi nhiệt gần như không đổi thì không chứng minh gì. **Phản ví dụ:** mô phỏng 2 gài sẵn một độ nhạy thật khác 0, vậy mà trong nhiều phiên "đã cô lập", CI của độ dốc vẫn chứa 0 (tỉ lệ ở phần 7). Thay bằng: độ nhạy đo ở thí nghiệm nóng/lạnh × dải nhiệt của phiên = cận trên ảnh hưởng.
+- *Gemini, bảng "Nếu ra khác": "Nhiệt tăng đều → chèn `time.sleep(0.5)` giữa các iteration."* → **SAI về cách sửa.** Nghỉ giữa *từng* iteration đổi thứ bạn đo. Governor hạ xung trong lúc nghỉ, và mỗi lần gọi bắt đầu ở trạng thái nửa nguội. Khi đó bạn đo latency "đánh thức", không đo latency steady state. Bài 3 đã chốt: nghỉ giữa **khối**, không giữa từng iteration. **Phản ví dụ:** trên laptop chạy governor `powersave`, latency một tác vụ ngắn khi có `sleep(0.5)` ở giữa có thể *cao hơn* khi chạy liên tục `[tự đo — Đề 5]`. Ngoại lệ có chủ đích: nếu robot thật gọi model theo chu kỳ có khoảng nghỉ (mỗi chunk một lần), thì đo đúng chu kỳ đó là một **chế độ thứ ba** hợp lệ. Phải khai báo nó, không dùng nó để "sửa" nhiệt.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Thermal throttling | Chip tự hạ xung khi nhiệt chạm ngưỡng (TjMax, PROCHOT) | Mọi kiểu hạ xung |
+| 🟢 | Power limit (PL1/PL2, τ) | Trần công suất dài hạn / ngắn hạn mà RAPL áp; PL2 dùng được trong cửa sổ τ | TDP trên hộp |
+| 🟢 | Burst / sustained | Chế độ còn ngân sách PL2 / chế độ bị ghim ở PL1 sau heat-soak | "Máy nhanh" / "máy chậm" |
+| 🟢 | Heat-soak | Chạy tải tới khi nhiệt và xung phẳng theo quy tắc viết trước | Warmup vài iteration |
+| 🟢 | Tần số thật (`Bzy_MHz`) | Xung trung bình khi nhân bận, tính từ APERF/MPERF | `scaling_cur_freq` hay xung governor yêu cầu |
+| 🟢 | Bộ đếm throttle | `thermal_throttle/*_throttle_count`, tăng mỗi lần chip vào trạng thái throttle nhiệt | Bộ đếm mọi lý do hạ xung |
+| 🟢 | Cận trên ảnh hưởng | Độ nhạy đo được (cận trên CI) × dải biến thiên trong phiên | "Không tương quan" |
+| 🟡 | Restriction of range | Dải biến quan sát hẹp làm tương quan nhỏ đi dù quan hệ thật mạnh | Bằng chứng không có quan hệ |
+| 🟡 | GPU Boost | Cơ chế NVIDIA tăng/giảm xung theo nhiệt, công suất, điện áp, theo từng nấc | Chỉ hạ xung khi quá nóng |
+| 🟡 | Theil–Sen | Độ dốc = trung vị độ dốc mọi cặp điểm; bền với ngoại lai | Hồi quy thường |
+| 🔴 | MSR perf-limit-reasons | Thanh ghi lý do giới hạn xung của Intel; có hay không tùy dòng chip | Thứ bắt buộc phải đọc |
+
+### 5. Dự đoán
+
+**Tham số cần tra:**
+- PL1, PL2, τ của chiếc EQ12: đã đọc ở K4 Bài 3, bước 3 (`/sys/class/powercap/intel-rapl:0/constraint_*`). Processor Base Power và TjMax của N100: Intel ARK, trang "Intel Processor N100" `[spec]`.
+- Card GPU định thuê: nhiệt mục tiêu và nhiệt tối đa trong spec sheet hoặc `nvidia-smi -q -d TEMPERATURE` (các dòng "Slowdown Temp", "Target Temperature") `[tự đo — tên dòng đổi theo driver]`.
+- Độ phân giải cảm biến: `temperature.gpu` và `PkgTmp` báo theo **độ nguyên** `[tự đo]`. Một dải "±2 °C" chỉ có khoảng năm giá trị đọc khả dĩ.
+
+**Đề:**
+1. N100 chạy SmolVLA (hoặc tải CPU nặng) liên tục từ lúc nguội. Sau bao nhiêu giây thì `Bzy_MHz` rơi? Rơi bao nhiêu phần trăm? Lúc đó `PkgTmp` khoảng bao nhiêu, cách TjMax bao xa? Bộ đếm throttle nhiệt có tăng không?
+2. Mô phỏng 1, chỉ đọc code: cửa sổ nào đạt tiêu chí ±2 °C? Ở cửa sổ đó, L/L_lạnh là bao nhiêu? r(L,T) ở cửa sổ 30–120 s dương hay âm, và nó có nghĩa là nhiệt gây ra latency không?
+3. Mô phỏng 2, chỉ đọc code: trong thiết kế A, bao nhiêu phần trăm phiên có CI độ dốc chứa 0? Thiết kế B ước lượng lại 0,4 %/°C tốt tới đâu? Cận trên ảnh hưởng nhiệt cho một phiên ±2 °C là bao nhiêu?
+4. GPU thuê, chạy SmolVLA fp16 batch 1 liên tục 15 phút: nhiệt tăng bao nhiêu °C? `clocks.sm` có giảm không, giảm theo nấc hay đột ngột? Cờ nào trong `clocks_event_reasons` bật?
+5. N100, cùng tải: (a) chạy liên tục; (b) `sleep(0.5)` giữa từng iteration. p50 của (b) so với (a): cao hơn, thấp hơn, hay bằng? Vì sao?
+
+```markdown
+# prediction-b6.md — commit trước khi chạy bất cứ tải nào
+- N100: PL1 = ___ W, PL2 = ___ W, τ = ___ s (từ Bài 3); TjMax = ___ °C (ARK)
+- Đề 1: xung rơi sau ___ s, từ ___ xuống ___ MHz (___%); PkgTmp lúc đó ___ °C; bộ đếm throttle tăng? ___
+- Đề 2: cửa sổ đạt ±2 °C: ___ ; L/L_lạnh = ___ ; r(30–120 s) = ___ , nghĩa là ___
+- Đề 3: CI chứa 0 ở ___% phiên ; độ dốc B = ___ ± ___ ; cận trên = ___%
+- Đề 4: ΔT = ___ °C ; clocks.sm: ___ (nấc/đột ngột) ; cờ bật: ___
+- Đề 5: p50(b) ___ p50(a), vì ___
+- Chế độ tôi sẽ báo làm số chính: burst / sustained / chu kỳ robot, vì ___
+```
+
+### 6. Làm
+
+Gợi ý chia 4h: chuẩn bị và hai mô phỏng 0,5h; N100 2h (phần lớn là chờ máy nóng/nguội); GPU 0,5h, gộp vào một lần thuê có sẵn của Bài 5 hoặc Bài 7; viết mục methodology 1h.
+
+**Bước 1 — Ghi telemetry mỗi giây, cùng file kết quả** (bản gốc). GPU: CSV `nvidia-smi` của Bài 5, Bước 2 đã đủ trường. N100: `turbostat` là nguồn chuẩn cho tần số thật và công suất RAPL. Chụp bộ đếm throttle trước và sau mỗi phiên:
+
+```bash
+# [chưa chạy] cần N100 + linux-tools; tên cột/cờ đổi theo phiên bản turbostat — kiểm bằng `turbostat --list` [tự đo]
+RID=<run_id>
+grep . /sys/devices/system/cpu/cpu*/thermal_throttle/*_throttle_count > results/throttle_before_$RID.txt
+sudo turbostat --quiet --interval 1 \
+  --show Time_Of_Day_Seconds,Busy%,Bzy_MHz,PkgTmp,CoreTmp,PkgWatt \
+  --out results/telemetry_n100_$RID.tsv &
+TS=$!
+python bench.py --run-id $RID ...            # harness Bài 4; ghi cặp (time_ns, monotonic_ns) lúc bắt đầu
+sudo kill $TS
+grep . /sys/devices/system/cpu/cpu*/thermal_throttle/*_throttle_count > results/throttle_after_$RID.txt
+```
+
+Ba lưu ý đo lường:
+- *Ghép thời gian.* Telemetry dùng giờ hệ thống (`Time_Of_Day_Seconds`). Harness dùng `perf_counter`/monotonic. Harness ghi một cặp (`time.time_ns()`, `time.monotonic_ns()`) lúc bắt đầu phiên để đổi trục. Ghép mỗi mẫu latency với dòng telemetry gần nhất **trước** nó (as-of join, → F3.4). Sai số căn chỉnh tối đa 1 s: đủ cho nhiệt (quán tính phút), không đủ cho sự kiện ngắn hơn 1 s. Sau phiên, gộp telemetry vào mảng `telemetry` của file JSON (schema Bài 4). "Cùng file" là yêu cầu của bản gốc, giữ nguyên.
+- *Cái công cụ không thấy.* Bộ đếm `*_throttle_count` chỉ đếm throttle **nhiệt**. Hạ xung do PL1 không làm nó tăng `[tự đo — kiểm trên kernel của bạn]`. Dấu hiệu của PL1 là `PkgWatt` ≈ PL1 cùng lúc `Bzy_MHz` rơi. `PkgWatt` là ước lượng RAPL của chip, không phải đồng hồ điện (Bài 3).
+- *Đừng tự nhiễu.* `turbostat` 1 Hz tốn rất ít CPU. Vẫn đo lại overhead bằng FakePolicy (Bài 4) có bật và tắt telemetry, ghi vào `METHODOLOGY.md`.
+
+**Bước 2 — Chọn chế độ và heat-soak có quy tắc (mới, cần cho Bước 3 gốc).** Viết vào `METHODOLOGY.md` *trước khi chạy*: chế độ báo làm số chính (khuyến nghị: sustained, vì robot chạy liên tục); quy tắc heat-soak, ví dụ "chạy tải cho tới khi trung vị `Bzy_MHz` của 3 cửa sổ 60 s liên tiếp lệch < 1% và `PkgTmp` của 3 cửa sổ đó nằm trong ±1 °C, tối thiểu 5 phút". Chạy hai mô phỏng ở phần 2, so với Đề 2–3.
+
+**Bước 3 — Vẽ ba đường chồng nhau** (bản gốc: latency, nhiệt, clock theo thời gian). Thêm đường thứ tư: công suất. Trục x là thời gian, đánh dấu ranh giới heat-soak / đo. Rồi tính, cho phần đo:
+- dải nhiệt (min..max theo giá trị đọc) → kiểm ±2 °C;
+- p5..p95 của `Bzy_MHz` hoặc `clocks.sm`;
+- hiệu bộ đếm throttle (sau − trước), cờ `clocks_event_reasons` có bật trong phần đo không;
+- độ dốc latency theo thời gian bằng Theil–Sen, kèm CI (mô phỏng 1 dùng `scipy.stats.theilslopes`), và trôi đầu–cuối của Bài 5.
+
+Cách đọc của bản gốc ("latency tăng đúng lúc nhiệt tăng thì chưa cô lập") giữ nguyên, kèm một sửa: latency đi cùng **tần số** mới là chẩn đoán. Đi cùng nhiệt chỉ là gợi ý.
+
+**Bước 4 — Cố tình tạo throttle để biết nó trông thế nào** (bản gốc). Ba phiên xấu, ghi đồ thị như Bước 3:
+- *GPU thuê* (bản gốc): chạy liên tục không nghỉ 15 phút. Máy trong trung tâm dữ liệu có thể không bao giờ throttle nhiệt trong 15 phút. Khi đó bạn ghi "không tạo được throttle nhiệt trong 15 phút ở nhiệt phòng máy X °C", và đó là một kết quả. Xem `clocks.sm` có đi xuống theo nấc khi nhiệt tăng dù không cờ nào bật không (GPU Boost) `[tự đo]`.
+- *N100, throttle công suất* (mới, an toàn, đảo ngược được): hạ PL1 tạm thời qua powercap, ví dụ còn một nửa giá trị BIOS, chạy 5 phút, rồi trả lại. Cần root. Giá trị mất khi khởi động lại `[tự đo — ghi giá trị gốc ra file trước khi sửa]`. Phiên này cho đúng hình ảnh "nhiệt phẳng, xung thấp" mà ±2 °C không bắt được.
+- *N100, throttle nhiệt* (bản gốc: hộp kín hoặc chặn khe gió). Làm có giám sát, **tối đa 15 phút**, dừng ngay khi `PkgTmp` ≥ 95 °C. Không bọc máy bằng vật dễ cháy. Không bịt cục nguồn 12 V. Nếu ngửi thấy mùi khét thì dừng. Chip tự bảo vệ ở TjMax, nhưng SSD và cục nguồn không có cơ chế đó. Chỉ cần đến khi thấy bộ đếm throttle tăng một lần là đủ.
+
+**Bước 5 — Đo độ nhạy, rút cận trên (mới; thay cho "tương quan ≈ 0").** Thí nghiệm nóng/lạnh: 3 phiên ngắn bắt đầu từ máy nguội (tắt máy ≥ 20 phút, hoặc chờ `PkgTmp` về mức idle đã ghi), 3 phiên sau heat-soak, **xen kẽ** lạnh–nóng–lạnh… Mỗi phiên dùng cùng một tập observation. Fit latency theo nhiệt (hoặc tốt hơn: theo `Bzy_MHz`). Cận trên ảnh hưởng trong phiên chính thức = (cận trên CI độ dốc) × (dải nhiệt của phiên đó). Lưu ý: thiết kế này trộn nhiệt với ngân sách PL2 (phiên lạnh còn ngân sách burst). Nên con số là cận trên của **trạng thái máy** nói chung, không phải của riêng nhiệt độ. Ghi đúng như vậy.
+
+**Bước 6 — Đặt hai đồ thị cạnh nhau trong báo cáo** (bản gốc), thêm đồ thị throttle công suất, và viết đoạn methodology theo mẫu:
+
+```markdown
+## Nhiệt và công suất (K4 Bài 6)
+- Chế độ báo: sustained, sau heat-soak theo quy tắc ___ (đạt sau ___ s).
+- Phiên chính thức: PkgTmp ___..___ °C; Bzy_MHz p5..p95 = ___..___; PkgWatt p50 ___ W (PL1 = ___ W);
+  bộ đếm throttle nhiệt tăng ___ ; cờ GPU trong lúc đo: ___
+- Độ nhạy (thí nghiệm nóng/lạnh, 6 phiên xen kẽ): ___ ± ___ %/°C → ảnh hưởng tối đa trong dải ___ °C: ≤ ___ %
+- Burst (máy nguội, 30 s đầu): p50 = ___ ms — báo riêng, KHÔNG trộn vào số chính.
+- Phiên xấu cố ý: hình ___ (GPU 15 phút), ___ (PL1 hạ), ___ (nhiệt).
+```
+
+**Bước 7 — Đề 5.** Chạy (a) liên tục, (b) có `sleep(0.5)` giữa iteration, mỗi kiểu 200 iteration sau heat-soak, xen kẽ hai khối. Ghi governor đang dùng.
+
+**Sai số của dụng cụ:** cảm biến nhiệt báo theo độ nguyên và đặt ở một vị trí trên die. Nhiệt "phẳng" ±1 giá trị đọc có thể che dao động thật cỡ 1 °C `[tự đo]`. `turbostat` lấy trung bình trong 1 s, nên một lần hạ xung 100 ms chỉ hiện thành một vết lõm nhỏ. RAPL ±vài phần trăm so với đồng hồ điện, tùy chip `[ước lượng]`. `nvidia-smi` 1 Hz như Bài 5. Mọi sai số này nhỏ hơn hiệu ứng burst/sustained cỡ chục phần trăm. Chúng chỉ quan trọng khi bạn khẳng định "ảnh hưởng < 1%".
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Bảng của bản gốc** (giữ nguyên tiêu chí; cột "Chú thích" là phần sửa):
+
+| Kiểm tra | Đã cô lập | Chưa cô lập | Chú thích |
+|---|---|---|---|
+| Biến thiên nhiệt độ | ±2 °C | Tăng đơn điệu hàng chục độ | Điều kiện cần. Kèm vết tần số và công suất |
+| Cờ throttle | Không bật | Bật | Bộ đếm CPU chỉ đếm throttle nhiệt; PL1 không làm nó tăng |
+| Tương quan latency–nhiệt độ | Không có | Rõ ràng | "Không có" không phải bằng chứng. Thay bằng cận trên từ Bước 5 |
+| p99/p50 | Gần nhau | p99 tách xa | Chỉ tách xa khi phiên trộn hai chế độ. Throttle đều từ đầu tới cuối dịch cả phân bố, p99/p50 vẫn gần nhau. Dùng trôi đầu–cuối và Theil–Sen |
+
+**Mô phỏng 1** (`[đã chạy]`, numpy 2.2, seed 3, tham số giả định):
+
+| Cửa sổ (s) | T đọc (°C) | f TB (GHz) | L/L_lạnh | r(L,T) | Trôi (%/phút, CI95) |
+|---|---|---|---|---|---|
+| 0–30 | 30..48 | 2,88 | 1,00 | +0,31 | +1,3 (−0,6..+3,3) |
+| 30–120 | 48..58 | 2,49 | 1,17 | +0,64 | +2,1 (+1,7..+2,5) |
+| 120–300 | 58..61 | 2,47 | 1,18 | +0,01 | −0,03 (−0,14..+0,08) |
+| 600–900 | 61..61 | 2,46 | 1,18 | không xác định | −0,01 (−0,06..+0,04) |
+
+Không lần nào chạm TjMax. Đọc: (1) Cửa sổ 120–300 s và 600–900 s đạt ±2 °C, không trôi, r ≈ 0. Cả hai vẫn chậm hơn lúc nguội ~18%. Đó là chế độ sustained, không phải lỗi, nhưng phải khai báo. (2) r = +0,64 ở 30–120 s là tương quan thật mà **không** do nhiệt: trong mô hình, xung rơi vì công suất trung bình chạm PL1, còn nhiệt chỉ tình cờ tăng cùng lúc. (3) Ở 600–900 s, nhiệt đọc không đổi nên r không tính được. "Không tương quan" ở đây là chia cho 0, không phải bằng chứng.
+
+**Mô phỏng 2** (`[đã chạy]`, seed 11): thiết kế A cho |r| trung vị 0,11, và **67%** số phiên có CI độ dốc chứa 0, dù độ nhạy thật là 0,4 %/°C. Thiết kế B: r = +0,97, độ dốc 0,403 ± 0,006 %/°C. Cận trên cho phiên ±2 °C: **≤ 1,64%** latency. Câu được phép viết: "ảnh hưởng nhiệt trong phiên chính thức ≤ 1,6%, nhỏ hơn dung sai A/A 5%". Câu không được phép viết: "không có tương quan, nên nhiệt không ảnh hưởng".
+
+**Kỳ vọng trên máy thật** `[ước lượng — tự đo]`:
+- N100 trong EQ12: `Bzy_MHz` rơi sau cỡ τ của PL2 (vài chục giây) khi tải đủ nặng. `PkgTmp` lúc rơi còn cách TjMax (105 °C theo ARK) vài chục độ. Bộ đếm throttle nhiệt không tăng. Mức rơi phụ thuộc PL1 mà Beelink đặt trong BIOS; có máy đặt PL1 đủ cao để gần như không rơi. Nếu thế, ghi số đo và ghi rằng chế độ burst và sustained gần trùng nhau trên máy này.
+- GPU thuê 15 phút: nhiệt tăng rồi phẳng theo quạt. Thường không có cờ throttle nhiệt. `clocks.sm` có thể giảm vài nấc khi nóng lên. Một card bị hạ power limit cho cờ `SW Power Cap` ngay từ đầu, không đợi nóng.
+- Đề 5: với governor `powersave`/`schedutil`, (b) thường **không** nhanh hơn (a) sau heat-soak, và có thể chậm hơn do xung phải tăng lại sau mỗi lần nghỉ. Nếu (b) nhanh hơn rõ, bạn đang thấy (b) chạy gần chế độ burst hơn. Cả hai cách đọc đều nói cùng một điều: sleep đổi chế độ, không "sửa" phép đo.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Nhiệt tăng đều suốt phép đo (bản gốc) | Chưa heat-soak; đo trong chuyển tiếp | Quy tắc heat-soak Bước 2 có đạt không | Heat-soak đủ, hoặc báo burst có khai báo. **Không** chèn sleep giữa từng iteration |
+| Xung tụt dù nhiệt chưa cao (Gemini, đúng) | PL1; trên GPU là power limit | `PkgWatt` ≈ PL1; `clocks_event_reasons` = `SW Power Cap` | Ghi là power throttling, tách khỏi thermal |
+| p50 lệch > 5% giữa 3 lần chạy (Gemini) | Phiên bắt đầu ở trạng thái nhiệt khác nhau | Nhiệt và xung lúc bắt đầu mỗi phiên | Quy tắc heat-soak giống nhau cho mọi phiên; hoặc chờ nguội tới mức idle đã ghi (cách của Gemini, chỉ hợp cho chế độ burst) |
+| Nhiệt phẳng, xung phẳng, latency vẫn trôi | Không phải nhiệt: rò bộ nhớ, allocator, cache input, tiến trình nền | RSS theo thời gian; đổi vòng observation; `top` | Bài 5 phần 8; Bài 4 FakePolicy |
+| Không tạo được throttle nhiệt trên N100 | Tản nhiệt tốt hơn bạn nghĩ, hoặc PL1 thấp nên chip không đủ nóng | `PkgWatt`, `PkgTmp` cuối 15 phút | Ghi kết quả âm. Phiên PL1 hạ vẫn cho đủ hình "xấu" |
+| `turbostat` không có cột `PkgWatt` | Không có quyền đọc RAPL (cần root từ bản vá PLATYPUS năm 2020) | Chạy bằng `sudo`; `ls -l .../energy_uj` | Chạy bằng root, ghi lý do |
+
+### 9. Câu hỏi ngược
+
+1. **[Quy mô]** 100 robot dùng cùng N100, chạy trong vỏ kín, ở kho Bình Dương mùa hè (35 °C) và văn phòng máy lạnh (24 °C). Benchmark của bạn đo ở 26 °C, máy để trần. Con số nào gãy trước, và bạn phải thêm phép đo nào trước khi đưa nó vào spec?
+   <details><summary>Hướng nghĩ</summary>Nhiệt môi trường cộng thẳng vào nhiệt die. Vỏ kín tăng R_th. Rò rỉ tăng theo nhiệt làm ăn vào ngân sách PL1, nên xung sustained thấp hơn ngay cả khi chưa chạm TjMax. Phép đo cần thêm là sustained ở nhiệt môi trường cao nhất dự kiến, trong vỏ thật. Spec ghi theo trường hợp xấu nhất, giống cách ngành ô tô ghi dải nhiệt hoạt động cho linh kiện.</details>
+2. **[Failure mode]** Sáu tháng sau, một robot chậm dần 15%. Telemetry cho thấy `PkgTmp` cao hơn lúc nghiệm thu 12 °C ở cùng tải. Liệt kê các nguyên nhân theo thứ tự bạn sẽ kiểm, và ghi trong runbook số nào làm mốc.
+   <details><summary>Hướng nghĩ</summary>Bụi bám tản nhiệt, quạt mòn hoặc chết, keo tản nhiệt khô, nhiệt môi trường đổi vì robot được chuyển chỗ. Mốc là đường cong (công suất → nhiệt) lúc nghiệm thu: cùng `PkgWatt` mà nhiệt cao hơn nghĩa là R_th tăng (phần cứng tản nhiệt), không phải tải tăng. Đây là lý do telemetry nhiệt nên nằm trong log vận hành của robot, không chỉ trong benchmark (→ F7.5).</details>
+3. **[Vì sao không]** Vì sao không tắt turbo, khóa xung ở base cho mọi phép đo để triệt cả hai vòng phản hồi?
+   <details><summary>Hướng nghĩ</summary>Bạn có được phép đo ổn định của một máy mà không ai dùng. Khóa xung hợp cho A/B (giảm phương sai khi so hai cấu hình), giống `nvidia-smi -lgc` ở Bài 5. Số tuyệt đối thì phải đo ở cấu hình triển khai. Hai mục đích, ghi cả hai chế độ.</details>
+4. **[Phản biện]** "Chỉ số sustained là thật, số burst là ảo, đừng báo." Dựng lập luận mạnh nhất cho phía ngược lại.
+   <details><summary>Hướng nghĩ</summary>Robot không chạy model liên tục. Nếu model chỉ được gọi mỗi chunk và giữa hai lần gọi chip có thời gian hồi ngân sách, thì chế độ thật nằm giữa burst và sustained. Câu trả lời đúng là đo theo chu kỳ tải thật của robot (chế độ thứ ba ở phần 3), và báo cả ba nếu khác nhau.</details>
+5. **[Liên ngành]** Thử nghiệm lâm sàng có một nguyên tắc: "absence of evidence is not evidence of absence". Để kết luận "thuốc mới không kém thuốc cũ", người ta dùng thiết kế non-inferiority với biên định trước. Bước 5 của bạn tương ứng với phần nào của thiết kế đó?
+   <details><summary>Hướng nghĩ</summary>Biên định trước ≈ ngưỡng ảnh hưởng chấp nhận được (ví dụ 2%). Cận trên CI của ảnh hưởng phải nằm dưới biên. Đó là logic của kiểm định tương đương (TOST): chứng minh ảnh hưởng *nhỏ* đòi CI hẹp, nghĩa là đòi thiết kế có biến thiên đủ, không phải đòi p-value lớn.</details>
+
+### 10. Liên kết ra ngoài
+
+- **Đo lường học: đại lượng ảnh hưởng (influence quantity) và hệ số độ nhạy (GUM).** Phòng hiệu chuẩn không viết "nhiệt độ phòng không ảnh hưởng". Họ ghi nhiệt độ trong lúc đo, lấy hệ số độ nhạy (đo riêng hoặc từ tài liệu), rồi đưa tích của hai thứ vào ngân sách bất định như một thành phần loại B `[chuẩn — JCGM 100:2008]`. Giống: Bước 5 chính là việc này. Khác: hệ số của bạn phải tự đo trên chính máy, vì không có tài liệu nào cho "SmolVLA trên EQ12".
+- **Thử nghiệm lâm sàng: Altman & Bland, "Absence of evidence is not evidence of absence", BMJ 1995** `[chuẩn]`. Bài báo hai trang chỉ ra các thử nghiệm nhỏ, không có ý nghĩa thống kê, bị đọc thành "không có tác dụng". Giống: r ≈ 0 trong một phiên hẹp bị đọc thành "nhiệt không ảnh hưởng". Khác: bạn có thể tự tạo biến thiên (nóng/lạnh). Người làm lâm sàng thường không được phép làm bệnh nhân ốm hơn.
+- **Hàng không: phân loại "hot and high".** Máy bay có hiệu năng cất cánh thấp hơn ở sân bay nóng và cao, và tài liệu bay cho bảng hiệu năng theo nhiệt độ và độ cao `[chuẩn]`. Giống: hiệu năng là hàm của điều kiện môi trường, phải ghi kèm điều kiện. Khác: hàng không dùng bảng theo điều kiện xấu nhất có chứng nhận, còn benchmark của bạn mới có một điểm đo.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Batterygate: Geekbench phát hiện cụm điểm thấp, Apple xác nhận quản lý công suất từ iOS 10.2.1 (12/2017) | `[chuẩn]` | Blog Geekbench "iPhone Performance and Battery Age"; thông cáo Apple 12/2017 |
+| `Bzy_MHz` tính từ APERF/MPERF | `[chuẩn]` | `man turbostat` |
+| `*_throttle_count` chỉ đếm throttle nhiệt; PL1 không làm tăng | `[tự đo]` | Kiểm trên kernel của bạn bằng phiên PL1 hạ ở Bước 4 |
+| RAPL `energy_uj` cần root từ 2020 (PLATYPUS, CVE-2020-8694) | `[chuẩn]` | Bản vá kernel 11/2020 |
+| N100 TjMax 105 °C, Processor Base Power 6 W | `[spec — Intel ARK]` | Kiểm lại trên ARK; PL1/PL2 thật do BIOS Beelink đặt `[tự đo]` |
+| Cảm biến nhiệt báo theo độ nguyên | `[tự đo]` | Nhìn giá trị trong TSV |
+| GPU Boost giảm xung theo nấc khi nhiệt tăng, trước ngưỡng throttle | `[tự đo]` | Vết `clocks.sm` theo `temperature.gpu` trong phiên 15 phút |
+| Kết quả hai mô phỏng | `[đã chạy]` | Tham số giả định; chỉ minh họa cơ chế |
+
+**Đã sửa so với bản gốc/Gemini:**
+- Bản gốc và Gemini: "đồ thị nhiệt phẳng ±2 °C là bằng chứng" → giữ ±2 °C làm tiêu chí (không đổi ngưỡng). Thêm điều kiện đi kèm: vết tần số, công suất, bộ đếm throttle. Lý do: hạ xung do PL1 xảy ra khi nhiệt phẳng.
+- Bản gốc và Gemini: "tương quan latency–nhiệt: không có" là dấu hiệu đã cô lập → sai khi nhiệt gần như không đổi (ghi chú hợp nhất w-F1). Thay bằng cận trên từ thí nghiệm nóng/lạnh (Bước 5).
+- Bản gốc: "p99/p50 gần nhau vs tách xa" → chỉ đúng khi phiên trộn hai chế độ. Thêm Theil–Sen và trôi đầu–cuối.
+- Gemini, "Nếu ra khác": sửa nhiệt bằng `time.sleep(0.5)` giữa iteration → sai, vì nó đổi chế độ đo. Nghỉ giữa khối (Bài 3); chu kỳ robot là chế độ riêng, phải khai báo.
+- Gemini, Bước 1: đọc `/sys/class/thermal/...` và `sensors` cho N100 → bổ sung `turbostat` (tần số thật, PkgWatt), bộ đếm throttle trước/sau, ghép thời gian bằng cặp đồng hồ.
+- Bản gốc, Bước 3 "chặn khe gió": giữ, thêm giới hạn an toàn (15 phút, dừng ở 95 °C, không bịt cục nguồn), và thêm phiên PL1 hạ (an toàn, đảo ngược được) để thấy throttle công suất.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Intel, *64 and IA-32 Architectures Software Developer's Manual*, Vol. 3B, chương Power and Thermal Management (RAPL, PROCHOT, APERF/MPERF). Trang `man turbostat`. Tài liệu kernel `Documentation/power/powercap/powercap.rst`.
+- **Giải thích:** Brendan Gregg, *Systems Performance* (ấn bản 2), chương CPUs, mục về tần số và trạng thái công suất.
+- **Đào sâu (tùy chọn):** D. G. Altman, J. M. Bland, "Absence of evidence is not evidence of absence", *BMJ* 311:485, 1995.
+- **Tự kiểm tra:** (1) giải thích cho một backend engineer khác trong 5 câu vì sao nhiệt phẳng chưa đủ; (2) vẽ lại sơ đồ hai vòng phản hồi ở phần 2 từ trí nhớ, ghi hằng số thời gian của từng vòng; (3) hai câu dưới.
+
+  1. Phiên chính thức trên N100: `PkgTmp` 62..63 °C, `Bzy_MHz` p5..p95 = 2390..2410, `PkgWatt` p50 = 15,0 W, PL1 = 15 W, bộ đếm throttle tăng 0. Có PASS tiêu chí 3 không, và bạn ghi chế độ gì?
+     <details><summary>Đáp án</summary>PASS phần nhiệt (dải 1 °C) và phần cờ. Nhưng `PkgWatt` = PL1 nghĩa là chip đang bị ghim bởi giới hạn công suất. Đây là chế độ sustained, xung thấp hơn xung burst. Ghi rõ "sustained, giới hạn bởi PL1 = 15 W", kèm số burst riêng. Không ghi "không throttle".</details>
+  2. Bạn chạy thí nghiệm nóng/lạnh và được độ dốc 0,10 ± 0,30 %/°C. Phiên chính thức có dải 3 °C. Bạn viết gì?
+     <details><summary>Đáp án</summary>Cận trên độ dốc = 0,40 %/°C, nhân 3 °C → ảnh hưởng ≤ 1,2%. Viết: "ảnh hưởng của trạng thái nhiệt trong phiên chính thức ≤ 1,2% (cận trên CI 95%)". CI chứa 0 không có nghĩa là "không ảnh hưởng". Nó chỉ làm cận trên trở thành thứ duy nhất được phép báo.</details>
+
+---
