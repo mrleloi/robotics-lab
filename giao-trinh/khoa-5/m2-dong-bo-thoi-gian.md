@@ -915,3 +915,283 @@ Lộ trình ghi rõ: **PTP không chạy được sau 60h → chuyển sang hard
   <details><summary>Đáp án</summary>A: t2−t1 = 350 µs; t4−t3 = −50 µs; offset = (350 − (−50))/2 = 200 µs; delay = (350 + (−50))/2 = 150 µs. B: "\|offset A−B\| < ~0,8 µs ở p99 theo trọng tài đọc PHC kẹp giữa CLOCK_REALTIME, sai số trọng tài 0,6 µs (p99 nửa độ rộng kẹp); số tự báo của ptp4l (25 ns) không được dùng làm kết quả vì không độc lập và không thấy bất đối xứng." Không viết "25 ns".</details>
 
 ---
+
+## Bài 10 — TN-3: Clock drift theo nhiệt độ (8h)
+
+> **Vị trí:** Bài 8 (rig GPIO chung, `b8_fit.py`) → **Bài 10** → Bài 12 (dòng "drift nhiệt" của ngân sách) · **Cần trước:** F4.1 (tuning-fork vs AT-cut, mô hình offset/skew/drift), F4.2 (Allan deviation, chọn cửa sổ), F1.6 (fit, phần dư, R²), Bài 8 · **Sau bài này bạn quyết định được:** với một robot mà nhiệt độ board thay đổi ΔT trong một phiên, chu kỳ sync phải ngắn bao nhiêu, cửa sổ ước lượng skew dài bao nhiêu, và có cần bù nhiệt (TCXO hoặc bảng bù bằng phần mềm) hay không.
+
+### 1. Câu chuyện — ai đã khổ vì chuyện này
+
+Thế kỷ 18, bài toán kinh độ trên biển là bài toán đồng hồ: biết giờ ở cảng gốc và giờ Mặt Trời tại chỗ thì suy ra kinh độ, mỗi phút sai là một phần tư độ. Nghị viện Anh treo giải năm 1714. Thứ làm đồng hồ biển thất bại không phải độ chính xác lúc ở xưởng, mà là **nhiệt độ**: dây tóc và con lắc giãn nở khi tàu đi từ biển lạnh vào vùng nhiệt đới. John Harrison mất nhiều chục năm, và phần lớn sáng chế của ông là cơ cấu **bù nhiệt**: con lắc ghép thanh đồng và thép giãn ngược nhau, rồi dải lưỡng kim trong các đồng hồ H3, H4 [chuẩn: lịch sử đo thời gian; xem D. Sobel, *Longitude*]. Bài học hai trăm năm tuổi: một đồng hồ được "chỉnh đúng" ở một nhiệt độ thì chỉ đúng ở nhiệt độ đó.
+
+Thạch anh lặp lại câu chuyện ở thang ppm. Những năm 1930, người ta tìm ra các góc cắt tinh thể (AT-cut là một) để hệ số nhiệt bậc một gần bằng 0 quanh nhiệt độ phòng; phần còn lại là đường bậc ba [chuẩn: J. Vig, *Quartz Crystal Resonators and Oscillators* tutorial]. Nhưng gần 0 không phải bằng 0, và vài ppm sau khi nhân với một giờ là hàng chục mili-giây. Đây là lý do "sync một lần lúc khởi động rồi thôi" thất bại trên robot: motor nóng, CPU nóng, robot đi từ bóng râm ra nắng. Và đây là chi tiết mà phần lớn người làm data pipeline không biết: họ thấy offset trôi "không đều" và đổ cho mạng.
+
+### 2. Mô hình tư duy
+
+Thí nghiệm là Bài 8 cộng một biến cố ý thay đổi. Chuỗi nhân quả, mỗi mũi tên là một chỗ có thể sai:
+
+```
+máy sấy / đá ──► nhiệt độ không khí quanh B ──(trễ nhiệt τ_th)──► nhiệt độ thạch anh B ──► skew y_B(T)
+                     ▲ BME280 đo cái này                              ▲ không ai đo trực tiếp
+                                                                       │
+board A (giữ ở nhiệt độ phòng) ──► y_A ≈ hằng                         │
+                                                                       ▼
+offset[k] = tB[k] − tA[k]   ──đạo hàm trong cửa sổ W──►  Δy(t) = y_B − y_A   ──ghép với T(t)──►  đồ thị Δy theo T
+```
+
+Bốn điều bản chất:
+
+1. **Thứ bạn đo là hiệu skew** của hai board (F4.1). Giữ A ở nhiệt độ ổn định thì *thay đổi* của Δy là thay đổi của y_B theo nhiệt. Nếu A cũng nóng theo (đặt quá gần), một phần hiệu ứng triệt tiêu (Bài 7, quy tắc 2).
+2. **Thạch anh 40 MHz của ESP32-S3 là AT-cut, không phải tuning-fork.** Đường cong bậc ba của nó lệch ít hơn hẳn parabol của tuning-fork 32,768 kHz trong dải phòng; bảng so sánh và hai hàm mô hình nằm ở F4.1 mục 2, đừng chép hệ số của loại này sang loại kia. Dải hai giờ sấy của bạn chỉ phủ một khúc ngắn của đường bậc ba, khúc đó trông gần như thẳng.
+3. **Đạo hàm của dữ liệu nhiễu là một bài toán chọn cửa sổ.** Cửa sổ ngắn: jitter timestamp (white PM, F4.2) lấn độ dốc. Cửa sổ dài: làm mờ chính sự thay đổi nhiệt bạn muốn thấy. Điểm cân bằng không đoán: vẽ **Allan deviation của 2 giờ nền** và lấy τ tại cực tiểu (F4.2 mục 9 nói đúng việc này). Bên trái cực tiểu, nhiễu đo còn trội; bên phải, đồng hồ thật sự thay đổi.
+4. **Nhiệt độ bạn ghi không phải nhiệt độ của thạch anh.** BME280 đo không khí; cảm biến nhiệt nội của ESP32 đo die của chip, nóng lên vì chính chip chạy; thạch anh là linh kiện riêng nằm dưới vỏ kim loại của module. Mỗi chặng có quán tính nhiệt. Trễ nhiệt vẽ ra một vòng lặp trên đồ thị Δy–T trông y hệt hysteresis.
+
+Mô phỏng 6 giờ theo đúng kịch bản của bài (2 h nền, 1 h sấy, 2 h nguội, 1 h lạnh), có trễ nhiệt hai chặng và jitter ISR 1 µs. Cùng script chạy được với dữ liệu thật của bạn (bước 3):
+
+```python
+# [đã chạy] b10_drift.py — drift theo nhiệt: chọn cửa sổ bằng Allan, đạo hàm trượt, fit, R², trễ nhiệt
+# Dữ liệu giả lập (mặc định) hoặc thật: python b10_drift.py off.csv  (cột t_s,off_us,temp_c; 1 dòng/giây)
+import sys, numpy as np, matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
+rng = np.random.default_rng(3)
+def at_cut(T, a1=-0.2, a3=1e-4, T0=25.0):              # mô hình AT-cut của F4.1 [ước lượng]
+    return a1*(T-T0) + a3*(T-T0)**3
+if len(sys.argv) > 1:
+    t, off, Tair = np.loadtxt(sys.argv[1], delimiter=",", skiprows=1, unpack=True)
+else:                                                   # kịch bản 6 h: 2h nền, 1h sấy, 2h nguội, 1h lạnh
+    t = np.arange(0, 6*3600.0)
+    room = 26 + 0.4*np.sin(2*np.pi*t/1200)              # điều hòa bật/tắt chu kỳ 20 phút [giả định]
+    target = np.select([t < 7200, t < 10800, t < 18000], [room, room + 28, room], room - 8)
+    Tair = np.empty_like(t); Tair[0] = room[0]
+    for k in range(1, t.size):                          # không khí quanh board theo máy sấy, τ = 3 phút
+        Tair[k] = Tair[k-1] + (target[k] - Tair[k-1])/180
+    Txtal = np.empty_like(t); Txtal[0] = Tair[0]
+    for k in range(1, t.size):                          # thạch anh trong vỏ module trễ thêm τ = 4 phút
+        Txtal[k] = Txtal[k-1] + (Tair[k] - Txtal[k-1])/240
+    y = 3.0 + at_cut(Txtal)                             # hiệu skew B−A (ppm); A giữ ở nhiệt độ phòng
+    off = np.cumsum(y) + rng.normal(0, 1.0, t.size)     # µs; jitter ISR σ = 1 µs (Bài 8) [giả định]
+def adev_phase(x, m):                                   # overlapping ADEV từ phase x (µs → giây)
+    d = x[2*m:] - 2*x[m:-m] + x[:-2*m]
+    return np.sqrt(np.mean(d**2)/2)/m*1e-6              # τ0 = 1 s
+base = off[t < 7200]
+ms = np.unique(np.logspace(0, np.log10(base.size//10), 25).astype(int))
+ad = np.array([adev_phase(base, m) for m in ms])
+W = int(ms[ad.argmin()]); print(f"ADEV nền: min {ad.min()*1e6:.4f} ppm tại τ = {W} s -> cửa sổ W = {W} s")
+def slide(off, W, step=30):                             # độ dốc (ppm) trong cửa sổ trượt W giây
+    c = np.arange(W//2, off.size - W//2, step); out = []
+    for i in c:
+        s = slice(i - W//2, i + W//2); out.append(np.polyfit(t[s], off[s], 1)[0])
+    return c, np.array(out)
+for Wtry in (10, 30, W, 600, 1800):                    # dữ liệu giả lập có đáp án thật y: đo sai bao nhiêu
+    c, d = slide(off, Wtry); hot = (c > 7200) & (c < 9000)
+    if len(sys.argv) == 1:
+        print(f"W={Wtry:5d} s: RMS sai so với y thật: lúc nền {np.sqrt(np.mean((d-y[c])[c < 7200]**2)):.3f},"
+              f" lúc đang sấy {np.sqrt(np.mean((d-y[c])[hot]**2)):.3f} ppm")
+c, d = slide(off, W); T = Tair[c]
+for deg in (1, 2, 3):
+    p = np.polyfit(T, d, deg); r = d - np.polyval(p, T)
+    nb = c < 7200; pb = np.polyfit(T[nb], d[nb], deg); rb = d[nb] - np.polyval(pb, T[nb])
+    print(f"bậc {deg}: R² = {1 - r.var()/d.var():.3f}, σ phần dư {r.std():.3f} ppm | chỉ 2 h nền: R² = {1 - rb.var()/d[nb].var():.3f}")
+heat, cool = (c >= 7200) & (c < 10800), (c >= 10800) & (c < 18000)
+for name, Tq in [("nhiệt độ không khí", Tair)] + ([("nhiệt độ thạch anh", Txtal)] if len(sys.argv) == 1 else []):
+    g = lambda m: np.interp(40, Tq[c[m]][np.argsort(Tq[c[m]])], d[m][np.argsort(Tq[c[m]])])
+    print(f"theo {name}: drift tại 40 °C khi nóng lên {g(heat):+.2f}, khi nguội {g(cool):+.2f} ppm")
+fig, ax = plt.subplots(1, 2, figsize=(10, 4))
+ax[0].loglog(ms, ad*1e6, "o-"); ax[0].set_xlabel("τ (s)"); ax[0].set_ylabel("σ_y (ppm)")
+ax[1].scatter(T, d, s=4, c=c, cmap="viridis"); ax[1].set_xlabel("°C (BME280)"); ax[1].set_ylabel("drift (ppm)")
+plt.tight_layout(); plt.savefig("b10_drift.png", dpi=90)   # trong notebook có thể thay bằng plt.show()
+```
+
+Trước khi chạy, ghi dự đoán cho ba thứ script in ra (mục 5, câu 4–6). Rồi đọc: cửa sổ nào cho sai số nhỏ nhất *cả lúc nền lẫn lúc đang sấy*; R² có phân biệt được bậc fit không; hai dòng "nóng lên / nguội" khác nhau vì thạch anh hay vì cách đo.
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Thermal throttling (K4): CPU nóng thì chậm | Thạch anh nóng thì tần số đổi | Throttling là quyết định rời rạc của firmware, có log, `turbostat` thấy. Drift nhiệt là vật lý liên tục, không log nào ghi, chỉ thấy khi so với một đồng hồ khác | Tìm nguyên nhân offset trôi trong `dmesg`; không có gì ở đó |
+| `rate(x[5m])` của Prometheus: chọn cửa sổ cho đẹp | Đạo hàm offset trong cửa sổ W | Ở metrics, cửa sổ là chuyện thẩm mỹ. Ở đây có cửa sổ tối ưu, đọc được từ Allan deviation; lệch về hai phía đều tăng sai số | Cửa sổ dài "cho mượt" xóa mất chính hiệu ứng nhiệt; ngắn quá thì vẽ ra nhiễu jitter |
+| Load config/warm cache một lần lúc start | Sync một lần lúc khởi động | Config không đổi khi chạy; skew đổi theo nhiệt của board, và lỗi tích lũy theo thời gian (tích phân của skew) | Dataset giờ đầu khớp, giờ thứ ba lệch hàng chục ms mà không có bậc nhảy nào để alert bắt |
+| Hệ số tương quan / R² trên dashboard | Tiêu chí "R² > 0,85" của Gemini | R² phụ thuộc dải của biến X (ΔT), không chỉ độ khớp; điểm trên cửa sổ chồng nhau không độc lập; R² cao không chọn được bậc mô hình, không phát hiện trễ nhiệt | PASS một mô hình sai; FAIL một thí nghiệm đúng chỉ vì dải nhiệt hẹp |
+
+**Chấm mô hình:**
+
+- *"Trong một system vật lý có số tác nhân biết trước, thu dữ liệu đủ lâu, thì mọi công thức vật lý gần như là hằng số, nên tầng AI/model dự đoán được mọi biến số"* (mô hình của bạn ở K3 lượt 12) — **ĐÚNG MỘT PHẦN.** Đúng: đường cong nhiệt của thạch anh là tất định, và bù bằng mô hình là một kỹ thuật có thật (TCXO làm đúng vậy bằng mạch; bù bằng phần mềm từ nhiệt độ đo được cũng làm được). Gãy ở ba chỗ: "hằng số" là **của từng con** (mỗi thạch anh có dung sai và a₁ riêng, phải hiệu chuẩn từng board), nó **trôi theo tuổi** (aging, F4.1), và mô hình chỉ tốt bằng **đầu vào** của nó: bạn không đo được nhiệt độ thạch anh, chỉ đo được không khí cạnh nó. **Phản ví dụ:** trong mô phỏng trên, cùng một thạch anh hoàn toàn tất định, mô hình theo nhiệt độ không khí cho hai giá trị khác nhau ở cùng 40 °C tùy đang nóng lên hay nguội đi.
+- *"Thạch anh nóng lên thì chạy chậm lại"* — **SAI** như quy tắc chung. Đúng với tuning-fork (parabol úp xuống, lệch khỏi T₀ về phía nào cũng chậm). Với AT-cut, dấu phụ thuộc góc cắt và bạn đang ở nhánh nào của đường bậc ba. **Phản ví dụ:** mô hình AT-cut của F4.1 với a₁ âm cho skew giảm khi nóng nhưng *tăng* khi lạnh xuống dưới 25 °C; đổi dấu a₁ thì ngược lại. Đo, đừng đoán dấu.
+- *"Đồ thị drift–nhiệt độ có vòng lặp thì thạch anh có hysteresis"* — **ĐÚNG MỘT PHẦN.** Hysteresis nhiệt thật có tồn tại ở thạch anh (F4.1 thuật ngữ 🔴), nhưng trong thí nghiệm máy sấy, vòng lặp lớn nhất thường đến từ trễ nhiệt giữa cảm biến và thạch anh. **Phản ví dụ:** cùng dữ liệu, vẽ theo nhiệt độ đã dịch trễ (bước 6) mà vòng lặp xẹp lại thì đó là trễ đo, không phải tính chất tinh thể.
+
+### 4. Thuật ngữ
+
+| Mức | Thuật ngữ | Nghĩa trong một câu | Hay bị hiểu nhầm thành |
+|---|---|---|---|
+| 🟢 | Frequency–temperature curve | Δf/f theo nhiệt độ của một loại thạch anh | Một hệ số dùng chung cho mọi thạch anh |
+| 🟢 | Tuning-fork 32,768 kHz vs AT-cut MHz | Parabol (RTC) vs bậc ba (clock chính MCU, NIC) | Cùng một loại "thạch anh" |
+| 🟢 | Drift tức thời (sliding-window slope) | Độ dốc offset trong cửa sổ W quanh thời điểm t, đơn vị ppm | Đạo hàm từng điểm (vô dụng vì nhiễu) |
+| 🟢 | Trễ nhiệt (thermal lag, hằng số thời gian τ_th) | Nhiệt độ một vật đuổi theo môi trường sau một khoảng | Không đáng kể với linh kiện nhỏ |
+| 🟡 | Turnover / inflection temperature | Điểm cực trị của parabol / điểm uốn của đường bậc ba | Luôn đúng 25 °C |
+| 🟡 | TCXO, OCXO | Bù nhiệt bằng mạch / giữ thạch anh trong lò ổn nhiệt | Thứ chỉ phòng lab mới dùng; GPS và điện thoại dùng TCXO |
+| 🟡 | Hysteresis nhiệt | Lên và xuống nhiệt không trùng đường | Mọi vòng lặp trên đồ thị |
+| 🔴 | Activity dip | Tần số nhảy bất thường ở một nhiệt độ hẹp do mode rung phụ | Cần cho bài này |
+
+### 5. Dự đoán
+
+**Đề:** trước khi bật máy sấy, dự đoán sáu số.
+
+1. Δy ở nhiệt độ phòng (ppm): lấy từ Bài 8, kèm khoảng.
+2. Δy thay đổi bao nhiêu ppm khi board B đi từ nhiệt độ phòng lên nhiệt độ cao nhất bạn định đạt (ghi con số đó, ví dụ 50 °C đo ở BME280), và khi xuống mức lạnh nhất. Tính **hai lần**: một lần bằng mô hình AT-cut, một lần bằng parabol tuning-fork, để thấy hai loại khác nhau bao nhiêu lần.
+3. Dấu của thay đổi đó (nhanh lên hay chậm đi), hoặc ghi "không biết, vì ___".
+4. Cửa sổ W tại cực tiểu Allan của 2 giờ nền.
+5. Độ rộng vòng lặp "nóng lên vs nguội đi" ở cùng một nhiệt độ, nếu trễ nhiệt cỡ vài phút.
+6. Offset tích lũy thêm trong 10 phút giữa hai lần sync khi board đang nóng, chỉ do phần nhiệt (so với lúc sync ở nhiệt độ phòng).
+
+**Tham số cần tra:**
+
+| Tham số | Tra ở đâu |
+|---|---|
+| Đường cong hoặc cận "frequency stability over temperature" của thạch anh 40 MHz | Datasheet module (ESP32-S3-WROOM-1/-MINI-1: thạch anh tích hợp, thường chỉ ghi tần số); nếu board dùng thạch anh rời, đọc mã trên vỏ và tìm datasheet của nhà sản xuất (dạng ±10/±20/±30 ppm trên dải nhiệt). Thường chỉ có **cận**, không có đường cong: đó là lý do bài này đo |
+| a₁, a₃ để thử | F4.1 mục 2 (giá trị [ước lượng]); thử a₁ cả âm và dương |
+| k tuning-fork | F4.1 mục 2 (datasheet tuning-fork 32,768 kHz) |
+| Giới hạn nhiệt độ làm việc | Datasheet **đúng mã** module của bạn, bảng "operating ambient temperature"; một số biến thể có giới hạn thấp hơn các biến thể khác [spec: tự kiểm] |
+| Sai số BME280 | Datasheet Bosch BME280, mục temperature: ±1 °C trong 0–65 °C [spec] |
+| Cảm biến nhiệt nội ESP32-S3 | ESP-IDF API reference, *Temperature Sensor* (`driver/temperature_sensor.h`): đo nhiệt độ die, có dải đo phải chọn khi cài [spec: kiểm theo phiên bản]; độ chính xác tuyệt đối [tự đo] |
+| σ jitter timestamp | Bài 8 (σ phần dư) |
+
+**Phương pháp:** câu 2: `Δy(T) − Δy(T_phòng)` theo từng mô hình. Câu 4: white PM cho `σ_y(τ) = √3·σ_x/τ` (F4.2); đặt nó bằng biến thiên skew do dao động nhiệt độ phòng (ΔT_phòng × |dy/dT|) để ra τ cỡ nào. Câu 5: với trễ τ_th và tốc độ đổi nhiệt dT/dt, nhiệt độ ghi được lệch nhiệt độ thạch anh cỡ `τ_th·dT/dt`; nhân |dy/dT|, nhân 2 (lên và xuống lệch ngược chiều). Câu 6: `|ΔΔy| × 600 s`, ppm × s = µs.
+
+**Mẫu `prediction.md`** (`lab/k5/b10/prediction.md`):
+
+```markdown
+# Bài 10 — TN-3 dự đoán (commit trước khi bật máy sấy)
+| # | Đại lượng | Dự đoán | Cách ra số |
+|---|---|---|---|
+| 1 | Δy ở nhiệt độ phòng (ppm) | ___ ± ___ | Bài 8 |
+| 2a | ΔΔy phòng → ___ °C, mô hình AT-cut (ppm) | ___ | a1 = ___, a3 = ___ |
+| 2b | ΔΔy phòng → ___ °C, nếu là tuning-fork (ppm) | ___ | k = ___ |
+| 2c | ΔΔy phòng → ___ °C (lạnh), AT-cut (ppm) | ___ | |
+| 3 | Dấu khi nóng | ___ | ___ |
+| 4 | W tại cực tiểu Allan (s) | ___ | σ_x = ___ µs, dao động nhiệt phòng ___ °C |
+| 5 | Vòng lặp nóng/nguội ở cùng T (ppm) | ___ | τ_th ≈ ___ phút, dT/dt ≈ ___ °C/phút |
+| 6 | Offset thêm trong 10 phút lúc nóng (ms) | ___ | |
+Tôi sẽ ngạc nhiên nếu: ___
+```
+
+### 6. Làm
+
+**An toàn trước (đọc hết rồi mới cắm điện):** máy sấy để mức nhiệt thấp, cách board ≥30 cm, thổi từng đợt; không thổi vào cáp USB và đầu cắm. Mục tiêu tối đa ≤55 °C đo ở BME280 sát module, thấp hơn nhiều so với giới hạn trong datasheet (thường 85 °C với linh kiện thương mại, có biến thể thấp hơn: kiểm đúng mã module). Đây là lúc mục "Absolute Maximum Ratings" ở Khóa 1 có ích thật. Làm lạnh: đá trong túi zip kín, bọc khăn, đặt cạnh (không chạm) board; **nước đọng trên board đang cắm điện có thể gây chập**: thấy hơi nước trên board thì rút điện, để khô hẳn rồi mới cắm lại. Không dùng bình xịt làm lạnh.
+
+1. **(0,5h) Chuẩn bị.** Dùng nguyên rig và firmware Bài 8. Thêm vào firmware của **cả hai** board: đọc cảm biến nhiệt nội mỗi giây và gửi kèm (cột `die_c`). Gắn BME280 sát vỏ kim loại module của B (băng dính giấy chịu nhiệt, cảm biến hướng vào module), log `host_ns,temp_c`. Đặt A cách xa ≥50 cm, có tấm bìa chắn gió máy sấy. Ghi vào notebook: vị trí, khoảng cách, nhiệt độ phòng, điều hòa bật hay tắt. Sai số dụng cụ: BME280 ±1 °C tuyệt đối [spec], nhưng thứ bạn cần là *thay đổi* nhiệt độ, tốt hơn con số tuyệt đối nhiều [ước lượng]; die sensor đo chip, không đo thạch anh.
+2. **(6h chạy, ~1h người) Chạy TN-1 liên tục 6 tiếng**, thay đổi nhiệt độ có chủ đích theo đúng kịch bản gốc: **để bình thường 2h → hơ máy sấy 1h → để nguội 2h → làm lạnh 1h** (quạt hoặc đá bọc túi). Ghi giờ bắt đầu/kết thúc từng giai đoạn vào notebook (cột `phase`). Tắt WiFi như Bài 8.
+3. **(1h) Tính drift tức thời bằng đạo hàm của offset trong cửa sổ trượt**, nhưng chọn cửa sổ có căn cứ:
+   - Ghép cạnh bằng `b8_fit.py` như Bài 8, rồi thêm vào cuối script ba dòng xuất chuỗi offset kèm nhiệt độ:
+     ```python
+     # [đã chạy] thêm vào cuối b8_fit.py: xuất offset + nhiệt độ cho b10_drift.py (temp.csv: host_ns,temp_c)
+     T = np.loadtxt("temp.csv", delimiter=",", skiprows=1)
+     temp = np.interp(B[ok, 0], T[:, 0], T[:, 1])          # nhiệt độ tại lúc host nhận cạnh của B
+     np.savetxt("off.csv", np.c_[t, off, temp], delimiter=",", header="t_s,off_us,temp_c", comments="", fmt="%.6f")
+     ```
+   - `python b10_drift.py off.csv`. Script vẽ Allan deviation của 2 giờ nền và lấy W tại cực tiểu. Nếu cạnh bị mất nhiều (>1%), chuỗi không còn đều 1 s: nội suy offset lên lưới 1 s trước khi tính Allan, ghi số cạnh mất.
+   - Chạy lại phần đạo hàm với W/3 và 3W. Ghi biên độ drift lúc sấy ở ba cửa sổ: nếu đổi mạnh theo W, kết luận của bạn phụ thuộc lựa chọn xử lý, phải nói ra.
+4. **(0,5h) Vẽ drift (ppm) theo nhiệt độ (°C). Đây là hình chính của thí nghiệm.** Tô màu theo thời gian (script đã làm) để thấy nhánh nóng lên, nhánh nguội, nhánh lạnh. Vẽ thêm chuỗi thời gian: nhiệt độ và drift trên cùng trục thời gian (hai trục y).
+5. **(1h) Fit một đường (tuyến tính hoặc bậc hai) và ghi hệ số**, như bản gốc, cộng thêm bậc ba. Ghi hệ số kèm sai số chuẩn (`np.polyfit(..., cov=True)`), và vẽ **phần dư theo nhiệt độ**, tách theo nhánh. Không dùng R² làm tiêu chí đạt: R² chỉ được ghi kèm dải ΔT, và kết luận bậc mô hình dựa vào phần dư có cấu trúc hay không. Nếu bậc hai và bậc ba cho phần dư như nhau, kết luận đúng là "dải nhiệt này không phân biệt được", không phải "thạch anh này là parabol".
+6. **(0,5h) Kiểm trễ nhiệt trước khi gọi là hysteresis.** Dịch chuỗi nhiệt độ trễ đi `L` giây (0, 60, 120, … 600 s), vẽ lại drift theo nhiệt độ dịch; chọn L làm hai nhánh nóng/nguội gần nhau nhất. Vòng lặp xẹp lại với L cỡ vài phút → trễ nhiệt. Còn lệch rõ sau khi dịch, và drift sau khi nguội hẳn (≥1 giờ ổn định) không về giá trị nền → ứng viên hysteresis thật, **phát hiện đáng ghi**. Tiêu chí "rõ": lệch lớn hơn vài lần σ của độ dốc trong cửa sổ W (đo ở 2 giờ nền).
+7. **(0,5h) Đưa vào ngân sách và quyết định.** Ghi vào bảng Bài 12 dòng "drift nhiệt": |dΔy/dT| quanh nhiệt độ phòng (ppm/°C), ΔT bạn giả định cho robot Khóa 7, và cửa sổ W kèm sai số độ dốc của nó. Ghi vào `decisions.md`: chu kỳ sync tối đa `T_sync = e_max / (|dΔy/dT|·ΔT)` cho ngân sách e_max của bạn (Bài 7), và có cần bù nhiệt không.
+
+### 7. Số phải ra
+
+<details><summary>🔒 MỞ SAU KHI COMMIT prediction.md</summary>
+
+**Mô phỏng (seed 3):** cực tiểu Allan ở τ ≈ 138 s (bị kéo về đó bởi dao động điều hòa ±0,4 °C chu kỳ 20 phút). Sai số RMS của drift tức thời so với giá trị thật:
+
+| W (s) | Lúc nền (ppm) | Lúc đang sấy (ppm) |
+|---|---|---|
+| 10 | 0,110 | 0,109 |
+| 30 | 0,021 | 0,021 |
+| **138 (cực tiểu Allan)** | **0,002** | **0,010** |
+| 600 | 0,022 | 0,119 |
+| 1800 | 0,151 | 0,434 |
+
+Cửa sổ Allan thắng ở cả hai pha. Cửa sổ dài "để triệt tiêu jitter" (lời khuyên của Gemini) tệ hơn 40 lần lúc đang sấy. R²: bậc 1 = 0,93, bậc 2 = bậc 3 = 0,96 trên cả 6 giờ; chỉ 2 giờ nền: 0,41 với mọi bậc. Cùng một thạch anh tất định: R² "trượt" ngưỡng 0,85 khi dải nhiệt hẹp và "đạt" với mô hình tuyến tính sai. Trễ nhiệt: theo nhiệt độ không khí, ở 40 °C drift khi nóng lên +2,13 ppm, khi nguội −0,42 ppm (vòng lặp ~2,5 ppm); theo nhiệt độ thạch anh: +0,35 / +0,34 ppm. Toàn bộ "hysteresis" trong mô phỏng là trễ đo.
+
+**Con số cho câu 2 (với mô hình F4.1, a₁ = −0,2, a₃ = 10⁻⁴):** 26 → 54 °C, AT-cut đổi ≈ −3,2 ppm; tuning-fork đổi ≈ −27 ppm (k = −0,034 × 28²): lệch nhau ~8 lần. 26 → 18 °C, AT-cut ≈ +1,6 ppm (đổi dấu so với nhánh nóng). Câu 6: ~3 ppm × 600 s ≈ 2 ms trong 10 phút; Gemini với −0,04 ppm/°C² ra 21,6 ms, sai một bậc cho thạch anh ESP32.
+
+**Bảng kỳ vọng (bản gốc, đã sửa):**
+
+| Kiểm tra | Kỳ vọng |
+|---|---|
+| Drift ở nhiệt độ phòng | Bằng độ dốc đo ở Bài 8 (trong 0–20 ppm, thường vài ppm hoặc nhỏ hơn); bản gốc ghi "vài chục ppm", quá cao cho ESP32-S3 (Bài 8 đã sửa) |
+| Drift đổi khi hơ nóng | **Phải đổi rõ rệt** so với σ của độ dốc (cỡ phần nghìn ppm với timestamp ISR). Biên độ: vài ppm cho AT-cut trong dải này [ước lượng], không phải 10–30 ppm. Nếu không đổi, hơ chưa đủ, đo chưa đủ lâu, hoặc A nóng theo B |
+| Quan hệ drift–nhiệt độ | AT-cut: bậc ba, trong một khúc hẹp trông đơn điệu gần thẳng. **Parabol rõ là dấu hiệu bạn đang đo một tuning-fork** (ví dụ RTC slow clock gắn thạch anh 32 kHz), kiểm lại nguồn đồng hồ |
+| Sau khi nguội về nhiệt độ ban đầu | Drift quay về gần giá trị cũ. Nếu không, **sau khi đã loại trễ nhiệt (bước 6)**, có hysteresis, và đó là phát hiện đáng ghi |
+
+**Vì sao lệch là bình thường:** a₁ của từng con thạch anh khác nhau; mô phỏng chỉ đúng dạng, không đúng số. Dấu và độ dốc của bạn có thể ngược mô phỏng. Thứ phải khớp: drift đổi rõ so với nhiễu, cửa sổ theo Allan cho kết quả ổn định khi đổi W/3–3W ít hơn các cửa sổ khác, vòng lặp co lại khi dịch trễ.
+
+**Quyết định mẫu:** |dΔy/dT| ≈ 0,1–0,3 ppm/°C, robot ấm thêm 20 °C → 2–6 ppm; ngân sách 1 ms → sync ít nhất mỗi 170–500 s [ước lượng]. Bù nhiệt bằng phần mềm chỉ đáng làm khi sync bị giới hạn (pin, băng thông); trên robot có PTP hoặc sync qua USB định kỳ, sync dày hơn rẻ hơn.
+
+</details>
+
+### 8. Nếu ra khác
+
+| Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
+|---|---|---|---|
+| Nhiệt độ lên 50 °C mà drift không đổi | Thạch anh chưa kịp nóng (hơ ngắn); A nóng theo B; cửa sổ quá dài | Nhiệt độ die của A có tăng không; vẽ drift với W nhỏ hơn | Hơ ổn định ≥15 phút; chắn A; dùng W theo Allan |
+| Drift nhảy loạn, không thành đường | W ngắn hơn cực tiểu Allan; hoặc cạnh mất làm ghép sai | Đồ thị Allan; đếm `seq` | Dùng W tại cực tiểu, không "tăng W cho tới khi đẹp"; sửa ghép |
+| Drift đổi theo nhiệt quá lớn (hàng chục ppm) | Đang đo đồng hồ khác (RTC slow clock, nguồn RC), hoặc firmware bật light sleep | `esp_clk_tree`/menuconfig nguồn clock; log khởi động | Tắt sleep; xác nhận `esp_timer` chạy từ thạch anh 40 MHz (Bài 8 mục 11) |
+| Vòng lặp lớn trên đồ thị drift–T | Trễ nhiệt | Bước 6: dịch trễ | Báo L tìm được; chỉ gọi hysteresis phần còn lại |
+| Nhiệt độ BME280 nhảy khi máy sấy bật/tắt, drift không theo | Cảm biến đo luồng khí, không đo board | So với die sensor của B | Dán chặt BME280 vào module, che gió trực tiếp |
+| Board reset khi hơ hoặc làm lạnh | Nước đọng, quá nhiệt, cáp USB lỏng do gió | Reset reason trong log; nhìn board | Dừng, để khô; giảm nhiệt; cố định cáp |
+| Offset có bậc nhảy | Một board reset hoặc mất cạnh hàng loạt | Bài 8 câu hỏi ngược 4 | Cắt đoạn, phân tích từng đoạn |
+
+### 9. Câu hỏi ngược
+
+1. **[Nếu…thì]** Nếu bạn hơ *cả hai* board cùng lúc, như nhau, đồ thị drift–T trông thế nào? Điều đó nói gì về hai robot cùng đi ra nắng, so với một cảm biến gắn sát motor nóng còn cảm biến kia ở xa?
+   <details><summary>Hướng nghĩ</summary>Phần chung triệt tiêu trong hiệu (Bài 7, quy tắc 2), chỉ còn chênh lệch giữa hai đường cong riêng. Cái nguy hiểm trên robot là **chênh lệch nhiệt** giữa các node, không phải nhiệt độ tuyệt đối. Nghĩ xem node nào trên robot Khóa 7 nằm gần nguồn nhiệt.</details>
+2. **[Vì sao không]** Vì sao không bù nhiệt bằng phần mềm luôn, dùng đường cong bạn vừa fit, rồi bỏ sync định kỳ?
+   <details><summary>Hướng nghĩ</summary>Đường cong là của một con, ở một tuổi, đo theo một cảm biến có trễ. Phần dư sau bù (σ phần dư bước 5, cộng sai do trễ nhiệt khi nhiệt đổi nhanh) vẫn tích lũy. Tính: phần dư 0,3 ppm cho bao nhiêu ms sau 1 giờ? Bù nhiệt kéo dài chu kỳ sync, không thay được sync. Ý tưởng của Gemini ở đây (tiết kiệm năng lượng vô tuyến cho node pin) đúng hướng cho mạng cảm biến không dây.</details>
+3. **[Quy mô]** 100 robot, mỗi con 2–4 node, chạy ngày đêm trong nhà kho có nhiệt độ dao động 15 °C giữa trưa và đêm. Bạn có hiệu chuẩn đường cong cho từng node không? Nếu không, metric nào trong dữ liệu đã ghi cho bạn biết node nào trôi tệ nhất?
+   <details><summary>Hướng nghĩ</summary>Hiệu chuẩn từng node tốn giờ máy sấy × 300. Thay vào đó: ghi skew ước lượng ở mỗi lần sync (`clock_source`, offset trước khi chỉnh) cùng nhiệt độ vào metadata, rồi đội robot tự tạo dữ liệu hiệu chuẩn theo chu kỳ ngày đêm. Đuôi phân bố |dy/dT| theo node là thứ cần theo dõi, không phải trung bình.</details>
+4. **[Failure mode]** Dataset 6 giờ của một đồng nghiệp có offset ESP32–host hiệu chỉnh bằng một đường thẳng fit trên cả 6 giờ. Phần dư hình chữ S. Cái gì sai, sai bao nhiêu ở đâu trong dataset, và tại sao kiểm tra schema hay đơn điệu timestamp không bắt được?
+   <details><summary>Hướng nghĩ</summary>Fit tuyến tính trên một skew thay đổi theo nhiệt: phần dư là tích phân của phần skew không mô hình hóa, lớn nhất ở giữa các pha nhiệt. Timestamp vẫn đơn điệu, vẫn hợp lệ. Chỉ kiểm theo vật lý (sự kiện chung, Bài 11) hoặc fit theo cửa sổ mới thấy.</details>
+5. **[Liên ngành]** GPS trong điện thoại dùng TCXO; trạm gốc 4G/5G dùng OCXO hoặc khóa theo GPS. Vì sao mỗi nơi chọn mức đó, và robot của bạn gần bên nào hơn?
+   <details><summary>Hướng nghĩ</summary>Bộ thu GPS phải tìm tín hiệu trong một dải tần lệch Doppler cộng sai tần số của chính nó: thạch anh trôi nhiều thì tìm lâu. Trạm gốc cần ổn định tần số và pha cho cả mạng. Robot có thể sync thường xuyên qua dây, nên thạch anh thường cộng sync dày là đủ: thứ mua bằng phần cứng ở nơi khác, bạn mua bằng giao thức.</details>
+6. **[Phản biện]** "Thí nghiệm này vô nghĩa vì sync PTP mỗi giây là xong." Đúng hay sai cho hệ của bạn?
+   <details><summary>Hướng nghĩ</summary>PTP sync PHC của NIC, không sync ESP32 (Bài 9 bước 7). Chặng ESP32 ↔ host sync qua USB, có trễ và giới hạn tần suất. Và giữa hai lần sync, skew thay đổi theo nhiệt là thứ quyết định sai số. Câu đó đúng cho hai PHC, sai cho chặng MCU.</details>
+
+### 10. Liên kết ra ngoài
+
+- **Đồng hồ biển của Harrison.** Giống: bù nhiệt cơ học là phiên bản cơ khí của TCXO, và kiểm định đồng hồ trên chuyến đi thật là "đo trong điều kiện vận hành". Khác: họ không sync lại được giữa đại dương; bạn có dây và giao thức, nên bài toán của bạn là chọn chu kỳ sync, không phải làm đồng hồ hoàn hảo.
+- **Thiên văn và đo lường: đồng hồ nguyên tử trong lò ổn nhiệt.** Phòng đo chuẩn tần số giữ nhiệt độ phòng ổn định và theo dõi Allan deviation dài hạn để thấy hiệu ứng môi trường. Giống: Allan deviation dùng để biết lúc nào môi trường bắt đầu lấn nhiễu. Khác: họ loại môi trường, bạn cố ý tạo ra nó để đo.
+- **Hệ phân tán: Spanner TrueTime.** TrueTime giả định một tốc độ trôi xấu nhất cho thạch anh giữa hai lần sync và cộng vào khoảng bất định ε [spec: Corbett et al., OSDI 2012]. Giống: drift nhân thời gian từ lần sync là một dòng trong ngân sách. Khác: họ dùng cận bảo thủ cho mọi máy; bạn đo một máy cụ thể và biết nó đổi theo nhiệt.
+
+### 11. Độ tin cậy và sửa lỗi
+
+| Khẳng định | Nhãn | Ghi chú / cách kiểm |
+|---|---|---|
+| Thạch anh 40 MHz là AT-cut, bậc ba; tuning-fork 32 kHz là parabol | [chuẩn] | Vig tutorial; F4.1 |
+| a₁ = −0,2 ppm/°C, a₃ = 10⁻⁴ ppm/°C³ trong mô phỏng | [ước lượng] | F4.1; giá trị thật phụ thuộc từng con, đo |
+| k tuning-fork ≈ −0,034 ppm/°C² | [spec] | F4.1 (datasheet tuning-fork) |
+| BME280 ±1 °C trong 0–65 °C | [spec] | Datasheet Bosch BME280 |
+| Cảm biến nhiệt ESP32-S3 đo die, không đo thạch anh | [spec] / [tự đo] | ESP-IDF *Temperature Sensor*; độ lệch so với thạch anh tự đo |
+| Trễ nhiệt vài phút giữa không khí và thạch anh trong module | [ước lượng] | Bước 6 cho ra L thật |
+| Cửa sổ tại cực tiểu Allan cho sai số nhỏ nhất | [chuẩn] cho dạng nhiễu trong mô phỏng | Đã chạy; với dữ liệu thật kiểm bằng W/3–3W |
+| Harrison, bù nhiệt bằng con lắc ghép và dải lưỡng kim | [chuẩn] | Sobel, *Longitude*; tài liệu Royal Museums Greenwich |
+
+**Đã sửa so với bản gốc/Gemini:**
+- Gemini (tự kiểm tra 1): k ≈ −0,04 ppm/°C² cho thạch anh ESP32 → đó là hệ số tuning-fork 32,768 kHz; thạch anh 40 MHz là AT-cut bậc ba, lệch nhỏ hơn nhiều trong dải phòng (quy chuẩn mục 7). Đáp án "21,6 ms trong 10 phút" sai một bậc.
+- Gemini (Số phải ra): "drift nền 20–40 ppm", "vọt thêm 10–30 ppm khi hơ" → nền lấy từ Bài 8 (thường vài ppm), thay đổi nhiệt vài ppm với AT-cut.
+- Gemini: tiêu chí "R² > 0,85" → bỏ làm tiêu chí: R² phụ thuộc dải ΔT, không chọn được bậc mô hình, không phát hiện trễ nhiệt (mô phỏng: 0,41 cho mô hình đúng ở dải hẹp, 0,93 cho mô hình tuyến tính sai). Thay bằng phần dư theo nhánh. Bản gốc không có ngưỡng R², nên không đổi tiêu chí gốc nào.
+- Gemini (cửa sổ cố định 120 s; "tăng cửa sổ để triệt tiêu jitter") → chọn W tại cực tiểu Allan của 2 giờ nền, kiểm độ nhạy W/3–3W (F4.2).
+- Gemini: "truyền nhiệt vào die silicon của thạch anh", "BME280 đo sát die nhất" → thạch anh không phải die silicon; nó là linh kiện riêng trong module; die sensor của ESP32 đo chip.
+- Bản gốc "drift ở nhiệt độ phòng vài chục ppm" → theo Bài 8; "đơn điệu hoặc parabol tùy loại cắt" → giữ ý, nói rõ parabol là tuning-fork, AT-cut là bậc ba.
+- Bản gốc "nếu không quay về → hysteresis" → giữ, thêm điều kiện loại trễ nhiệt trước (bước 6).
+- Thêm an toàn: nước đọng khi làm lạnh, không thổi vào cáp, mục tiêu ≤55 °C.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** John R. Vig, *Quartz Crystal Resonators and Oscillators for Frequency Control and Timing Applications — A Tutorial* (US Army CECOM), phần frequency vs temperature. Datasheet thạch anh 40 MHz SMD bất kỳ của nhà sản xuất lớn, mục "frequency stability over operating temperature".
+- **Giải thích:** W. J. Riley, *Handbook of Frequency Stability Analysis*, NIST SP 1065 (2008), phần đọc đồ thị Allan và hiệu ứng môi trường.
+- **Đào sâu (tùy chọn):** Dava Sobel, *Longitude* (1995).
+- **Tự kiểm tra:** (1) giải thích trong 5 câu vì sao "sync một lần" thất bại và vì sao cửa sổ ước lượng skew có một giá trị tối ưu; (2) vẽ lại chuỗi nhân quả ở phần 2 từ trí nhớ, chỉ ra chỗ trễ nhiệt; (3) hai câu dưới.
+
+  *Câu A:* Một bài blog viết: "thạch anh của ESP32 trôi −0,04 ppm/°C², nên từ 25 lên 55 °C lệch 36 ppm". Chấm ĐÚNG / ĐÚNG MỘT PHẦN / SAI và sửa câu.
+  *Câu B:* Allan deviation nền của bạn có cực tiểu ở τ = 200 s. Thí nghiệm sốc nhiệt đổi nhiệt độ 20 °C trong 3 phút. Cửa sổ 200 s có đủ ngắn không, và bạn báo cáo điều gì?
+  <details><summary>Đáp án</summary>A: SAI cho thạch anh 40 MHz. −0,034…−0,04 ppm/°C² là hệ số parabol của tuning-fork 32,768 kHz; câu đúng cho RTC 32 kHz. Thạch anh 40 MHz là AT-cut, bậc ba, lệch cỡ vài ppm trong dải đó; tra datasheet hoặc đo. B: 200 s dài hơn thời gian đổi nhiệt, nên trong pha sốc, độ dốc ước lượng là trung bình làm mờ cú sốc (biên độ thấp hơn thật, lệch thời gian). Báo cáo: dùng W theo Allan cho các pha nhiệt đổi chậm, ghi rõ pha sốc bị làm mờ; muốn thấy sốc thì giảm W và chấp nhận nhiễu lớn hơn (ghi σ của W đó), hoặc làm sốc chậm hơn.</details>
+
+---
