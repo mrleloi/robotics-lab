@@ -165,6 +165,7 @@ Thư mục `_hop-nhat/` — mỗi bài: bản nền, phần ghép, mâu thuẫn 
 | `_hop-nhat/ghi-chu-cho-K4-K5.md` | Lỗi K4/K5 do các agent F phát hiện, phải áp khi hợp nhất |
 | `_hop-nhat/review-khoa-6.md` | Review độc lập K6 |
 | `_hop-nhat/review-khoa-7-c00-c01.md` | Review an toàn K7 C0–C1 |
+| `_hop-nhat/review-khoa-4-5-session4.md` | Tự review (không độc lập) các bài K4/K5 viết ở session 4 |
 
 ## 8. File khác trong thư mục
 

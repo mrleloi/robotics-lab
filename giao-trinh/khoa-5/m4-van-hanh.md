@@ -220,7 +220,7 @@ Chia 6h người gợi ý: chuẩn bị và kiểm trước khi chạy 2h; sự 
 
 ### 10. Liên kết ra ngoài
 
-- **Hàng không: Boeing 787 GCU và Airbus A350.** Ngoài 787, EASA năm 2017 cũng yêu cầu khởi động lại định kỳ một số hệ thống trên A350 vì vấn đề sau thời gian cấp điện liên tục dài `[chuẩn — EASA AD 2017-0129]`. Giống: lỗi theo thời gian chạy, biện pháp tạm là khởi động lại có lịch. Khác: máy bay có quy trình bảo dưỡng ép buộc khởi động lại. Robot dữ liệu của bạn thì không, trừ khi bạn thêm nó vào runbook.
+- **Hàng không: Boeing 787 GCU và Airbus A350.** Ngoài 787, EASA tháng 7/2017 yêu cầu các A350-941 tắt nguồn toàn máy bay trước khi chạy liên tục 149 giờ, vì sau mốc đó một số hệ avionics có thể mất liên lạc với mạng avionics `[chuẩn — EASA AD 2017-0129]`. Giống: lỗi theo thời gian chạy, biện pháp tạm là khởi động lại có lịch. Khác: máy bay có quy trình bảo dưỡng ép buộc khởi động lại. Robot dữ liệu của bạn thì không, trừ khi bạn thêm nó vào runbook.
 - **SRE: chaos engineering có kế hoạch.** Netflix Chaos Monkey tắt ngẫu nhiên các instance trong giờ làm việc, để đội phát hiện điểm yếu khi người còn thức `[chuẩn]`. Giống: rút cảm biến ngày 4 là một "game day" có kế hoạch, và alert phải bắn thật. Khác: chaos ở cloud kiểm khả năng tự phục hồi của một hệ dư thừa. Rig của bạn không có dư thừa, nên câu hỏi là phát hiện và ghi nhận, không phải che giấu sự cố.
 
 ### 11. Độ tin cậy và sửa lỗi
@@ -229,7 +229,7 @@ Chia 6h người gợi ý: chuẩn bị và kiểm trước khi chạy 2h; sự 
 |---|---|---|
 | FAA AD 2015-09-07: GCU 787 sau 248 ngày cấp điện liên tục | `[chuẩn]` | 2³¹ × 10 ms ≈ 248,5 ngày là phép tính của giáo trình |
 | Patriot Dhahran 1991, ~0,34 s sau ~100 giờ | `[chuẩn — GAO/IMTEC-92-26]` | |
-| EASA AD 2017-0129 (A350, khởi động lại định kỳ) | `[chuẩn]` | Kiểm số AD trên trang EASA trước khi trích |
+| EASA AD 2017-0129 (A350-941, 149 giờ cấp điện liên tục, 25/7/2017) | `[chuẩn]` | Reviewer đã kiểm trên cơ sở dữ liệu AD của EASA (10/2026) |
 | Chu kỳ nhiệt hiện ở `freq` của servo PTP khi đã khóa | `[chuẩn — F4.5]` | Kiểm trên log của bạn |
 | `WatchdogSec`, `sd_notify` của systemd | `[tự đo]` | `man systemd.service`, `man sd_notify` |
 | Mẫu số completeness theo `seq`, theo luồng | `[chuẩn]` | F7.4; ghi chú hợp nhất w-F7 |

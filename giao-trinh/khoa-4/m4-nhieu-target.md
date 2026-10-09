@@ -681,7 +681,7 @@ Bốn ý bản chất:
 
 1. **Đơn vị phân tích là pha.** SmolVLA có ít nhất ba pha với cường độ rất khác nhau: vision encoder (hàng nghìn patch), prefix LM (vài trăm token), action expert (n = chunk_size token, chạy `num_steps` lần). Một điểm "SmolVLA" trên roofline là trung bình của ba điểm nằm ở ba chỗ khác nhau. Nó không nằm ở đâu cả.
 2. **Mái phải là số đo.** π lý thuyết của N100 giả định 4 nhân ở xung tối đa và kernel hoàn hảo. Bài 11 đã đo π (GEMM) và β (GEMV, STREAM). Dùng hai số đó. Trên GPU, mẫu đối chứng GEMM của Bài 5 cho π của *chiếc máy đó*.
-3. **"% trần đạt" thấp không có nghĩa là bị chặn bởi trần.** Một pha đạt 6% trần β·I của nó không bị băng thông chặn. Nó bị chặn bởi thứ khác: kernel quá nhỏ để lấp GPU, chi phí launch, đồng bộ, Python. Khi đó quantization (giảm byte) gần như không giúp, dù roofline xếp pha đó vào phía memory.
+3. **"% trần đạt" thấp không có nghĩa là bị chặn bởi trần.** Một pha chỉ đạt vài phần trăm trần β·I của nó thì không bị băng thông chặn. Nó bị chặn bởi thứ khác: kernel quá nhỏ để lấp GPU, chi phí launch, đồng bộ, Python. Khi đó quantization (giảm byte) gần như không giúp, dù roofline xếp pha đó vào phía memory.
 4. **Roofline là dự đoán. Can thiệp là kiểm định.** Đổi byte mà giữ FLOP (weight-only), đổi FLOP mà giữ byte weight (đổi số token n), đổi số kernel mà giữ cả hai (CUDA Graphs). Pha phản ứng với can thiệp nào thì bị chặn bởi thứ đó. Đây là cách làm của bản gốc ("hai đường phải gặp nhau"), mở rộng thành ba can thiệp.
 
 Mô phỏng: một VLA cỡ SmolVLA, kích thước **giả định** theo config công khai (in lại từ checkpoint của bạn). Cận dưới roofline theo từng Linear, cộng một chi phí cố định mỗi kernel:
@@ -836,7 +836,7 @@ Kết luận một pha "bị chặn bởi X" chỉ khi đường 1 (vị trí so
 
 **Bước 7 — Viết đoạn "Why not double?" cho Bài 13.** Mỗi target một đoạn ≤ 5 câu: pha chiếm thời gian nhiều nhất, nó bị chặn bởi gì (kèm bằng chứng từ ít nhất hai đường), và nếu sửa nó thì cận trên của tăng tốc là bao nhiêu. Áp định luật Amdahl: nếu pha chiếm tỉ lệ p của thời gian và nhanh lên s lần, tăng tốc tổng là 1/((1−p) + p/s).
 
-**Sai số:** đếm FLOP tay sai ±20% là bình thường (bỏ attention, bias, norm). Byte còn bất định hơn, vì cache có thể giữ một phần weight hoặc activation: SmolVLA bf16 ~0,9 GB thì không vừa LLC, nhưng một lớp nhỏ thì vừa L2 của GPU `[ước lượng]`. Vì vậy % trần chỉ đáng tin tới thừa số ~1,5. Đủ để nói "6% hay 60%", không đủ để nói "38% hay 45%". Thời gian theo pha từ fit affine mang CI của fit (Bài 10). Lấy CI đó làm thanh sai số.
+**Sai số:** đếm FLOP tay sai ±20% là bình thường (bỏ attention, bias, norm). Byte còn bất định hơn, vì cache có thể giữ một phần weight hoặc activation: SmolVLA bf16 ~0,9 GB thì không vừa LLC, nhưng một lớp nhỏ thì vừa L2 của GPU `[ước lượng]`. Vì vậy % trần chỉ đáng tin tới thừa số ~1,5. Đủ để nói "5% hay 50%", không đủ để nói "38% hay 45%". Thời gian theo pha từ fit affine mang CI của fit (Bài 10). Lấy CI đó làm thanh sai số.
 
 ### 7. Số phải ra
 

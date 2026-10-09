@@ -1207,7 +1207,7 @@ print(f"đĩa khựng {stall.mean():.1%} thời gian; tải trung bình {sum(b /
 **Chấm mô hình:**
 
 - *Bản gốc, "Số phải ra": "Tool Khóa 2 chạy trên file này: phát hiện đúng những lỗ hổng đã được ghi nhận."* → **ĐÚNG MỘT PHẦN.** Đúng hướng: audit độc lập phải thấy lại mọi drop đã khai. Gãy: audit còn thấy cả lỗ **không** được khai (mất trên dây, mất ở MCU nếu `dropped_at_source` không được gửi). "Khớp hoàn toàn" sẽ FAIL oan một hệ đúng, hoặc tệ hơn, khiến người ta xóa bớt lỗ cho khớp. **Phản ví dụ:** mô phỏng có mất trên dây mà không ai khai; so cột "drop đã khai" với cột "lỗ audit" ở phần 7. Tiêu chí đúng: mỗi drop đã khai trùng một lỗ, *và* số lỗ ≥ số drop đã khai; phần chênh được giải thích (ghi chú hợp nhất w-F3).
-- *"Tải trung bình mới 4% băng thông đĩa, hàng đợi vài trăm kB là thừa."* → **SAI.** Đây là trực giác sizing theo trung bình. **Phản ví dụ:** trong mô phỏng, tải trung bình chỉ vài phần trăm băng thông đĩa mà tail drop vẫn để lại một lỗ IMU liền dài (phần 7), vì một lần khựng dài của đĩa cần hàng đợi chứa λ·S.
+- *"Tải trung bình mới vài phần trăm băng thông đĩa, hàng đợi vài trăm kB là thừa."* → **SAI.** Đây là trực giác sizing theo trung bình. **Phản ví dụ:** trong mô phỏng, tải trung bình chỉ vài phần trăm băng thông đĩa mà tail drop vẫn để lại một lỗ IMU liền dài (phần 7), vì một lần khựng dài của đĩa cần hàng đợi chứa λ·S.
 - *"Chặn (block) thay vì drop là an toàn hơn vì không mất gì."* → **SAI ở robot.** Chặn ở host làm tràn ở tầng không có bộ đếm (bộ đệm USB, hàng đợi MCU). **Phản ví dụ:** Bài 6 Bước 6(b) (`sleep` ở host) cho thấy lỗ `seq` xuất hiện mà host không ghi một bản ghi drop nào.
 
 ### 4. Thuật ngữ

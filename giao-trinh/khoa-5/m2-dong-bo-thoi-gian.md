@@ -1366,7 +1366,7 @@ Chia 14h gợi ý: dựng rig và đọc timestamp driver 2,5h; Phần A 2h; Ph�
 5. So với điều timestamp driver nói: (T_B − T_A) − (S_B − S_A) cho từng lần nháy. Trung bình là β_B − β_A, σ là jitter timestamp. Đây là con số đi vào ngân sách Bài 12, dòng 9.
 
 **Phần C — đo lệch camera ↔ IMU** (bản gốc).
-1. Đổi mỗi khung camera sang đồng hồ ESP32: dùng LED để ước lượng β của từng camera so với đồng hồ host, rồi dùng mô hình ESP32 ↔ host (Bài 6, Bài 9 bước 7) để đổi sang đồng hồ ESP32. Bây giờ IMU và camera cùng một trục thời gian, trừ trễ trong IMU.
+1. Đưa camera và IMU về cùng một trục thời gian. Trước hết đổi t_on (đồng hồ ESP32, ghi ở Bước 0) sang đồng hồ host bằng mô hình ESP32 ↔ host (Bài 6, Bài 9 bước 7). Khi đó, với mỗi lần nháy, β_k = T_k − (t_on − r*·t_row) cho từng camera k. Lấy trung bình β_k qua các lần nháy, ghi kèm σ. Từ đây khung camera đổi được sang trục thời gian của IMU (đồng hồ ESP32), trừ trễ bên trong IMU. Sai số của ánh xạ ESP32 ↔ host đi thẳng vào β_k, nên ghi nó cạnh β_k trong ngân sách Bài 12.
 2. Bù trễ bộ lọc của IMU theo cấu hình DLPF (datasheet). Ghi giá trị đã bù.
 3. Kiểm end-to-end bằng một sự kiện cơ học (bản gốc): gõ nhẹ vào mặt bàn có gắn cả IMU và camera, đồng thời nháy LED làm mốc. So đỉnh IMU với khung/hàng đầu tiên thấy chuyển động. Nếu đỉnh khó thấy, tăng ODR lên 500–1000 Hz (bản gốc) và nội suy đỉnh. Phép kiểm này thô, cỡ ms. Nó bắt lỗi lớn (bù sai dấu, sai đơn vị), không đo tinh.
 4. Tùy chọn, đường thứ ba: cầm rig xoay qua lại 30 s, ước lượng vận tốc góc từ video (optical flow) và từ gyro, cross-correlation hai chuỗi để ra độ lệch (→ F4.6, F5.6). Nếu ba đường gặp nhau trong sai số của từng đường thì con số đáng tin.

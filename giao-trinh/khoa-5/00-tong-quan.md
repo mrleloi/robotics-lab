@@ -342,7 +342,7 @@ Lý do: bản Gemini của khóa này đưa cờ `ptp4l` sai (`-p`, `-2`), hệ 
 
 | Sau này | Dùng lại từ K5 |
 |---|---|
-| K6 Bài 15 (sim-to-real theo kênh) | Thời điểm của phép đo cảm biến, sai số ghép (Bài 11–13) |
+| K6 Bài 15, 17 (gap đo được, bảng gap theo kênh) | Thời điểm của phép đo cảm biến, sai số ghép (Bài 11–13) |
 | K7 C4.3 (giao thức ESP32 ↔ host) | Khung `seq`/`boot_id`/CRC, parser đồng bộ lại, USB cho vòng điều khiển, Wi-Fi chỉ cho telemetry (Bài 6) |
 | K7 C7 (cảm biến, ghi dữ liệu) | Raw → SI và metadata (Bài 4–5), MCAP nhiều luồng (Bài 13), drop có khai (Bài 17), validation vật lý (Bài 16) |
 | K7 C10 (an toàn, vận hành) | Soak, freshness, completeness theo luồng (Bài 18); runbook bisect (Bài 19) |

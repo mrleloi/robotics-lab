@@ -369,9 +369,40 @@ Nếu trọng tài có độ rộng kẹp cỡ µs, bạn không thể đo đư�
 
 ---
 
-## Gate Module 0
+## Gate Module 0 (khung rút gọn)
 
-Bản gốc không có gate riêng cho Module 0. Gate này gom tiêu chí "Đạt bài" của Bài 1 và các deliverable của Bài 2 để có một điểm dừng rõ ràng **trước khi mua cảm biến và trước khi tốn giờ Module 2**. Không thêm ngưỡng mới. Mọi tiêu chí là nhị phân.
+> **Vị trí:** Bài 2 → **Gate Module 0** → Module 1 (Bài 3) và Module 2 (Bài 7) · **Cần trước:** Bài 1–2; F1.7 (cam kết trước) · **Sau gate này bạn quyết định được:** bắt đầu đo theo tầng T0 trong một hộp, chuyển T1, hay đổi trả máy; và kế hoạch đo đã khóa trước khi có số đo đầu tiên.
+
+### 1. Câu chuyện — vì sao Module 0 cần một điểm dừng
+
+Bản gốc không có gate riêng cho Module 0. Gate này gom tiêu chí "Đạt bài" của Bài 1 và các deliverable của Bài 2 để có một điểm dừng rõ ràng **trước khi mua cảm biến và trước khi tốn giờ Module 2**. Không thêm ngưỡng mới. Mọi tiêu chí là nhị phân. Lý do đặt điểm dừng ở đây là chi phí: phát hiện "hai cổng chung một PHC" ở tuần 11 (giữa Bài 9) thì mất cả tháng; phát hiện ở tuần 2 thì chỉ mất một lần đổi trả.
+
+### 2. Mô hình tư duy
+
+```mermaid
+flowchart LR
+  A["ethtool -T hai cổng"] --> B{"hai PHC khác nhau,<br/>hardware TX/RX?"}
+  B -->|"không"| R["đổi trả máy"]
+  B -->|"có"| C{"drift A−B lớn hơn<br/>sai số phép đo?"}
+  C -->|"chưa đo / có"| D["T0 hợp lệ"]
+  C -->|"không phân biệt được với 0"| T1["T1 hoặc hardware-trigger-only"]
+  D --> E["GOALS.md + prediction.md commit"]
+  T1 --> E
+  E --> M["Module 1, Module 2"]
+```
+
+Gate có hai loại tiêu chí: **ràng buộc vật lý** (1–4: phần cứng có cho phép đo điều khóa này hứa không) và **cam kết** (5–7: luật chơi viết trước khi biết kết quả).
+
+### 3. Cầu nối từ backend
+
+| Backend bạn biết | Ở đây | Gãy ở chỗ | Nếu dùng nhầm thì |
+|---|---|---|---|
+| Kiểm năng lực của môi trường trước khi deploy (feature detection) | `ethtool -T`, `/sys/class/ptp` | Năng lực driver khai là của **chip**, không phải của **bo mạch**: chân SDP có trong driver nhưng không nối ra ngoài (Bài 1) | Lên kế hoạch trọng tài PPS cho một máy không có chân PPS |
+| Design doc được duyệt trước khi code | `GOALS.md` + `prediction.md` commit trước | Design doc sửa được khi yêu cầu đổi. Dự đoán đã commit thì không sửa: giá trị của nó là chỗ nó sai | Sửa dự đoán sau khi thấy số đo, mất đúng thông tin Module 2 cần |
+
+### 6. Làm
+
+Đối chiếu bảy tiêu chí, mỗi tiêu chí chỉ vào một file hoặc commit. Mọi tiêu chí là nhị phân. Gate không thêm ngưỡng mới.
 
 | # | Tiêu chí | Cách kiểm | Nguồn |
 |---|---|---|---|
@@ -385,6 +416,8 @@ Bản gốc không có gate riêng cho Module 0. Gate này gom tiêu chí "Đạ
 
 **Khuyến nghị, không bắt buộc:** chạy thử hai `ptp4l` cùng máy trong 5 phút, mỗi instance một file cấu hình riêng (`uds_address`, interface; mẫu ở K5 Bài 9). Nếu không lên, bạn biết sớm, trước khi đồng hồ 60h của Bài 9 bắt đầu chạy. Không dùng `-p` để tách socket: `-p` là thiết bị PHC (quy chuẩn mục 7).
 
+### 8. Nếu ra khác
+
 **FAIL action:**
 
 | Tình huống | Làm |
@@ -396,5 +429,17 @@ Bản gốc không có gate riêng cho Module 0. Gate này gom tiêu chí "Đạ
 Đặt hàng cảm biến vẫn làm ngay dù gate chưa qua, vì Module 1 không phụ thuộc PTP.
 
 **Ngân sách:** 8h (Bài 1 3h + Bài 2 5h). Vượt 12h ở module này thường do loay hoay với driver hoặc chọn mua. Dừng lại, ghi cái đang chặn vào `decisions.md`, rồi sang Module 1 song song.
+
+### 9. Câu hỏi ngược
+
+1. **[Failure mode]** `ethtool -T` cho hai số PHC khác nhau, nhưng drift A−B sau 600 s đúng bằng 0 tới từng ns. Bạn tin T0 hợp lệ không?
+   <details><summary>Hướng nghĩ</summary>Hai PHC "khác nhau" theo chỉ số nhưng cùng nguồn xung, hoặc script đang đọc một PHC hai lần (ánh xạ sai). Bằng 0 tuyệt đối là đáng ngờ hơn là tin tốt. Kiểm `clock_name` (MAC) của từng `ptpN` (Bài 1, phần 7).</details>
+2. **[Quy mô]** Đội mua 20 mini PC cùng tên model cho 20 rig. Bạn có phải chạy lại gate này cho từng máy không?
+   <details><summary>Hướng nghĩ</summary>Có, phần ràng buộc vật lý: hãng có thể đổi lô NIC giữa các đợt sản xuất cùng tên máy (Bài 1, phần 7). Viết tiêu chí 1–2 thành một script kiểm tự động chạy lúc nhận máy; phần cam kết (5–7) là của dự án, làm một lần.</details>
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** Bài 1 (phần 6–7), Bài 2 (phần 6).
+- **Tự kiểm tra:** trong 2 phút, mở `decisions.md` và `GOALS.md`, chỉ ra dòng chứng minh từng tiêu chí 1–7. Không chỉ ra được thì tiêu chí đó chưa qua.
 
 ---

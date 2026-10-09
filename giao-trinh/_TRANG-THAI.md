@@ -7,6 +7,7 @@
 > - `README.md`: bảng trạng thái K4/K5 đã cập nhật.
 > - Mọi khối Python mới đã chạy lại từ chính file markdown (venv `.venv-giaotrinh`, numpy 2.2.6, scipy 1.15.2). Nháp ở `_scratch/K4-m2`, `K4-b12`, `K5-b6`, `K5-b11`, `K5-b12`, `K5-b17`, `K5-m4`.
 > - **Chưa review độc lập:** mọi bài chỉ có một bản của K4 (Bài 4–6, 10–12) và K5 (Bài 5–19, hai gate, tổng quan). Ưu tiên review: K5 Bài 11 (nhiều công thức rolling shutter, cách đọc ảnh), Bài 6, Bài 17–18 (định nghĩa completeness đi vào gate), K4 Bài 12 (mô hình roofline theo pha).
+> - **Đã tự review (session 4, không độc lập):** các bài trên, theo `brief-reviewer.md` A–H. Nhật ký: `_hop-nhat/review-khoa-4-5-session4.md` (Gate M0 viết lại theo khung rút gọn, 7 bài sửa niêm phong, 4 lỗi kỹ thuật, 3 nguồn đã kiểm web). Review độc lập vẫn cần.
 > - **Đã quyết (người học, 2026-10-09):** đường lõi tối thiểu K7 gồm **C8 tối thiểu** (~27h, Nav2 A→B chỉ bằng odometry) → ~366h, tổng 911h. Đã sửa `c08` (khối đầu file), `c10` (ghi chú FMEA F10), `00-tong-quan` K1, K3–K7, `_KE-HOACH-K7.md`, README.
 > - **Việc còn lại theo thứ tự ưu tiên:** mục 2 bên dưới, từ mục 2 trở đi (review an toàn K7 C2–C5, C8–C10; review F1–F3, F5–F7, K7 C11–C12; kiểm liên kết chéo bằng script).
 

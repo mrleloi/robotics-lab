@@ -1019,7 +1019,7 @@ Little-endian, struct packed. Kiểm kích thước bằng `static_assert(sizeof
 | WiFi UDP, mạng tải nặng | Tăng | Đuôi rất dài | Tăng rõ | |
 | WiFi TCP | Cao hơn UDP | Có spike do retransmit | ≈0, nhưng đổi bằng latency | Spike là head-of-line blocking: mọi mẫu sau gói mất cùng bị trễ |
 
-**Mô phỏng 1** (`[đã chạy]`, seed 1): mất 12 byte, lật 30 bit. Parser cố định nhận một khung hỏng **không bị phát hiện** ở #463 (không có CRC), rồi lệch pha vĩnh viễn sau khung #2070. Chỉ 2.070/20.000 khung đúng `seq`. Parser đồng bộ lại nhận **19.958** khung. CRC loại 38 ứng viên. `seq` báo 42 lỗ, thiếu 42 khung, 0 lần lùi. Đúng bằng 12 + 30 sự kiện lỗi, vì mỗi lỗi giết đúng một khung.
+**Mô phỏng 1** (`[đã chạy]`, seed 1): mất 12 byte, lật 30 bit. Parser cố định nhận một khung hỏng **không bị phát hiện** ở #463 (không có CRC), rồi lệch pha vĩnh viễn sau khung #2070. Chỉ 2.070/20.000 khung đúng `seq`. Parser đồng bộ lại nhận **19.958** khung. CRC loại 38 ứng viên. `seq` báo 42 lỗ, thiếu 42 khung, 0 lần lùi. Đúng bằng 12 + 30 sự kiện lỗi: mỗi lỗi giết đúng một khung, và lần chạy này không có hai lỗi rơi vào cùng một khung. Nếu có thì số lỗ sẽ ít hơn số sự kiện lỗi.
 
 **Mô phỏng 2** (`[đã chạy]`, seed 6; trễ giả định):
 
@@ -1107,6 +1107,6 @@ Little-endian, struct packed. Kiểm kích thước bằng `static_assert(sizeof
   1. Bạn đo 1 giờ qua UDP, 720.000 gói, không mất gói nào. Bạn ghi gì vào bảng quyết định?
      <details><summary>Đáp án</summary>Tỉ lệ mất ≤ 3/720.000 ≈ 4,2 × 10⁻⁶ (cận trên 95%) **trong điều kiện đó** (mạng nhàn, khoảng cách X, kênh Y). Không ghi "0%". Kèm kết quả khối `iperf3`: thường đó mới là điều kiện quyết định có được dùng Wi-Fi hay không.</details>
   2. Đường bao dưới của đường USB cho skew +31 ppm ở nửa giờ đầu và +28 ppm ở nửa giờ sau. Phòng có điều hòa bật lúc giữa giờ. Có gì sai không?
-     <details><summary>Đáp án</summary>Không nhất thiết sai. Tần số thạch anh phụ thuộc nhiệt độ, nên skew đổi 3 ppm khi phòng nguội là hợp lý (K5 Bài 10 đo đúng hiện tượng này). Kiểm thêm: host có dùng `MONOTONIC_RAW` không, NTP có chỉnh trong lúc đó không. Kết luận cho bài này: mô hình θ(t) tuyến tính chỉ đúng trong cửa sổ nhiệt ổn định, nên fit theo đoạn và ghi nhiệt độ.</details>
+     <details><summary>Đáp án</summary>Chưa chắc sai, nhưng đáng kiểm. Skew là hiệu của **hai** thạch anh (ESP32 và mini PC), cả hai đều trôi theo nhiệt. Thạch anh AT-cut trôi ít trong dải nhiệt phòng (K5 Bài 10), nên 3 ppm đòi nhiệt quanh một trong hai board đổi đáng kể, ví dụ luồng gió máy lạnh thổi thẳng vào. Kiểm bằng BME280 đặt cạnh board. Kiểm thêm: host có dùng `MONOTONIC_RAW` không, NTP có chỉnh trong lúc đó không. Kết luận cho bài này: mô hình θ(t) tuyến tính chỉ đúng trong cửa sổ nhiệt ổn định, nên fit theo đoạn và ghi nhiệt độ.</details>
 
 ---
