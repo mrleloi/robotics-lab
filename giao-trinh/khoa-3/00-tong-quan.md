@@ -30,7 +30,7 @@
 | 6 | Simulation & evaluation infrastructure | 120 | |
 | 7 | Robot di động — **thiết kế lại thành khóa build** | 561 lõi (K7 gốc: 340) | Xem `khoa-7/_KE-HOACH-K7.md` |
 
-K1–K6 = **545h**. Cộng K7 gốc = **885h**, đã vượt ngân sách gốc 650h. Cộng K7 mới (lõi 561h) = **1.106h**, ở 6,5h/tuần ≈ 170 tuần ≈ **3,3 năm**; đường lõi tối thiểu của K7 (≈ 340h) cho 885h ≈ 2,6 năm. Đây là quyết định của bạn, ghi vào `decisions.md`.
+K1–K6 = **545h**. Cộng K7 gốc = **885h**, đã vượt ngân sách gốc 650h. Cộng K7 mới (lõi 561h) = **1.106h**, ở 6,5h/tuần ≈ 170 tuần ≈ **3,3 năm**; đường lõi tối thiểu của K7 (≈ 366h, gồm C8 tối thiểu) cho 911h ≈ 2,7 năm. Đây là quyết định của bạn, ghi vào `decisions.md`.
 
 K3 là track chiều sâu phần cứng: chậm và tốn giờ nhất. K2 là track tạo artifact và tín hiệu phỏng vấn nhanh nhất. **Tuần bận chạy K2, tuần rảnh chạy K3.** K3 là thứ khiến bạn không bị loại; K2 là thứ khiến bạn được gọi.
 

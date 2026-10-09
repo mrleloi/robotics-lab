@@ -25,7 +25,7 @@
 | 6 | Hạ tầng mô phỏng và đánh giá | 120 | Dùng lại LIBERO (Bài 7), harness và roofline N100 |
 | 7 | Robot di động — **thiết kế lại thành khóa build** | 561 lõi (K7 gốc: 340) | `khoa-7/_KE-HOACH-K7.md` |
 
-**Ngân sách toàn lộ trình — không giấu.** K1–K6 = **545h**. Cộng K7 gốc = **885h**, đã vượt con số 650h của lộ trình gốc. Cộng K7 mới (lõi 561h, chưa tính tùy chọn) = **1.106h**; ở 6,5h/tuần ≈ 170 tuần ≈ **3,3 năm**. Đường lõi tối thiểu của K7 mới (~340h: C0–C7 trọn, C10.1–C10.2, C11.1–C11.3) cho **545 + 340 = 885h ≈ 2,6 năm**.
+**Ngân sách toàn lộ trình — không giấu.** K1–K6 = **545h**. Cộng K7 gốc = **885h**, đã vượt con số 650h của lộ trình gốc. Cộng K7 mới (lõi 561h, chưa tính tùy chọn) = **1.106h**; ở 6,5h/tuần ≈ 170 tuần ≈ **3,3 năm**. Đường lõi tối thiểu của K7 mới (~366h: C0–C7 trọn, C8 tối thiểu, C10.1–C10.2, C11.1–C11.3) cho **545 + 366 = 911h ≈ 2,7 năm**.
 
 **Khóa nền F1–F7 nằm ngoài các con số trên** (~245h nếu học trọn, nhưng F được thiết kế để học **đúng lúc**). K4 dựa nặng nhất vào F1 (đo lường, thống kê): phần lớn viên nang F1.1–F1.7 bạn gặp lần đầu ở khóa này nếu chưa học ở K1–K3, cộng F2.2, F2.3, F2.8, F5.5, F7.2. Chọn học trọn hay đúng lúc là quyết định của bạn, ghi vào `decisions.md`.
 

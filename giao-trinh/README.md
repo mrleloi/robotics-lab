@@ -124,11 +124,11 @@ Bảng đủ (kèm viên nang F từng chặng) ở `khoa-7/00-tong-quan.md` m�
 | K1–K6 + K7 gốc (340h) | 885h | ≈ 2,6 năm |
 | **K1–K6 + K7 mới lõi (561h)** | **1.106h** | ~170 tuần ≈ **3,3 năm** |
 | K1–K6 + K7 mới có tùy chọn (597h) | 1.142h | ≈ 3,4 năm |
-| K1–K6 + **đường lõi tối thiểu K7** (~340h) | **885h** | ≈ 2,6 năm |
+| K1–K6 + **đường lõi tối thiểu K7** (~366h) | **911h** | ≈ 2,7 năm |
 | + khóa nền F trọn | +245h | +0,7 năm |
 
 - Mọi kịch bản có K7 đều **vượt** ngân sách gốc 650h. Đây là quyết định của bạn, ghi vào `decisions.md`, không phải điều giáo trình giấu.
-- **Đường lõi tối thiểu K7** (C0–C7 trọn + C10.1–C10.2 + C11.1–C11.3): robot đi được, an toàn, có dữ liệu, có sim và có câu trả lời "sim có dự đoán đúng thực tế không". Xem `khoa-7/00-tong-quan.md` mục 6 (có một điểm chưa khớp với C11.3 cần bạn quyết).
+- **Đường lõi tối thiểu K7** (C0–C7 trọn + C8 tối thiểu + C10.1–C10.2 + C11.1–C11.3): robot đi được, tự đi A→B quãng ngắn, an toàn, có dữ liệu, có sim và có câu trả lời "sim có dự đoán đúng thực tế không". Xem `khoa-7/00-tong-quan.md` mục 6 và đầu `khoa-7/c08-dieu-huong.md` (C8 tối thiểu).
 - F học đúng lúc thì ít hơn 245h nhiều; F trọn là phần thêm.
 - Con số chưa tính tuần crunch, chờ hàng, làm lại. Người mới làm phần cứng thường vượt ở các chặng có lắp.
 - Mỗi khóa có **trần cứng** (ví dụ K3 140h, K4 95h, K6 160h); K7 có trần theo chặng = giờ chặng × 1,3 (`khoa-7/00-tong-quan.md` mục 7). Chạm trần → FAIL action: dừng, publish nguyên trạng, ghi cái gì xong.

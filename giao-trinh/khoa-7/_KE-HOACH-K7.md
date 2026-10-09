@@ -41,7 +41,7 @@ Người học thật là người đang **học bật tắt mỏ hàn**, đi t�
 
 **Tổng lõi: 561h** (C0–C12, không tính tùy chọn); có tùy chọn: 597h. K7 gốc: 340h (trần 450h).
 
-**Đường lõi tối thiểu ≈ 340h** (bằng K7 gốc, nhưng đi từ xưởng thay vì từ đặc tả): C0–C7 trọn (245h) + C10.1–C10.2 (~34h) + C11.1–C11.3 (~60h). Nếu chỉ làm được đường này, robot vẫn đi được, an toàn, có dữ liệu, có sim và có câu trả lời "sim có dự đoán đúng thực tế không" — đúng tinh thần "nếu chỉ làm được một phần, làm 7A và 7E" của bản gốc.
+**Đường lõi tối thiểu ≈ 366h** (gần bằng K7 gốc, nhưng đi từ xưởng thay vì từ đặc tả): C0–C7 trọn (245h) + C8 tối thiểu (~27h: Nav2 A→B chỉ bằng odometry, đã quyết 2026-10-09) + C10.1–C10.2 (~34h) + C11.1–C11.3 (~60h). Nếu chỉ làm được đường này, robot vẫn đi được, an toàn, có dữ liệu, có sim và có câu trả lời "sim có dự đoán đúng thực tế không" — đúng tinh thần "nếu chỉ làm được một phần, làm 7A và 7E" của bản gốc.
 
 **Tác động ngân sách toàn lộ trình** (phải ghi trong `00-tong-quan.md` và README): K1–K6 = 545h; + K7 mới lõi 561h = **1.106h**; ở 6,5h/tuần ≈ 170 tuần ≈ **3,3 năm**. Đường lõi tối thiểu: 545 + 340 = 885h ≈ 2,6 năm. Đây là quyết định của người học, ghi vào `decisions.md`, không giấu.
 
@@ -173,3 +173,4 @@ Các agent soạn song song, không đọc được file của nhau lúc viết.
 - Giới hạn gia tốc phanh (chống lật, C2.2) lưu vào `decisions.md`, firmware C4.4 kẹp theo đó.
 - PCNT ESP-IDF về 0 khi chạm limit → bật `accum_count` + watch point ở hai limit (mẹo trừ int16 không đủ). Lệnh động lực mang **lease** (đề xuất 200 ms) trên mỗi CMD; tiêu chí gate vẫn timeout ≤ 500 ms. FAULT dùng coast trừ khi C2.2 cho phép phanh.
 - Diễn giải CONVENTIONS mục 7: vòng điều khiển nằm trong ESP32; dây USB dùng giao thức tối thiểu có spec + test; phía ROS dùng `ros2_control`.
+- **Đường lõi tối thiểu gồm C8 tối thiểu** (người học quyết, 2026-10-09): Nav2 A→B chỉ bằng odometry, `map → odom` tĩnh, ~27h; tổng đường tối thiểu ~366h. Chi tiết ở đầu `c08-dieu-huong.md`.

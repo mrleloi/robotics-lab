@@ -747,6 +747,8 @@ Chạy hai lần: có guard và `noguard`. Dự đoán trước (phần 5) số 
 | F14 | Kill switch K3 / moderation không phản hồi | Daemon chết | Healthcheck daemon | Không phát nội dung chưa duyệt (K3 Bài 15) | `kill -9` daemon |
 
    Dòng F11–F13 là các dòng bảng gốc không có: chính cơ chế phát hiện hỏng và lỗi chung nguồn.
+
+   **Nếu đi đường lõi tối thiểu (C8 tối thiểu, chỉ odometry, xem `c08-dieu-huong.md`):** F07 bỏ nếu camera không dùng cho định vị. F10 đổi thành *"trôi odometry không phát hiện được"*. Không có cơ chế phát hiện tức thời nên D cao. Hành vi thiết kế: mỗi nhiệm vụ không vượt quãng đã kiểm ở checkpoint C8 tối thiểu, và luôn bắt đầu từ A đã đặt lại odometry. Gây lỗi thật bằng cách đặt robot lệch khỏi A 20 cm rồi chạy ở ≤ 0,2 m/s, người quan sát cầm E-stop, xem robot tới đâu. Ghi giới hạn này trong `decisions.md`.
 4. **Gây lỗi thật từng dòng** (gate: mỗi dòng đã test bằng lỗi thật). Quy trình mỗi lần: viết dự đoán ở `prediction.md` → robot trên giá, tay ở E-stop → gây lỗi → ghi `fmea/results.csv` (mục 7 của chặng) → nếu PASS trên giá, lặp trên sàn ở tốc độ thấp → rồi ở 0,5 m/s. Mỗi dòng ≥2 trạng thái (đứng yên / đang chạy; hoặc NAVIGATING / SPEAKING). Đo **thời gian phát hiện** và **thời gian về trạng thái an toàn** bằng log (và logic analyzer cho F04, F06).
 5. **Ghi hành vi thực tế, so cột thiết kế, sửa chỗ khác.** Mỗi chỗ khác là một issue; sửa xong gây lỗi lại. Một dòng **không test được bằng lỗi thật** (F12) ghi rõ cách giả lập và giới hạn; không đánh dấu PASS như các dòng khác.
 6. **Moderation queue và kill switch của K3: dùng lại nguyên vẹn** (gốc). Kiểm hai điều: kill switch dừng **nội dung** (âm thanh) chứ không phải E-stop; và khi WiFi mất (F01), robot không phát nội dung chưa duyệt (fail closed cho nội dung).

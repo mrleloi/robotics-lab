@@ -6,7 +6,7 @@
 
 **Khóa này chạy song song với K2** (thuần phần mềm, làm ở tuần bận). Thứ tự lộ trình: K1 + K2 song song → K3 → K4 → K5 → K6, với K7 (khóa build robot) chạy thành đường ray song song từ sau K1 (xem `khoa-7/_KE-HOACH-K7.md`).
 
-**Ngân sách toàn lộ trình — không giấu.** K1–K6 cộng lại **545h** (K1 35 · K2 80 · K3 90 · K4 70 · K5 150 · K6 120). Ngay với K7 gốc (340h), tổng đã là **885h**, vượt con số 650h mà lộ trình gốc ghi. K7 thiết kế lại thành khóa build cho người mới có lõi **561h** (C0–C12, chưa tính phần tùy chọn) → tổng **1.106h**, ở 6,5h/tuần là khoảng **170 tuần ≈ 3,3 năm**. Đường lõi tối thiểu của K7 mới (~340h: C0–C7 trọn, C10.1–C10.2, C11.1–C11.3) cho tổng **545 + 340 = 885h ≈ 2,6 năm** (`khoa-7/_KE-HOACH-K7.md` mục 3). Đây là quyết định của bạn, ghi vào `decisions.md`, không phải thứ để phát hiện ra ở năm thứ hai.
+**Ngân sách toàn lộ trình — không giấu.** K1–K6 cộng lại **545h** (K1 35 · K2 80 · K3 90 · K4 70 · K5 150 · K6 120). Ngay với K7 gốc (340h), tổng đã là **885h**, vượt con số 650h mà lộ trình gốc ghi. K7 thiết kế lại thành khóa build cho người mới có lõi **561h** (C0–C12, chưa tính phần tùy chọn) → tổng **1.106h**, ở 6,5h/tuần là khoảng **170 tuần ≈ 3,3 năm**. Đường lõi tối thiểu của K7 mới (~366h: C0–C7 trọn, C8 tối thiểu, C10.1–C10.2, C11.1–C11.3) cho tổng **545 + 366 = 911h ≈ 2,7 năm** (`khoa-7/_KE-HOACH-K7.md` mục 3). Đây là quyết định của bạn, ghi vào `decisions.md`, không phải thứ để phát hiện ra ở năm thứ hai.
 
 **K7 không chờ tới cuối.** Chặng **K7 C0** (xưởng, dụng cụ, an toàn: bàn làm việc, hàn dây, nguồn bàn giới hạn dòng, sổ build) mở được **ngay sau Phần B** của khóa này và chạy song song với phần còn lại của K1 và K2; C1 (hệ nguồn) cần K1 trọn (`_KE-HOACH-K7.md` mục 4).
 

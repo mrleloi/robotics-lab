@@ -20,6 +20,44 @@ Chặng này đến từ K7 gốc Bài 6–10 và GATE 7B (80h, trần 110h). Ph
 | Gate chặng 8 (gồm bài viết) | 3 |
 | **Tổng** | **70** |
 
+### Đường lõi tối thiểu: C8 tối thiểu (~27h)
+
+Đã quyết 2026-10-09 (cách (a) ở `00-tong-quan.md` mục 6): đường lõi tối thiểu của K7 **gồm** một phần của C8. Lý do: C10.1 cần "Nav2 chạy được" (dòng Vị trí của C10.1), và C11.3 so cấu hình Nav2 giữa sim và thật trên đúng tuyến A→B của C8.4. Bản tối thiểu là **Nav2 A→B chỉ bằng odometry**: chưa có marker, chưa có EKF. Robot tự đi được những quãng ngắn, đo được, an toàn ở mức C8 cho phép. Nó chưa biết mình đang lạc.
+
+| Phần | Giờ | Ghi chú |
+|---|---|---|
+| Lắp bước 1 — khu thử và quy tắc chạy tự động | 1 | Giữ nguyên, kể cả checkpoint kẹp tốc độ và timeout lệnh |
+| Lắp bước 5 — cảm biến chướng ngại | 2 | Giữ nguyên. Không có nó thì không được chạy tự động |
+| Lắp bước 6 — bản đồ từ số đo thước | 1,5 | Gốc `map` = mốc A. Checkpoint đổi: teleop từ A tới G1, G2, G3; pose odometry rơi đúng ô của mốc (lệch ≤ 2 ô) |
+| C8.3, chỉ phần cây TF (mục 2 và 4 của bài) | 3 | Ai publish cạnh nào. `map → odom` là **biến đổi tĩnh đồng nhất**; không chạy EKF, không chạy AMCL |
+| Bài C8.4 — Nav2 từ A tới B | 18 | Chạy với các sửa đổi dưới đây |
+| Checkpoint C8 tối thiểu | 1,5 | Thay cho Gate chặng 8, xem dưới |
+| **Tổng** | **~27** | `[ước lượng]` |
+
+**Bỏ trong bản tối thiểu:** C8.1, C8.2 (hiệu chuẩn camera, pose từ marker), phần EKF của C8.3, Lắp bước 2–4 (gá camera cho marker, in và dán tag), C8.5, Gate chặng 8.
+
+**Sửa đổi khi làm C8.4 theo bản tối thiểu:**
+- `map → odom` tĩnh: `ros2 run tf2_ros static_transform_publisher --frame-id map --child-frame-id odom` (đồng nhất) `[tự đo — cú pháp đối số theo bản Jazzy bạn cài]`. Tắt AMCL trong `nav2_params.yaml`. Chỉ một publisher cho mỗi cạnh TF, đúng như C8.3 dạy.
+- **Mỗi lần chạy bắt đầu đúng ở A, odometry bằng 0.** Đặt robot vào khung băng dính ở A, hướng theo vạch. Rồi đưa odometry về 0: kích hoạt lại `diff_drive_controller`, hoặc khởi động lại container nếu bản `ros2_controllers` của bạn không đặt lại odometry khi kích hoạt `[tự đo]`. Sai số đặt tay đi thẳng vào phép đo. Ghi nó ở cột `dat_tay` của `runs.csv`.
+- **Tuyến ngắn.** Chọn B sao cho quãng A→B ≤ ~5 m và ít quay. Sai số odometry tích lũy theo quãng và theo góc quay (C6). Tính trước sai số kỳ vọng ở B từ số UMBmark của bạn, và so với `xy_goal_tolerance`. Nếu sai số kỳ vọng lớn hơn dung sai, rút ngắn tuyến, không nới dung sai.
+- **"Sai thật − sai tự báo" giờ là sai số của odometry.** Đây là số quan trọng nhất của bản tối thiểu. Nó cho biết giới hạn của việc không có nguồn tuyệt đối, và là thứ C11.1 dùng khi dựng twin.
+- **Bỏ kịch bản kidnapped** (bước 7) và bước 9. Không có nguồn tuyệt đối thì robot chắc chắn đi tiếp với pose sai, và chạy thử điều đó không dạy thêm gì mà thêm rủi ro. Ghi vào `decisions.md`: "chưa phát hiện được lạc". Ba kịch bản còn lại (hộp chắn, người cắt ngang ≤ 0,2 m/s, đích không tới được) **giữ nguyên**.
+- Mọi quy tắc của mục 1 (An toàn của chặng) áp dụng **nguyên văn**. Bản tối thiểu không nới quy tắc nào.
+
+**Checkpoint C8 tối thiểu** (không phải Gate chặng 8; không đổi ngưỡng nào của gate đó):
+- [ ] Kẹp tốc độ firmware và timeout lệnh đã kiểm trong buổi chạy, số đo trong `measurements.jsonl`.
+- [ ] Quãng dừng đo được (C8.4 bước 4), khoảng trống khu thử đủ theo mục 1.
+- [ ] 20 lần A→B liên tiếp, mỗi lần một dòng `runs.csv` có MCAP. Báo tỉ lệ thành công kèm Wilson CI 95%, scatter điểm dừng đo bằng thước, phân bố "sai thật − sai tự báo".
+- [ ] Ba kịch bản ép hỏng có MCAP + log BT, hành vi phục hồi ghi lại.
+- [ ] `decisions.md` ghi: tuyến, sai số odometry kỳ vọng và đo được, giới hạn "không phát hiện được lạc".
+
+Đề xuất (không phải ngưỡng gate): nếu tỉ lệ thành công thấp hơn khoảng 15/20, robot chưa đủ ổn định cho 120 lần chạy của C11.3. Quay lại C6 (hiệu chuẩn) hoặc làm C8 trọn trước.
+
+**Hệ quả xuống các chặng sau:**
+- C10.2, FMEA: dòng F07 (camera) và F10 (mất định vị) viết cho đường marker. Bản tối thiểu thay F10 bằng "trôi odometry không phát hiện được"; hành vi thiết kế: giới hạn quãng mỗi nhiệm vụ và đặt lại ở A (ghi chú ngay dưới bảng FMEA của C10.2).
+- C11.3: tuyến A→B và các cấu hình Nav2 dùng đúng bản tối thiểu này. Twin trong sim cũng chạy chỉ bằng odometry, để so sim với thật trên cùng một kênh định vị.
+- C9, C10.3 (soak), C11.4 cần định vị tuyệt đối và nằm ngoài đường tối thiểu. Muốn làm chúng thì làm C8 trọn: phần đã làm ở đây không phải làm lại.
+
 Ký hiệu thư mục lab trong chặng: `lab/c08/<bài>/` với `prediction.md`, `results.md`, MCAP, script. Mọi `prediction.md` commit **trước** khi đo.
 
 ## 0. Bức tranh chặng

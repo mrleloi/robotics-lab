@@ -27,7 +27,7 @@
 | **6** | **Hạ tầng mô phỏng và đánh giá** | **120** | ← khóa này |
 | 7 | Robot di động — **thiết kế lại thành khóa build** | 561 lõi (K7 gốc: 340) | `khoa-7/_KE-HOACH-K7.md` |
 
-**Ngân sách toàn lộ trình — không giấu.** K1–K6 = **545h**. Cộng K7 gốc = **885h**, đã vượt con số 650h của lộ trình gốc. Cộng K7 mới (lõi 561h, chưa tính tùy chọn) = **1.106h**; ở 6,5h/tuần ≈ 170 tuần ≈ **3,3 năm**. Đường lõi tối thiểu của K7 mới (~340h: C0–C7 trọn, C10.1–C10.2, C11.1–C11.3) cho **545 + 340 = 885h ≈ 2,6 năm**.
+**Ngân sách toàn lộ trình — không giấu.** K1–K6 = **545h**. Cộng K7 gốc = **885h**, đã vượt con số 650h của lộ trình gốc. Cộng K7 mới (lõi 561h, chưa tính tùy chọn) = **1.106h**; ở 6,5h/tuần ≈ 170 tuần ≈ **3,3 năm**. Đường lõi tối thiểu của K7 mới (~366h: C0–C7 trọn, C8 tối thiểu, C10.1–C10.2, C11.1–C11.3) cho **545 + 366 = 911h ≈ 2,7 năm**.
 
 **Khóa nền F1–F7 nằm ngoài các con số trên.** Học trọn cả bảy là thêm khoảng **245h** (F1 31 · F2 36 · F3 39 · F4 34 · F5 37 · F6 37 · F7 31), tức 1.106 + 245 ≈ 1.350h ≈ 4 năm ở 6,5h/tuần. Nhưng F không được thiết kế để học trọn: học **đúng lúc**, chỉ viên nang mà bài sắp tới cần. Phần lớn viên nang K6 dùng (F1.x, F3.x, F7.1–F7.3, F5.6) bạn đã gặp ở K1–K5; viên nang thường gặp **lần đầu** ở khóa này là F2.6, F6.1, F6.2, F6.3, F6.5, F6.6, cộng khoảng 28h `[ước lượng, cộng giờ ghi ở đầu từng viên nang]`, thêm F6.4 (6h) nếu chưa học ở K7 C6. Chọn đường nào là quyết định của bạn, ghi vào `decisions.md`.
 

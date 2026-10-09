@@ -2,7 +2,7 @@
 
 **Cho:** người đã qua K1 (cầm que đo, đọc logic analyzer, hàn header), **đang học bật tắt mỏ hàn**, chưa từng đi dây nguồn công suất, chưa từng cầm pin lithium dung lượng lớn, chưa từng lắp cơ khí. Không cần PASS K2–K6 trước: K7 là **đường ray song song** (mục 4).
 
-**Thời lượng:** **561h lõi** (C0–C12, không tính tùy chọn) · **597h** nếu làm cả C10.4 (16h) và C11.6 (20h) `[ước lượng — tổng giờ bài + giờ lắp, ghi ở đầu từng file chặng]`. K7 gốc: 340h, trần 450h. **Đường lõi tối thiểu ≈ 340h** (mục 6).
+**Thời lượng:** **561h lõi** (C0–C12, không tính tùy chọn) · **597h** nếu làm cả C10.4 (16h) và C11.6 (20h) `[ước lượng — tổng giờ bài + giờ lắp, ghi ở đầu từng file chặng]`. K7 gốc: 340h, trần 450h. **Đường lõi tối thiểu ≈ 366h** (mục 6; gồm C8 tối thiểu từ 2026-10-09).
 
 **Chi phí phần cứng mới:** ~13,6–28,6 triệu VNĐ cho 13 chặng `[ước lượng 10/2026 — cộng tổng BOM của từng file, kiểm lại ở cửa hàng]`, chưa tính mini PC, ESP32-S3, logic analyzer, đồng hồ đã có từ K1–K5 (mục 5).
 
@@ -163,27 +163,28 @@ Lấy từ dòng "Tổng Cn" ở mục 2 BOM của từng file. Mọi giá phả
 | K1–K6 + K7 gốc | 885h | ≈ 2,6 năm |
 | **K1–K6 + K7 mới lõi** | **1.106h** | ~170 tuần ≈ **3,3 năm** |
 | K1–K6 + K7 mới có tùy chọn | 1.142h | ≈ 3,4 năm |
-| K1–K6 + **đường lõi tối thiểu K7** | 545 + ~340 = **885h** | ≈ 2,6 năm |
+| K1–K6 + **đường lõi tối thiểu K7** | 545 + ~366 = **911h** | ≈ 2,7 năm |
 | Khóa nền F1–F7 nếu học trọn | +245h | +0,7 năm |
 
 `[ước lượng — chia giờ cho 6,5h/tuần, chưa tính tuần crunch]`. Ngân sách gốc là 650h; mọi kịch bản đều vượt. Viên nang F học **đúng lúc** (chỉ những mã trong cột "Viên nang nền" của bảng mục 4) thì ít hơn 245h nhiều. **Chọn kịch bản nào là quyết định của bạn**, ghi vào `decisions.md` ở tuần đầu, cùng với trần giờ (mục 7).
 
-### Đường lõi tối thiểu (~340h)
+### Đường lõi tối thiểu (~366h)
 
-Bằng giờ K7 gốc, nhưng đi từ xưởng thay vì từ đặc tả:
+Gần bằng giờ K7 gốc (340h), nhưng đi từ xưởng thay vì từ đặc tả:
 
 | Phần | Giờ |
 |---|---|
 | C0–C7 trọn | 245 |
+| **C8 tối thiểu**: khu thử, cảm biến chướng ngại, bản đồ, cây TF, C8.4 Nav2 A→B chỉ bằng odometry, checkpoint (`c08-dieu-huong.md`, đầu file) | ~27 |
 | C10.1 An toàn tầng phần cứng + C10.2 State machine, FMEA | ~34 |
 | C11.1 Model sim + C11.2 HIL, CI + C11.3 Sim có dự đoán được thực tế không ★ | ~60 |
-| **Tổng** | **~339** |
+| **Tổng** | **~366** |
 
-Nếu chỉ làm được đường này, robot vẫn đi được (teleop, odometry đã hiệu chuẩn), **an toàn** (E-stop cứng, FMEA đã test), **có dữ liệu** (MCAP, audit, data contract), **có sim** và có câu trả lời cho câu hỏi ★ "sim có dự đoán đúng thực tế không". Đây đúng tinh thần "nếu chỉ làm được một phần, làm 7A và 7E" của bản gốc.
+Nếu chỉ làm được đường này, robot vẫn đi được (teleop, odometry đã hiệu chuẩn, **tự đi A→B quãng ngắn bằng Nav2**), **an toàn** (E-stop cứng, FMEA đã test), **có dữ liệu** (MCAP, audit, data contract), **có sim** và có câu trả lời cho câu hỏi ★ "sim có dự đoán đúng thực tế không". Đây đúng tinh thần "nếu chỉ làm được một phần, làm 7A và 7E" của bản gốc.
 
-Bỏ trong đường tối thiểu: C8, C9 (nhận người), C10.3 (soak), C11.4–C11.5, C12. **Không bao giờ bỏ C10.1–C10.2** trước khi cho robot chạy gần người.
+Bỏ trong đường tối thiểu: phần định vị tuyệt đối của C8 (C8.1, C8.2, EKF của C8.3, C8.5, Gate chặng 8), C9 (nhận người), C10.3 (soak), C11.4–C11.5, C12. **Không bao giờ bỏ C10.1–C10.2** trước khi cho robot chạy gần người.
 
-**Điểm chưa khớp, cần bạn quyết:** C11.3 như đang viết so 6 cấu hình **Nav2** giữa sim và thật, và C11 ghi "cần trước C10" (C10 cần C8). Đường tối thiểu của `_KE-HOACH-K7.md` lại không gồm C8. Hai cách: (a) thêm phần tối thiểu của C8 (TF `map→odom→base_link` + Nav2 A→B, ước ~18–30h `[ước lượng]` → đường tối thiểu ~360–370h); (b) cho C11.3 so cấu hình **controller/lệnh vận tốc có kịch bản** thay vì cấu hình Nav2. Ghi lựa chọn vào `decisions.md`; file này không tự đổi C11.
+**Đã quyết (2026-10-09):** C11.3 so 6 cấu hình **Nav2** giữa sim và thật, và C10.1 cần Nav2 chạy được. Vì vậy đường tối thiểu gồm **C8 tối thiểu** (cách (a) trong hai phương án đã nêu): Nav2 A→B chỉ bằng odometry, `map → odom` tĩnh, tuyến ngắn, không kidnapped. Chi tiết, checkpoint và hệ quả xuống C10.2/C11.3 ở đầu `c08-dieu-huong.md`. Phương án (b), đổi C11.3 sang controller có kịch bản, không dùng.
 
 ---
 
@@ -365,6 +366,7 @@ Từ `_KE-HOACH-K7.md` mục 9 (2026-10-08). Mọi file chặng dùng nhất qu�
 - **Lệnh động lực mang lease** (đề xuất 200 ms) trên mỗi CMD; tiêu chí gate vẫn timeout ≤500 ms. FAULT dùng coast trừ khi C2.2 cho phép phanh.
 - **Diễn giải `CONVENTIONS.md` mục 7:** vòng điều khiển nằm trong ESP32; dây USB dùng giao thức tối thiểu có spec + test; phía ROS dùng `ros2_control` + `diff_drive_controller`; micro-ROS là phương án so sánh ở C4.3. (Chờ người học ghi chính thức vào `CONVENTIONS.md`.)
 - **Chân RELAY_HOLD** là GPIO đảo bằng phần mềm (không LEDC); bảng chân C4.1 dành chân VM_SENSE, RELAY_FB (87a), RESET, PRECHARGE (thống nhất với C10.1 — `_TRANG-THAI.md`).
+- **Đường lõi tối thiểu gồm C8 tối thiểu** (người học quyết, 2026-10-09): Nav2 A→B chỉ bằng odometry, `map → odom` tĩnh, ~27h; tổng đường tối thiểu ~366h. Chi tiết ở đầu `c08-dieu-huong.md`.
 
 Quyết định agent soạn tự đưa ra, **chờ người học duyệt**: C9 tốc độ thử gần người ≤0,3 m/s và cấm phát audio khi robot chạy; C11.5 ứng viên fine-tune mặc định là bộ dự đoán quãng dừng (không cần dữ liệu cá nhân).
 

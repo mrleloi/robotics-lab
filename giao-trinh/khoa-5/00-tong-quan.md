@@ -29,7 +29,7 @@ Rủi ro lớn nhất không phải là khó. Nó là phần mềm, thế mạnh
 | 6 | Hạ tầng mô phỏng và đánh giá | 120 | Không cần mua gì; điều kiện của K7 C11 |
 | 7 | Robot di động, **thiết kế lại thành khóa build** | 561 lõi (K7 gốc: 340) | `khoa-7/_KE-HOACH-K7.md`; C7 (cảm biến, ghi dữ liệu) dùng thẳng K5 M1–M3 |
 
-**Ngân sách toàn lộ trình, không giấu.** K1–K6 = **545h**. Cộng K7 gốc = **885h**, đã vượt con số 650h của lộ trình gốc. Cộng K7 mới (lõi 561h) = **1.106h**, ở 6,5h/tuần khoảng **3,3 năm**. Đường lõi tối thiểu của K7 mới (~340h) cho 545 + 340 = 885h, khoảng 2,6 năm. Đường lõi đó còn một điểm chưa khớp đang chờ bạn quyết: C11.3 cần Nav2, mà C8 không nằm trong đường lõi (xem `khoa-7/00-tong-quan.md` mục 6). K5 là khóa lớn nhất trong K1–K6: 150h, gần 28% của 545h.
+**Ngân sách toàn lộ trình, không giấu.** K1–K6 = **545h**. Cộng K7 gốc = **885h**, đã vượt con số 650h của lộ trình gốc. Cộng K7 mới (lõi 561h) = **1.106h**, ở 6,5h/tuần khoảng **3,3 năm**. Đường lõi tối thiểu của K7 mới (~366h, gồm C8 tối thiểu: Nav2 A→B chỉ bằng odometry) cho 545 + 366 = 911h, khoảng 2,7 năm (`khoa-7/00-tong-quan.md` mục 6). K5 là khóa lớn nhất trong K1–K6: 150h, gần 28% của 545h.
 
 **Khóa nền F nằm ngoài các con số trên** (~245h nếu học trọn; thiết kế để học **đúng lúc**). K5 dựa nặng nhất vào **F4** (thời gian và đồng hồ: gần như mọi viên nang F4.1–F4.7 gặp ở Module 2), **F3** (Module 3: F3.1–F3.9), F5.2–F5.3 (ngắt, ISR, jitter), F1.1/F1.6 (sai số, fit), F7.4–F7.7 (Module 4). Chọn học trọn hay đúng lúc là quyết định của bạn, ghi vào `decisions.md`.
 
