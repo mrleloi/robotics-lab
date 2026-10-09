@@ -101,7 +101,7 @@ Công thức ở mục 2 dành cho hai nhánh **độc lập**, tức là trư�
 
 - *"Cùng seed thì 3 lần chạy phải giống hệt; khác là có bug"* (bản gốc, Gemini). **ĐÚNG MỘT PHẦN.** Câu này chỉ đúng khi đủ cả ba điều kiện: **cùng máy** (cùng model CPU/GPU, cùng driver), **cùng image** (cùng phiên bản PyTorch/CUDA/cuDNN/MuJoCo/LeRobot, ghim bằng lockfile + digest image), và **bật cờ tất định** (`torch.use_deterministic_algorithms(True)`, `CUBLAS_WORKSPACE_CONFIG`, số luồng cố định, mọi RNG được seed). Đổi GPU hay đổi phiên bản cuDNN thì kernel được chọn khác, thứ tự cộng khác, và bit-exact không còn được hứa nữa, kể cả khi đã bật cờ. Thiếu cờ tất định thì ngay trên cùng máy cũng không được hứa: trên GPU, nhiều kernel dùng atomic hoặc chia nhỏ phép cộng (split-K), nên thứ tự cộng float thay đổi giữa các lần chạy. Bit cuối khác nhau, và trong mô phỏng tiếp xúc, một lệch nhỏ ở bước 50 có thể làm vật trượt khỏi tay ở bước 200. **Phản ví dụ:** cùng seed, GPU, không bật `torch.use_deterministic_algorithms(True)`, ba lần chạy 500 episode có vài episode lật kết quả. Đó không phải bug logic, đó là một **số đo** (tỉ lệ lật) bạn phải báo cáo (→ F2.3). Cũng phải tách riêng: **cùng máy, cùng image, đã bật cờ** mà vẫn khác thì mới là nguồn ngẫu nhiên chưa kiểm soát (bug). Khác máy hoặc khác image thì lệch vài episode là bình thường, và người reproduce ở Module 5 sẽ gặp đúng điều này: so sánh với họ bằng CI, không bằng bit-exact.
 - *"Biến thiên giữa 3 bộ seed là sai số của phép đo chất lượng"* (bản gốc). **ĐÚNG MỘT PHẦN.** Hướng thì đúng: phải có sai số. Nhưng độ lệch chuẩn ước lượng từ **3 điểm** cũng rất bấp bênh. Với 2 bậc tự do, khoảng tin cậy 95% của s/σ là khoảng [0.16; 1.92] `[chuẩn: phân phối χ² với 2 bậc tự do]`. Nghĩa là ba bộ seed có thể "may mắn" cho ra biến thiên nhỏ gấp 6 lần thực tế. **Phản ví dụ:** p = 0.7, mỗi bộ 50 episode. Lý thuyết nhị thức cho SD ≈ 6.5 điểm, nhưng ba bộ của bạn có thể ra 69/70/71% và khiến bạn tin sai số chỉ ±1 điểm. Cách làm đúng: gộp episode, dùng Wilson cho tỉ lệ, dùng McNemar cho so sánh, và dùng 3 bộ seed để **kiểm tra** xem biến thiên có lớn hơn nhị thức không (nếu lớn hơn thì có nguồn biến thiên ngoài phép thử Bernoulli).
-- *"70% → 68% với biến thiên seed ±4% thì kết luận: không có khác biệt có ý nghĩa thống kê"* (Gemini, Bài 7, tự kiểm tra 1). **SAI ở cách phát biểu.** "Không phát hiện được khác biệt" khác với "không có khác biệt". Câu đúng: "chưa phân biệt được; với n này, phép đo chỉ phát hiện được chênh lệch từ X điểm trở lên (MDE)". **Phản ví dụ:** mục 3 của mô phỏng trên cho thấy hai model *giống hệt nhau* với 20 episode vẫn thường lệch nhau 5–10 điểm. Ngược lại, một model kém thật 3 điểm cũng sẽ thường xuyên "không có ý nghĩa thống kê" ở n = 50.
+- *"70% → 68% với biến thiên seed ±4% thì kết luận: không có khác biệt có ý nghĩa thống kê"* (Gemini, Bài 7, tự kiểm tra 1). **SAI ở cách phát biểu.** "Không phát hiện được khác biệt" khác với "không có khác biệt". Câu đúng: "chưa phân biệt được; với n này, phép đo chỉ phát hiện được chênh lệch từ X điểm trở lên (MDE)". **Phản ví dụ:** mục 3 của mô phỏng trên dựng hai model *giống hệt nhau* với 20 episode mỗi cái; chạy nó (sau khi dự đoán Q3) và xem chênh lệch "nhìn thấy được" xuất hiện thường xuyên thế nào dù khác biệt thật bằng 0. Ngược lại, một model kém thật 3 điểm cũng sẽ thường xuyên "không có ý nghĩa thống kê" ở n = 50.
 
 ### 4. Thuật ngữ
 
@@ -277,6 +277,7 @@ Hai model giống hệt, 20 episode mỗi model: P(|chênh| ≥ 5 điểm) ≈ 0
 - Gemini tự kiểm tra 1: "không có khác biệt có ý nghĩa thống kê" → "chưa phân biệt được ở MDE = X".
 - Gemini ví dụ JSON có trường `seed_variance` là một con số duy nhất. Đã thay bằng k/n theo task, Wilson, file episode thô và tỉ lệ lật.
 - Thêm: dùng checkpoint đã fine-tune trên LIBERO; khớp `control_mode`; kiểm oracle bằng video; quy tắc loại task chỉ dựa trên baseline (tránh chọn sau khi đã thấy kết quả).
+- Reviewer sửa (niêm phong): chấm mô hình thứ ba nêu sẵn mức chênh "5–10 điểm" của hai model giống hệt, tức đáp án Q3; đã thay bằng lời mời chạy mô phỏng sau khi dự đoán. Đã chạy lại 4 khối Python của module, số khớp các bảng 🔒.
 
 ### 12. Đọc thêm và tự kiểm tra
 
@@ -381,7 +382,7 @@ for steps in (1, 10, 50):
     print(f"{steps:3d} bước: lệch do nhiễu ngẫu nhiên {r:.4f} | lệch do sai lệch hệ thống {s_:.4f}")
 ```
 
-Cột "X kênh thường" là cột quan trọng nhất. SQNR toàn tensor bị chính các kênh outlier (vốn được biểu diễn tốt) kéo lên, nên nó **che** việc các kênh bình thường bị phá. Một chỉ số trung bình che một hỏng hóc cục bộ: đó là cùng hình dạng với "trung bình 61.07% không đổi nhưng từng task dịch chuyển", chỉ ở tầng tensor.
+Khi đọc kết quả, đặt cột "X per-tensor (toàn tensor)" cạnh cột "X kênh thường" và hỏi: một chỉ số tính trên **toàn tensor** có thể che hỏng hóc ở **một nhóm kênh** không? Câu hỏi đó cùng hình dạng với "trung bình 61.07% không đổi nhưng từng task dịch chuyển", chỉ ở tầng tensor. Phần đọc kết quả nằm trong khối 🔒 ở phần 7.
 
 ### 3. Cầu nối từ backend
 
@@ -482,7 +483,7 @@ Cột "X kênh thường" là cột quan trọng nhất. SQNR toàn tensor bị 
        print(f"task {t}: {y_ref[m].mean():.2f} -> {y_new[m].mean():.2f}  bất đồng {b10}/{b01}  p={p:.2f}")
    print("Bội so sánh: 10 task × α=0.05 → kỳ vọng ~0.5 'phát hiện' giả ngay cả khi không có gì khác")
    ```
-   Để ý: phép thử trên tổng có thể phát hiện được một suy giảm mà **không task nào riêng lẻ** đủ power để phát hiện. Đó là lý do "dịch chuyển theo task" là một khẳng định mạnh, cần nhiều episode hơn khẳng định về trung bình.
+   Để ý hai điều. Thứ nhất, phép thử trên tổng có thể phát hiện được một suy giảm mà phần lớn task riêng lẻ không đủ power để thấy. Thứ hai, đọc kỹ cách dữ liệu giả được sinh: suy giảm thật là **như nhau ở mọi task** (30% episode lắc lại với p thấp hơn 15 điểm). Nếu output cho thấy một task "sụp" mạnh hơn hẳn các task khác, đó là nhiễu lấy mẫu trên 50 episode, không phải hành vi bị dịch chuyển ở task đó. Một khẳng định "task X dịch chuyển" cần (a) hiệu chỉnh bội so sánh (Holm hoặc Bonferroni trên số task), và (b) tốt nhất là xác nhận lại trên init state chưa dùng. Đó là lý do "dịch chuyển theo task" là một khẳng định mạnh, cần nhiều episode hơn khẳng định về trung bình. Đổi seed của script vài lần và xem task "sụp" có đổi chỗ không.
 6. **Định vị chỗ nhạy (thêm so với bản gốc, tùy chọn nếu dư giờ).** Lượng tử *từng phần một*: chỉ vision tower, chỉ VLM, chỉ action expert. Trước tiên đo trên một bộ 50 observation cố định (vòng hở): sai số action so với fp32. Sau đó chạy LIBERO cho phần nghi ngờ nhất. Đây là kiểm chứng trực tiếp quan sát của nhóm vla.cpp.
 7. **Vẽ đồ thị hai trục:** latency p50 trên trục X, success rate (có thanh Wilson) trên trục Y. Mỗi cấu hình một điểm. Đây là hình chính của bài viết, và là đầu vào của Bài 9.
 8. **Tìm ít nhất một cấu hình "nhanh hơn nhưng hỏng".** Không tìm được thì nén sâu hơn (4-bit cả vision tower, hoặc giảm solver step) cho tới khi tìm được. Một benchmark không có điểm hỏng nào chưa chứng minh được rằng nó *đo được* chuyện hỏng (→ F2.5: canary lỗi cố ý).
@@ -503,7 +504,7 @@ Cột "X kênh thường" là cột quan trọng nhất. SQNR toàn tensor bị 
 | 4 | 14.2 dB | 17.4 dB | 12.7 dB | **0.0 dB** | 11.4 dB |
 
 - Weight Gaussian thấp hơn 6.02b+1.76 khoảng 10 dB: công thức giả định sin full-scale. Gaussian có hệ số đỉnh cao (max lớn so với RMS), nên phần lớn dải mã bị bỏ phí. Per-channel lấy lại khoảng 3 dB.
-- Activation có outlier: các kênh bình thường gần như bị xóa sạch (0 dB nghĩa là lỗi bằng tín hiệu: mọi giá trị bị làm tròn về 0). SQNR toàn tensor vẫn trông "chấp nhận được" vì outlier chiếm phần lớn năng lượng.
+- Activation có outlier: các kênh bình thường gần như bị xóa sạch (0 dB nghĩa là lỗi bằng tín hiệu: mọi giá trị bị làm tròn về 0). SQNR toàn tensor vẫn trông "chấp nhận được" vì outlier chiếm phần lớn năng lượng. Cột "X kênh thường" là cột quan trọng nhất: chỉ số trung bình che hỏng hóc cục bộ.
 - Solver: lệch do nhiễu ngẫu nhiên **giảm** khi tăng số bước (0.036 → 0.027 → 0.014), vì nhiễu trung bình hóa. Lệch do bias **giữ hoặc tăng** (0.020 → 0.055 → 0.057). Lỗi lượng tử weight thuộc loại thứ hai.
 
 **Kỳ vọng thực nghiệm `[tự đo]`, dạng xu hướng:**
@@ -571,6 +572,8 @@ Cột "X kênh thường" là cột quan trọng nhất. SQNR toàn tensor bị 
 - Bản gốc: quy tắc "chênh lệch nhỏ hơn biến thiên giữa các seed". Đã thay bằng Wilson/McNemar + MDE (lý do ở Bài 7).
 - Thêm phân biệt lỗi weight (tất định, bias) và lỗi activation (phụ thuộc dữ liệu, outlier); thêm bước kiểm lượng tử thật sự được áp; thêm định vị thành phần nhạy.
 - Ghi rõ con số GR00T là của task Bridge, từ model card bên thứ ba, không phải LIBERO.
+- Reviewer sửa (niêm phong): đoạn ngay sau mô phỏng SQNR nói sẵn kết luận (outlier che kênh thường), trong khi Q4 hỏi đúng điều đó; đã chuyển kết luận vào 🔒, thân bài chỉ còn câu hỏi dẫn.
+- Reviewer bổ sung (chiều sâu): mô phỏng McNemar sinh suy giảm **đều** ở mọi task, nhưng output thường có một task trông "sụp" — đó là nhiễu 50 episode. Thêm cảnh báo: khẳng định "task X dịch chuyển" cần hiệu chỉnh bội so sánh và xác nhận trên init state mới.
 
 ### 12. Đọc thêm và tự kiểm tra
 
@@ -694,11 +697,11 @@ Latency cũng có sai số (CI của p50, → F1.2). Script trên bỏ qua đi�
 
 Làm trên dữ liệu Bài 8 của bạn **trước khi vẽ**.
 
-**Tham số cần tra:** `chunk_size` và số bước thực thi mỗi chunk (`n_action_steps` hoặc tương đương trong config policy, Bài 1); chu kỳ control dự kiến của robot K7; RAM có sẵn trên target (N100: 16 GB trừ OS + ROS 2; module nhúng 8 GB: bộ nhớ dùng chung CPU/GPU); peak RAM/VRAM của từng cấu hình (Bài 8).
+**Tham số cần tra:** `chunk_size` và số bước thực thi mỗi chunk (`n_action_steps` hoặc tương đương trong config policy, Bài 1); chu kỳ control dự kiến của robot K7; RAM có sẵn trên target (N100: dung lượng thanh RAM của máy bạn, EQ12 thường bán bản 16 GB `[tự đo: free -h]`, trừ OS + ROS 2; module nhúng 8 GB: bộ nhớ dùng chung CPU/GPU); peak RAM/VRAM của từng cấu hình (Bài 8).
 
 **Câu hỏi:**
 1. Từ bảng số Bài 8, liệt kê cấu hình bạn đoán bị trội (a) theo điểm trung tâm, (b) theo CI tách hẳn.
-2. Cấu hình "nhanh nhưng hỏng" của bạn có nằm trên mặt Pareto không?
+2. Cấu hình "nhanh nhưng hỏng" của bạn (từ Bài 8) là cấu hình nào? Sàn chất lượng bạn sắp cam kết có loại được nó không, và có loại oan cấu hình nào khác không (CI chạm sàn)?
 3. Có bao nhiêu cấu hình có CI chồng với cấu hình có success rate cao nhất?
 4. Với số cấu hình K và số episode n của bạn, "người thắng" bị lạc quan bao nhiêu điểm (ước lượng bằng cách đổi tham số trong mô phỏng phần 2)?
 5. Cho ba kịch bản của bản gốc, dịch thành ràng buộc số và chọn trước cấu hình:
@@ -710,7 +713,7 @@ Làm trên dữ liệu Bài 8 của bạn **trước khi vẽ**.
 # prediction.md — K4 Bài 9
 - Sàn chất lượng (cam kết trước): ≥ ___ % success rate tuyệt đối HOẶC ≥ ___ % của baseline fp32
 - Bị trội (điểm trung tâm): ___ · bị trội (CI tách hẳn): ___
-- "Nhanh nhưng hỏng" nằm trên mặt Pareto? ___
+- "Nhanh nhưng hỏng": ___ · sàn loại được nó? ___ · cấu hình có CI chạm sàn: ___
 - Số cấu hình CI chồng với cấu hình đứng đầu: ___
 - Lạc quan của người thắng (K=___, n=___): ~___ điểm
 - Kịch bản 1: ràng buộc ___ (dịch từ chunk ___ × T ___ − biên ___) → chọn ___
@@ -810,6 +813,7 @@ Không có số đúng, chỉ có **lập luận đúng** (giữ nguyên tinh th
 - Gemini kịch bản 1: "10 Hz ⇒ p99 < 100 ms". Đã sửa theo action chunking (bản gốc Bài 1 đã nhấn mạnh chunking mà Gemini bỏ qua ở đây).
 - Gemini tự kiểm tra 2 nói cấu hình 4-bit "bị loại vì không thỏa Task Feasibility Boundary" mà không định nghĩa ranh giới đó trước. Đã thay bằng sàn chất lượng cam kết trước.
 - Bản gốc chưa nói mặt Pareto chứa cả điểm "nhanh nhưng hỏng". Đã thêm sàn chất lượng và bước xác nhận holdout (Goodhart → F2.8).
+- Reviewer sửa (niêm phong): câu dự đoán 2 hỏi "nhanh nhưng hỏng có nằm trên mặt Pareto không" trong khi phần 2 đã trả lời; đổi thành câu hỏi về chính dữ liệu Bài 8 của người học (sàn có loại được nó, có loại oan cấu hình nào). RAM N100 "16 GB" hạ thành `[tự đo]` (tùy thanh RAM lắp).
 
 ### 12. Đọc thêm và tự kiểm tra
 

@@ -31,7 +31,7 @@ Một bài benchmark đáng tin là một **đồ thị truy vết ngược**: m
 
 ```mermaid
 flowchart LR
-    C1["Claim: 'INT8 không phân biệt được với FP16 về success rate'"] --> N1["Bảng 2, dòng 3: 37/50 vs 35/50, CI95 của hiệu"]
+    C1["Claim so sánh: 'INT8 vs FP16 về success rate'"] --> N1["Bảng 2, dòng 3: k/n mỗi bên + CI95 của hiệu + phán quyết của claim_check.py"]
     C2["Claim: 'N100 chậm hơn yêu cầu 10 Hz k lần'"] --> N2["Bảng 4: p50, p95, p99 + số mẫu"]
     N1 --> J1["results/smolvla_int8_4090_seedset-A.json"]
     N2 --> J2["results/smolvla_fp32_n100_ov.json"]
@@ -75,7 +75,7 @@ Quy tắc 2 có một nửa thứ hai mà bản Gemini làm sai: "không phân b
 **Chấm mô hình:**
 
 - *"Bài benchmark tốt = nhiều số và nhiều hình."* — **SAI.** Số không có sai số và methodology là nhiễu có định dạng đẹp. Phản ví dụ: benchmark "2,6×" ở phần 1 có số rất rõ, và vô dụng cho quyết định thật.
-- *"Nêu giới hạn làm bài yếu đi."* — **SAI** với khán giả này. Bản gốc ghi nhận nhóm benchmark VLA trên Intel thấy INT8-CPU đạt 75% so với 70% của fp32 và nói rõ họ **không** tuyên bố INT8 thắng (K4 Bài 8). Chính câu tự giới hạn đó làm phần còn lại của báo cáo đáng tin. Phản ví dụ cho mô hình: bài không có Limitations thì người đọc tự viết Limitations hộ bạn trong phần bình luận, với giọng kém thiện chí hơn.
+- *"Nêu giới hạn làm bài yếu đi."* — **SAI** với khán giả này. Bản gốc kể một nhóm benchmark VLA trên Intel thấy INT8-CPU đạt 75% so với 70% của fp32 và nói rõ họ **không** tuyên bố INT8 thắng (K4 Bài 8; nguồn chưa truy được, xem phần 11 của Bài 8 — dùng như ví dụ phương pháp, đừng trích như số liệu). Chính câu tự giới hạn đó làm phần còn lại của báo cáo đáng tin. Phản ví dụ cho mô hình: bài không có Limitations thì người đọc tự viết Limitations hộ bạn trong phần bình luận, với giọng kém thiện chí hơn.
 - *"Chênh lệch không có ý nghĩa thống kê nghĩa là hai cấu hình như nhau."* (đây là đáp án của bản Gemini cho câu tự kiểm tra INT8 73% vs FP16 71%, N=50) — **SAI.** Không bác bỏ được H0 ≠ chứng minh H0. Phản ví dụ: với vài chục episode mỗi bên, CI95 của hiệu hai tỉ lệ rộng tới mức một INT8 kém thật 10 điểm vẫn rơi vào "không phân biệt được" [ước lượng — tự kiểm bằng `claim_check.py` ở phần 6]. Câu đúng: "không phân biệt được; thí nghiệm này không đủ mạnh để loại trừ chênh lệch nhỏ hơn ~X điểm".
 
 ### 6. Làm
@@ -183,13 +183,14 @@ Biên tương đương (`margin`) phải được **viết vào `METHODOLOGY.md`
 | Checklist 7 câu của Gregg | [spec] | Blog brendangregg.com, 30/6/2018 |
 | Ví dụ "2,6× → <1%" | [spec] | Slide Intel InnovatiON 2021 của Gregg |
 | Độ rộng CI95 của hiệu tỉ lệ ở N=50 | [ước lượng] | Từ `claim_check.py`, giả định episode độc lập; số cụ thể trong khối 🔒 phần 12 |
-| Benchmark Intel: INT8 75% vs fp32 70%, tác giả không tuyên bố INT8 thắng | [spec theo bản gốc] | Bản gốc K4 Bài 8 không nêu tên báo cáo; tự tìm và đọc trước khi dẫn trong bài |
+| Benchmark Intel: INT8 75% vs fp32 70%, tác giả không tuyên bố INT8 thắng | chưa kiểm nguồn | Bản gốc K4 Bài 8 không nêu tên báo cáo; Bài 8 cũng chưa tìm được. Tự tìm và đọc trước khi dẫn trong bài (Reviewer sửa: nhãn cũ `[spec theo bản gốc]` mạnh hơn bằng chứng, lệch với Bài 8) |
 
 **Đã sửa so với bản gốc/Gemini:**
 - Gemini (tự kiểm tra câu 2): kết luận "INT8 bảo toàn chất lượng trong phạm vi sai số" từ 73% vs 71%, N=50 → sai, đó là nhầm "không bác bỏ được" với "chứng minh tương đương". Đã thay bằng ba phán quyết và biên tương đương cam kết trước.
 - Gemini thêm yêu cầu "1.200–1.800 từ" và "Limitations ≥3 mục" — không có trong bản gốc. Giữ làm gợi ý, không phải tiêu chí.
 - Gemini liệt kê "khoảng cách CPU edge–GPU hàng chục đến hàng trăm lần" như sự thật trong bài học → đã bỏ; đó là số bạn phải đo (Bài 11), không phải số được viết trước.
 - Bản gốc gợi ý "kernel quan trọng hơn weight" làm ứng viên What surprised me dựa trên kết luận "VLA batch 1 compute-bound" → thêm điều kiện: chỉ viết khi roofline và số đo của chính bạn cho thấy (quy chuẩn mục 7).
+- Reviewer sửa (niêm phong): hình truy vết ở phần 2 dùng đúng cặp 37/50 vs 35/50 kèm phán quyết "không phân biệt được", tức là đáp án câu tự kiểm tra; đã thay bằng placeholder.
 
 ### 12. Đọc thêm và tự kiểm tra
 
@@ -517,6 +518,7 @@ So sánh của người reproduce đi qua `compare.py` với ba phán quyết (�
 
 ```python
 # [đã chạy] compare.py — so kết quả người khác với baseline, phán quyết 3 trạng thái
+# Chạy: python compare.py results/baseline/<gpu>.json results/latest.json  (cần 2 file JSON theo schema Bài 4)
 import json, sys
 
 TOL = {"p50": 0.10, "p95": 0.15, "p99": 0.25}   # thay bằng ngưỡng ĐO ĐƯỢC (Bài 14 bước 4)
@@ -557,7 +559,7 @@ if __name__ == "__main__":
     print("VERDICT:", v)
 ```
 
-Đã chạy với ba file giả: cùng SKU, p99 vượt ngưỡng → INCONCLUSIVE; cùng SKU khác driver, p50 vượt → INCONCLUSIVE kèm danh sách khác biệt; Jetson → NEW DATAPOINT. Mở rộng cho trục chất lượng: so success rate theo nhiệm vụ trên cùng bộ seed, ngưỡng lấy từ độ biến thiên giữa các bộ seed (Bài 7 bước 4), dùng `claim_check.py` của Bài 13.
+Đã chạy với năm file giả: cùng SKU, p99 vượt ngưỡng → INCONCLUSIVE; cùng SKU khác driver, p50 vượt → INCONCLUSIVE kèm danh sách khác biệt; Jetson → NEW DATAPOINT; cùng SKU cùng driver, p50 vượt → FAIL; mọi chỉ số trong ngưỡng → PASS. Viết năm file giả này thành test của chính `compare.py` (→ F2.5). Mở rộng cho trục chất lượng: so success rate theo nhiệm vụ trên cùng bộ seed, ngưỡng lấy từ độ biến thiên giữa các bộ seed (Bài 7 bước 4), dùng `claim_check.py` của Bài 13.
 
 **Bước 5 (≈0,5h) — README.** Phần cứng/VRAM/thời gian/chi phí lấy từ lần chạy thật ở bước 6. Expected output dán nguyên văn output quick-run, kèm "nếu số của bạn nằm trong ±X% thì bạn đang chạy đúng". Chi phí tính bằng công thức, không đoán: `giá thuê/giờ (tra trang listing tại ngày chạy) × thời gian đo được`.
 
@@ -604,7 +606,7 @@ Một bug thật làm chậm 12% với sigma_b = 0,06 chỉ bị ngưỡng 10% b
 
 Độ tản mát p50 giữa các máy thuê cùng SKU: không có con số chung đáng tin; nhiều khả năng lớn hơn nhiễu trong một máy (2–5% của Bài 3) vì cộng thêm power limit, CPU host, PCIe, driver [ước lượng — **tự đo**]. Nếu ba máy của bạn lệch nhau dưới 5%, ngưỡng 10% là thoải mái; nếu lệch 10–15%, ngưỡng 10% không đủ và phải nới, có lý do.
 
-**Mô phỏng 1 (`nondet.py`)**, output đã chạy: 20 thứ tự cộng cho 8 giá trị tổng khác nhau (chênh ~5·10⁻⁴ trên tổng của 10⁶ số); với nhiễu ε = 10⁻⁷, khoảng 47% episode đổi kết quả nhưng success rate tổng chỉ đổi từ 0,579 lên 0,595. Bài học: **kết quả từng episode không tái lập, kết quả tổng hợp tái lập trong sai số lấy mẫu.** Với LIBERO thật, tỉ lệ episode đổi kết quả nhỏ hơn nhiều so với đồ chơi hỗn loạn này [tự đo].
+**Mô phỏng 1 (`nondet.py`)**, output đã chạy: 20 thứ tự cộng cho từ vài tới hơn chục giá trị tổng khác nhau (máy soạn: 8 giá trị, chênh ~5·10⁻⁴; máy reviewer, Windows/numpy khác: 13 giá trị, chênh ~9·10⁻⁴ — số cụ thể phụ thuộc CPU và phiên bản numpy, bản thân điều đó cũng là một minh họa) trên tổng của 10⁶ số; với nhiễu ε = 10⁻⁷, khoảng 47% episode đổi kết quả nhưng success rate tổng chỉ đổi từ 0,579 lên 0,595. Bài học: **kết quả từng episode không tái lập, kết quả tổng hợp tái lập trong sai số lấy mẫu.** Với LIBERO thật, tỉ lệ episode đổi kết quả nhỏ hơn nhiều so với đồ chơi hỗn loạn này [tự đo].
 
 **Cùng seed trên GPU (câu 4):** không bật cờ tất định, có khả năng success rate tổng giống hoặc lệch nhỏ, còn một số episode đổi kết quả; bật cờ tất định trên cùng máy, cùng image, cùng driver, kỳ vọng giống hệt từng episode — nếu không, còn nguồn phi tất định ngoài PyTorch (đa luồng trong sim, thời gian thực, thứ tự đọc file) [tự đo]. Giữa hai **loại** GPU khác nhau, kể cả có cờ tất định, không có bảo đảm giống từng bit [spec — PyTorch docs]. Vì thế yêu cầu "cùng seed 3 lần → giống hệt" của Bài 7 chỉ đúng **trên cùng máy, có cờ tất định**.
 
@@ -666,7 +668,7 @@ Một bug thật làm chậm 12% với sigma_b = 0,06 chỉ bị ngưỡng 10% b
 
 **Đã sửa so với bản gốc/Gemini:**
 - Bản gốc: ngưỡng "chênh <10% trên cùng loại GPU" là con số cố định → giữ làm mục tiêu nhưng buộc kiểm bằng độ tản mát đo được giữa ≥3 instance; nếu tản mát lớn hơn, ngưỡng nới có lý do. Thêm: ngưỡng áp cho p50; p95/p99 cần ngưỡng rộng hơn.
-- Bản gốc K4 Bài 7: "cùng seed, 3 lần chạy → giống hệt, nếu khác thì tìm nguồn ngẫu nhiên" → chỉ đúng trên cùng máy, cùng image, cùng driver, có cờ tất định. Trên GPU không có cờ tất định, khác biệt từng episode là bình thường (thứ tự reduction, autotuner). Ghi chú cho người soạn file Bài 7.
+- Bản gốc K4 Bài 7: "cùng seed, 3 lần chạy → giống hệt, nếu khác thì tìm nguồn ngẫu nhiên" → chỉ đúng trên cùng máy, cùng image, cùng driver, có cờ tất định. Trên GPU không có cờ tất định, khác biệt từng episode là bình thường (thứ tự reduction, autotuner). Bài 7 (m3) đã sửa theo cùng điều kiện.
 - Gemini Bài 14 câu 2: "lockfile đóng băng môi trường tuyệt đối theo thời gian" → sai (driver, image nền, apt, artifact biến mất).
 - Gemini Bài 14 chuỗi 5 lệnh: bỏ qua Docker dù checklist đòi; `python bench.py` sau `uv sync` không dùng venv của uv → dùng `uv run` hoặc chạy trong container.
 - Gemini Bài 15 câu 2 (lỗi "no kernel image"): đề xuất sửa bằng `TORCH_CUDA_ARCH_LIST` → chỉ đúng khi tự build kernel/extension; với wheel PyTorch dựng sẵn, sửa bằng chọn bản PyTorch/CUDA hỗ trợ arch đó. Đã đưa vào bảng phần 8.
@@ -933,7 +935,13 @@ Gate có hai loại tiêu chí khác nhau về bản chất: **sáu tiêu chí b
 - Làm rõ tiêu chí 4: định nghĩa "xác nhận công khai" và phân loại reproduce/đóng góp/replication theo ACM v1.1, cam kết trước ở Bài 15 bước 0. Đây là quyết định diễn giải của bản này, không phải thay đổi tiêu chí.
 - Bỏ câu kết "Chúc mừng bạn đã hoàn thành..." của bản Gemini.
 
-### 12. Tự kiểm tra
+- Reviewer (đối chiếu `khoa-4-benchmark-edge.md`, mục GATE KHÓA 4): 7 tiêu chí, ngưỡng ±2°C, FAIL action và quy tắc "cắt Module 4, không cắt Module 3" khớp nguyên văn; không ngưỡng nào bị đổi. Đổi tiêu đề phần 12 cho đúng khung rút gọn và thêm nguồn.
+
+### 12. Đọc thêm và tự kiểm tra
+
+- **Nguồn gốc:** `00-lo-trinh-tong.md`, mục M6 (5 tiêu chí PASS và FAIL action gốc); `khoa-4-benchmark-edge.md`, mục GATE KHÓA 4 (tiêu chí 6–7).
+- **Giải thích:** Brendan Gregg, "Evaluating the Evaluation: A Benchmarking Checklist" (blog, 2018) — dùng như rubric cuối cùng trước khi tick tiêu chí 5.
+- **Đào sâu (tùy chọn):** ACM, "Artifact Review and Badging – Current" (v1.1) — để phân loại đúng loại xác nhận ở tiêu chí 4.
 
 - (1) Giải thích trong 5 câu vì sao tiêu chí 4 không được phép chặn việc bắt đầu Khóa 5.
 - (2) Với mỗi tiêu chí, nói ra file nào trong repo là bằng chứng, không nhìn bảng.

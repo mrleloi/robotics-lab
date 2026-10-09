@@ -64,7 +64,7 @@ Sai số giữa hai luồng là **hiệu** hai vế: `(b_A − b_B) + (y_A − y
 3. **Biên khác độ lệch chuẩn.** Nếu chỉ biết "|sai| ≤ a" và không biết gì hơn, coi phân bố đều: `u = a/√3` (GUM loại B). Trộn "±a tối đa" với "σ" trong cùng một phép RSS là lỗi phổ biến nhất của bảng ngân sách.
 4. **RSS bị thống trị bởi số hạng lớn nhất.** Thành phần bằng 1/3 thành phần lớn nhất chỉ đóng góp ~5% vào tổng. Giống profiling: tối ưu hàm chiếm 2% thời gian là phí công.
 
-Phép đổi đơn vị phải thuộc: **sai tần số tương đối `y` (ppm) × thời gian = sai pha tích lũy**. `y` ppm nghĩa là mỗi giây lệch `y` µs; một giờ là 3600 s, nên `ms/giờ = ppm × 3,6`. Ví dụ phương pháp: 20 ppm × 3600 s = 72 000 µs = 72 ms [chuẩn]. Chú ý cái bạn đo được luôn là **hiệu** ppm của hai đồng hồ, không phải ppm của từng cái.
+Phép đổi đơn vị phải thuộc: **sai tần số tương đối `y` (ppm) × thời gian = sai pha tích lũy**. `y` ppm nghĩa là mỗi giây lệch `y` µs; một giờ là 3600 s, nên `ms/giờ = ppm × 3,6`. Ví dụ phương pháp: 7 ppm × 3600 s = 25 200 µs = 25,2 ms [chuẩn]. Chú ý cái bạn đo được luôn là **hiệu** ppm của hai đồng hồ, không phải ppm của từng cái.
 
 Mô phỏng đồ chơi để thấy ba quy tắc cộng bằng số (chạy trước khi tin):
 
@@ -255,6 +255,8 @@ Dụng cụ đo ở bài này là datasheet: sai số của nó là "nhà sản 
 - Gemini Bước 1: "thạch anh ESP32 ±10 ppm ở 25 °C và ±20–30 ppm theo dải nhiệt" — con số thứ hai không có nguồn; tài liệu Espressif chỉ nêu một yêu cầu ±10 ppm. Bắt người học tra và ghi rõ điều kiện.
 - Gemini ví dụ tự kiểm tra chỉ quy sai số thời gian ra sai số tịnh tiến; thêm sai số quay (`r·ω·Δt`), thường lớn hơn.
 
+**Reviewer sửa (K5-m2):** ví dụ đổi đơn vị ở mục 2 dùng đúng 20 ppm mà bước 1 bắt tính → đổi sang 7 ppm để không lộ đáp án bước 1. Đã chạy lại mô phỏng ngân sách: khớp mô tả. `b12_budget.py` mà bước 4 nhắc tới nằm ở Bài 12.
+
 ### 12. Đọc thêm và tự kiểm tra
 
 - **Nguồn gốc:** GAO, *Patriot Missile Defense: Software Problem Led to System Failure at Dhahran, Saudi Arabia*, GAO/IMTEC-92-26 (1992). JCGM 100:2008, *Evaluation of measurement data — Guide to the expression of uncertainty in measurement* (GUM).
@@ -274,7 +276,7 @@ Dụng cụ đo ở bài này là datasheet: sai số của nó là "nhà sản 
 
 ### 1. Câu chuyện — ai đã khổ vì chuyện này
 
-Kính thiên văn vô tuyến giao thoa đường đáy rất dài (VLBI) là người khổ nhất vì bài toán này và giải nó đẹp nhất. Các đài cách nhau hàng nghìn km cùng thu *một* mặt sóng vô tuyến từ một quasar; mỗi đài ghi dữ liệu lên đĩa kèm timestamp từ đồng hồ maser hydro của riêng mình, rồi gửi đĩa về trung tâm xử lý. Ở đó, máy tương quan tìm độ lệch thời gian và độ lệch *tốc độ* giữa các đồng hồ như những tham số chưa biết, bằng chính tín hiệu chung mà các đài cùng thấy [chuẩn]. Kính Event Horizon Telescope chụp ảnh lỗ đen năm 2019 làm đúng như vậy. Họ không tin đồng hồ nào là "thật"; họ tin *sự kiện chung*.
+Kính thiên văn vô tuyến giao thoa đường đáy rất dài (VLBI) là người khổ nhất vì bài toán này và giải nó đẹp nhất. Các đài cách nhau hàng nghìn km cùng thu *một* mặt sóng vô tuyến từ một quasar; mỗi đài ghi dữ liệu lên đĩa kèm timestamp từ đồng hồ maser hydro của riêng mình, rồi gửi đĩa về trung tâm xử lý. Ở đó, máy tương quan tìm độ lệch thời gian và độ lệch *tốc độ* giữa các đồng hồ như những tham số chưa biết, bằng chính tín hiệu chung mà các đài cùng thấy [chuẩn]. Mạng Event Horizon Telescope, công bố ảnh lỗ đen đầu tiên năm 2019 (dữ liệu ghi năm 2017), làm đúng như vậy. Họ không tin đồng hồ nào là "thật"; họ tin *sự kiện chung*.
 
 Thí nghiệm của bạn là phiên bản trên bàn của ý tưởng đó: một cạnh điện áp là "mặt sóng", hai ESP32 là hai "đài", và đường thẳng bạn fit là "fringe fitting" của người nghèo. Nó đẹp vì không có mạng, không có hệ điều hành ở giữa: hiệu timestamp là sai lệch đồng hồ cộng với sai số của chính cách bạn đọc đồng hồ, và bài này bắt bạn tách hai thứ đó ra.
 
@@ -523,6 +525,8 @@ Chú ý dòng "± ppb": nó giả định phần dư là nhiễu trắng. Khi nh
 - Gemini đáp án tự kiểm tra 2: "hai thạch anh cùng mẻ lệch nhau ±10 đến ±20 ppm" — nhầm cận dung sai với giá trị điển hình.
 - Thêm: ghép cạnh theo thời gian host (gốc và Gemini ghép theo số thứ tự, gãy khi mất cạnh); không ghi LA cả giờ ở 24 MHz.
 
+**Reviewer sửa (K5-m2):** EHT "chụp ảnh lỗ đen năm 2019" → công bố 2019, dữ liệu ghi 2017. Đã chạy lại `b8_fit.py` với dữ liệu giả: khớp.
+
 ### 12. Đọc thêm và tự kiểm tra
 
 - **Nguồn gốc:** ESP-IDF Programming Guide (ESP32-S3): *High Resolution Timer (ESP Timer)*, *GPIO & RTC GPIO*, *Interrupt Allocation*, *MCPWM*; kiểm theo phiên bản bạn cài.
@@ -600,7 +604,7 @@ Bỏ tầng 2 thì `date`, Python `time.time_ns()`, ROS 2 `now()` vẫn sai dù 
        └────────── cáp Cat6 nối thẳng ──────┘
 ```
 
-Hai PHC là hai đồng hồ phần cứng độc lập (mỗi i225/i226 một thạch anh riêng [tự đo: kiểm `ethtool -T` ra hai chỉ số PHC khác nhau]), trôi riêng, đúng như hai máy. Chạy ptp4l với **transport L2** (`-2` hoặc `network_transport L2`, khung Ethernet thô): với UDP/IP, hai địa chỉ IP cùng một máy thì kernel giao gói nội bộ, không ra dây.
+Hai PHC là hai đồng hồ phần cứng độc lập (mỗi i225/i226 một thạch anh riêng [tự đo: kiểm `ethtool -T` ra hai chỉ số PHC khác nhau]), trôi riêng, đúng như hai máy. Chạy ptp4l với **transport L2** (`-2` hoặc `network_transport L2`, khung Ethernet thô): với UDP/IP (mặc định `-4`), hai cổng mang hai địa chỉ IP của *cùng* một máy, và đường IP giữa hai địa chỉ cục bộ dễ bị kernel đi tắt nội bộ hoặc loại gói đến có địa chỉ nguồn là IP của chính máy [tự đo]; khung L2 không qua định tuyến IP nên chắc chắn ra dây. Đừng nhầm `-2` với chế độ đóng dấu: `-2` chỉ chọn transport; hardware timestamping là `-H`, và đó đã là **mặc định** [spec: ptp4l(8), OPTIONS]. Cũng vì `-H` đòi mọi cổng của một instance gắn cùng một PHC [spec: ptp4l(8)], hai cổng hai PHC trong bài này cần **hai instance**.
 
 **Trọng tài.** Kernel cho đọc PHC "kẹp" giữa hai lần đọc đồng hồ hệ thống: ioctl `PTP_SYS_OFFSET_EXTENDED` trả về các bộ ba `(sys_trước, phc, sys_sau)` [spec: `include/uapi/linux/ptp_clock.h`]. `phc − (sys_trước + sys_sau)/2` là offset PHC so với hệ thống, sai không quá `(sys_sau − sys_trước)/2`: đó là **độ rộng kẹp**, sai số của trọng tài. Đọc A, rồi B, rồi A lần nữa; nội suy A về thời điểm đọc B; lấy hiệu → offset A−B. CLOCK_REALTIME chỉ là "đồng hồ trung chuyển": giá trị của nó triệt tiêu trong hiệu, chỉ có tốc độ của nó trong vài µs giữa hai lần đọc là còn (và nội suy A–B–A khử phần tuyến tính). Phép đo này độc lập với ptp4l ở chỗ quan trọng: ptp4l ước lượng offset từ **timestamp gói tin đi qua dây**; trọng tài đọc **thanh ghi đồng hồ** qua PCIe. Hai phương pháp, hai nguồn sai số khác nhau; đúng tinh thần kiểm tra chéo của Khóa 1.
 
@@ -632,11 +636,12 @@ def run(sigma_ts, asym=0.0, y_ppm=25.0, N=600, kp=0.7, ki=0.3, seed=1):
         true.append(theta); rep.append(off)
     return np.array(true), np.array(rep)
 
-cases = {"HW, sigma=8 ns": (8e-9, 0), "SW, sigma=20 us": (20e-6, 0),
-         "HW + bat doi xung 200 ns": (8e-9, 200e-9)}
+cases = {"HW, sigma=8 ns": (8e-9, 0, 0.7, 0.3),            # kp, ki mặc định của ptp4l cho HW
+         "SW, sigma=20 us": (20e-6, 0, 0.1, 0.001),         # ... và cho software timestamping
+         "HW + bat doi xung 200 ns": (8e-9, 200e-9, 0.7, 0.3)}
 fig, ax = plt.subplots(figsize=(8, 4))
-for name, (s, a) in cases.items():
-    true, rep = run(s, a)
+for name, (s, a, kp, ki) in cases.items():
+    true, rep = run(s, a, kp=kp, ki=ki)
     ss = slice(120, None)  # bỏ 2 phút đầu (hội tụ)
     print(f"{name:26s} |offset thật| p50={np.median(abs(true[ss]))*1e9:9.1f} ns"
           f"   |offset tự báo| p50={np.median(abs(rep[ss]))*1e9:9.1f} ns")
@@ -659,7 +664,7 @@ Các σ timestamp trong mô phỏng là [giả định] để thấy hình dạn
 **Chấm mô hình:**
 
 - *"`ptp4l` báo master offset vài ns, vậy hai đồng hồ lệch vài ns"* — **SAI.** Offset tự báo chỉ chứa phần nhiễu timestamp mà servo thấy; nó mù với bất đối xứng đường truyền, với sai số của bộ đếm PHC khi được đọc, và với tầng 2 (phc2sys). **Phản ví dụ:** mô phỏng trên, trường hợp bất đối xứng 200 ns: tự báo vài ns, thật ~100 ns.
-- *"`-2` (L2) ổn định hơn UDP vì bỏ được IP stack"* (Gemini, đáp án tự kiểm tra 1) — **SAI** về lý do. Với hardware timestamping, timestamp lấy ở NIC nên chi phí IP stack không vào phép đo. Lý do thật để dùng L2 *trong bài này*: hai cổng cùng máy, gói UDP tới IP cục bộ được kernel giao nội bộ, không ra dây. **Phản ví dụ:** hai máy khác nhau qua switch, PTP UDPv4 với hardware timestamping cho độ chính xác tương đương L2 [chuẩn].
+- *"`-2` (L2) ổn định hơn UDP vì bỏ được IP stack"* (Gemini, đáp án tự kiểm tra 1) — **SAI** về lý do. Với hardware timestamping, timestamp lấy ở NIC nên chi phí IP stack không vào phép đo. Lý do thật để dùng L2 *trong bài này*: hai cổng cùng máy, đường IP giữa hai địa chỉ cục bộ dễ bị kernel đi tắt hoặc loại [tự đo]; khung L2 không qua định tuyến IP. **Phản ví dụ:** hai máy khác nhau qua switch, PTP UDPv4 với hardware timestamping cho độ chính xác tương đương L2 [chuẩn].
 - *"Trọng tài đọc PHC là độc lập hoàn toàn"* (dễ tự xây từ bản gốc) — **ĐÚNG MỘT PHẦN.** Độc lập với timestamp gói tin, nên bắt được lỗi servo, lỗi cấu hình, tầng 2. Không độc lập với bất đối xứng của PHY dưới mức độ rộng kẹp: nếu bất đối xứng gây sai 30 ns và kẹp rộng 1 µs, trọng tài cũng không thấy. Kết luận đúng là "offset < X", với X là sai số trọng tài.
 
 ### 4. Thuật ngữ
@@ -704,7 +709,7 @@ linuxptp version: ___  kernel: ___  driver (ethtool -i): ___
 
 ### 6. Làm
 
-**Bước 0 — chuẩn bị (1h).** Tìm PHC của từng cổng: `ethtool -T <iface1>` và `ethtool -T <iface2>` (dòng `PTP Hardware Clock: N` → `/dev/ptpN`; hai số phải khác nhau). Ghi `ptp4l -v`, `uname -r`, `ethtool -i <iface>` (driver `igc`). Biên dịch `testptp` từ cây nguồn kernel (`tools/testing/selftests/ptp/testptp.c`) và chạy `sudo ./testptp -d /dev/ptpN -x 10`: mỗi mẫu in `real time before`, `phc time`, `real time after`, hiệu của dòng đầu và dòng cuối là độ rộng kẹp. Đây là phép đo đầu tiên của sai số trọng tài.
+**Bước 0 — chuẩn bị (1h).** Tìm PHC của từng cổng: `ethtool -T <iface1>` và `ethtool -T <iface2>` (dòng `PTP Hardware Clock: N` → `/dev/ptpN`; hai số phải khác nhau). Ghi `ptp4l -v`, `uname -r`, `ethtool -i <iface>` (driver `igc`). Biên dịch `testptp` từ cây nguồn kernel (`tools/testing/selftests/ptp/testptp.c`) và chạy `sudo ./testptp -d /dev/ptpN -x 10`: mỗi mẫu in một bộ ba (đồng hồ hệ thống trước, PHC, đồng hồ hệ thống sau) [tự đo: định dạng in theo bản kernel], hiệu của số đầu và số cuối là độ rộng kẹp. Đây là phép đo đầu tiên của sai số trọng tài.
 
 **Bước 1 — đo baseline, trước (1h chạy + 0,5h).** Không chạy ptp4l. Chạy trọng tài mỗi giây trong **≥1 giờ**:
 
@@ -748,7 +753,7 @@ Ba ghi chú về script. Mọi phép tính trên ns là **số nguyên**: thời
 
 Bạn sẽ thấy hai PHC trôi xa dần: đó là drift của hai bộ dao động.
 
-**Bước 2 — bật PTP giữa hai cổng (2h).** Hai instance ptp4l cùng một máy **cần hai file cấu hình riêng**: mỗi instance mở một UNIX socket quản lý (`uds_address`, mặc định `/var/run/ptp4l`) và một socket chỉ đọc (`uds_ro_address`, mặc định `/var/run/ptp4lro`); hai instance cùng mặc định sẽ giẫm lên nhau [spec: ptp4l(8), linuxptp v4.0–v4.4; nhánh phát triển hiện tại chuyển mặc định sang `/var/run/ptp/ptp4l`, kiểm `man ptp4l` của bản bạn cài]. `clockIdentity` mặc định được sinh tự động (từ địa chỉ MAC) nên hai cổng tự khác nhau; chỉ đặt tay nếu bạn đã đặt nó ở đâu đó. `domainNumber` phải **giống** nhau (mặc định 0) thì hai bên mới nói chuyện; chỉ đổi domain khi muốn cách ly khỏi PTP khác trên cùng mạng.
+**Bước 2 — bật PTP giữa hai cổng (2h).** Hai instance ptp4l cùng một máy **cần hai file cấu hình riêng**: mỗi instance mở một UNIX socket quản lý (`uds_address`, mặc định `/var/run/ptp4l`) và một socket chỉ đọc (`uds_ro_address`, mặc định `/var/run/ptp4lro`) [spec: ptp4l(8), linuxptp v4.0–v4.4; nhánh phát triển sau v4.4 chuyển mặc định sang `/var/run/ptp/ptp4l`, kiểm `man ptp4l` của bản bạn cài]. Hai instance cùng mặc định **không báo lỗi**: instance thứ hai xóa (`unlink`) socket cũ rồi bind lại, im lặng ở v4.0–v4.2, từ v4.3 chỉ có một dòng log "uds: removed existing …" [spec: `uds.c` trong mã nguồn linuxptp; hành vi tự kiểm, → F4.5]. Instance đầu vẫn chạy, nhưng mọi lệnh `pmc` từ đó về sau nói với instance thứ hai: bạn tưởng đang hỏi trạng thái slave mà thật ra đọc của master. Hỏng im lặng, nên phải phòng từ cấu hình. `clockIdentity` mặc định được sinh tự động (từ địa chỉ MAC) nên hai cổng tự khác nhau; chỉ đặt tay nếu bạn đã đặt nó ở đâu đó. `domainNumber` phải **giống** nhau (mặc định 0) thì hai bên mới nói chuyện; chỉ đổi domain khi muốn cách ly khỏi PTP khác trên cùng mạng.
 
 ```ini
 # master.cfg  [tự đo: kiểm tên tùy chọn theo `man ptp4l` của bản bạn cài]
@@ -782,9 +787,9 @@ sudo timedatectl set-ntp false              # tránh hai bộ cùng chỉnh CLOC
 sudo phc2sys -s enp1s0 -c CLOCK_REALTIME -O 0 -m
 ```
 
-Ba lệnh của bản gốc được sửa: `--masterOnly 1` và `--slaveOnly 1` là tên cũ, đã deprecated (thay bằng `serverOnly`/`clientOnly`); và **`-p` không tách socket** như bản Gemini viết: `-p` chỉ định *thiết bị PHC* (đã deprecated, dành cho kernel cũ trước v3.5) [spec: ptp4l(8)]. Cảnh báo với `phc2sys -O 0`: nếu PHC A chưa từng được đặt giờ, phc2sys sẽ nhảy CLOCK_REALTIME về giờ của PHC (có thể là năm 1970 hoặc lệch 37 s do TAI); đặt PHC A theo giờ hệ thống trước bằng `sudo phc_ctl /dev/ptpA set` [spec: phc_ctl(8)], hoặc chỉ chạy phc2sys ở lần đo riêng. Trọng tài không cần phc2sys để chạy.
+Ba lệnh của bản gốc được sửa: `--masterOnly 1` và `--slaveOnly 1` là tên cũ, đã deprecated (thay bằng `serverOnly`/`clientOnly`); và **`-p` không tách socket** như bản Gemini viết: `-p` chỉ định *thiết bị PHC* (đã deprecated, dành cho kernel cũ trước v3.5) [spec: ptp4l(8)]. Gõ `-p /var/run/ptp4l_slave` theo Gemini thì ptp4l cố mở đường dẫn đó như một PHC, thất bại và thoát lỗi ngay lúc khởi động [spec: `clock.c`, mã nguồn linuxptp; tự kiểm trên bản cài: đây là một thí nghiệm 10 giây đáng làm để thấy tài liệu sai trông thế nào]. Cảnh báo với `phc2sys -O 0`: nếu PHC A chưa từng được đặt giờ, phc2sys sẽ nhảy CLOCK_REALTIME về giờ của PHC (có thể là năm 1970 hoặc lệch 37 s do TAI); đặt PHC A theo giờ hệ thống trước bằng `sudo phc_ctl /dev/ptpA set` [spec: phc_ctl(8)], hoặc chỉ chạy phc2sys ở lần đo riêng. Trọng tài không cần phc2sys để chạy.
 
-Ghi lại **toàn bộ** log ptp4l (`master offset`, `freq`, `path delay`; dòng có `s0/s1/s2` là trạng thái servo) [tự đo: định dạng theo phiên bản]. Đừng chỉ tin con số đó. Nếu hai instance giẫm lên nhau, đó là một chi tiết đáng ghi vào lab notebook.
+Ghi lại **toàn bộ** log ptp4l (`master offset`, `freq`, `path delay`; dòng có `s0/s1/s2` là trạng thái servo) [tự đo: định dạng theo phiên bản]. Đừng chỉ tin con số đó. Kiểm hai instance không giẫm lên nhau: `ls -l /var/run/ptp4l*` phải thấy bốn socket riêng, và `pmc -u -s /var/run/ptp4l-a …` với `… -s /var/run/ptp4l-b …` phải trả về hai `clockIdentity` khác nhau. Ghi kết quả vào lab notebook.
 
 **Bước 3 — đo lại bằng trọng tài (0,5h).** Chạy lại `b9_arbiter.py` khi slave đã ở trạng thái SLAVE và servo đã khóa (`s2`). Đây là điểm quan trọng nhất của bài: ptp4l tự báo offset của chính nó, và đó là **tự chấm điểm**. Nếu hai con số khác nhau nhiều, tìm hiểu vì sao trước khi tin bên nào.
 
@@ -815,7 +820,7 @@ Ghi lại **toàn bộ** log ptp4l (`master offset`, `freq`, `path delay`; dòng
 | Hội tụ lại sau rút cáp 10 s | Chục giây tới vài phút tùy servo và việc có nhảy đồng hồ hay không [ước lượng] |
 | NTP qua LAN (để so, nếu có máy thứ hai) | Chục µs tới ms tùy chrony/ntpd, tải, có HW timestamping hay không |
 
-Gemini ghi "kẹp ≈ 1–2 µs" như sự thật: chưa kiểm, giữ [tự đo].
+Gemini ghi "kẹp ≈ 1–2 µs" và đánh dấu nó là PASS: sai vai trò. Độ rộng kẹp là độ bất định của **trọng tài**, không phải tiêu chí PASS của hệ; gate gốc chỉ đòi phân bố offset trước/sau ≥ 1 giờ kèm phương pháp và sai số của phép đo, không đặt ngưỡng cho kẹp. Con số 1–2 µs cũng chưa có nguồn: giữ [tự đo], báo phân bố (p50/p99, số lần loại) chứ không báo một số (→ F4.7).
 
 **Nếu PTP của bạn chỉ ngang NTP**, gần như chắc chắn đang chạy software timestamping. Kiểm `ethtool -T`, tùy chọn `time_stamping` trong file cấu hình, cờ `-S`, và dòng ptp4l in lúc khởi động về chế độ đóng dấu.
 
@@ -826,7 +831,8 @@ Gemini ghi "kẹp ≈ 1–2 µs" như sự thật: chưa kiểm, giữ [tự đo
 
 | Triệu chứng | Nguyên nhân khả dĩ | Kiểm bằng cách | Sửa |
 |---|---|---|---|
-| Instance thứ hai báo lỗi bind socket / "Address already in use" | Hai instance dùng chung `uds_address` (hoặc `uds_ro_address`) | `ls -l /var/run/ptp4l*` | Hai file cấu hình riêng như bước 2 |
+| `pmc` trả lời từ sai instance (hai lần hỏi ra cùng `clockIdentity`), hoặc log có "uds: removed existing" | Hai instance dùng chung `uds_address` (hoặc `uds_ro_address`): instance sau xóa socket của instance trước, không báo "Address already in use" | `ls -l /var/run/ptp4l*`; `pmc -s <socket> 'GET DEFAULT_DATA_SET'` cho từng socket | Hai file cấu hình riêng như bước 2 |
+| ptp4l thoát ngay lúc khởi động khi có `-p /var/run/...` | `-p` là thiết bị PHC (deprecated), không phải socket | Đọc dòng lỗi đầu tiên; `man ptp4l` mục `-p` | Bỏ `-p`; tách socket bằng `uds_address` trong file cấu hình |
 | ptp4l từ chối tùy chọn `uds_ro_address` hoặc `clientOnly` | Bản linuxptp cũ | `ptp4l -v` | Dùng tên tùy chọn của bản đó (`slaveOnly`), hoặc cài bản mới hơn; ghi lại |
 | Cả hai bên đều ở trạng thái MASTER | Không nhận được Announce của nhau: một bên L2 một bên UDP, khác domain, cáp/link chưa lên | `ip link`, log "new foreign master", `pmc ... GET PORT_DATA_SET` | Đồng bộ `network_transport` và `domainNumber`; kiểm link |
 | "timed out while polling for tx timestamp" | Driver trả timestamp TX chậm | Log ptp4l; man ptp4l mục lỗi này | Tăng `tx_timestamp_timeout` (mặc định 10 ms [spec]); ghi lại, man page nói khả năng cao là lỗi driver |
@@ -866,7 +872,10 @@ Lộ trình ghi rõ: **PTP không chạy được sau 60h → chuyển sang hard
 
 | Khẳng định | Nhãn | Ghi chú / cách kiểm |
 |---|---|---|
-| `-p` là thiết bị PHC, deprecated; `-s` = clientOnly; `-2` = IEEE 802.3 transport; mặc định hardware timestamping | [spec] | ptp4l(8), linuxptp v4.0–v4.4 và nhánh chính |
+| `-p` là thiết bị PHC, deprecated (kernel < v3.5); `-s` = clientOnly; `-2` = IEEE 802.3 transport; `-H` = hardware timestamping, là mặc định, mọi cổng của instance phải chung một PHC | [spec] | ptp4l(8) OPTIONS; reviewer đối chiếu trang man linuxptp (linuxptp.nwtime.org) |
+| `-p /var/run/...` làm ptp4l thoát lỗi lúc khởi động | [spec] / [tự đo] | `clock.c`; chạy thử 10 giây trên bản cài |
+| Instance thứ hai cùng `uds_address` xóa socket cũ, không báo "Address already in use" (log "uds: removed existing" từ v4.3) | [spec] / [tự đo] | `uds.c` các tag v4.0–v4.4; → F4.5 |
+| UDP giữa hai IP cục bộ bị kernel đi tắt/loại | [tự đo] | Thử `-4` rồi xem bộ đếm `ip -s link` có tăng không |
 | `uds_address` mặc định `/var/run/ptp4l`, `uds_ro_address` `/var/run/ptp4lro` (v4.0–v4.4); nhánh chính chuyển sang `/var/run/ptp/…` | [spec] | So man page theo tag; kiểm bản cài |
 | `masterOnly`/`slaveOnly` deprecated → `serverOnly`/`clientOnly` | [spec] | ptp4l(8) |
 | kp/ki: 0,7/0,3 (HW), 0,1/0,001 (SW); `first_step_threshold` 20 µs; `tx_timestamp_timeout` 10 ms; `logSyncInterval` 0 (1 s) | [spec] | ptp4l(8) |
@@ -885,6 +894,14 @@ Lộ trình ghi rõ: **PTP không chạy được sau 60h → chuyển sang hard
 - Gemini bước 1: đọc A rồi B bằng hai lệnh `phc_ctl cmp` nối tiếp làm trọng tài — thêm sai số do trôi đồng hồ hệ thống giữa hai tiến trình, và `phc_ctl cmp` không in độ rộng kẹp; thay bằng script A–B–A với ioctl, giữ `phc_ctl` để kiểm tra nhanh.
 - Gemini: "độ rộng kẹp ≈ 1–2 µs" như sự thật → [tự đo].
 - Bổ sung: `iperf3` giữa hai cổng cùng máy đi qua loopback (cần network namespace); cảnh báo `phc2sys -O 0` nhảy đồng hồ hệ thống; số học ns phải là số nguyên.
+
+**Reviewer sửa (K5-m2):**
+- Bảng "Nếu ra khác" dòng đầu ghi triệu chứng "Address already in use" (lặp lại Gemini) → sai: instance thứ hai `unlink` socket cũ rồi bind, không báo lỗi; triệu chứng thật là `pmc` nói với sai instance. Thêm dòng "`-p /var/run/...` làm ptp4l thoát lỗi".
+- Bước 2: thêm hành vi xóa socket im lặng và cách kiểm (bốn socket, hai `clockIdentity`); thêm hậu quả của `-p` theo Gemini (thoát lỗi, không phải "tách socket").
+- Mục 2: tách rõ `-2` (transport) với `-H` (hardware timestamping, mặc định); thêm lý do cần hai instance (`-H` đòi mọi cổng chung một PHC). Lý do dùng L2 hạ xuống [tự đo] (đường IP giữa hai địa chỉ cục bộ), vì PTP UDP mặc định là multicast, câu "kernel giao nội bộ" không chắc đúng cho mọi gói.
+- Mục 7: độ rộng kẹp 1–2 µs không được dùng làm tiêu chí PASS; nói rõ vai trò (U của trọng tài).
+- Mô phỏng servo: trường hợp software timestamping dùng kp/ki của software (0,1/0,001) thay vì của hardware, đúng như văn bản mô tả; đã chạy lại.
+- `testptp -x`: không khẳng định chuỗi in ra, hạ [tự đo].
 
 ### 12. Đọc thêm và tự kiểm tra
 

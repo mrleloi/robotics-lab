@@ -4,6 +4,24 @@ Module này không chạy benchmark nào. Nó trả lời ba câu trước khi b
 
 Định dạng gốc sáu phần (Câu hỏi · Khái niệm · Làm · Số phải ra · Nếu ra khác · Tự kiểm tra) được mở rộng thành khung 12 phần của `giao-trinh/_QUY-CHUAN.md`. Mọi bước, tiêu chí và giờ của bản gốc được giữ; chỗ sai được sửa và ghi ở phần 11 từng bài.
 
+> **Cần trước:** K2 PASS (MCAP, schema, đọc dataset LeRobot v3.0). Học đúng lúc: F7.1 (Bài 1), F1.2 + F1.4 + F7.4 (trước Bài 2), F1.3 + F1.1 + F1.7 + F2.2 (trước Bài 3) · **Artifact của module:** `notes/01-model-anatomy.md`, `prediction.md` toàn khóa (commit trước mọi phép đo), `METHODOLOGY.md` bản 0.
+
+```mermaid
+flowchart LR
+  B1["Bài 1<br/>VLA ở mức tensor<br/>chunk, prefix, solver step"] --> B2["Bài 2<br/>Đo cái gì<br/>mốc, percentile, số mẫu"]
+  B2 --> B3["Bài 3<br/>Methodology<br/>warmup, A/A, coordinated omission"]
+  B3 --> M2["Module 2<br/>Harness"]
+  F71(["F7.1 Little"]) -.-> B1
+  F12(["F1.2 + F1.4 percentile, CI"]) -.-> B2
+  F13(["F1.3 benchmark đúng cách"]) -.-> B3
+```
+
+| Bài | Giờ | Viên nang nền cần trước | Quyết định ra được |
+|---|---|---|---|
+| 1 VLA ở mức tensor | 3 | F7.1 | Harness bấm giờ hàm nào; "chạy kịp" so với cái gì |
+| 2 Đo cái gì | 3 | F1.2, F1.4, F7.4 | Một con số là "đo nhầm thứ", "hợp lý" hay "đáng báo"; bao nhiêu mẫu cho percentile nào |
+| 3 Methodology | 4 | F1.3, F1.1, F1.7, F2.2 | Kế hoạch đo cam kết trước và quy tắc ba trạng thái nhanh hơn / chậm hơn / không phân biệt được |
+
 ---
 
 ## Bài 1 — VLA model là cái gì, ở mức tensor (3h)
@@ -16,7 +34,7 @@ Năm 2023, nhóm của Tony Zhao (Stanford) dựng ALOHA, một cặp tay robot 
 
 Chunking giải bài toán chất lượng nhưng đẻ ra bài toán hạ tầng. Khi model lớn lên thành VLA (π0 của Physical Intelligence năm 2024, rồi SmolVLA của Hugging Face năm 2025), một lần inference tốn hàng trăm mili-giây trên phần cứng tiêu dùng. Nếu chạy **đồng bộ** (hết chunk mới chạy model), robot đứng khựng mỗi khi chờ chunk mới. Paper SmolVLA đề xuất một stack **asynchronous inference** để tách việc dự đoán khỏi việc thực thi, chính vì cái khựng này `[spec: SmolVLA paper, arXiv 2506.01844, phần async inference]`. Physical Intelligence sau đó công bố *Real-Time Execution of Action Chunking Flow Policies* (real-time chunking, RTC) để xử lý chỗ nối giữa chunk cũ và chunk mới khi inference chậm `[chuẩn — tên paper; chi tiết đọc bản gốc]`. LeRobot hiện có hẳn một thư mục `policies/rtc` `[tự đo — kiểm trên nhánh bạn cài]`.
 
-Bài học cho người làm benchmark: "latency của VLA" không có nghĩa nếu bạn không nói rõ nó được so với cái gì. Một model 4 Hz có thể điều khiển robot mượt, hoặc làm robot khựng 14% thời gian, tùy cách thực thi chunk.
+Bài học cho người làm benchmark: "latency của VLA" không có nghĩa nếu bạn không nói rõ nó được so với cái gì. Cùng một model 4 Hz có thể điều khiển robot mượt, hoặc làm robot khựng định kỳ một phần đáng kể thời gian, tùy cách thực thi chunk (bạn tự tính bao nhiêu ở Đề 4).
 
 ### 2. Mô hình tư duy
 
@@ -57,6 +75,22 @@ Ba điều quyết định mọi thứ về hiệu năng:
    `L ≈ t_pre + t_prefix + num_steps × t_expert_step + t_post`. Đây là một đường thẳng theo `num_steps`, và hệ số góc/điểm cắt là thứ bạn sẽ đo ở Bài 5.
 3. **Wrapper có trạng thái.** Trong LeRobot, `select_action` giữ một hàng đợi: chỉ khi hàng đợi rỗng nó mới chạy model và nạp `n_action_steps` action vào; các lần gọi còn lại chỉ `popleft()` `[spec: src/lerobot/policies/smolvla/modeling_smolvla.py, nhánh main 10/2026]`. Bấm giờ `select_action` cho ra một phân bố hai đỉnh: phần lớn lần gọi gần như 0 ms, một phần nhỏ là inference thật.
 
+Mô phỏng 10 dòng cho điểm 3 (số latency là **giả định**, không phải số đo). Chạy nó, rồi tự hỏi: percentile nào trong này là "latency của model"?
+
+```python
+# [đã chạy] select_action trong vòng lặp: 1/50 lần gọi chạy model, 49/50 chỉ lấy từ hàng đợi
+import numpy as np
+rng = np.random.default_rng(0)
+n = 5000
+heavy = rng.normal(180.0, 8.0, n)      # ms — lần gọi có forward thật (GIẢ ĐỊNH)
+light = rng.normal(0.03, 0.005, n)     # ms — chỉ popleft()
+is_heavy = (np.arange(n) % 50) == 0    # n_action_steps = 50
+lat = np.where(is_heavy, heavy, light)
+for q in (50, 95, 98, 99, 99.9):
+    print(f"select_action p{q}: {np.percentile(lat, q):8.3f} ms")
+print(f"mean: {lat.mean():.2f} ms")
+```
+
 Chunk là một **buffer giữa producer (model) và consumer (bộ điều khiển)**. Định luật Little áp thẳng vào: hàng đợi action được tiêu với tốc độ λ = fps; một chunk H action "sống" trong hàng đợi H/fps giây. Khác với buffer audio ở K3, nội dung buffer này **mất giá trị theo tuổi**: action cuối cùng của chunk được tính từ một observation đã cũ H/fps giây.
 
 Thời gian thực thi đồng bộ vs bất đồng bộ (L = latency, mỗi `a` là một tick điều khiển):
@@ -68,7 +102,7 @@ Async(k):  obs─[ infer L ]─a a a a a … a a a a a a a a a …
                                   obs─[ infer L ]──┘ (bắt đầu khi còn k action; xong thì thay chunk)
 ```
 
-Mô phỏng đồ chơi dưới đây đo hai thứ: tỉ lệ tick robot không có action (đứng), và **tuổi của observation** đứng sau action đang thực thi. Chạy nó **sau** khi viết dự đoán ở phần 5.
+Mô phỏng đồ chơi dưới đây đo hai thứ: tỉ lệ tick robot không có action (đứng), và **tuổi của observation** đứng sau action đang thực thi. Chạy nó **sau** khi viết dự đoán ở phần 5. Mặc định `fps=30` là giả định cho một tay robot thu dữ liệu ở 30 fps; hai dataset có sẵn trong `data/` (LIBERO, PushT) ghi ở tần số khác — đọc `meta/info.json` rồi chạy lại với `fps` đúng của chúng để thấy cùng một latency có nghĩa khác nhau thế nào.
 
 ```python
 # [đã chạy] Mô phỏng thực thi action chunk: đồng bộ vs bất đồng bộ
@@ -157,6 +191,8 @@ Viết các dự đoán dưới đây vào `notes/prediction-b1.md`, commit, r�
 
 Tra ở đâu: `src/lerobot/policies/smolvla/configuration_smolvla.py` (các trường `chunk_size`, `n_action_steps`, `num_steps`, `max_state_dim`, `max_action_dim`, `resize_imgs_with_padding`), `policy.config.input_features` / `output_features`, và `meta/info.json` của dataset bạn đã đọc ở K2 (SO-101 có bao nhiêu motor, tính cả gripper?).
 
+**Đề 1b — Từ `info.json` ra byte.** Mở `data/libero/meta/info.json` và `data/lerobotpusht/meta/info.json` (đã tải ở K2; nếu máy bạn chưa có, `huggingface-cli download --repo-type dataset <repo> --include "meta/*"` chỉ tải phần meta, vài KB — dùng đúng repo id bạn đã tải ở K2, ví dụ `lerobot/pusht` `[tự đo — kiểm tên repo trên Hub]`). Đọc `fps`, các key `observation.image*` và `shape`, shape `observation.state` / `action`. Dự đoán cho mỗi dataset: số camera; byte một ảnh uint8; byte tensor ảnh float32 `(1, 3, H, W)` trước resize và sau resize-pad của SmolVLA; execution horizon `n_action_steps / fps` (giây). Phương pháp: byte = tích các chiều × byte/phần tử (uint8 = 1, float32 = 4).
+
 **Đề 2 — Kích thước.** Paper SmolVLA công bố khoảng 450M tham số. Dự đoán phần trăm tham số nằm ở action expert so với phần VLM. Tra: trường `vlm_model_name`, `num_vlm_layers` trong config; số layer gốc của VLM đó trên model card.
 
 **Đề 3 — Latency theo solver step.** Dùng công thức `L ≈ t_pre + t_prefix + num_steps × t_expert_step + t_post`. Dự đoán, ở giá trị `num_steps` mặc định, phần expert chiếm bao nhiêu phần trăm `t_inference`. Phương pháp: ước lượng FLOP thô = 2 × (số tham số phần đó) × (số token đi qua phần đó); prefix có bao nhiêu token (ảnh → bao nhiêu token mỗi camera? tra config/paper), expert có bao nhiêu token (= chunk_size). Không cần đúng, cần có lập luận. Số đo thật đến ở Bài 5.
@@ -167,6 +203,7 @@ Tra ở đâu: `src/lerobot/policies/smolvla/configuration_smolvla.py` (các tr�
 # prediction-b1.md — commit trước khi chạy bất cứ thứ gì
 - Ảnh sau preprocessor: shape = ..., H×W model thấy = ...   (lý do: ...)
 - State: trước pad = (B, ...), sau pad = (B, ...)
+- libero / pusht: số camera ..., ...; byte ảnh uint8 ..., ...; byte float32 sau resize-pad ...; fps ..., ...; horizon (s) ..., ...
 - predict_action_chunk -> (..., ..., ...)   select_action -> (..., ...)
 - Tham số: tổng ≈ ...M, expert ≈ ...%      (cách tính: ...)
 - Ở num_steps mặc định, expert chiếm ≈ ...% t_inference   (cách tính: ...)
@@ -181,14 +218,26 @@ Tra ở đâu: `src/lerobot/policies/smolvla/configuration_smolvla.py` (các tr�
 2. **Chạy inference một lần trên observation giả, in shape mọi tensor vào/ra.** Đoạn code dưới đây viết theo bố cục package trên nhánh `main` tháng 10/2026; **kiểm theo phiên bản bạn cài**:
 
    ```python
-   # [chưa chạy] — cần LeRobot + checkpoint; API đổi nhanh, kiểm theo phiên bản bạn cài
-   import torch, lerobot
-   print("lerobot", getattr(lerobot, "__version__", "?"))
-   try:   # bố cục src/ hiện hành: src/lerobot/policies/smolvla/modeling_smolvla.py
-       from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
-       from lerobot.policies.factory import make_pre_post_processors
-   except ImportError:   # bố cục cũ (lerobot/common/...) — nâng cấp thay vì viết code cho nó
-       raise SystemExit("LeRobot quá cũ: đường dẫn lerobot.common.* đã bị bỏ, hãy nâng cấp")
+   # [chưa chạy] — cần LeRobot + checkpoint (~1 GB). [tự đo] MỌI tên module/hàm/key dưới đây:
+   # kiểm theo phiên bản bạn cài. Không có import nào ở đây là "đúng mãi mãi".
+   import importlib, torch, lerobot
+   print("lerobot", getattr(lerobot, "__version__", "?"), "tại", lerobot.__file__)
+
+   def first_import(candidates):
+       """Thử lần lượt các đường dẫn module:tên; trả về đối tượng đầu tiên import được."""
+       for mod, name in candidates:
+           try:
+               return getattr(importlib.import_module(mod), name), f"{mod}.{name}"
+           except (ImportError, AttributeError):
+               pass
+       raise SystemExit(f"Không tìm thấy {candidates[0][1]}: đọc cây thư mục policies/ của bản bạn cài")
+
+   # Bố cục src/ (main 10/2026) trước, bố cục cũ lerobot.common.* sau — ghi lại cái nào chạy được
+   SmolVLAPolicy, where = first_import([("lerobot.policies.smolvla.modeling_smolvla", "SmolVLAPolicy"),
+                                        ("lerobot.common.policies.smolvla.modeling_smolvla", "SmolVLAPolicy")])
+   make_pre_post_processors, where2 = first_import([("lerobot.policies.factory", "make_pre_post_processors"),
+                                                    ("lerobot.policies", "make_pre_post_processors")])
+   print("dùng:", where, "|", where2)   # chép hai dòng này vào notes/01-model-anatomy.md
 
    REPO = "lerobot/smolvla_base"
    policy = SmolVLAPolicy.from_pretrained(REPO).eval()
@@ -213,14 +262,16 @@ Tra ở đâu: `src/lerobot/policies/smolvla/configuration_smolvla.py` (các tr�
    print("chunk:", tuple(chunk.shape), "| select_action:", tuple(one.shape))
    ```
 
-   Nếu dòng import đầu thất bại, **đừng** sao chép import `lerobot.common.policies…` từ tài liệu cũ hay từ bản Gemini; đọc cây thư mục `src/lerobot/policies/` của đúng phiên bản bạn cài.
+   Nếu cả hai đường dẫn đều thất bại, **đừng** sao chép import từ tài liệu cũ, từ bản Gemini hay từ bài này; đọc cây thư mục `policies/` của đúng phiên bản bạn cài (`python -c "import lerobot, os; print(os.listdir(os.path.dirname(lerobot.__file__)))"`). Nếu chỉ đường dẫn `lerobot.common.*` chạy được, bạn đang ở bản cũ: các tên hàm khác (processor, `predict_action_chunk`) cũng có thể chưa tồn tại — nâng cấp và pin phiên bản trong lockfile thay vì vá code (→ F2.2).
 3. **Đọc config:** `chunk_size`, `n_action_steps`, số solver step (`num_steps`), số camera đầu vào (đếm khóa `observation.images.*` trong `input_features`), kích thước ảnh sau resize. Ghi tất cả vào `notes/01-model-anatomy.md`, kèm câu "action thứ k của chunk dành cho thời điểm ___".
-4. **Bấm giờ thô để thấy cái bẫy của wrapper** (không phải benchmark): gọi `select_action` 100 lần liên tiếp trên cùng một batch, ghi thời gian mỗi lần bằng `time.perf_counter_ns()`. Vẽ histogram. Đây là lý do harness ở Bài 4 bấm giờ `predict_action_chunk`.
+4. **Bấm giờ thô để thấy cái bẫy của wrapper** (không phải benchmark): `policy.reset()` một lần, rồi gọi `select_action` 100 lần liên tiếp trên cùng một batch, ghi thời gian mỗi lần bằng `time.perf_counter_ns()`. Vẽ thời gian theo chỉ số lần gọi và histogram. So với mô phỏng 10 dòng ở phần 2. Đây là lý do harness ở Bài 4 bấm giờ `predict_action_chunk`.
+4b. **Nguồn ngẫu nhiên đầu tiên.** Flow matching bắt đầu từ nhiễu, nên hai lần gọi cùng observation cho hai chunk khác nhau. Nếu bản bạn cài cho truyền nhiễu vào (`predict_action_chunk(batch, noise=...)` `[tự đo — kiểm chữ ký hàm]`): gọi hai lần với cùng tensor nhiễu (shape `(1, chunk_size, max_action_dim)`), so hai chunk (phải trùng tới sai số float); gọi hai lần không truyền nhiễu, so (phải khác). Nếu không truyền được, `torch.manual_seed` trước mỗi lần gọi. Ghi lại: đây là nguồn ngẫu nhiên bạn phải kiểm soát ở Bài 7.
+4c. **Thấy hình dạng `t_prefix + K·t_step`.** Đổi `policy.config.num_steps` (10 → 5 → 2) và đo `predict_action_chunk` thô trên CPU, mỗi mức 5 lần. Chưa warmup, chưa cô lập: chỉ để thấy hình dạng. Fit đường thẳng theo K, ghi hệ số chặn và hệ số góc **kèm câu "đo thô, chưa cô lập"**. Sai số của đồng hồ: `perf_counter_ns` có độ phân giải dưới micro-giây `[tự đo: đo chi phí một lần gọi bằng vòng 10⁵ lần]`, nhỏ không đáng kể so với thang giây trên CPU; trên GPU, đồng hồ CPU không đo được thời gian GPU nếu không đồng bộ (→ Bài 5).
 5. **Đọc danh sách policy hiện có** trong docs LeRobot (hoặc cây `src/lerobot/policies/`). Ghi tên và kích thước của ít nhất 6 model, kiểu action head của từng cái (flow matching / diffusion / autoregressive token / regression trực tiếp). Đây là đầu vào cho lựa chọn bộ ba model ở Bài 10.
 6. **Kiểm tra lại các con số mốc ở Bài 2 xem còn đúng không.** Lĩnh vực này đổi nhanh; ghi nguồn và ngày tra.
 7. Chạy mô phỏng ở phần 2, so với Đề 4.
 
-Sai số của dụng cụ ở bài này: không có phép đo vật lý nào. Thứ có thể sai là **phiên bản**: ghi phiên bản LeRobot, torch, transformers và revision checkpoint ngay cạnh mọi shape bạn ghi.
+Sai số của dụng cụ ở bài này: không có phép đo vật lý chính thức nào (bước 4 và 4c là bấm giờ thô). Thứ dễ sai nhất là **phiên bản**: ghi phiên bản LeRobot, torch, transformers, revision checkpoint và đường dẫn import đã chạy ngay cạnh mọi shape bạn ghi.
 
 ### 7. Số phải ra
 
@@ -239,6 +290,24 @@ Giá trị mặc định đọc từ `configuration_smolvla.py` trên nhánh `ma
 | `select_action` | `(B, action_dim)` — **2 chiều là đúng** | Vì nó `popleft()` một phần tử của chunk |
 | VLM | `SmolVLM2-500M-Video-Instruct`, chỉ giữ 16 layer đầu | Đây là lý do tổng ~450M dù VLM gốc ~500M |
 | Số tham số | ~450M theo paper | Số bạn đếm có thể lệch vài chục M tùy có đếm vision encoder bị đóng băng, embedding, buffer hay không — ghi rõ bạn đếm gì |
+
+**Đề 1b** — đọc từ `data/*/meta/info.json` trong repo (codebase v3.0, kiểm 10/2026) `[spec — file dataset; bản bạn tải có thể khác phiên bản]`:
+
+| Mục | `data/libero` | `data/lerobotpusht` |
+|---|---|---|
+| Camera | 2 (`observation.images.image`, `observation.images.image2`), 256×256×3 | 1 (`observation.image`), 96×96×3 |
+| Byte một ảnh uint8 | 196.608 B | 27.648 B |
+| Tensor ảnh float32 `(1, 3, H, W)` trước resize | 786.432 B mỗi camera | 110.592 B |
+| Sau resize-pad 512×512 | `(1, 3, 512, 512)` ≈ 3,15 MB mỗi camera | như bên trái |
+| state / action | 8 / 7 | 2 / 2 |
+| fps | 10 | 10 |
+| Horizon với `n_action_steps = 50` | 5,0 s | 5,0 s |
+
+Hai dataset đều 10 fps, không phải 30: cùng latency 0,25 s, chạy đồng bộ trên LIBERO thì tỉ lệ đứng chỉ ≈ 0,25 / (5 + 0,25) ≈ 4,8%, so với ~13% ở 30 fps. PushT 96×96 bị **phóng** lên 512×512: tensor model thấy lớn hơn ảnh gốc ~28 lần — tiền xử lý không miễn phí, và đó là lý do harness tách `t_preprocess`.
+
+**Mô phỏng 10 dòng (`select_action`)**, seed 0: p50 ≈ 0,030 ms, p95 ≈ 0,039 ms, p98 ≈ 3,2 ms (nội suy giữa hai loại), p99 ≈ 182 ms, p99.9 ≈ 192 ms, mean ≈ 3,65 ms (≈ 180/50 + 0,03). p50 và p95 là latency **của hàng đợi**; chỉ từ p99 trở lên mới thấy model; mean không mô tả lần gọi nào cả.
+
+**Bước 4c:** đường thẳng theo K phải có hệ số chặn dương rõ ràng (prefix). Nếu đường đi qua gốc, bạn đang đo nhầm chỉ phần expert, hoặc prefix bị cache sai giữa các lần gọi. Tỉ lệ chặn/góc trên CPU và GPU là số của bạn `[tự đo]`.
 
 Đề 3: không có đáp án đúng duy nhất. Hai mốc công khai để so: vla.cpp báo cáo action expert chiếm **gần một nửa** thời gian của SmolVLA trên RTX 5070 dù đã cache prefix `[tự đo — theo tóm tắt paper arXiv 2606.08094, chưa đọc bảng gốc]`; tài liệu deployment của NVIDIA Isaac-GR00T ghi GR00T-N1.6-3B trên Orin (PyTorch eager, 4 bước denoise) tốn ~93 ms backbone và ~202 ms action head `[tự đo — thấy qua bản mirror tài liệu, kiểm trong repo NVIDIA/Isaac-GR00T]`. Nếu bạn dự đoán "backbone nặng, expert nhẹ, expert không đáng kể", hai mốc này nói điều ngược lại: lặp nhiều bước làm phần "nhẹ" thành phần nặng. Đây cũng là lý do giảm `num_steps` là một trục benchmark thật.
 
@@ -269,6 +338,9 @@ Lệch so với bảng là bình thường nếu: phiên bản LeRobot của b�
 | Action 2 chiều | Bạn gọi `select_action` | Đổi sang `predict_action_chunk` | Không phải lỗi model; ghi rõ API nào được đo |
 | Chiều cuối của action là 32 | Bạn lấy tensor nội bộ trước khi cắt | So `max_action_dim` với `action_dim` của dataset | Đo/ghi shape sau postprocessor |
 | Số tham số lệch xa 450M (ví dụ ~500M+) | Load cả VLM đầy đủ, hoặc đếm cả buffer | `num_vlm_layers` trong config đã nạp | Ghi rõ đếm gì; so với paper |
+| `select_action` lần nào cũng chậm | Gọi `reset()` mỗi lần, hoặc `n_action_steps = 1` | In độ dài hàng đợi sau mỗi lần gọi | `reset()` một lần mỗi episode |
+| Cùng nhiễu mà hai chunk khác nhau đáng kể | Thiếu `.eval()` (dropout còn bật), hoặc kernel không tất định trên GPU | `policy.training`; chạy lại trên CPU | `.eval()`; nếu chỉ lệch ở mức sai số float thì ghi lại, không phải lỗi |
+| Không có `data/libero` hoặc `data/lerobotpusht` | Chưa tải ở K2 | `dir data` | Tải riêng `meta/` (vài KB, Đề 1b); hoặc đọc `features` trên trang dataset của Hub |
 | Một lần chạy CPU mất hàng chục giây | Bình thường với CPU, chưa phải benchmark | — | Không kết luận gì về latency ở bài này |
 
 ### 9. Câu hỏi ngược
@@ -302,13 +374,19 @@ Lệch so với bảng là bình thường nếu: phiên bản LeRobot của b�
 | SO-101: 6 motor gồm gripper | `[tự đo]` | Đọc `meta/info.json` của một dataset SO-101 |
 | Expert ~½ thời gian SmolVLA (RTX 5070) | `[tự đo]` | Tóm tắt paper vla.cpp; đọc bảng gốc |
 | GR00T-N1.6 Orin: 93 ms backbone / 202 ms action head | `[tự đo]` | Thấy qua bản mirror tài liệu Isaac-GR00T; kiểm repo NVIDIA |
-| Tỉ lệ đứng ~13% ở L=0,25 s | `[ước lượng]` | Công thức + mô phỏng đồ chơi, không phải số đo |
+| Tỉ lệ đứng ~13% ở L=0,25 s, 30 fps | `[ước lượng]` | Công thức + mô phỏng đồ chơi, không phải số đo |
+| libero: 2 camera 256×256, state 8, action 7, 10 fps; pusht: 1 camera 96×96, state/action 2, 10 fps | `[spec]` | Đọc `data/*/meta/info.json` (codebase v3.0) khi hợp nhất 10/2026 |
+| Import `lerobot.policies.smolvla.modeling_smolvla`, `make_pre_post_processors` ở `lerobot.policies.factory` (và re-export ở `lerobot.policies`) | `[tự đo]` | Đúng trên main 10/2026; code thử nhiều đường dẫn và in đường đã dùng |
+| `predict_action_chunk(batch, noise=...)` | `[tự đo]` | Kiểm chữ ký hàm trong bản cài |
 
 **Đã sửa so với bản gốc/Gemini:**
-- Gemini K4 Bài 1: `from lerobot.common.policies.smolvla.modeling_smolvla import SmolVLAPolicy` là đường dẫn của bố cục cũ; nhánh main hiện hành dùng `lerobot.policies.smolvla.modeling_smolvla`. Bản sửa: không cố định import nào, kiểm theo phiên bản cài `[tự đo]`, và đi qua processor pipeline thay vì đưa chuỗi `"task"` thô vào model.
+- Gemini K4 Bài 1: `from lerobot.common.policies.smolvla.modeling_smolvla import SmolVLAPolicy` là đường dẫn của bố cục cũ; nhánh main hiện hành dùng `lerobot.policies.smolvla.modeling_smolvla` (quy chuẩn mục 7). Bản sửa: không cố định import nào; code thử lần lượt các đường dẫn, in đường đã chạy để ghi vào notes, gắn `[tự đo]`; đi qua processor pipeline thay vì đưa chuỗi `"task"` thô vào model. (Hợp nhất: bản Claude trước đó cố định một đường dẫn và thoát nếu thất bại — vẫn là một import cố định, đã thay.)
 - Gemini: obs giả với `"observation.state": torch.randn(1, 7)` cho "6 khớp + kẹp". SO-101 có 5 khớp + gripper = 6 motor; và tên/shape khóa phải lấy từ `input_features`, không gõ tay.
 - Bản gốc + Gemini: "shape action đầu ra phải là 3 chiều; nếu 2 chiều, model không chunking". Sai với API LeRobot: `select_action` trả 2 chiều **dù** model chunking. Sửa: chỉ rõ hàm nào trả gì.
 - Bản gốc + Gemini: "model 4 Hz, chunk 50 → về lý thuyết tới 200 Hz". Nhầm tốc độ cung action với tần số điều khiển; action gắn với fps dataset. Sửa ở câu hỏi ngược 5 và mục 2.
+- Bản gốc: "giảm số solver step thì latency giảm gần tuyến tính" → latency là hàm **affine** theo `num_steps` (có hệ số chặn prefix + pre/post), nên không bao giờ giảm về 0 và không giảm tỉ lệ thuận. Bước 4c cho người học tự thấy.
+- Bản gốc: ảnh đầu vào `(B, N_cam, 3, H, W)` → LeRobot đưa mỗi camera một key riêng `(B, 3, H, W)`; với `n_obs_steps = 1` không có chiều thời gian.
+- Bản gốc: "SO-101 6 khớp + gripper thì `state_dim` ≈ 6–8" → SO-101 có 6 motor **tính cả** gripper; đọc `info.json`, không đoán.
 - Bản gốc nói SmolVLA "nhỏ hơn khoảng một bậc" so với model 3–7B: 450M so với 3–7B là 7–15 lần, tức khoảng một bậc — giữ, nhưng thêm rằng tỉ lệ thời gian không theo tỉ lệ tham số (phần expert lặp nhiều bước).
 
 ### 12. Đọc thêm và tự kiểm tra
@@ -335,7 +413,7 @@ Câu hỏi của bài này là câu bạn đã nêu từ đầu lộ trình: ng�
 
 Ngành ML đã khổ vì thiếu điều đó. Trước 2018, mỗi hãng chip báo "images/second" theo cách riêng (batch bao nhiêu, precision nào, có tính preprocess không), và các con số không so được với nhau. MLPerf ra đời (2018) như một nỗ lực chung để cố định *kịch bản* đo: ở MLPerf Inference, kịch bản SingleStream báo một percentile cao của latency (p90), kịch bản Server bắn query theo phân bố Poisson và chấm theo p99 dưới một ngưỡng, kịch bản Offline chỉ đo throughput `[spec: MLPerf Inference Rules — kiểm lại theo phiên bản hiện hành]`. Bài học: "latency" không phải một con số; nó là **một phân bố trong một kịch bản**.
 
-Ở hệ phân tán, Jeff Dean và Luiz Barroso viết *The Tail at Scale* (CACM, 2013): khi một request chạm 100 server, p99 của một server trở thành trải nghiệm thường gặp của người dùng. Robot có phiên bản riêng của chuyện này: một vòng điều khiển 30 Hz có 1.800 tick mỗi phút; một sự kiện 1% xảy ra khoảng 18 lần mỗi phút, và mỗi lần là một sự kiện **vật lý** (giật, trượt, va), không phải một trang web tải chậm.
+Ở hệ phân tán, Jeff Dean và Luiz Barroso viết *The Tail at Scale* (CACM, 2013): khi một request chạm 100 server, p99 của một server trở thành trải nghiệm thường gặp của người dùng. Robot có phiên bản riêng của chuyện này, với một cái bẫy đếm: "1% chậm" chỉ có nghĩa khi bạn nói **1% của cái gì**. Một vòng điều khiển 30 Hz có 1.800 tick mỗi phút; nếu 1% số **tick** lỡ deadline thì là 18 lần mỗi phút. Nhưng nếu 1% số **lần inference** chậm, số sự kiện mỗi phút phụ thuộc số lần inference mỗi phút (với chunking, ít hơn số tick nhiều lần), còn **phần thời gian** robot bị ảnh hưởng phụ thuộc mỗi lần chậm kéo dài bao lâu. Ba đại lượng này (theo lần, theo tick, theo thời gian) khác nhau, và mỗi lần trễ là một sự kiện **vật lý** (giật, trượt, va), không phải một trang web tải chậm.
 
 ### 2. Mô hình tư duy
 
@@ -399,13 +477,14 @@ for n in [30, 100, 200, 1000, 10000]:
 | p99 latency của một API | p99 latency của một lần inference | n nhỏ: 200 iteration không đủ để chặn trên p99 (tự tính ở phần 5) | Báo p99 với hai chữ số thập phân trong khi nó chỉ là mẫu lớn thứ 2–3 |
 | Throughput (req/s) ở tải cao | Throughput ở batch > 1 | Robot chạy batch 1; throughput chỉ có nghĩa cho eval/sim hàng loạt | Quảng cáo throughput batch 8 như thể nó là tốc độ trên robot |
 | Mean để capacity planning | Mean service time | Vẫn cần cho Little và chi phí GPU-giờ, nhưng không bao giờ là con số tiêu đề | Ẩn đuôi, hoặc cực đoan ngược lại: cấm mean rồi không tính được chi phí |
-| Error rate 1% "chấp nhận được" | Deadline miss 1% | 1% ở 30 Hz = 18 lần/phút, mỗi lần là một hành vi vật lý | Chấp nhận một policy giật mỗi 3 giây |
+| Error rate 1% "chấp nhận được" | 1% số lần inference chậm | Error rate backend đếm theo request và mỗi request độc lập; ở đây "1%" phải đổi sang **theo tick** (bao nhiêu lần robot đói lệnh) và **theo thời gian** (bao nhiêu phần trăm thời gian robot đứng/giật) — một lần chậm dài chiếm nhiều tick | Đọc "1% lần chậm" thành "giật 1% thời gian": sai cả hai chiều, tùy độ dài lần chậm và tần số inference |
 
 **Chấm mô hình:**
 
 - *Quy tắc của bản gốc: "Không báo cáo mean."* → **ĐÚNG MỘT PHẦN.** Đúng: mean không bao giờ được là con số **tiêu đề** cho latency, vì nó che đuôi. Gãy: mean là đại lượng đúng cho capacity và chi phí — định luật Little (L = λW) dùng W trung bình; số GPU-giờ để chạy 10.000 episode eval là n × mean, không phải n × p50. Phản ví dụ: phân bố hai đỉnh 90% ở 100 ms, 10% ở 1.000 ms có p50 = 100 ms nhưng mean = 190 ms; lập kế hoạch thuê GPU theo p50 sẽ hụt gần gấp đôi. Sửa: báo p50/p95/p99/max + n làm số chính; mean chỉ xuất hiện trong phần chi phí/throughput, ghi rõ tên.
 - *Câu tự kiểm của bản gốc: "p99 gấp 9 lần p50 là dấu hiệu hệ thống chưa được cô lập."* → **ĐÚNG MỘT PHẦN.** Nó là một giả thuyết đáng kiểm đầu tiên, không phải chẩn đoán. Phân bố có thể hai đỉnh một cách nội tại: đường code khác nhau (Bài 1: `select_action` có p99/p50 hàng nghìn lần trên máy tĩnh tuyệt đối), Python GC, allocator xin thêm bộ nhớ. Phản ví dụ: chạy cùng harness trên máy đã ghim tần số, không tiến trình nền, nhiệt phẳng — tỉ lệ vẫn 9× nếu cứ mỗi 50 lần gọi có một lần chạy model.
 - *"Bậc độ lớn là bạn bè: sai số 10% không làm hỏng kết luận."* (bản gốc) → **ĐÚNG** khi so phần cứng cách nhau ≥10×; **SAI** khi so cấu hình trên cùng phần cứng. Phản ví dụ: fp16 vs bf16 trên cùng GPU chênh 8% với sai số giữa phiên 5% — kết luận "fp16 nhanh hơn" chưa có cơ sở.
+- *Câu tự kiểm của bản gốc: "1% số lần chạy mất 800 ms… robot mất ổn định 1% thời gian… ở 30 Hz là 18 lần mỗi phút."* → **SAI** về đơn vị đếm, dù kết luận "mean không đủ" vẫn đúng. Câu này trộn ba đại lượng: tỉ lệ **theo lần inference**, tỉ lệ **theo thời gian**, và số sự kiện **theo tick**. Phản ví dụ (không chunk, chạy liền nhau, 99% lần 120 ms, 1% lần 800 ms): phần thời gian nằm trong lần chậm là `0,01·800 / (0,99·120 + 0,01·800)` ≈ 6,3% — gấp sáu lần "1% thời gian"; còn số lần chậm mỗi phút là `0,01 × 60 / 0,1268` ≈ 4,7 — không phải 18, vì 30 Hz là nhịp tick chứ không phải nhịp inference (mỗi lần 120 ms thì chỉ có ~470 lần inference mỗi phút). Mỗi lần chậm 800 ms làm robot đói ~24 tick liền. Với chunk 50 @ 30 fps chạy async, số inference còn ~36 lần/phút, và một lần 800 ms có thể bị khoảng đệm nuốt trọn, không mất tick nào. Quy tắc: luôn ghi "1% **của cái gì**", và tính phần thời gian bằng trọng số độ dài, không bằng số lần.
 
 ### 4. Thuật ngữ
 
@@ -580,8 +659,9 @@ Bản gốc kỳ vọng "fp32 thang 100–400 ms trên GPU tiêu dùng" `[ước
 
 **Đã sửa so với bản gốc/Gemini:**
 - "Không báo cáo mean" → không dùng mean làm số tiêu đề cho latency; mean chỉ trong phần throughput/chi phí, ghi rõ.
+- Bản gốc (tự kiểm 2): "1% số lần chạy chậm → robot mất ổn định 1% thời gian, ở 30 Hz là 18 lần mỗi phút" → lẫn đếm theo lần inference với theo thời gian và theo tick. Sửa: phần thời gian = tổng độ dài các lần chậm ÷ tổng thời gian (trọng số độ dài); số sự kiện/phút = tỉ lệ × số lần inference/phút, không phải × số tick. Đã sửa ở câu chuyện, bảng cầu nối và chấm mô hình. (Bản Claude trước hợp nhất lặp lại lỗi này ở câu chuyện và bảng cầu nối.)
 - "p99 gấp 9 lần p50 là dấu hiệu chưa cô lập" → là giả thuyết đầu tiên cần kiểm, không phải chẩn đoán (phân bố có thể hai đỉnh nội tại).
-- Bổ sung: p99 cần n ≥ 368 để có cận trên; 200 iteration của bản gốc chỉ đủ cho p95. Ảnh hưởng tới Bài 4–5.
+- Bổ sung: tính số iteration tối thiểu để từng percentile có cận trên (Đề 1; đáp số ở 🔒 phần 7). Kết quả buộc xem lại con số 200 iteration của bản gốc ở Bài 4–5.
 - Gemini Bài 2: "Đo ra 10–30 giây trên CPU N100 không phải là thí nghiệm thất bại" — đưa con số kỳ vọng ra ngoài khối niêm phong và không có cơ sở tính; đã bỏ, thay bằng phương pháp ước lượng.
 - Gemini Bài 2: "BitVLA giảm RAM ~4,4× so với OpenVLA" và gộp hai dòng BitVLA thành một — bản gốc ghi so với **OpenVLA-OFT**, và hai dòng có điều kiện khác nhau; đã tách lại.
 - Bảng mốc: thêm cột nhãn và nguồn, ghi rõ dòng nào là mean, thêm số GR00T tách theo phase (cho thấy action head > backbone).
@@ -597,7 +677,7 @@ Bản gốc kỳ vọng "fp32 thang 100–400 ms trên GPU tiêu dùng" `[ước
   1. Một benchmark báo "p50 = 120 ms, p99 = 160 ms, n = 50". Câu nào trong đó đáng tin, câu nào không?
      <details><summary>Đáp án</summary>p50 với n = 50 có CI khá hẹp (đáng tin vừa phải). p99 với n = 50 là mẫu lớn nhất hoặc nội suy giữa hai mẫu lớn nhất — thực chất là "max của 50 mẫu", không có cận trên. Nên viết "max (n = 50) = 160 ms".</details>
   2. Một policy **không chunk**, control 10 Hz (deadline 100 ms). Đo n = 1.000: p50 = 80 ms, p99 = 900 ms. Tối thiểu bao nhiêu deadline miss mỗi phút? Con số thật có thể lớn hơn vì sao?
-     <details><summary>Đáp án</summary>10 Hz = 600 tick/phút. Ít nhất 1% số lần vượt 900 ms → tối thiểu ~6 miss/phút. Thật ra nhiều hơn: (a) phần giữa p50 và p99 có thể đã vượt 100 ms — biết p50 và p99 không cho biết p90; (b) mỗi lần chạy 900 ms làm trễ dây chuyền ~9 tick sau đó nếu chạy đồng bộ — đếm theo tick, một sự kiện đuôi thành 9 miss. Đây là cửa vào coordinated omission ở Bài 3.</details>
+     <details><summary>Đáp án</summary>10 Hz = 600 tick/phút, mỗi tick một lần inference khi mọi thứ đúng hạn. Ít nhất 1% số **lần inference** vượt 900 ms → cỡ 5–6 lần chậm mỗi phút (hơi dưới 6, vì mỗi lần chậm chiếm chỗ của ~9 tick nên số lần inference mỗi phút giảm). Đếm theo **tick** thì nhiều hơn hẳn: chạy đồng bộ, mỗi lần 900 ms chiếm chỗ ~9 tick, lỡ ~8 tick liền → cỡ 45–50 tick lỡ mỗi phút, tức ~8% thời gian robot không có lệnh mới. Và đó mới là cận dưới: phần giữa p50 và p99 có thể đã vượt 100 ms — biết p50 và p99 không cho biết p90. "1% lần" thành "~8% thời gian": đây là cửa vào coordinated omission ở Bài 3.</details>
 
 ---
 
