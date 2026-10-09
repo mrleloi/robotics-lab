@@ -221,7 +221,7 @@ Giữ đủ bảy bước của bản gốc; thêm bước 4b (ghép) vì đó l
 |---|---|---|
 | File mở được trong Foxglove | Không lỗi, các luồng hiện đúng tần số | Giữ từ bản gốc |
 | `sensor_msgs/Imu` CDR | **324 byte/message** với `frame_id = "imu_link"` | [đã chạy — `mcap-ros2-support` 0.5.7]. encapsulation 4 + stamp 8 + chuỗi `imu_link` 13 + padding 3 + quaternion 32 + 2 vector × 24 + 3 ma trận covariance × 72 |
-| IMU trong MCAP, không nén | ≈ **370 byte/message → ≈ 265 MB/giờ** | Gồm overhead Message record (31 byte) và message index. **Gấp ~7 lần** con số 36 MB/giờ của bản gốc, vì 50 byte là kích thước `ImuSample` Protobuf tự chế ở Khóa 2, không phải message chuẩn |
+| IMU trong MCAP, không nén | ≈ **370 byte/message → ≈ 265 MB/giờ** | Gồm overhead Message record (31 byte) và message index. **Gấp ~7 lần** con số 36 MB/giờ của bản gốc. 36 MB/giờ ứng với ≈ 50 byte/mẫu: cỡ gói thô từ MCU (6 × int16 + timestamp + header), không phải message chuẩn; ngay cả `ImuSample` Protobuf tự chế ở Khóa 2, khi điền đủ trường, đo được ≈ 190 byte (→ F3.2, mục 5) |
 | IMU, zstd | ≈ 55–70 MB/giờ trên dữ liệu tổng hợp (×4–5) | [đã chạy, dữ liệu tổng hợp]. Covariance, quaternion, `frame_id` lặp lại y hệt nên nén rất tốt; dữ liệu thật của bạn sẽ khác vài chục phần trăm [tự đo] |
 | JPEG, zstd | Gần như không giảm (×1.0–1.05) | Đã nén entropy; nén thêm chỉ tốn CPU. Giữ nguyên kết luận bản gốc |
 | Sau `kill -9` | File đọc được bằng đọc tuần tự hoặc sau `mcap recover`; mất **tối đa khoảng một chunk** | Python `mcap` 1.5.0 mặc định `chunk_size = 1 MiB` [spec — chữ ký `Writer.__init__`]. Thử nghiệm của người soạn: ghi 200 800 message, cứu được 199 452 (chunk dở bị mất). Đổi ra giây: nếu chỉ có IMU ≈ 1 MiB / (370 B × 200/s) ≈ **14 s**; có thêm 2 camera JPEG ~45 kB thì tốc độ gộp ~2.8 MB/s và một chunk chỉ còn ≈ **0.4 s** |
@@ -279,11 +279,12 @@ Vì sao lệch là bình thường: kích thước JPEG phụ thuộc cảnh và
 | Lee & Ready (1991) đề xuất trễ 5 giây giữa quote và trade | [chuẩn] | Bài báo gốc *Journal of Finance* 46(2) |
 
 **Đã sửa so với bản gốc/Gemini:**
-- Bản gốc (bảng "Số phải ra") và Gemini: "IMU 200 Hz × ~50 byte ≈ 36 MB/giờ". Sai với message chuẩn mà chính bài này bắt buộc: `sensor_msgs/Imu` là 324 byte CDR (vì ba ma trận covariance 9 × `float64`), ≈ 265 MB/giờ trong MCAP chưa nén. 50 byte là `ImuSample` Protobuf tự chế của Khóa 2.
+- Bản gốc (bảng "Số phải ra") và Gemini: "IMU 200 Hz × ~50 byte ≈ 36 MB/giờ". Sai với message chuẩn mà chính bài này bắt buộc: `sensor_msgs/Imu` là 324 byte CDR (vì ba ma trận covariance 9 × `float64`), ≈ 265 MB/giờ trong MCAP chưa nén. 50 byte cỡ gói thô từ MCU; `ImuSample` Protobuf của Khóa 2 khi đủ trường là ≈ 190 byte.
 - Gemini: "`publish_time` (timestamp lúc cảm biến đo)". Sai ngữ nghĩa MCAP: thời điểm đo thuộc `header.stamp`; `publish_time` là lúc publisher gửi.
 - Gemini: "`calibration_id`, `clock_source`, `sequence` … phải được lưu vào metadata của channel". `sequence` thay đổi theo từng message nên không thể nằm trong metadata tĩnh của channel; nó thuộc trường `sequence` của Message record và/hoặc `/diagnostics` (đúng như `CONVENTIONS.md` mục 4).
 - Gemini: "cấu trúc append-only của MCAP bảo toàn dữ liệu khi mất điện" (diễn giải kết quả `kill -9`). `kill -9` không kiểm được mất điện: page cache vẫn được flush. Hai thí nghiệm tách riêng; mất điện ở Bài 14.
 - Bổ sung so với bản gốc: phân biệt cửa sổ theo `log_time` và theo `header.stamp` (watermark), và bước 4b ghép camera↔IMU có đo sai số. Không đổi giờ (rút từ bước 6 nếu cần).
+- **Sửa sau:** (lượt hợp nhất 10/2026, theo đo của F3.2) giải thích nguồn gốc con số 50 byte: không phải `ImuSample` Protobuf tự chế (đủ trường ≈ 190 byte) mà cỡ gói thô từ MCU. Kết luận "thiếu ~7 lần so với `sensor_msgs/Imu`" giữ nguyên.
 
 ### 12. Đọc thêm và tự kiểm tra
 
@@ -725,7 +726,7 @@ Hai dòng in cuối là toàn bộ bài học của phần này. Chạy trước
 
 Viết năm câu SQL **trước** khi có dữ liệu thật; chạy chúng trên dữ liệu tổng hợp (mô phỏng ở phần 2 là điểm khởi đầu).
 
-**Bước 3 — Extractor (≈3h).** Một worker chạy khi file chuyển sang VERIFIED (Bài 14): đọc MCAP (từ local trước khi xóa, hoặc từ object store), tính tóm tắt theo giây theo `header.stamp`, ghi Parquet partition theo `date=…/device=…`. Tính |a| từ ba trục **và** đếm mẫu có bất kỳ trục nào chạm trần mã hóa (`raw == 32767` hoặc `-32768`). Extractor phải **idempotent**: chạy lại trên cùng file cho ra cùng file Parquet (đặt tên theo sha256 của MCAP nguồn), để sửa bug extractor rồi chạy lại toàn bộ là an toàn (→ F3.8).
+**Bước 3 — Extractor (≈3h).** Một worker chạy khi file chuyển sang VERIFIED (Bài 14): đọc MCAP (từ local trước khi xóa, hoặc từ object store), tính tóm tắt theo giây theo `header.stamp`, ghi Parquet partition theo `date=…/device=…`. Tính |a| từ ba trục **và** đếm mẫu có bất kỳ trục nào chạm trần mã hóa (`raw == 32767` hoặc `-32768`). Extractor phải **idempotent**: chạy lại trên cùng file với cùng phiên bản extractor cho ra cùng file Parquet. Đặt tên output theo sha256 của MCAP nguồn **và** phiên bản extractor (ví dụ `<sha256>__ext-v3.parquet`); chỉ theo sha256 thì sau khi sửa bug extractor, output mới trùng tên output lỗi và không phân biệt được bản nào đã chạy lại. Có version trong tên, sửa bug rồi chạy lại toàn bộ là an toàn (→ F3.8).
 
 **Bước 4 — Đo latency với 7 ngày dữ liệu (≈2h).** Nếu chưa có 7 ngày thật (soak ở Bài 18 sẽ tạo ra), dựng 7 ngày bằng cách phát lại một giờ thật với timestamp dời (ghi rõ trong báo cáo: dữ liệu lặp, phân bố giá trị không thật, chỉ dùng để đo latency). Mỗi câu chạy 5 lần, báo median và max, tách cache lạnh/ấm. Sai số dụng cụ: đo bằng `time.perf_counter()` quanh `execute().fetchall()`; độ phân giải dưới µs, nhưng biến thiên do page cache lớn hơn nhiều, nên phải báo cả hai trạng thái cache.
 
@@ -796,6 +797,7 @@ Vì sao lệch là bình thường: latency phụ thuộc mạnh vào cache; s�
 - Gemini: bảng index với một dòng mỗi **session** và cột `max_accel_magnitude`. Một giá trị max cho cả session không trả lời được "**mọi lúc** vượt ngưỡng"; cần tóm tắt theo cửa sổ thời gian ngắn.
 - Mở rộng bước 1 của bản gốc: thêm DuckDB+Parquet như lựa chọn mặc định cho một máy (→ F3.6); ClickHouse/TimescaleDB vẫn hợp lệ. Lý do ghi ở phần 1 bước 1.
 - Làm rõ lý do "không nhét raw vào DB": không phải vì ClickHouse chậm ở quy mô này, mà vì một nguồn sự thật và vì video.
+- **Sửa sau:** (lượt hợp nhất 10/2026, → F3.8) bước 3: tên output extractor gồm sha256 nguồn **và** phiên bản extractor. Chỉ theo sha256 thì output sau khi sửa bug trùng tên output lỗi.
 
 ### 12. Đọc thêm và tự kiểm tra
 
