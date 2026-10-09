@@ -91,7 +91,7 @@ Phần lớn đã có (relay K1 và nút E-stop từ C1, opto từ C4, bumper n�
 |---|---|---|---|---|---|
 | Nút E-stop nấm **thứ hai** gắn trên thân (hoặc thay nút C1) | NC, **mở cưỡng bức** (positive opening, ký hiệu ⊝ trên khối tiếp điểm), tự khóa, xoay để nhả, đầu ≥30 mm màu đỏ trên nền vàng | Mở cưỡng bức: cơ cấu ép tiếp điểm NC tách ra kể cả khi tiếp điểm bị dính `[spec — IEC 60947-5-1 phụ lục K; kiểm ký hiệu trên khối tiếp điểm]` | 100–300k | Đo: chưa nhấn thông, nhấn hở, xoay thông lại; nhìn ký hiệu ⊝ | Nút C1 nếu đã đạt các thông số này |
 | Relay K1 loại **5 chân (changeover)** | 12 V, tiếp điểm 30/87/87a, ≥30 A; datasheet ghi **thời gian nhả** và định mức tiếp điểm DC | Chân 87a cho tín hiệu "relay đã nhả" độc lập với VM (mục 4). Định mức DC thấp hơn AC `[chuẩn]` | 50–150k | Cấp 12 V vào cuộn: 30–87 thông; bỏ điện: 30–87a thông | Relay 4 chân của C1 + đo VM (kém hơn, mục 4) |
-| Zener 18–24 V (1 W) + diode 1N4007 | Áp Zener + áp pack đầy < Vds max của Q1 | Diode + Zener cho dòng cuộn tắt nhanh hơn chỉ diode → relay nhả nhanh hơn `[chuẩn — app note coil suppression của hãng relay; tự đo]` | <20k | Đo chế độ diode | TVS hai chiều |
+| Zener 1 W + diode 1N4007 | Áp Zener + áp pack đầy + ~1 V < Vds max của Q1, còn dư ≥15%: 18–24 V khi Q1 ≥40 V; **≤10 V khi Q1 là AO3400 (30 V)** | Diode + Zener cho dòng cuộn tắt nhanh hơn chỉ diode → relay nhả nhanh hơn `[chuẩn — app note coil suppression của hãng relay; tự đo]` | <20k | Đo chế độ diode | TVS hai chiều |
 | MOSFET kênh N logic-level (Q1) | Vgs(th) ≤1,5 V, Rds(on) **ghi ở Vgs = 2,5 V**, Vds ≥40 V, gói SOT-23 hoặc TO-220 | Cổng chỉ được lái bằng mạch xung giữ (~2 V, mục 4); dòng cuộn relay ~100–200 mA `[spec — đo ở C1]` | 5–20k | Đo chế độ diode thân D–S | Transistor NPN + điện trở (tính lại mạch) |
 | Linh kiện mạch xung giữ | 2 tụ 1 µF (gốm, ≥10 V), 2 diode Schottky (BAT54/1N5819), 100 kΩ, 10 kΩ kéo xuống | Mô phỏng ở Bài C10.1 phần 2 | <30k | — | IC supervisor có watchdog (phương án C, Bài C10.1) |
 | Bumper ×2 | Công tắc hành trình (microswitch có cần lăn) **dùng chân NC**, thanh cản mềm (xốp EVA/ống PU) phủ mặt trước | Đứt dây = "đã va" (hỏng về phía an toàn, bảng chân C4) | 50–150k | Đo NC thông khi chưa ấn; lực ấn để kích (cân hành lý C0) | Thanh cản + 2–3 công tắc song song logic (nối tiếp NC) |
@@ -103,6 +103,8 @@ Phần lớn đã có (relay K1 và nút E-stop từ C1, opto từ C4, bumper n�
 | Biển báo, dây buộc, băng dính sàn | In A5 ép plastic | Người lạ biết đây là gì và dừng nó thế nào | 30–50k | — | — |
 
 **Tổng C10 `[ước lượng]`:** ~0,7–1,5tr (không tính MCU thứ hai, cảm biến vực).
+
+**Đồ có sẵn từ kit Arduino:** relay 5 V của kit để diễn tập phép đo "chỉ diode / diode + Zener" trên mạch 5 V trước khi đo relay K1 (`phu-luc-kit-arduino.md` P1, tùy chọn). Relay kit **không** được dùng trong chuỗi E-stop (lý do ở đầu phụ lục).
 
 ## 3. Dụng cụ và kỹ năng tay
 
@@ -120,10 +122,10 @@ Phần lớn đã có (relay K1 và nút E-stop từ C1, opto từ C4, bumper n�
 Mở rộng chuỗi cuộn của C1 (FD 1 A → nút E-stop NC → cuộn K1 → GND). Thay đổi: thêm Q1 ở phía thấp của cuộn, mạch xung giữ, ba đường đo. Màu theo C0.5; dây chuỗi E-stop có nhãn đỏ ở hai đầu (C0.5).
 
 ```
-  THANH CÁI + ──[FD 1A]──┬──[E-STOP NC ⊝]──●COIL_SENSE──[cuộn K1 (85→86)]──┬── D Q1 (AO3400 hoặc tương đương)
+  THANH CÁI + ──[FD 1A]──┬──[E-STOP NC ⊝]──●COIL_SENSE──[cuộn K1 (85→86)]──┬── D Q1 (AO3400 30 V → Zener ≤10 V; Q1 ≥40 V → Zener 20 V)
   (VBAT 10–14,6 V)       │                  │                  ║ D1 1N4007    │   S ── GND sao
                          │                47k                  ║ nối tiếp     │   G ◄── mạch xung giữ
-                         │                  ├──► ESTOP_SENSE   ║ Zener 20 V   │
+                         │                  ├──► ESTOP_SENSE   ║ Zener V_Z    │
                          │                10k  (GPIO41, qua    ║ (dập nhanh)  │
                          │                  ┴   100 nF)        ╚═════════════╝
                          │
@@ -146,6 +148,7 @@ Mở rộng chuỗi cuộn của C1 (FD 1 A → nút E-stop NC → cuộn K1 →
 ```
 
 Đọc sơ đồ:
+- **Chọn cặp Q1–Zener cùng nhau.** Khi Q1 tắt, dòng cuộn chạy qua D1 + Zener và cực D của Q1 lên tới V_pack + V_Z + ~0,7 V `[chuẩn]`. Với Zener 20 V đó là ~35 V: AO3400 (V_DS 30 V `[spec — datasheet AOS AO3400]`) bị đánh thủng. Hai cặp hợp lệ: AO3400 + Zener 9,1–10 V (đỉnh ~25 V), hoặc MOSFET ≥40 V có R_DS(on) ghi ở 2,5 V + Zener 20 V. Shopee 10/2026 không có MOSFET loại sau mà có lượt bán (`_MUA-SAM-K7.md` mục 0.2). Ghi cặp đã chọn vào `decisions.md`; phép đo "chỉ diode vs diode + Zener" ở phần 6 giữ nguyên.
 - **Nút E-stop và Q1 nối tiếp:** cuộn K1 có điện khi và chỉ khi nút chưa nhấn **và** Q1 đang dẫn. Q1 chỉ dẫn khi RELAY_HOLD **đang đảo** (Bài C10.1 phần 2). Một chân kẹt cao, kẹt thấp, thả nổi, hay ESP32 mất điện đều làm Q1 tắt.
 - **Chân 87a cho biết relay đã nhả,** độc lập với VM. Không dùng "VM về 0" làm mốc kết thúc: khi relay mở lúc motor còn quay, motor phát ngược qua diode thân của driver và giữ VM trên tụ 1000 µF một lúc. VM_SENSE dùng để phát hiện **relay dính** (87a chưa lên mà VM vẫn còn sau khi cuộn mất điện, hoặc VM còn khi 87a đã lên).
 - **Đồng thời 87 và 87a** không bao giờ cùng nối với 30. Nếu RELAY_FB cao và VM_SENSE cao kéo dài hơn thời gian xả tụ đã đo → tiếp điểm 87 dính hoặc đi dây sai.

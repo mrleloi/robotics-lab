@@ -110,6 +110,8 @@ Giá `[ước lượng 10/2026]`, kiểm lại ở cửa hàng. Nơi mua theo `d
 
 **Tổng C1 `[ước lượng]`:** ~2,5–5tr. Pack và buck-boost là phần lớn.
 
+**Đồ có sẵn từ kit Arduino:** LM35DZ + DHT11 ghi nhiệt độ tải giả và bo nguồn theo thời gian, bổ sung cho nhiệt kế hồng ngoại (`phu-luc-kit-arduino.md` P2, tùy chọn).
+
 ## 3. Dụng cụ và kỹ năng tay
 
 | Kỹ năng | Bài | Luyện trước trên phế liệu | Đạt trông thế nào |

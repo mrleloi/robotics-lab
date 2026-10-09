@@ -1,0 +1,196 @@
+- generic [ref=f15e3]:
+  - generic [active]:
+    - button "Skip to main content"
+  - generic [ref=f15e6]:
+    - navigation [ref=f15e7]:
+      - generic [ref=f15e8]:
+        - link [ref=f15e10] [cursor=pointer]:
+          - /url: /
+        - link "Need help?" [ref=f15e15] [cursor=pointer]:
+          - /url: https://help.shopee.vn/vn/s
+    - contentinfo [ref=f15e26]:
+      - generic [ref=f15e27]:
+        - generic [ref=f15e28]:
+          - generic [ref=f15e29]:
+            - generic [ref=f15e30]:
+              - generic [ref=f15e31]: CUSTOMER SERVICE
+              - list [ref=f15e32]:
+                - listitem [ref=f15e33]:
+                  - link "Help Centre" [ref=f15e34] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal
+                - listitem [ref=f15e36]:
+                  - link "Shopee Blog" [ref=f15e37] [cursor=pointer]:
+                    - /url: https://shopee.vn/blog/
+                - listitem [ref=f15e39]:
+                  - link "Shopee Mall" [ref=f15e40] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/79090-[Th%C3%A0nh-vi%C3%AAn-m%E1%BB%9Bi]-Shopee-Mall-l%C3%A0-g%C3%AC?previousPage=search%20recommendation%20bar
+                - listitem [ref=f15e42]:
+                  - link "How To Buy" [ref=f15e43] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/79180-[Th%c3%a0nh-vi%c3%aan-m%e1%bb%9bi]-L%c3%a0m-sao-%c4%91%e1%bb%83-mua-h%c3%a0ng-%2F-%c4%91%e1%ba%b7t-h%c3%a0ng-tr%c3%aan-%e1%bb%a9ng-d%e1%bb%a5ng-Shopee%3F
+                - listitem [ref=f15e45]:
+                  - link "How To Sell" [ref=f15e46] [cursor=pointer]:
+                    - /url: https://banhang.shopee.vn/edu/article/13243/ban-hang-online-bat-dau-tu-dau
+                - listitem [ref=f15e48]:
+                  - link "Payment" [ref=f15e49] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/category/59-Thanh-To%C3%A1n/708-V%C3%AD-ShopeePay?page=1
+                - listitem [ref=f15e51]:
+                  - link "Shopee Coins" [ref=f15e52] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/79144-[Shopee-Xu]-C%c3%a1c-c%c3%a2u-h%e1%bb%8fi-th%c6%b0%e1%bb%9dng-g%e1%ba%b7p
+                - listitem [ref=f15e54]:
+                  - link "Shipping" [ref=f15e55] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/category/60-%C4%90%C6%A1n-H%C3%A0ng-V%E1%BA%ADn-Chuy%E1%BB%83n/703-%C4%90%C6%A1n-h%C3%A0ng?page=1
+                - listitem [ref=f15e57]:
+                  - link "Return & Refund" [ref=f15e58] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/79258-Tr%e1%ba%a3-h%c3%a0ng%2FHo%c3%a0n-ti%e1%bb%81n]-C%e1%ba%a9m-nang-Tr%e1%ba%a3-h%c3%a0ng-ho%c3%a0n-ti%e1%bb%81n
+                - listitem [ref=f15e60]:
+                  - link "Contact Us" [ref=f15e61] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/79191-%5BD%E1%BB%8Bch-v%E1%BB%A5%5D-L%C3%A0m-sao-%C4%91%E1%BB%83-li%C3%AAn-h%E1%BB%87-Ch%C4%83m-s%C3%B3c-Kh%C3%A1ch-h%C3%A0ng
+                - listitem [ref=f15e63]:
+                  - link "Warranty Policy" [ref=f15e64] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/79046-[Quy-%c4%91%e1%bb%8bnh]-Ch%c3%adnh-s%c3%a1ch-b%e1%ba%a3o-h%c3%a0nh-cho-s%e1%ba%a3n-ph%e1%ba%a9m-mua-t%e1%ba%a1i-Shopee
+            - generic [ref=f15e66]:
+              - generic [ref=f15e67]: ABOUT SHOPEE
+              - list [ref=f15e68]:
+                - listitem [ref=f15e69]:
+                  - link "About Us" [ref=f15e70] [cursor=pointer]:
+                    - /url: https://careers.shopee.vn/about
+                - listitem [ref=f15e72]:
+                  - link "Shopee Careers" [ref=f15e73] [cursor=pointer]:
+                    - /url: https://careers.shopee.vn/jobs
+                - listitem [ref=f15e75]:
+                  - link "Shopee Policies" [ref=f15e76] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/77242
+                - listitem [ref=f15e78]:
+                  - link "Privacy Policy" [ref=f15e79] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/77244
+                - listitem [ref=f15e81]:
+                  - link "Shopee Mall" [ref=f15e82] [cursor=pointer]:
+                    - /url: https://shopee.vn/mall/
+                - listitem [ref=f15e84]:
+                  - link "Seller Centre" [ref=f15e85] [cursor=pointer]:
+                    - /url: https://banhang.shopee.vn/
+                - listitem [ref=f15e87]:
+                  - link "Flash Deals" [ref=f15e88] [cursor=pointer]:
+                    - /url: https://shopee.vn/flash_sale/
+                - listitem [ref=f15e90]:
+                  - link "Shopee Ambassador Programme" [ref=f15e91] [cursor=pointer]:
+                    - /url: https://shopee.vn/affiliate/
+                - listitem [ref=f15e93]:
+                  - link "Media Contact" [ref=f15e94] [cursor=pointer]:
+                    - /url: mailto:media.vn%40shopee.com
+            - generic [ref=f15e96]:
+              - generic [ref=f15e97]: PAYMENT
+              - list [ref=f15e98]:
+                - listitem [ref=f15e99]:
+                  - img "logo" [ref=f15e102]
+                - listitem [ref=f15e103]:
+                  - img "logo" [ref=f15e106]
+                - listitem [ref=f15e107]:
+                  - img "logo" [ref=f15e110]
+                - listitem [ref=f15e111]:
+                  - img "logo" [ref=f15e114]
+                - listitem [ref=f15e115]:
+                  - img "logo" [ref=f15e118]
+                - listitem [ref=f15e119]:
+                  - img "logo" [ref=f15e122]
+                - listitem [ref=f15e123]:
+                  - img "logo" [ref=f15e126]
+                - listitem [ref=f15e127]:
+                  - img "logo" [ref=f15e130]
+                - listitem [ref=f15e131]:
+                  - img "logo" [ref=f15e134]
+              - generic [ref=f15e135]: LOGISTICS
+              - list [ref=f15e136]:
+                - listitem [ref=f15e137]:
+                  - img "logo" [ref=f15e140]
+                - listitem [ref=f15e141]:
+                  - img "logo" [ref=f15e144]
+                - listitem [ref=f15e145]:
+                  - img "logo" [ref=f15e148]
+                - listitem [ref=f15e149]:
+                  - img "logo" [ref=f15e152]
+                - listitem [ref=f15e153]:
+                  - img "logo" [ref=f15e156]
+                - listitem [ref=f15e157]:
+                  - img "logo" [ref=f15e160]
+                - listitem [ref=f15e161]:
+                  - img "logo" [ref=f15e164]
+                - listitem [ref=f15e165]:
+                  - img "logo" [ref=f15e168]
+                - listitem [ref=f15e169]:
+                  - img "logo" [ref=f15e172]
+            - generic [ref=f15e173]:
+              - generic [ref=f15e174]: FOLLOW US
+              - list [ref=f15e175]:
+                - listitem [ref=f15e176]:
+                  - link "Facebook" [ref=f15e177] [cursor=pointer]:
+                    - /url: https://www.facebook.com/ShopeeVN
+                - listitem [ref=f15e180]:
+                  - link "Instagram" [ref=f15e181] [cursor=pointer]:
+                    - /url: https://instagram.com/Shopee_VN
+                - listitem [ref=f15e184]:
+                  - link "LinkedIn" [ref=f15e185] [cursor=pointer]:
+                    - /url: https://www.linkedin.com/company/shopee
+            - generic [ref=f15e188]:
+              - generic [ref=f15e189]: SHOPEE APP DOWNLOAD
+              - generic [ref=f15e190]:
+                - link [ref=f15e191] [cursor=pointer]:
+                  - /url: https://shopee.vn/web
+                  - img "download_qr_code" [ref=f15e193]
+                - generic [ref=f15e194]:
+                  - link [ref=f15e195] [cursor=pointer]:
+                    - /url: https://shopee.vn/web
+                    - img "app" [ref=f15e197]
+                  - link [ref=f15e198] [cursor=pointer]:
+                    - /url: https://shopee.vn/web
+                    - img "app" [ref=f15e200]
+                  - link [ref=f15e201] [cursor=pointer]:
+                    - /url: https://shopee.vn/web
+                    - img "app" [ref=f15e203]
+          - generic [ref=f15e204]:
+            - generic [ref=f15e205]: © 2026 Shopee. All Rights Reserved .
+            - generic [ref=f15e206]:
+              - generic [ref=f15e207]: "Country & Region:"
+              - link "Argentina" [ref=f15e209] [cursor=pointer]:
+                - /url: https://shopee.com.ar
+              - link "Singapore" [ref=f15e211] [cursor=pointer]:
+                - /url: https://shopee.sg
+              - link "Indonesia" [ref=f15e213] [cursor=pointer]:
+                - /url: https://shopee.co.id
+              - link "Thailand" [ref=f15e215] [cursor=pointer]:
+                - /url: https://shopee.co.th
+              - link "Malaysia" [ref=f15e217] [cursor=pointer]:
+                - /url: https://shopee.com.my
+              - link "Vietnam" [ref=f15e219] [cursor=pointer]:
+                - /url: https://shopee.vn
+              - link "Philippines" [ref=f15e221] [cursor=pointer]:
+                - /url: https://shopee.ph
+              - link "Brazil" [ref=f15e223] [cursor=pointer]:
+                - /url: https://shopee.com.br
+              - link "México" [ref=f15e225] [cursor=pointer]:
+                - /url: https://shopee.com.mx
+              - link "Taiwan" [ref=f15e227] [cursor=pointer]:
+                - /url: https://shopee.tw
+        - generic [ref=f15e229]:
+          - generic [ref=f15e230]:
+            - link "Privacy Policy" [ref=f15e232] [cursor=pointer]:
+              - /url: https://help.shopee.vn/portal/article/77244
+            - link "Term of service" [ref=f15e234] [cursor=pointer]:
+              - /url: https://help.shopee.vn/portal/article/77245
+            - link "Shipping policy" [ref=f15e236] [cursor=pointer]:
+              - /url: https://help.shopee.vn/portal/article/77250
+            - link "Violation" [ref=f15e238] [cursor=pointer]:
+              - /url: https://help.shopee.vn/portal/article/77251
+          - generic [ref=f15e239]:
+            - link [ref=f15e240] [cursor=pointer]:
+              - /url: http://online.gov.vn/Home/WebDetails/18367
+            - link [ref=f15e242] [cursor=pointer]:
+              - /url: http://online.gov.vn/Home/AppDetails/29
+            - link [ref=f15e244] [cursor=pointer]:
+              - /url: https://shopee.vn/docs/170
+          - generic [ref=f15e246]: Shopee Company Limited
+          - generic [ref=f15e247]: "Địa chỉ: Tầng 4-5-6, Tòa nhà Capital Place, số 29 đường Liễu Giai, Phường Ngọc Hà, Thành phố Hà Nội, Việt Nam"
+          - generic [ref=f15e248]: "Chăm sóc khách hàng: Gọi tổng đài Shopee (miễn phí) hoặc Trò chuyện với Shopee ngay trên Trung tâm trợ giúp"
+          - generic [ref=f15e249]: "Person in charge of information management: \x1dNguyen Bui Anh Tuan"
+          - generic [ref=f15e250]: "Business Registration Certificate No: 0106773786"
+          - generic [ref=f15e251]: © 2015 - Copyright belongs to Shopee Company Limited

@@ -81,6 +81,8 @@ Phần lớn đã có từ C1–C4. Giá `[ước lượng 10/2026]`.
 
 **Tổng C5 `[ước lượng]`:** ~0,5–1,2tr (không tính tay cầm nếu đã có).
 
+**Đồ có sẵn từ kit Arduino:** LED RGB + còi báo trạng thái, LCD1602 làm màn trạng thái headless (`phu-luc-kit-arduino.md` P4, P5, tùy chọn; P5 cần mạch chuyển mức BSS138).
+
 ## 3. Dụng cụ và kỹ năng tay
 
 | Kỹ năng | Bài | Luyện trước | Đạt trông thế nào |

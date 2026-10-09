@@ -1,0 +1,453 @@
+- generic [ref=e3]:
+  - generic:
+    - button "Skip to main content"
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - navigation [ref=e7]:
+        - generic [ref=e8]:
+          - link "Seller Centre" [ref=e9] [cursor=pointer]:
+            - /url: //banhang.shopee.vn
+          - link "Start Selling" [ref=e10] [cursor=pointer]:
+            - /url: /seller/signup
+          - link "Download" [ref=e12] [cursor=pointer]:
+            - /url: /web/
+          - generic [ref=e13]: Follow us on
+          - generic [ref=e14]:
+            - link "Follow us on Facebook" [ref=e15] [cursor=pointer]:
+              - /url: https://facebook.com/ShopeeVN
+            - link "Follow us on Instagram!" [ref=e16] [cursor=pointer]:
+              - /url: https://instagram.com/Shopee_VN
+        - list [ref=e17]:
+          - listitem
+          - listitem [ref=e18] [cursor=pointer]:
+            - link "help" [ref=e19]:
+              - /url: https://help.shopee.vn/vn/s
+          - listitem [ref=e26] [cursor=pointer]:
+            - button "Tiếng Việt" [ref=e28]
+          - listitem [ref=e37]:
+            - link "Sign Up" [ref=e38] [cursor=pointer]:
+              - /url: /buyer/signup?next=
+            - link "Login" [ref=e40] [cursor=pointer]:
+              - /url: /buyer/login?next=
+      - generic [ref=e42]:
+        - link "home" [ref=e43] [cursor=pointer]:
+          - /url: /
+        - generic [ref=e48]:
+          - search [ref=e49]:
+            - combobox "Shopee bao ship 0Đ - Đăng ký ngay!" [ref=e52]
+            - button "search" [ref=e53] [cursor=pointer]
+          - generic [ref=e64]:
+            - link [aria-hidden] [ref=e65] [cursor=pointer]:
+              - /url: /search?keyword=%C3%A1o%20thun%20tay%20d%C3%A0i
+              - text: Áo Thun Tay Dài
+            - link [aria-hidden] [ref=e66] [cursor=pointer]:
+              - /url: /search?keyword=iphone%20gi%C3%A1%20r%E1%BA%BB
+              - text: iPhone Giá Rẻ
+            - link [aria-hidden] [ref=e67] [cursor=pointer]:
+              - /url: /search?keyword=%C3%A1o%20ki%E1%BB%83u%20n%E1%BB%AF
+              - text: Áo Kiểu Nữ
+            - link [aria-hidden] [ref=e68] [cursor=pointer]:
+              - /url: /search?keyword=b%C3%ACnh%20gi%E1%BB%AF%20nhi%E1%BB%87t%201%20l%C3%ADt%205
+              - text: Bình Giữ Nhiệt 1 Lít 5
+            - link [aria-hidden] [ref=e69] [cursor=pointer]:
+              - /url: /search?keyword=m%C3%A1y%20x%E1%BA%A5y
+              - text: Máy Xấy
+            - link [aria-hidden] [ref=e70] [cursor=pointer]:
+              - /url: /search?keyword=qu%E1%BA%A7n%20b%C3%B2%20su%C3%B4ng%20%E1%BB%91ng%20r%E1%BB%99ng%20n%E1%BB%AF
+              - text: Quần Bò Suông Ống Rộng Nữ
+            - link [aria-hidden] [ref=e71] [cursor=pointer]:
+              - /url: /search?keyword=b%E1%BB%99%20makeup%20c%C6%A1%20b%E1%BA%A3n%20ch%C3%ADnh%20h%C3%A3ng
+              - text: Bộ Makeup Cơ Bản Chính Hãng
+            - link [aria-hidden] [ref=e72] [cursor=pointer]:
+              - /url: /search?keyword=ki%E1%BB%87n%20h%C3%A0ng%20bomm%20c%C3%B4ng%20ngh%E1%BB%87
+              - text: Kiện Hàng Bomm Công Nghệ
+            - link [aria-hidden] [ref=e73] [cursor=pointer]:
+              - /url: /search?keyword=d%C3%A9p
+              - text: Dép
+            - link [aria-hidden] [ref=e74] [cursor=pointer]:
+              - /url: /search?keyword=g%C6%B0%C6%A1ng%20to%C3%A0n%20th%C3%A2n%20ch%E1%BB%91ng%20v%E1%BB%A1
+              - text: Gương Toàn Thân Chống Vỡ
+        - link "Shopping Cart Icon Shopping Cart Please log in to view cart / add items to cart" [ref=e79] [cursor=pointer]:
+          - /url: /buyer/login?from_source=mini_cart_btn&next=
+          - img "Shopping Cart Icon" [ref=e80]
+          - generic [ref=e84]: Shopping Cart Please log in to view cart / add items to cart
+    - main [ref=e91]:
+      - generic [ref=e92]:
+        - link "Shopee" [ref=e93] [cursor=pointer]:
+          - /url: /
+        - img "icon arrow right" [ref=e94]
+        - link "Máy Tính & Laptop" [ref=e95] [cursor=pointer]:
+          - /url: /Máy-Tính-Laptop-cat.11035954
+        - img "icon arrow right" [ref=e96]
+        - link "Linh Kiện Máy Tính" [ref=e97] [cursor=pointer]:
+          - /url: /Linh-Kiện-Máy-Tính-cat.11035954.11035962
+        - img "icon arrow right" [ref=e98]
+        - link "Nguồn Máy Tính" [ref=e99] [cursor=pointer]:
+          - /url: /Nguồn-Máy-Tính-cat.11035954.11035962.11035968
+        - img "icon arrow right" [ref=e100]
+        - generic [ref=e101]: Máy cấp nguồn 10A 30V Nice-Power R-SPS3010 (Nguồn Xung)
+      - generic [ref=e102]:
+        - generic [ref=e103]:
+          - generic [ref=e104]:
+            - img "Product image Máy cấp nguồn 10A 30V Nice-Power R-SPS3010 (Nguồn Xung)" [ref=e109]
+            - generic [ref=e110]:
+              - button [ref=e137] [cursor=pointer]:
+                - img "icon arrow left bold" [ref=e138]
+              - button [ref=e139] [cursor=pointer]:
+                - img "icon arrow right bold" [ref=e140]
+          - generic [ref=e141]:
+            - generic [ref=e142]:
+              - generic [ref=e143]: "Share:"
+              - button "Share on Messenger" [ref=e144] [cursor=pointer]
+              - button "Share on Facebook" [ref=e145] [cursor=pointer]
+              - button "Share on Pinterest" [ref=e146] [cursor=pointer]
+              - button "Share on Twitter" [ref=e147] [cursor=pointer]
+            - button [disabled] [ref=e149]
+        - generic [ref=e153]:
+          - heading "Máy cấp nguồn 10A 30V Nice-Power R-SPS3010 (Nguồn Xung)" [level=1] [ref=e158]
+          - generic [ref=e159]:
+            - generic [ref=e160]: No ratings yet
+            - button "Report" [ref=e162] [cursor=pointer]
+          - generic [ref=e164]:
+            - generic [ref=e166]:
+              - heading "Shop Vouchers" [level=2] [ref=e167]
+              - generic [ref=e169]:
+                - generic [ref=e170]: 2% OFF
+                - generic [ref=e172]: 2% OFF
+                - generic [ref=e174]: 1% OFF
+            - heading "Shipping" [level=2] [ref=e178]
+            - generic [ref=e179]:
+              - heading "Shopping Guarantee" [level=2] [ref=e180]
+              - generic [ref=e182]:
+                - img "service entrance icon" [ref=e183]
+                - generic [ref=e184]: Bảo hiểm Thiết bị điện tử
+            - generic [ref=e189]:
+              - heading "Quantity" [level=2] [ref=e190]
+              - generic [ref=e193]:
+                - button "Decrease" [disabled] [ref=e194]
+                - spinbutton [disabled] [ref=e197]: "1"
+                - button "Increase" [disabled] [ref=e198]
+          - generic [ref=e203]:
+            - button "icon-add-to-cart add to cart" [ref=e204] [cursor=pointer]:
+              - img "icon-add-to-cart" [ref=e205]
+              - generic [ref=e206]: add to cart
+            - button "buy now" [ref=e207] [cursor=pointer]
+      - generic [ref=e210]:
+        - generic [ref=e211]:
+          - link [ref=e212] [cursor=pointer]:
+            - /url: /?categoryId=100644&entryPoint=ShopByPDP&itemId=28309184100
+            - img "icon head shot" [ref=e215]
+          - generic [ref=e217]:
+            - button "chat now" [ref=e218] [cursor=pointer]
+            - link "icon shop view shop" [ref=e221] [cursor=pointer]:
+              - /url: /?categoryId=100644&entryPoint=ShopByPDP&itemId=28309184100
+              - img "icon shop" [ref=e222]
+              - generic [ref=e223]: view shop
+        - generic [ref=e224]:
+          - generic [ref=e225]:
+            - generic [ref=e226]: Ratings
+            - generic [ref=e227]: "0"
+          - generic [ref=e228]:
+            - generic [ref=e229]: response rate
+            - generic [ref=e230]: "-"
+          - generic [ref=e231]: joined
+          - link "products N/A" [ref=e234]:
+            - /url: /#product_list
+            - generic [ref=e235]: products
+            - generic [ref=e236] [cursor=pointer]: N/A
+          - generic [ref=e237]:
+            - generic [ref=e238]: response time
+            - generic [ref=e239]: "-"
+          - generic [ref=e240]:
+            - generic [ref=e241]: follower
+            - generic [ref=e242]: N/A
+      - generic [ref=e246]:
+        - generic [ref=e247]:
+          - heading "Product Specifications" [level=2] [ref=e248]
+          - generic [ref=e249]:
+            - generic [ref=e250]:
+              - heading "Category" [level=3] [ref=e251]
+              - generic [ref=e252]:
+                - link "Shopee" [ref=e253] [cursor=pointer]:
+                  - /url: /
+                - img "icon arrow right" [ref=e254]
+                - link "Máy Tính & Laptop" [ref=e255] [cursor=pointer]:
+                  - /url: /Máy-Tính-Laptop-cat.11035954
+                - img "icon arrow right" [ref=e256]
+                - link "Linh Kiện Máy Tính" [ref=e257] [cursor=pointer]:
+                  - /url: /Linh-Kiện-Máy-Tính-cat.11035954.11035962
+                - img "icon arrow right" [ref=e258]
+                - link "Nguồn Máy Tính" [ref=e259] [cursor=pointer]:
+                  - /url: /Nguồn-Máy-Tính-cat.11035954.11035962.11035968
+            - generic [ref=e260]:
+              - heading "Thương hiệu" [level=3] [ref=e261]
+              - link "NICE-POWER" [ref=e262] [cursor=pointer]:
+                - /url: https://shopee.vn/search?brands=1802071
+            - generic [ref=e263]:
+              - heading "Loại bảo hành" [level=3] [ref=e264]
+              - generic [ref=e265]: Bảo hành nhà sản xuất
+            - generic [ref=e266]:
+              - heading "Tên tổ chức chịu trách nhiệm sản xuất" [level=3] [ref=e267]
+              - generic [ref=e268]: Đang cập nhật
+            - generic [ref=e269]:
+              - heading "Địa chỉ tổ chức chịu trách nhiệm sản xuất" [level=3] [ref=e270]
+              - generic [ref=e271]: Đang cập nhật
+            - generic [ref=e272]:
+              - heading "Sản phẩm đặt theo yêu cầu" [level=3] [ref=e273]
+              - generic [ref=e274]: Không
+            - generic [ref=e275]:
+              - heading "Gửi từ" [level=3] [ref=e276]
+              - generic [ref=e277]: Thành phố Hồ Chí Minh
+        - generic [ref=e278]:
+          - heading "Product Description" [level=2] [ref=e279]
+          - generic [ref=e282]:
+            - paragraph [ref=e283]: Máy cấp nguồn 10A-30V
+            - paragraph [ref=e284]: Nice-Power R-SPS3010 ( Nguồn Xung )
+            - paragraph
+            - paragraph [ref=e285]: "- Dò chập Vbat nhanh và hiệu quả do có dòng Ampe 10A"
+            - paragraph [ref=e286]: "✅ Đặc điểm kỹ thuật:"
+            - paragraph [ref=e287]: "- Mô hình: R-SPS3010"
+            - paragraph [ref=e288]: "- Điện Áp đầu ra: 0 ~ 30V"
+            - paragraph [ref=e289]: "- Dòng Điện: 0 ~ 10A"
+            - paragraph [ref=e290]: "- Độ Phân Giải Điện áp: 0.1V"
+            - paragraph [ref=e291]: "- Hiện tại Độ Phân Giải: 0.01A"
+            - paragraph [ref=e292]: "- Điện Áp gợn: Vpp≤ 1%"
+            - paragraph [ref=e293]: "- Điện Tác Dụng: CV≤ 1% + 10mV"
+            - paragraph [ref=e294]: "- Hiệu ứng của Tải: CV≤ 1% + 10mV"
+            - paragraph [ref=e295]: "- Hiển Thị kỹ thuật số: 3 LED Hiển Thị Kỹ Thuật Số"
+            - paragraph [ref=e296]: "- Gợn Tiếng Ồn: ≤ 1 MV"
+            - paragraph [ref=e297]: "- Điện áp Hiển Thị Độ Chính Xác: ± 1% + 1 chữ số"
+            - paragraph [ref=e298]: "- Hiện tại Hiển Thị Độ Chính Xác: ± 1% + 2 chữ số"
+            - paragraph [ref=e299]: "- Môi Trường hoạt động: -10 ~ 45 ℃ /14 ~ 113 ℉ Rh≤ 90%"
+            - paragraph [ref=e300]: "- Môi Trường lưu trữ: -20 ~ 60 ℃ /4 ~ 140 ℉ Rh≤ 80%"
+            - paragraph [ref=e301]: "- Trọng lượng: 1595g"
+            - paragraph
+            - paragraph [ref=e302]: 𝑸𝒖𝒐̂́𝒄 𝑪𝒖̛𝒐̛̀𝒏𝒈 𝑺𝒕𝒐𝒓𝒆
+            - paragraph [ref=e303]: "- Hàng chất lượng đúng với mô tả sản phẩm"
+            - paragraph [ref=e304]: "- 1 đổi 1 nếu sản phẩm bị lỗi do nhà sản xuất."
+            - paragraph [ref=e305]: "- Tư vấn, hướng dẫn sử dụng sản phẩm tận tình và chu đáo."
+            - paragraph [ref=e306]: "- Cần biết thêm thông tin sản phẩm đừng ngại nhắn cho shop, shop sẽ trả lời trong thời gian sớm nhất."
+            - paragraph
+            - paragraph [ref=e307]: Shop Cảm ơn các bạn đã tin tưởng và ủng hộ ạ!
+    - contentinfo [ref=e308]:
+      - generic [ref=e310]:
+        - generic [ref=e311]:
+          - generic [ref=e312]:
+            - generic [ref=e313]:
+              - generic [ref=e314]: CUSTOMER SERVICE
+              - list [ref=e315]:
+                - listitem [ref=e316]:
+                  - link "Help Centre" [ref=e317] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal
+                - listitem [ref=e319]:
+                  - link "Shopee Blog" [ref=e320] [cursor=pointer]:
+                    - /url: https://shopee.vn/blog/
+                - listitem [ref=e322]:
+                  - link "Shopee Mall" [ref=e323] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/79090-[Th%C3%A0nh-vi%C3%AAn-m%E1%BB%9Bi]-Shopee-Mall-l%C3%A0-g%C3%AC?previousPage=search%20recommendation%20bar
+                - listitem [ref=e325]:
+                  - link "How To Buy" [ref=e326] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/79180-[Th%c3%a0nh-vi%c3%aan-m%e1%bb%9bi]-L%c3%a0m-sao-%c4%91%e1%bb%83-mua-h%c3%a0ng-%2F-%c4%91%e1%ba%b7t-h%c3%a0ng-tr%c3%aan-%e1%bb%a9ng-d%e1%bb%a5ng-Shopee%3F
+                - listitem [ref=e328]:
+                  - link "How To Sell" [ref=e329] [cursor=pointer]:
+                    - /url: https://banhang.shopee.vn/edu/article/13243/ban-hang-online-bat-dau-tu-dau
+                - listitem [ref=e331]:
+                  - link "Payment" [ref=e332] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/category/59-Thanh-To%C3%A1n/708-V%C3%AD-ShopeePay?page=1
+                - listitem [ref=e334]:
+                  - link "Shopee Coins" [ref=e335] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/79144-[Shopee-Xu]-C%c3%a1c-c%c3%a2u-h%e1%bb%8fi-th%c6%b0%e1%bb%9dng-g%e1%ba%b7p
+                - listitem [ref=e337]:
+                  - link "Shipping" [ref=e338] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/category/60-%C4%90%C6%A1n-H%C3%A0ng-V%E1%BA%ADn-Chuy%E1%BB%83n/703-%C4%90%C6%A1n-h%C3%A0ng?page=1
+                - listitem [ref=e340]:
+                  - link "Return & Refund" [ref=e341] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/79258-Tr%e1%ba%a3-h%c3%a0ng%2FHo%c3%a0n-ti%e1%bb%81n]-C%e1%ba%a9m-nang-Tr%e1%ba%a3-h%c3%a0ng-ho%c3%a0n-ti%e1%bb%81n
+                - listitem [ref=e343]:
+                  - link "Contact Us" [ref=e344] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/79191-%5BD%E1%BB%8Bch-v%E1%BB%A5%5D-L%C3%A0m-sao-%C4%91%E1%BB%83-li%C3%AAn-h%E1%BB%87-Ch%C4%83m-s%C3%B3c-Kh%C3%A1ch-h%C3%A0ng
+                - listitem [ref=e346]:
+                  - link "Warranty Policy" [ref=e347] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/79046-[Quy-%c4%91%e1%bb%8bnh]-Ch%c3%adnh-s%c3%a1ch-b%e1%ba%a3o-h%c3%a0nh-cho-s%e1%ba%a3n-ph%e1%ba%a9m-mua-t%e1%ba%a1i-Shopee
+            - generic [ref=e349]:
+              - generic [ref=e350]: ABOUT SHOPEE
+              - list [ref=e351]:
+                - listitem [ref=e352]:
+                  - link "About Us" [ref=e353] [cursor=pointer]:
+                    - /url: https://careers.shopee.vn/about
+                - listitem [ref=e355]:
+                  - link "Shopee Careers" [ref=e356] [cursor=pointer]:
+                    - /url: https://careers.shopee.vn/jobs
+                - listitem [ref=e358]:
+                  - link "Shopee Policies" [ref=e359] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/77242
+                - listitem [ref=e361]:
+                  - link "Privacy Policy" [ref=e362] [cursor=pointer]:
+                    - /url: https://help.shopee.vn/portal/article/77244
+                - listitem [ref=e364]:
+                  - link "Shopee Mall" [ref=e365] [cursor=pointer]:
+                    - /url: https://shopee.vn/mall/
+                - listitem [ref=e367]:
+                  - link "Seller Centre" [ref=e368] [cursor=pointer]:
+                    - /url: https://banhang.shopee.vn/
+                - listitem [ref=e370]:
+                  - link "Flash Deals" [ref=e371] [cursor=pointer]:
+                    - /url: https://shopee.vn/flash_sale/
+                - listitem [ref=e373]:
+                  - link "Shopee Ambassador Programme" [ref=e374] [cursor=pointer]:
+                    - /url: https://shopee.vn/affiliate/
+                - listitem [ref=e376]:
+                  - link "Media Contact" [ref=e377] [cursor=pointer]:
+                    - /url: mailto:media.vn%40shopee.com
+            - generic [ref=e379]:
+              - generic [ref=e380]: PAYMENT
+              - list [ref=e381]:
+                - listitem [ref=e382]:
+                  - generic [ref=e383]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e384]:
+                  - generic [ref=e385]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e386]:
+                  - generic [ref=e387]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e388]:
+                  - generic [ref=e389]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e390]:
+                  - generic [ref=e391]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e392]:
+                  - generic [ref=e393]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e394]:
+                  - generic [ref=e395]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e396]:
+                  - generic [ref=e397]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e398]:
+                  - generic [ref=e399]:
+                    - generic:
+                      - img "logo"
+              - generic [ref=e400]: LOGISTICS
+              - list [ref=e401]:
+                - listitem [ref=e402]:
+                  - generic [ref=e403]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e404]:
+                  - generic [ref=e405]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e406]:
+                  - generic [ref=e407]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e408]:
+                  - generic [ref=e409]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e410]:
+                  - generic [ref=e411]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e412]:
+                  - generic [ref=e413]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e414]:
+                  - generic [ref=e415]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e416]:
+                  - generic [ref=e417]:
+                    - generic:
+                      - img "logo"
+                - listitem [ref=e418]:
+                  - generic [ref=e419]:
+                    - generic:
+                      - img "logo"
+            - generic [ref=e420]:
+              - generic [ref=e421]: FOLLOW US
+              - list [ref=e422]:
+                - listitem [ref=e423]:
+                  - link "Facebook" [ref=e424] [cursor=pointer]:
+                    - /url: https://www.facebook.com/ShopeeVN
+                - listitem [ref=e427]:
+                  - link "Instagram" [ref=e428] [cursor=pointer]:
+                    - /url: https://instagram.com/Shopee_VN
+                - listitem [ref=e431]:
+                  - link "LinkedIn" [ref=e432] [cursor=pointer]:
+                    - /url: https://www.linkedin.com/company/shopee
+            - generic [ref=e435]:
+              - generic [ref=e436]: SHOPEE APP DOWNLOAD
+              - generic [ref=e437]:
+                - link [ref=e438] [cursor=pointer]:
+                  - /url: https://shopee.vn/web
+                  - img "download_qr_code" [ref=e440]
+                - generic [ref=e441]:
+                  - link [ref=e442] [cursor=pointer]:
+                    - /url: https://shopee.vn/web
+                    - img "app" [ref=e444]
+                  - link [ref=e445] [cursor=pointer]:
+                    - /url: https://shopee.vn/web
+                    - img "app" [ref=e447]
+                  - link [ref=e448] [cursor=pointer]:
+                    - /url: https://shopee.vn/web
+                    - img "app" [ref=e450]
+          - generic [ref=e451]:
+            - generic [ref=e452]: © 2026 Shopee. All Rights Reserved .
+            - generic [ref=e453]:
+              - generic [ref=e454]: "Country & Region:"
+              - link "Argentina" [ref=e456] [cursor=pointer]:
+                - /url: https://shopee.com.ar
+              - link "Singapore" [ref=e458] [cursor=pointer]:
+                - /url: https://shopee.sg
+              - link "Indonesia" [ref=e460] [cursor=pointer]:
+                - /url: https://shopee.co.id
+              - link "Thailand" [ref=e462] [cursor=pointer]:
+                - /url: https://shopee.co.th
+              - link "Malaysia" [ref=e464] [cursor=pointer]:
+                - /url: https://shopee.com.my
+              - link "Vietnam" [ref=e466] [cursor=pointer]:
+                - /url: https://shopee.vn
+              - link "Philippines" [ref=e468] [cursor=pointer]:
+                - /url: https://shopee.ph
+              - link "Brazil" [ref=e470] [cursor=pointer]:
+                - /url: https://shopee.com.br
+              - link "México" [ref=e472] [cursor=pointer]:
+                - /url: https://shopee.com.mx
+              - link "Taiwan" [ref=e474] [cursor=pointer]:
+                - /url: https://shopee.tw
+        - generic [ref=e476]:
+          - generic [ref=e477]:
+            - link "Privacy Policy" [ref=e479] [cursor=pointer]:
+              - /url: https://help.shopee.vn/portal/article/77244
+            - link "Term of service" [ref=e481] [cursor=pointer]:
+              - /url: https://help.shopee.vn/portal/article/77245
+            - link "Shipping policy" [ref=e483] [cursor=pointer]:
+              - /url: https://help.shopee.vn/portal/article/77250
+            - link "Violation" [ref=e485] [cursor=pointer]:
+              - /url: https://help.shopee.vn/portal/article/77251
+          - generic [ref=e486]:
+            - link [ref=e487] [cursor=pointer]:
+              - /url: http://online.gov.vn/Home/WebDetails/18367
+            - link [ref=e489] [cursor=pointer]:
+              - /url: http://online.gov.vn/Home/AppDetails/29
+            - link [ref=e491] [cursor=pointer]:
+              - /url: https://shopee.vn/docs/170
+          - generic [ref=e493]: Shopee Company Limited
+          - generic [ref=e494]: "Địa chỉ: Tầng 4-5-6, Tòa nhà Capital Place, số 29 đường Liễu Giai, Phường Ngọc Hà, Thành phố Hà Nội, Việt Nam"
+          - generic [ref=e495]: "Chăm sóc khách hàng: Gọi tổng đài Shopee (miễn phí) hoặc Trò chuyện với Shopee ngay trên Trung tâm trợ giúp"
+          - generic [ref=e496]: "Person in charge of information management: \x1dNguyen Bui Anh Tuan"
+          - generic [ref=e497]: "Business Registration Certificate No: 0106773786"
+          - generic [ref=e498]: © 2015 - Copyright belongs to Shopee Company Limited

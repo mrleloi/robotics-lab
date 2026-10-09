@@ -77,6 +77,8 @@ Giá `[ước lượng 10/2026]`. Motor đã mua ở C2.
 
 **Tổng C3 `[ước lượng]`:** 0,6–1tr (driver chiếm phần lớn). Không mua driver trước khi có số dòng hãm của C3.1 nếu được: làm C3.1 bước 1–4 chỉ cần motor + nguồn bàn.
 
+**Đồ có sẵn từ kit Arduino:** biến trở 10k làm núm lệnh PWM có khóa "khởi động ở 0" cho C3.4 (`phu-luc-kit-arduino.md` P3, tùy chọn).
+
 ## 3. Dụng cụ và kỹ năng tay
 
 | Kỹ năng | Bài | Luyện trước | Đạt trông thế nào |

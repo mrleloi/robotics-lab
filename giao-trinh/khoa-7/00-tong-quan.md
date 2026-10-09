@@ -6,6 +6,8 @@
 
 **Chi phí phần cứng mới:** ~13,6–28,6 triệu VNĐ cho 13 chặng `[ước lượng 10/2026 — cộng tổng BOM của từng file, kiểm lại ở cửa hàng]`, chưa tính mini PC, ESP32-S3, logic analyzer, đồng hồ đã có từ K1–K5 (mục 5).
 
+**Mua sắm:** danh sách chốt cho đường lõi tối thiểu, đã trừ đồ đã có, ở `_MUA-SAM-K7.md` mục 0 (~10,8tr chưa ship, chưa mini PC `[ước lượng 10/2026]`). Bài tập phụ tận dụng kit Arduino K1 (tùy chọn, ~14h, ngoài giờ lõi): `phu-luc-kit-arduino.md`.
+
 **Hợp đồng soạn:** `_KE-HOACH-K7.md` (mã chặng, mã bài, giờ, ràng buộc phần cứng mục 5, quyết định đã chốt mục 9). Văn bản chính thức của từng gate nằm **ở cuối file chặng đó**; file này chỉ tóm tắt.
 
 ---

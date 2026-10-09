@@ -76,6 +76,8 @@ Giá `[ước lượng 10/2026]`, kiểm lại ở cửa hàng.
 
 **Tổng C7 `[ước lượng]`:** ~0,6–1,7tr (0 cho IMU nếu dùng lại K5). Object store: MinIO/Garage tự chạy trên laptop như K5 Bài 14 (0đ).
 
+**Đồ có sẵn từ kit Arduino:** 28BYJ-48 + UNO làm bàn xoay kiểm hệ số thang gyro, ra `calibration_id` đầu tiên của IMU (`phu-luc-kit-arduino.md` P6, tùy chọn).
+
 ## 3. Dụng cụ và kỹ năng tay
 
 | Kỹ năng | Bài | Luyện trước | Đạt trông thế nào |
